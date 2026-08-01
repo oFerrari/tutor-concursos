@@ -1,0 +1,14 @@
+# segredos
+.env
+
+# ambiente
+.venv/
+__pycache__/
+*.pyc
+
+# material de estudo (PDFs pessoais, não vão para o repositório)
+acervo/
+
+# transitórios
+.llm_debug.txt
+*.sql.bak
