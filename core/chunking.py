@@ -30,6 +30,8 @@ recuperável nem por semântica nem por palavra-chave.
 """
 import re
 
+VERSAO = "chunking-v12"
+
 RE_ARTIGO = re.compile(r"(?im)^\s*Art\.?\s*(\d+[\-\wºo]*)")
 RE_PARAGRAFO = re.compile(r"(?im)^\s*(?:§\s*(\d+[\wºo]*)|Par[áa]grafo\s+[úu]nico)")
 RE_INCISO = re.compile(r"(?im)^\s*([IVXLCDM]+)\s*[-–—)]")
@@ -61,6 +63,9 @@ def normalizar_lei(texto: str) -> str:
             or ant.endswith("§")
             # "Art." separado do número
             or RE_ART_SOLTO.search(ant)
+            # parêntese aberto e não fechado: a frase continua na linha
+            # seguinte, mesmo que ela comece com dígito ("...Lei nº" / "7.209")
+            or ant.count("(") > ant.count(")")
             # nome de TÍTULO/CAPÍTULO quebrado entre linhas de caixa alta
             or (_eh_caixa_alta(ant) and _eh_caixa_alta(atual)
                 and not RE_FIM_FRASE.search(ant)
@@ -78,10 +83,37 @@ RE_NIVEL = re.compile(r"(?i)^\s*(t[íi]tulo|cap[íi]tulo|subse[çc][ãa]o|se[çc
 
 # Linhas de nota legislativa que não são rubrica
 RE_NOTA = re.compile(
-    r"(?i)(reda[çc][ãa]o dada|inclu[íi]d[oa]|revogad[oa]|vide|vigor|"
-    r"lei n|decreto|renumerad|ac?rescentad)"
+    r"(?i)(reda[çc][ãa]o dada|inclu[íi]d[oa]|revogad[oa]|vide|vigor|vig[êe]ncia|"
+    r"vetado|lei n|decreto|renumerad|ac?rescentad)"
 )
 MAX_LINHAS_CAUDA = 6
+
+
+def _sem_nota(linha: str) -> str:
+    """
+    Remove notas legislativas em parênteses no fim da linha.
+
+    A Parte Geral do CP foi reescrita pela Lei 7.209/1984, então as rubricas
+    vêm com a nota colada:
+
+        Lei excepcional ou temporária (Incluído pela Lei nº 7.209, de 11.7.1984)
+
+    Sem tirar o parêntese, a rubrica legítima é confundida com nota e
+    descartada — o que apagava a rubrica de toda a Parte Geral.
+    """
+    l = linha.strip()
+    for _ in range(3):
+        m = re.search(r"\(([^()]*)\)\s*$", l)
+        if m and RE_NOTA.search(m.group(1)):
+            l = l[:m.start()].rstrip()
+            continue
+        # nota truncada: parêntese abriu e não fechou até o fim da linha
+        m = re.search(r"\(([^()]*)$", l)
+        if m and RE_NOTA.search(m.group(1)):
+            l = l[:m.start()].rstrip()
+            continue
+        break
+    return l
 
 
 def _eh_titulo_hierarquia(linha: str) -> bool:
@@ -97,8 +129,9 @@ def _eh_rubrica(linha: str) -> bool:
     """
     Rubrica é linha curta, sem pontuação final, iniciando em maiúscula, que
     não é artigo, parágrafo, inciso, pena, nota legislativa nem cabeçalho.
+    A nota entre parênteses é descartada antes da avaliação.
     """
-    l = linha.strip()
+    l = _sem_nota(linha)
     if not l or len(l) > 90:
         return False
     if l.endswith((".", ":", ";", ",")):
@@ -107,7 +140,11 @@ def _eh_rubrica(linha: str) -> bool:
         return False
     if RE_ARTIGO.match(l) or _eh_titulo_hierarquia(l):
         return False
-    if re.match(r"(?i)^(pena|par[áa]grafo|§|[IVXLCDM]+\s*[-–—)]|\()", l):
+    # Linha de cominação de pena é "Pena - reclusão, de..." (com travessão).
+    # Exigir o travessão é essencial: sem isso a regra derruba rubricas
+    # legítimas que começam com a palavra — "Pena cumprida no estrangeiro",
+    # "Penas restritivas de direitos", "Pena de multa".
+    if re.match(r"(?i)^(pena[s]?\s*[-–—:]|par[áa]grafo|§|[IVXLCDM]+\s*[-–—)]|\()", l):
         return False
     if RE_NOTA.search(l):
         return False
@@ -116,24 +153,53 @@ def _eh_rubrica(linha: str) -> bool:
     return True
 
 
+def _so_nota(linha: str) -> bool:
+    """Linha que é apenas nota legislativa, sem conteúdo próprio."""
+    return bool(linha.strip()) and not _sem_nota(linha)
+
+
 def _cortar_cauda(bloco: str) -> tuple[str, str]:
     """
     Separa do fim do bloco as linhas que pertencem ao PRÓXIMO artigo
     (cabeçalhos de hierarquia e rubrica). Para na primeira linha que faz
     parte do artigo corrente, para nunca comer o corpo.
+
+    Linha só-de-nota é PULADA, não é motivo de parada. O Planalto insere a
+    nota da lei entre a rubrica e o artigo:
+
+        Feminicídio
+        (Incluído pela Lei nº 14.994, de 2024)
+        Art. 121-A. Matar mulher...
+
+    Parar na nota perdia a rubrica de artigos recentes — feminicídio,
+    121-B, 122, 144 — que são justamente os mais cobrados.
     """
     linhas = bloco.rstrip().split("\n")
     cauda: list[str] = []
+    notas: list[str] = []
     while linhas and len(cauda) < MAX_LINHAS_CAUDA:
         ult = linhas[-1]
         if not ult.strip():
             linhas.pop()
             continue
+        if _so_nota(ult):
+            l = linhas.pop()
+            # Subindo, as notas encontradas ANTES da rubrica pertencem ao
+            # artigo seguinte; as encontradas depois são do artigo corrente.
+            notas.insert(0, l)   # v12: guarda toda nota descartada
+            continue
         if _eh_titulo_hierarquia(ult) or _eh_caixa_alta(ult) or _eh_rubrica(ult):
             cauda.insert(0, linhas.pop())
             continue
         break
-    return "\n".join(linhas).strip(), "\n".join(cauda).strip()
+
+    corpo = "\n".join(linhas).strip()
+    # Artigo revogado tem como corpo apenas a nota ("Art. 217 - / (Revogado
+    # pela Lei...)"). Descartar a nota o esvazia e o chunk é perdido — então
+    # a nota volta. Saber que um artigo foi revogado é conteúdo de prova.
+    if len(corpo) < 20 and notas:
+        corpo = (corpo + "\n" + "\n".join(notas)).strip()
+    return corpo, "\n".join(cauda).strip()
 
 
 def _ler_cauda(cauda: str, hierarquia: dict) -> str | None:
@@ -167,7 +233,7 @@ def _ler_cauda(cauda: str, hierarquia: dict) -> str | None:
                 hierarquia.pop(menor, None)
             continue
         if _eh_rubrica(linhas[i]) and not _eh_caixa_alta(linhas[i]):
-            rubrica = linhas[i]
+            rubrica = _sem_nota(linhas[i])
         i += 1
     return rubrica
 
