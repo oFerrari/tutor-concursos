@@ -76,11 +76,13 @@ def main() -> int:
         for j, (c, v) in enumerate(zip(lote, vetores)):
             r = db.exec1(
                 """INSERT INTO chunk (documento_id, ordem, texto, norma, artigo,
-                                      paragrafo, inciso, embedding)
-                   VALUES (%(d)s, %(o)s, %(tx)s, %(n)s, %(a)s, %(p)s, %(i)s, %(e)s)
+                                      paragrafo, inciso, rubrica, secao, embedding)
+                   VALUES (%(d)s, %(o)s, %(tx)s, %(n)s, %(a)s, %(p)s, %(i)s,
+                           %(r)s, %(s)s, %(e)s)
                    RETURNING id""",
                 {"d": doc_id, "o": i + j, "tx": c["texto"], "n": c["norma"],
-                 "a": c["artigo"], "p": c["paragrafo"], "i": c["inciso"], "e": v},
+                 "a": c["artigo"], "p": c["paragrafo"], "i": c["inciso"],
+                 "r": c.get("rubrica"), "s": c.get("secao"), "e": v},
             )
             ids.append(r["id"])
         print(f"  indexados {min(i + LOTE, len(chunks))}/{len(chunks)}")

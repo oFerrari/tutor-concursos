@@ -107,9 +107,17 @@ def perguntar(pergunta: str) -> None:
         r = socratic.explicar(pergunta)
     con.print(Markdown(r["resposta"]))
     if r["fontes"]:
-        refs = {f"{c['titulo']}" + (f", art. {c['artigo']}" if c.get("artigo") else "")
-                for c in r["fontes"]}
-        con.print("\n[dim]fontes: " + " · ".join(sorted(refs)) + "[/]")
+        # Listar tudo que foi recuperado engana: o modelo usa uma fração.
+        # Mostra o que ele realmente citou; o resto vai como "consultado".
+        citadas, consultadas = [], []
+        for c in r["fontes"]:
+            ref = c["titulo"] + (f", art. {c['artigo']}" if c.get("artigo") else "")
+            marca = f"art. {c['artigo']}" if c.get("artigo") else c["titulo"]
+            (citadas if marca in r["resposta"] else consultadas).append(ref)
+        if citadas:
+            con.print("\n[dim]citado: " + " · ".join(sorted(set(citadas))) + "[/]")
+        if consultadas:
+            con.print("[dim]consultado: " + " · ".join(sorted(set(consultadas))) + "[/]")
 
 
 def erros() -> None:
