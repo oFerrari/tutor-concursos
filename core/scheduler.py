@@ -12,33 +12,88 @@ de falha mais comum de Anki mal usado.
 from datetime import date, timedelta
 
 from . import db
-from .config import INTERVALOS
+from .scheduler_regras import (INTERVALOS, conta_como_erro, dias_ate_revisao,
+                               proxima_caixa)
+
+VERSAO = "scheduler-v18"
+
+# TETO_DIARIO: quantas questões por dia. NOVAS_POR_DIA=None significa "todo o
+# orçamento que sobrar depois das revisões" — cota fixa perdeu em todos os
+# tetos testados, porque freia a exposição sem necessidade nos dias leves.
+#
+# Simulação com 428 questões, 90 dias, média de 15 sementes (dominadas):
+#   teto 15:   ordem antiga   0  ·  revisão primeiro 133
+#   teto 25:   ordem antiga  39  ·  revisão primeiro 220
+#   teto 40:   ordem antiga 389  ·  revisão primeiro 353
+#
+# O ganho é enorme quando a capacidade não cobre a demanda — regime em que a
+# fila vive assim que o acervo cresce. No teto 40 a ordem antiga aparece na
+# frente, mas ali o simulador NÃO é confiável: ele não modela esquecimento,
+# então atrasar revisão sai de graça no modelo e caro na vida real. Revisão
+# primeiro se sustenta pela teoria, não por esse número.
+TETO_DIARIO = 40
+NOVAS_POR_DIA = None
 
 
-def fila(limite: int = 20) -> list[dict]:
-    """Pendentes de hoje, priorizando caixa baixa e atraso maior."""
-    return db.query(
-        """SELECT id, disciplina, tema, enunciado, gabarito, dicas, caixa, prox_revisao
-           FROM questao
-           WHERE prox_revisao <= CURRENT_DATE
-           ORDER BY caixa ASC, prox_revisao ASC
-           LIMIT %(l)s""",
-        {"l": limite},
+CAMPOS_Q = "id, disciplina, tema, enunciado, gabarito, dicas, caixa, prox_revisao"
+
+
+def fila(teto: int = TETO_DIARIO, novas: int | None = NOVAS_POR_DIA) -> list[dict]:
+    """
+    Fila do dia em duas etapas, e a ordem entre elas é o que importa:
+
+    1. REVISÕES — questões já tentadas cujo prazo venceu. Prioridade absoluta:
+       revisão atrasada é conhecimento se perdendo agora.
+    2. NOVAS — nunca tentadas, com cota própria, só no espaço que sobrar.
+
+    Uma consulta única ordenada por caixa faz material novo (caixa 0) sufocar
+    as revisões para sempre. Duas etapas com orçamentos separados resolvem.
+    """
+    revisoes = db.query(
+        f"""SELECT {CAMPOS_Q} FROM questao q
+            WHERE q.prox_revisao <= CURRENT_DATE
+              AND EXISTS (SELECT 1 FROM tentativa t WHERE t.questao_id = q.id)
+            ORDER BY q.prox_revisao ASC, q.caixa ASC
+            LIMIT %(l)s""",
+        {"l": teto},
     )
+    resto = max(teto - len(revisoes), 0)
+    sobra = resto if novas is None else min(resto, novas)
+    if sobra == 0:
+        return revisoes
+    inéditas = db.query(
+        f"""SELECT {CAMPOS_Q} FROM questao q
+            WHERE q.prox_revisao <= CURRENT_DATE
+              AND NOT EXISTS (SELECT 1 FROM tentativa t WHERE t.questao_id = q.id)
+            ORDER BY q.id
+            LIMIT %(l)s""",
+        {"l": sobra},
+    )
+    return revisoes + inéditas
+
+
+def carga_hoje() -> dict:
+    """Quanto venceu vs quanto cabe no teto — para o usuário ver a dívida."""
+    r = db.exec1(
+        """SELECT count(*) FILTER (WHERE prox_revisao <= CURRENT_DATE
+                AND EXISTS (SELECT 1 FROM tentativa t WHERE t.questao_id = q.id)) AS revisoes,
+                  count(*) FILTER (WHERE prox_revisao <= CURRENT_DATE
+                AND NOT EXISTS (SELECT 1 FROM tentativa t WHERE t.questao_id = q.id)) AS ineditas
+           FROM questao q"""
+    ) or {"revisoes": 0, "ineditas": 0}
+    r["teto"] = TETO_DIARIO
+    r["atraso"] = max(0, r["revisoes"] - TETO_DIARIO)
+    return r
 
 
 def registrar(questao_id: int, veredito: str, resposta: str,
               dicas_usadas: int, segundos: int | None = None) -> dict:
-    acertou = veredito == "correta"
     q = db.exec1("SELECT caixa, disciplina, tema FROM questao WHERE id = %(id)s", {"id": questao_id})
     if not q:
         raise ValueError(f"questão {questao_id} não existe")
 
-    if acertou:
-        caixa = min(q["caixa"] + 1, len(INTERVALOS) - 1) if dicas_usadas == 0 else q["caixa"]
-    else:
-        caixa = 0
-    prox = date.today() + timedelta(days=INTERVALOS[caixa])
+    caixa = proxima_caixa(q["caixa"], veredito, dicas_usadas)
+    prox = date.today() + timedelta(days=dias_ate_revisao(caixa))
 
     db.query(
         """INSERT INTO tentativa (questao_id, resposta, veredito, dicas_usadas, segundos)
@@ -49,7 +104,7 @@ def registrar(questao_id: int, veredito: str, resposta: str,
         "UPDATE questao SET caixa = %(c)s, prox_revisao = %(p)s WHERE id = %(id)s",
         {"c": caixa, "p": prox, "id": questao_id},
     )
-    if not acertou:
+    if conta_como_erro(veredito):
         db.query(
             """INSERT INTO erro_caderno (questao_id, disciplina, tema)
                VALUES (%(id)s, %(d)s, %(t)s)

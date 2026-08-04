@@ -13,7 +13,7 @@ Sem isso, modelo pequeno erra a sintaxe e a sessão de estudo morre no meio.
 """
 from . import llm, retrieval
 
-VERSAO = "socratic-v13"
+VERSAO = "socratic-v21"
 
 # ------------------------------------------------------------------ schemas
 # Subconjunto OpenAPI aceito pelo Gemini. propertyOrdering importa: o modelo
@@ -61,6 +61,9 @@ Regras absolutas:
 - Não use elogio vazio. Se a resposta está incompleta, diga o que falta em termos de conceito, \
 não de palavra.
 - Sua pergunta deve ser respondível pelo aluno com o que ele já demonstrou saber.
+- Uma linha de raciocínio só, do começo ao fim da questão. Cada pergunta sua \
+avança UM passo em relação à anterior; nunca recomece de outro ângulo.
+- Se o aluno acertou a parte que você perguntou, DIGA isso antes de pedir o resto.
 - Português brasileiro, tom direto, no máximo 2 frases no comentário."""
 
 SISTEMA_GERADOR = """Você elabora questões discursivas curtas para concursos públicos \
@@ -68,7 +71,13 @@ brasileiros, no estilo Cebraspe/FGV, a partir de um material fornecido.
 
 Regras:
 - Use exclusivamente o conteúdo do material. Não invente dispositivo, número ou prazo.
-- Cada questão cobra UM ponto verificável, não um resumo do assunto.
+- Cada questão cobra UM ÚNICO ponto verificável. Isto é a regra mais violada: \
+não junte dois pedidos com "e".
+  RUIM: "Qual a conduta típica E a respectiva pena do crime X?"
+  RUIM: "Quais os requisitos E a consequência do aumento de pena?"
+  BOM:  "Qual a conduta típica do crime X?"
+  BOM:  "Qual a fração de aumento de pena quando resulta dano ao administrado?"
+  Se o material der conduta e pena, gere DUAS questões separadas, não uma dupla.
 - Exatamente 3 dicas, em ordem crescente de ajuda, e NENHUMA delas contém o gabarito \
 completo: a primeira reorienta o olhar, a segunda restringe o campo, a terceira quase entrega.
 - Enunciado com no máximo 2 frases. Gabarito com no máximo 3 frases.
@@ -79,18 +88,36 @@ como aparece no material: "312", "121-A", "8º". Nunca invente número, nunca es
 LOTE_GERACAO = 3   # questões por chamada; lotes grandes estouram o limite de tokens
 
 
-def avaliar(enunciado: str, gabarito: str, resposta: str, nivel: int) -> dict:
+def avaliar(enunciado: str, gabarito: str, resposta: str, nivel: int,
+            historico: list[dict] | None = None) -> dict:
     """
-    nivel = quantas dicas já foram consumidas (0..3).
-    Devolve dict com veredito, comentario, pergunta e revelar_gabarito.
+    nivel    = quantas tentativas erradas já houve nesta questão (0..3).
+    historico = turnos anteriores [{resposta, comentario, pergunta}], para que
+                o avaliador CONTINUE o diálogo em vez de recomeçá-lo.
+
+    Sem histórico cada chamada era independente: o modelo reformulava a
+    pergunta-guia do zero a cada turno e repetia explicação já dada. O aluno
+    perseguia um alvo móvel — e pior, respondia à pergunta-guia enquanto era
+    avaliado contra o gabarito da questão original.
     """
-    prompt = (
-        f"QUESTÃO: {enunciado}\n\n"
-        f"GABARITO (uso interno, jamais revele): {gabarito}\n\n"
-        f"RESPOSTA DO ALUNO: {resposta}\n\n"
+    partes = [f"QUESTÃO: {enunciado}",
+              f"GABARITO (uso interno, jamais revele): {gabarito}"]
+    if historico:
+        linhas = []
+        for i, t in enumerate(historico, 1):
+            linhas.append(f"  turno {i} — aluno: {t['resposta']}")
+            if t.get("pergunta"):
+                linhas.append(f"           você perguntou: {t['pergunta']}")
+        partes.append("DIÁLOGO ATÉ AQUI:\n" + "\n".join(linhas))
+    partes.append(f"RESPOSTA ATUAL DO ALUNO: {resposta}")
+    partes.append(
         f"Esta é a tentativa nº {nivel + 1}. "
-        f"{'Seja mais específico na pista, o aluno já errou antes.' if nivel else ''}"
+        + ("Continue a MESMA linha de raciocínio do turno anterior: se o aluno "
+           "respondeu a sua última pergunta, reconheça o avanço e peça só o que "
+           "ainda falta. Não repita explicação já dada nem troque de abordagem."
+           if historico else "")
     )
+    prompt = "\n\n".join(partes)
     d = llm.obter().gerar_json(prompt, SISTEMA_AVALIADOR,
                               max_tokens=800, schema=ESQUEMA_AVALIACAO)
     veredito = d.get("veredito", "parcial")

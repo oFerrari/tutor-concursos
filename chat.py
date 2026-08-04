@@ -23,7 +23,7 @@ from rich.table import Table
 
 from core import llm, scheduler, socratic
 
-VERSAO = "chat-v16"
+VERSAO = "chat-v21"
 con = Console()
 MAX_DICAS = 3
 
@@ -33,42 +33,61 @@ def _dicas(q) -> list[str]:
     return json.loads(d) if isinstance(d, str) else (d or [])
 
 
+MAX_TENTATIVAS = 3      # respostas erradas antes de revelar o gabarito
+
+
 def estudar() -> None:
     pendentes = scheduler.fila()
     if not pendentes:
         con.print("[green]Nada pendente hoje.[/] Ingira material novo ou volte amanhã.")
         return
 
-    con.print(f"[bold]{len(pendentes)}[/] questões na fila de hoje.\n")
+    c = scheduler.carga_hoje()
+    con.print(f"[bold]{len(pendentes)}[/] questões na fila · "
+              f"{c['revisoes']} revisões venceram, {c['ineditas']} inéditas"
+              + (f" · [yellow]{c['atraso']} de atraso[/]" if c["atraso"] else "") + "\n")
+
     for q in pendentes:
         dicas = _dicas(q)
         con.print(Panel(q["enunciado"],
                         title=f"{q['disciplina']} · {q['tema']}",
                         subtitle=f"caixa {q['caixa']}", border_style="blue"))
-        nivel, inicio = 0, time.monotonic()
+
+        # DOIS ORÇAMENTOS SEPARADOS. Antes uma única variável contava dicas,
+        # tentativas e penalidade ao mesmo tempo: pedir dica gastava tentativa,
+        # e errar consumia dica automaticamente — o que dava dicas_usadas>0 a
+        # quem nunca pediu dica e bloqueava a promoção em silêncio.
+        dicas_mostradas = 0    # ponteiro da próxima dica a exibir
+        dicas_pedidas = 0      # dicas que VOCÊ pediu, antes de responder
+        erradas = 0
+        inicio = time.monotonic()
         veredito, ultima_resposta = None, ""
+        historico = []          # turnos desta questão, para o avaliador seguir o fio
+        avisou_contrato = False
 
         def fechar(v):
-            """Grava a tentativa. Chamado tanto no fim normal quanto ao sair."""
-            r = scheduler.registrar(q["id"], v, ultima_resposta, nivel,
+            # PENALIDADE = errar, não receber dica. Como a dica vem automática
+            # ao errar, as duas coisas andam juntas: usar ambas para penalizar
+            # contaria a mesma falha duas vezes. Dica pedida por iniciativa
+            # própria conta, porque aí é ajuda escolhida.
+            penalidade = erradas + dicas_pedidas
+            r = scheduler.registrar(q["id"], v, ultima_resposta, penalidade,
                                     int(time.monotonic() - inicio))
-            con.print(f"[dim]registrado como {v} · caixa {r['caixa']} · "
-                      f"próxima revisão {r['prox_revisao']}[/]\n")
+            motivo = ("acertou de primeira" if v == "correta" and penalidade == 0 else
+                      f"{erradas} erro(s), {dicas_pedidas} dica(s) pedida(s)")
+            con.print(f"[dim]{v} · {motivo} · caixa {r['caixa']} · "
+                      f"volta em {r['prox_revisao']}[/]\n")
 
         while True:
-            restam = max(0, MAX_DICAS - nivel)
-            aviso = (f"{restam} tentativa(s) antes do gabarito"
-                     if restam else "o gabarito aparece na próxima")
+            rest_d = min(MAX_DICAS, len(dicas)) - dicas_mostradas
             try:
                 resposta = con.input(
-                    f"\n[bold cyan]sua resposta[/] [dim]({aviso}; 'dica', 'pular', 'sair')[/]: "
-                ).strip()
+                    f"\n[bold cyan]resposta[/] [dim](tentativa {erradas + 1} de "
+                    f"{MAX_TENTATIVAS} · {rest_d} dica(s) disponível(is) · "
+                    f"'dica', 'pular', 'sair')[/]: ").strip()
             except (EOFError, KeyboardInterrupt):
                 resposta = "sair"
 
-            # Sair não pode descartar o esforço: se houve tentativa errada, ela
-            # é dado real e vai para o caderno de erros. Perder isso ensinava o
-            # usuário a nunca interromper a sessão.
             if resposta in ("sair", "pular"):
                 if ultima_resposta:
                     fechar("incorreta")
@@ -80,9 +99,10 @@ def estudar() -> None:
                 break
 
             if resposta == "dica":
-                if nivel < min(MAX_DICAS, len(dicas)):
-                    con.print(f"[yellow]dica {nivel + 1}:[/] {dicas[nivel]}")
-                    nivel += 1
+                if rest_d > 0:
+                    con.print(f"[yellow]dica {dicas_mostradas + 1}:[/] {dicas[dicas_mostradas]}")
+                    dicas_mostradas += 1
+                    dicas_pedidas += 1
                 else:
                     con.print("[yellow]as dicas acabaram. Tente formular o que você lembra.[/]")
                 continue
@@ -92,7 +112,8 @@ def estudar() -> None:
             ultima_resposta = resposta
             with con.status("corrigindo…"):
                 try:
-                    av = socratic.avaliar(q["enunciado"], q["gabarito"], resposta, nivel)
+                    av = socratic.avaliar(q["enunciado"], q["gabarito"], resposta,
+                                          erradas, historico)
                 except llm.ErroLLM as e:
                     con.print(f"[red]LLM indisponível:[/] {e}")
                     con.print(Panel(q["gabarito"], title="gabarito", border_style="green"))
@@ -105,13 +126,25 @@ def estudar() -> None:
                 con.print(f"[green]✓ {av['comentario']}[/]")
                 break
 
+            erradas += 1
+            historico.append({"resposta": resposta, "comentario": av["comentario"],
+                              "pergunta": av["pergunta"]})
             con.print(f"[yellow]{av['comentario']}[/]")
             if av["pergunta"]:
                 con.print(f"[cyan]→ {av['pergunta']}[/]")
-            if nivel < min(MAX_DICAS, len(dicas)):
-                con.print(f"[dim]dica {nivel + 1}: {dicas[nivel]}[/]")
-                nivel += 1
-            if av["revelar_gabarito"] and nivel >= MAX_DICAS:
+                if not avisou_contrato:
+                    # A pergunta-guia parece ser a nova questão, mas a avaliação
+                    # continua sendo contra o enunciado do quadro. Dizer isso uma
+                    # vez evita o aluno responder a coisa errada e ser punido.
+                    con.print("[dim]  (é uma pista; sua resposta continua valendo "
+                              "para a questão do quadro)[/]")
+                    avisou_contrato = True
+            # Dica automática a cada erro: errar já é a penalidade, então
+            # entregar a pista de graça não cobra nada a mais.
+            if dicas_mostradas < min(MAX_DICAS, len(dicas)):
+                con.print(f"[dim]dica {dicas_mostradas + 1}: {dicas[dicas_mostradas]}[/]")
+                dicas_mostradas += 1
+            if erradas >= MAX_TENTATIVAS:
                 con.print(Panel(q["gabarito"], title="gabarito", border_style="green"))
                 break
 
