@@ -13,6 +13,8 @@ Sem isso, modelo pequeno erra a sintaxe e a sessão de estudo morre no meio.
 """
 from . import llm, retrieval
 
+VERSAO = "socratic-v13"
+
 # ------------------------------------------------------------------ schemas
 # Subconjunto OpenAPI aceito pelo Gemini. propertyOrdering importa: o modelo
 # gera na ordem declarada, e gerar o gabarito antes das dicas produz dicas
@@ -34,13 +36,18 @@ ESQUEMA_QUESTOES = {
     "items": {
         "type": "OBJECT",
         "properties": {
+            # `artigo` primeiro de propósito: o modelo escolhe o dispositivo
+            # ANTES de redigir, o que ancora a questão em um artigo só. E é o
+            # que permite medir cobertura — sem proveniência não há como saber
+            # quais artigos já foram cobrados.
+            "artigo": {"type": "STRING"},
             "tema": {"type": "STRING"},
             "enunciado": {"type": "STRING"},
             "gabarito": {"type": "STRING"},
             "dicas": {"type": "ARRAY", "items": {"type": "STRING"}},
         },
-        "required": ["tema", "enunciado", "gabarito", "dicas"],
-        "propertyOrdering": ["tema", "enunciado", "gabarito", "dicas"],
+        "required": ["artigo", "tema", "enunciado", "gabarito", "dicas"],
+        "propertyOrdering": ["artigo", "tema", "enunciado", "gabarito", "dicas"],
     },
 }
 
@@ -64,7 +71,10 @@ Regras:
 - Cada questão cobra UM ponto verificável, não um resumo do assunto.
 - Exatamente 3 dicas, em ordem crescente de ajuda, e NENHUMA delas contém o gabarito \
 completo: a primeira reorienta o olhar, a segunda restringe o campo, a terceira quase entrega.
-- Enunciado com no máximo 2 frases. Gabarito com no máximo 3 frases."""
+- Enunciado com no máximo 2 frases. Gabarito com no máximo 3 frases.
+- O campo `artigo` recebe SÓ o número do dispositivo de onde a questão saiu, \
+como aparece no material: "312", "121-A", "8º". Nunca invente número, nunca escreva "Art.".
+- Uma questão por artigo. Se pedirem 3 questões, use 3 artigos diferentes do material."""
 
 LOTE_GERACAO = 3   # questões por chamada; lotes grandes estouram o limite de tokens
 
@@ -148,6 +158,7 @@ def _validar(itens) -> list[dict]:
             continue
         dicas = [str(d).strip() for d in (q.get("dicas") or []) if str(d).strip()]
         validas.append({
+            "artigo": (q.get("artigo") or "").strip().replace("Art.", "").strip() or None,
             "tema": (q.get("tema") or "Sem tema").strip(),
             "enunciado": q["enunciado"].strip(),
             "gabarito": q["gabarito"].strip(),

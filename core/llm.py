@@ -11,6 +11,8 @@ declarar schema é garantia. Modelos menores (flash-lite) erram muito o JSON
 livre, então todo lugar que precisa de JSON aqui passa schema.
 """
 import json
+import os
+import time
 from pathlib import Path
 
 import httpx
@@ -18,8 +20,11 @@ import httpx
 from .config import (GEMINI_API_KEY, GEMINI_MODEL, LLM_PROVIDER,
                      OLLAMA_MODEL, OLLAMA_URL)
 
-TIMEOUT = httpx.Timeout(120.0)
+# 120s nao bastava no plano gratuito. Configuravel via LLM_TIMEOUT no .env.
+TIMEOUT = httpx.Timeout(float(os.getenv("LLM_TIMEOUT", "240")))
 DEBUG_FILE = Path(".llm_debug.txt")
+VERSAO = "llm-v15"
+ESPERA = (3, 10, 25)   # backoff entre tentativas, em segundos
 
 
 class ErroLLM(RuntimeError):
@@ -47,6 +52,35 @@ class LLM:
         raise ultimo
 
 
+def _post(url, params, corpo, tentativas=3):
+    """
+    Faz o POST convertendo TODA falha de transporte em ErroLLM.
+
+    Existia um vazamento de abstração aqui: o resto do sistema captura
+    ErroLLM, mas httpx.ReadTimeout subia cru e derrubava a execução com
+    stack trace. Se esta camada promete esconder o cliente HTTP, ela tem
+    de esconder também os erros dele.
+
+    Timeout e 5xx são transitórios: vale reprocessar. 4xx é erro nosso e
+    não melhora com repetição.
+    """
+    ultimo = ""
+    for i in range(tentativas):
+        try:
+            r = httpx.post(url, params=params, json=corpo, timeout=TIMEOUT)
+        except (httpx.TimeoutException, httpx.TransportError) as e:
+            ultimo = f"{type(e).__name__}: {e}"
+        else:
+            if r.status_code < 500 and r.status_code != 429:
+                return r
+            ultimo = f"HTTP {r.status_code}"
+        if i + 1 < tentativas:
+            espera = ESPERA[min(i, len(ESPERA) - 1)]
+            print(f"    rede instavel ({ultimo}); nova tentativa em {espera}s")
+            time.sleep(espera)
+    raise ErroLLM(f"falhou depois de {tentativas} tentativas — {ultimo}")
+
+
 class Gemini(LLM):
     BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 
@@ -63,8 +97,8 @@ class Gemini(LLM):
         if sistema:
             corpo["systemInstruction"] = {"parts": [{"text": sistema}]}
 
-        r = httpx.post(f"{self.BASE}/{GEMINI_MODEL}:generateContent",
-                       params={"key": GEMINI_API_KEY}, json=corpo, timeout=TIMEOUT)
+        r = _post(f"{self.BASE}/{GEMINI_MODEL}:generateContent",
+                  {"key": GEMINI_API_KEY}, corpo)
         if r.status_code == 429:
             raise ErroLLM("cota do plano gratuito estourada (429). Aguarde ou troque de modelo.")
         if r.status_code == 404:
@@ -105,7 +139,7 @@ class Ollama(LLM):
             corpo["format"] = schema      # Ollama aceita JSON Schema aqui
         elif json_mode:
             corpo["format"] = "json"
-        r = httpx.post(f"{OLLAMA_URL}/api/generate", json=corpo, timeout=TIMEOUT)
+        r = _post(f"{OLLAMA_URL}/api/generate", None, corpo)
         if r.status_code >= 400:
             raise ErroLLM(f"Ollama HTTP {r.status_code}: {r.text[:400]}")
         return r.json().get("response", "").strip()

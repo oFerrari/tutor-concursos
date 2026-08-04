@@ -23,6 +23,7 @@ from rich.table import Table
 
 from core import llm, scheduler, socratic
 
+VERSAO = "chat-v16"
 con = Console()
 MAX_DICAS = 3
 
@@ -44,21 +45,40 @@ def estudar() -> None:
         con.print(Panel(q["enunciado"],
                         title=f"{q['disciplina']} · {q['tema']}",
                         subtitle=f"caixa {q['caixa']}", border_style="blue"))
-        nivel, inicio, veredito = 0, time.monotonic(), "incorreta"
-        ultima_resposta = ""
+        nivel, inicio = 0, time.monotonic()
+        veredito, ultima_resposta = None, ""
+
+        def fechar(v):
+            """Grava a tentativa. Chamado tanto no fim normal quanto ao sair."""
+            r = scheduler.registrar(q["id"], v, ultima_resposta, nivel,
+                                    int(time.monotonic() - inicio))
+            con.print(f"[dim]registrado como {v} · caixa {r['caixa']} · "
+                      f"próxima revisão {r['prox_revisao']}[/]\n")
 
         while True:
+            restam = max(0, MAX_DICAS - nivel)
+            aviso = (f"{restam} tentativa(s) antes do gabarito"
+                     if restam else "o gabarito aparece na próxima")
             try:
-                resposta = con.input("\n[bold cyan]sua resposta[/] (ou 'dica', 'pular', 'sair'): ").strip()
+                resposta = con.input(
+                    f"\n[bold cyan]sua resposta[/] [dim]({aviso}; 'dica', 'pular', 'sair')[/]: "
+                ).strip()
             except (EOFError, KeyboardInterrupt):
-                con.print("\nsessão encerrada.")
-                return
+                resposta = "sair"
 
-            if resposta == "sair":
-                return
-            if resposta == "pular":
-                veredito = None
+            # Sair não pode descartar o esforço: se houve tentativa errada, ela
+            # é dado real e vai para o caderno de erros. Perder isso ensinava o
+            # usuário a nunca interromper a sessão.
+            if resposta in ("sair", "pular"):
+                if ultima_resposta:
+                    fechar("incorreta")
+                elif resposta == "sair":
+                    con.print("[dim]nada respondido; nada registrado.[/]")
+                if resposta == "sair":
+                    con.print("[dim]até a próxima.[/]")
+                    return
                 break
+
             if resposta == "dica":
                 if nivel < min(MAX_DICAS, len(dicas)):
                     con.print(f"[yellow]dica {nivel + 1}:[/] {dicas[nivel]}")
@@ -95,11 +115,8 @@ def estudar() -> None:
                 con.print(Panel(q["gabarito"], title="gabarito", border_style="green"))
                 break
 
-        if veredito is None:
-            continue
-        r = scheduler.registrar(q["id"], veredito, ultima_resposta, nivel,
-                                int(time.monotonic() - inicio))
-        con.print(f"[dim]caixa {r['caixa']} · próxima revisão {r['prox_revisao']}[/]\n")
+        if veredito:
+            fechar(veredito)
 
 
 def perguntar(pergunta: str) -> None:
