@@ -156,6 +156,12 @@ numa máquina nova não depende de baixar de novo.
 - Next.js só depois — `scheduler` e `socratic` já são funções puras.
 - Se a rotina exportar/importar do `sincronizar.py` cansar: Postgres hospedado
   (Neon, Supabase) com `DATABASE_URL` único resolve, ao custo de exigir rede.
+- **Precisão de `retrieval.py` (busca híbrida RRF) nunca foi medida.** O que
+  já foi validado é upstream/downstream disso: chunking (434/434 artigos
+  limpos, `diagnostico.py`) e o scheduler (fiação SQL bate com a regra pura,
+  harness de integração). Falta o meio — dado um conjunto de queries com
+  artigo esperado conhecido ("art. 312" → peculato), medir precision@k da
+  recuperação exata e da híbrida. Sem isso, "RAG está bom" não tem lastro.
 
 ## Convenções
 
