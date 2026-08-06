@@ -111,6 +111,11 @@ numa máquina nova não depende de baixar de novo.
 - Nota isolada ENTRE rubrica e artigo (feminicídio, art. 121-A).
 - Artigo revogado tem como corpo só a nota — preservar, é matéria de prova.
 - Rubrica pode começar com "Pena" ("Penas restritivas de direitos").
+- Assinatura e aviso de rodapé ("Este texto não substitui o publicado no
+  DOU...", "GETÚLIO VARGAS") vêm colados depois do último artigo no HTML
+  compilado. Sem cortar pelo marcador do aviso ANTES de gerar o `.txt`, esse
+  texto vira corpo do último artigo — não é rubrica nem termina sem
+  pontuação, então `_cortar_cauda` não descarta.
 
 ## Armadilhas de método (custaram tempo)
 
@@ -122,6 +127,10 @@ numa máquina nova não depende de baixar de novo.
   antes de novidade" quando a capacidade cobre a demanda.
 - **Medir ausência não é medir defeito.** "112 artigos sem rubrica" media o
   Código Penal, não o código-fonte. A métrica certa é perda de informação.
+- **`diagnostico.py` audita estrutura (contagem, rubrica), não conteúdo do
+  corpo.** O corpus com assinatura/rodapé colada no Art. 361 passava 434/434
+  limpo — o defeito estava DENTRO do texto do último chunk, onde a métrica
+  não olha. Só apareceu inspecionando `chunk_lei(...)[-1]` na mão.
 
 ## Limitações conhecidas
 
