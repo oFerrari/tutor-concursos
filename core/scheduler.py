@@ -15,7 +15,7 @@ from . import db
 from .scheduler_regras import (INTERVALOS, conta_como_erro, dias_ate_revisao,
                                orcamento_novas, proxima_caixa)
 
-VERSAO = "scheduler-v18"
+VERSAO = "scheduler-v19"
 
 # TETO_DIARIO: quantas questões por dia. NOVAS_POR_DIA=None significa "todo o
 # orçamento que sobrar depois das revisões" — cota fixa perdeu em todos os
@@ -86,7 +86,14 @@ def carga_hoje() -> dict:
 
 
 def registrar(questao_id: int, veredito: str, resposta: str,
-              dicas_usadas: int, segundos: int | None = None) -> dict:
+              dicas_usadas: int, segundos: int | None = None,
+              simulado_id: int | None = None) -> dict:
+    """
+    simulado_id marca a tentativa como parte de uma prova (core/simulado.py),
+    sem mudar a regra de promoção: acerto sem dica promove igual, dentro ou
+    fora de simulado — e simulado nunca oferece dica, então a caixa reage ao
+    mesmo sinal de sempre.
+    """
     q = db.exec1("SELECT caixa, disciplina, tema FROM questao WHERE id = %(id)s", {"id": questao_id})
     if not q:
         raise ValueError(f"questão {questao_id} não existe")
@@ -95,9 +102,10 @@ def registrar(questao_id: int, veredito: str, resposta: str,
     prox = date.today() + timedelta(days=dias_ate_revisao(caixa))
 
     db.query(
-        """INSERT INTO tentativa (questao_id, resposta, veredito, dicas_usadas, segundos)
-           VALUES (%(q)s, %(r)s, %(v)s, %(d)s, %(s)s)""",
-        {"q": questao_id, "r": resposta, "v": veredito, "d": dicas_usadas, "s": segundos},
+        """INSERT INTO tentativa (questao_id, resposta, veredito, dicas_usadas, segundos, simulado_id)
+           VALUES (%(q)s, %(r)s, %(v)s, %(d)s, %(s)s, %(sim)s)""",
+        {"q": questao_id, "r": resposta, "v": veredito, "d": dicas_usadas, "s": segundos,
+         "sim": simulado_id},
     )
     db.query(
         "UPDATE questao SET caixa = %(c)s, prox_revisao = %(p)s WHERE id = %(id)s",

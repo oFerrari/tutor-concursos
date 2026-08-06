@@ -35,9 +35,12 @@ A primeira execução baixa o modelo de embeddings (~1 GB). Depois roda offline.
 | `python ingest.py ARQ --disciplina D --tipo lei --norma CP` | indexa lei por artigo |
 | `python ingest.py ARQ --disciplina D --tipo aula --gerar 8` | indexa aula e gera 8 questões |
 | `python chat.py estudar` | fila de revisão do dia, modo socrático |
+| `python chat.py simulado 20 60` | prova de 20 questões, sem dica, corrige no final |
+| `python chat.py simulados` | histórico de simulados feitos |
 | `python chat.py perguntar "..."` | pergunta livre ancorada no acervo |
 | `python chat.py erros` | caderno de erros por reincidência |
-| `python chat.py stats` | % de acerto por disciplina |
+| `python chat.py stats` | % de acerto e cobertura por disciplina, com barra no terminal |
+| `python chat.py stats --json` | mesmo dado, formato pronto pra um futuro endpoint consumir |
 | `python chat.py meta 2026-11-15` | dias restantes, cobertura, ritmo necessário |
 
 ## Mapa do código
@@ -52,6 +55,7 @@ core/retrieval.py     citação exata → híbrida (RRF de vetor + tsvector)
 core/llm.py           interface LLM + adaptadores Gemini e Ollama
 core/socratic.py      avaliação e geração; retenção do gabarito em código
 core/scheduler.py     promoção de caixa, caderno de erros, meta
+core/simulado.py      prova sob condição de exame: sem dica, corrige no final
 ingest.py             worker de ingestão (batch)
 chat.py               sessão de estudo (CLI)
 ```

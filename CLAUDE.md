@@ -30,6 +30,8 @@ interface                CLI (rich). Sem frontend, de propósito.
 db/001_schema.sql          documento, chunk, questao, tentativa, erro_caderno
 db/002_rubrica_secao.sql   colunas rubrica e secao
 db/003_embedding_cache.sql cache de vetores por hash de conteúdo
+db/004_simulado.sql        tabela simulado, tentativa.simulado_id
+db/005_desempenho_json.sql v_desempenho_disciplina em float8 (JSON-pronta) + cobertura_pct
 core/chunking.py           lei -> chunks por artigo (função pura)
 core/embeddings.py         e5 local, prefixos query:/passage:, cache
 core/retrieval.py          dispositivo exato -> rubrica -> híbrida (RRF)
@@ -37,6 +39,7 @@ core/llm.py                interface LLM + Gemini + Ollama, retry
 core/socratic.py           avaliação e geração de questões (schemas JSON)
 core/scheduler_regras.py   regras de promoção — FUNÇÕES PURAS
 core/scheduler.py          fila, registro, caderno de erros, meta
+core/simulado.py           prova sob condição de exame: sem dica, corrige no final
 ingest.py                  ingestão (batch)
 reingest.py                reprocessa chunks preservando questões
 gerar.py                   geração com cobertura por seção
@@ -74,6 +77,19 @@ caixa causa INANIÇÃO: com centenas de questões inéditas, a promovida volta e
 **Penalidade de promoção = errar, não receber dica.** Dica vem automática ao
 errar, então as duas coisas andam juntas; penalizar ambas conta a mesma falha
 duas vezes. Dica pedida por iniciativa própria conta.
+
+**Simulado não dialoga nem dá dica — corrige tudo no final.** É a diferença
+entre treino e prova; andaime durante a prova mede a ajuda, não o aluno.
+Reaproveita `scheduler.registrar`: como nunca há dica, `dicas_usadas` é
+sempre 0, então acerto sempre promove — mesma regra de sempre, mesmo sinal
+limpo. Seleciona por `ORDER BY random()` sobre TODO o acervo, não pela fila
+do dia: fila prioriza o que venceu, simulado testa o conjunto inteiro.
+
+**`v_desempenho_disciplina` devolve `float8`, não `numeric`.** `ROUND(numeric,
+N)` vira `Decimal` no psycopg, e `json.dumps(Decimal)` estoura `TypeError`.
+Castear na view agora é o que deixa `scheduler.desempenho()` pronto pra virar
+endpoint depois sem reescrever nada — `chat.py stats --json` já imprime
+exatamente o que a API vai servir.
 
 **Cache de embeddings por hash de conteúdo.** Vetor é função pura de (texto,
 modelo). Corrigir chunking passou a custar segundos em vez de minutos.
@@ -142,6 +158,9 @@ numa máquina nova não depende de baixar de novo.
 - Trocar modelo de embeddings exige `ALTER TABLE` e reindexação.
 - `sincronizar.py` resolve alternância entre duas máquinas de um usuário só,
   não edição simultânea. Estudar nas duas sem exportar perde a mais recente.
+- `sincronizar.py` não exporta `simulado`/`tentativa.simulado_id`: histórico
+  de provas não viaja entre máquinas (o progresso em si — caixa,
+  prox_revisao — viaja, porque isso vem da tentativa comum).
 
 ## Aberto
 
@@ -152,7 +171,8 @@ numa máquina nova não depende de baixar de novo.
 - Ingerir CF, CPP, Lei 8.112 (mesmo pipeline, trocar `--norma`).
 - Parsear edital em tabela `topico` para cobertura por tópico.
 - Provas anteriores da banca: gabarito oficial + peso de incidência real.
-- Simulado por banca e desafio diário.
+- Simulado por banca (peso de incidência real, não amostra uniforme) e
+  desafio diário. Simulado genérico (`chat.py simulado`) já existe.
 - Next.js só depois — `scheduler` e `socratic` já são funções puras.
 - Se a rotina exportar/importar do `sincronizar.py` cansar: Postgres hospedado
   (Neon, Supabase) com `DATABASE_URL` único resolve, ao custo de exigir rede.
@@ -184,7 +204,9 @@ python ingest.py corpus/cp.txt --disciplina "Direito Penal" --tipo lei --norma C
 python gerar.py --cobertura 3
 python gerar.py 3 --secao "FUNCIONARIO PUBLICO" --por-lote 3 --max 12
 python chat.py estudar
-python chat.py erros | stats | meta AAAA-MM-DD
+python chat.py simulado 20 60      # 20 questões, meta de 60 min
+python chat.py simulados
+python chat.py erros | stats | stats --json | meta AAAA-MM-DD
 python chat.py perguntar "art. 312"
 
 # ao sair de uma máquina

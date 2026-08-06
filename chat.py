@@ -3,9 +3,12 @@
 Sessão de estudo no terminal.
 
     python chat.py estudar          # fila de revisão do dia, modo socrático
+    python chat.py simulado [N] [minutos]   # prova: sem dica, corrige no final
+    python chat.py simulados        # histórico de simulados feitos
     python chat.py perguntar "diferença entre dolo eventual e culpa consciente"
     python chat.py erros
-    python chat.py stats
+    python chat.py stats            # barras no terminal
+    python chat.py stats --json     # mesmo dado, formato que a futura API vai servir
     python chat.py meta 2026-11-15
 
 Provar o loop aqui antes de escrever uma linha de Next.js. Se a tutoria
@@ -21,9 +24,9 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
-from core import llm, scheduler, socratic
+from core import llm, scheduler, simulado as simulado_mod, socratic
 
-VERSAO = "chat-v21"
+VERSAO = "chat-v23"
 con = Console()
 MAX_DICAS = 3
 
@@ -152,6 +155,86 @@ def estudar() -> None:
             fechar(veredito)
 
 
+def simulado(n: int = simulado_mod.N_PADRAO, minutos: int | None = None) -> None:
+    questoes = simulado_mod.selecionar(n)
+    if not questoes:
+        con.print("[yellow]Nenhuma questão no acervo ainda.[/]")
+        return
+    if len(questoes) < n:
+        con.print(f"[dim]só há {len(questoes)} questões no acervo; simulado sai menor.[/]")
+
+    sid = simulado_mod.iniciar(len(questoes), minutos)
+    con.print(Panel(
+        f"{len(questoes)} questões" + (f" · meta de {minutos} min" if minutos else "") +
+        " · sem dica, sem correção durante a prova — gabarito só no final.",
+        title="simulado", border_style="magenta"))
+
+    respondidas = []   # (questao, resposta, segundos)
+    inicio_total = time.monotonic()
+    for i, q in enumerate(questoes, 1):
+        con.print(Panel(q["enunciado"], title=f"{i}/{len(questoes)} · {q['disciplina']}",
+                        border_style="blue"))
+        t0 = time.monotonic()
+        try:
+            resposta = con.input("\n[bold cyan]resposta[/] [dim]('pular', 'sair')[/]: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            resposta = "sair"
+        segundos = int(time.monotonic() - t0)
+        if resposta == "sair":
+            con.print("[dim]simulado interrompido; corrigindo o que já foi respondido.[/]")
+            break
+        respondidas.append((q, "" if resposta == "pular" else resposta, segundos))
+
+    if not respondidas:
+        con.print("[dim]nada respondido; simulado descartado.[/]")
+        return
+
+    segundos_total = int(time.monotonic() - inicio_total)
+    with con.status("corrigindo…"):
+        pendentes = []
+        for q, resposta, segundos in respondidas:
+            try:
+                av = simulado_mod.corrigir(q, resposta)
+            except llm.ErroLLM as e:
+                con.print(f"[red]LLM indisponível ao corrigir \"{q['tema']}\":[/] {e}")
+                continue
+            scheduler.registrar(q["id"], av["veredito"], resposta, 0, segundos, simulado_id=sid)
+            if av["veredito"] != "correta":
+                pendentes.append((q, resposta, av))
+
+    r = simulado_mod.finalizar(sid, segundos_total)
+    mm, ss = segundos_total // 60, segundos_total % 60
+    con.print(Panel(
+        f"{r['acertos']}/{r['total']} corretas ([bold]{r['nota_pct']}%[/]) · "
+        f"{r['parciais']} parciais · {r['erros']} erradas · {mm}min{ss:02d}s",
+        title="resultado", border_style="green"))
+
+    t = Table("disciplina", "questões", "acertos", "% acerto")
+    for d in simulado_mod.relatorio(sid):
+        t.add_row(d["disciplina"], str(d["questoes"]), str(d["acertos"]), f"{d['pct']}%")
+    con.print(t)
+
+    if pendentes:
+        con.print("\n[bold]revisão[/]")
+        for q, resposta, av in pendentes:
+            con.print(Panel(
+                f"[dim]sua resposta:[/] {resposta or '(em branco)'}\n"
+                f"[green]gabarito:[/] {q['gabarito']}",
+                title=f"{q['tema']} · {av['veredito']}", border_style="yellow"))
+
+
+def simulados() -> None:
+    hist = simulado_mod.historico()
+    if not hist:
+        con.print("[dim]nenhum simulado ainda. 'python chat.py simulado' para começar.[/]")
+        return
+    t = Table("data", "questões", "respondidas", "nota", title="histórico de simulados")
+    for s in hist:
+        t.add_row(str(s["criado_em"].date()), str(s["n_questoes"]), str(s["respondidas"]),
+                  f"{s['nota_pct'] or 0}%")
+    con.print(t)
+
+
 def perguntar(pergunta: str) -> None:
     with con.status("consultando o acervo…"):
         r = socratic.explicar(pergunta)
@@ -177,11 +260,34 @@ def erros() -> None:
     con.print(t)
 
 
-def stats() -> None:
-    t = Table("disciplina", "questões", "dominadas", "tentativas", "% acerto")
-    for d in scheduler.desempenho():
+def _barra(pct: float | None, largura: int = 20) -> str:
+    pct = max(0.0, min(100.0, pct or 0.0))
+    preenchido = round(largura * pct / 100)
+    return "█" * preenchido + "░" * (largura - preenchido)
+
+
+def stats(como_json: bool = False) -> None:
+    dados = scheduler.desempenho()
+    if como_json:
+        # Mesma função que vai virar endpoint um dia — testar o JSON aqui
+        # agora é testar o contrato exato que o frontend vai receber depois.
+        # float8 na view garante que isto não precisa de serializer customizado.
+        print(json.dumps(dados, ensure_ascii=False, indent=1))
+        return
+    if not dados:
+        con.print("[dim]sem questões ainda.[/]")
+        return
+
+    largura_nome = max(len(d["disciplina"]) for d in dados)
+    for d in dados:
+        pct = d["pct_acerto"] or 0.0
+        con.print(f"{d['disciplina']:<{largura_nome}}  {_barra(pct)}  {pct:>5.1f}% acerto")
+    con.print()
+
+    t = Table("disciplina", "questões", "dominadas", "% cobertura", "tentativas", "% acerto")
+    for d in dados:
         t.add_row(d["disciplina"], str(d["questoes"]), str(d["dominadas"]),
-                  str(d["tentativas"]), f"{d['pct_acerto'] or 0}%")
+                  f"{d['cobertura_pct'] or 0}%", str(d["tentativas"]), f"{d['pct_acerto'] or 0}%")
     con.print(t)
 
 
@@ -192,6 +298,12 @@ def main() -> int:
     cmd = sys.argv[1]
     if cmd == "estudar":
         estudar()
+    elif cmd == "simulado":
+        n = int(sys.argv[2]) if len(sys.argv) > 2 else simulado_mod.N_PADRAO
+        minutos = int(sys.argv[3]) if len(sys.argv) > 3 else None
+        simulado(n, minutos)
+    elif cmd == "simulados":
+        simulados()
     elif cmd == "perguntar":
         if len(sys.argv) < 3:
             con.print("uso: python chat.py perguntar \"sua pergunta\"")
@@ -200,7 +312,7 @@ def main() -> int:
     elif cmd == "erros":
         erros()
     elif cmd == "stats":
-        stats()
+        stats(como_json="--json" in sys.argv[2:])
     elif cmd == "meta":
         if len(sys.argv) < 3:
             con.print("uso: python chat.py meta AAAA-MM-DD")
