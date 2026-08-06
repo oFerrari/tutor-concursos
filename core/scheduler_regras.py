@@ -38,3 +38,20 @@ def dias_ate_revisao(caixa: int) -> int:
 def conta_como_erro(veredito: str) -> bool:
     """Parcial vai para o caderno de erros: não foi domínio."""
     return veredito != "correta"
+
+
+def orcamento_novas(n_revisoes: int, teto: int, novas: int | None) -> int:
+    """
+    Quantas questões inéditas cabem na fila de hoje, depois de reservar o
+    espaço para revisões.
+
+    novas=None -> usa todo o resto do teto (estratégia que venceu na
+    simulação: cota fixa freia a exposição sem necessidade nos dias leves).
+    novas=N    -> reserva N no máximo, mesmo com resto de teto sobrando.
+
+    n_revisoes já vem limitado a `teto` por quem chama (a query tem
+    LIMIT teto), então `resto` nunca é negativo — o max(..., 0) é
+    só para não confiar nessa invariante calada.
+    """
+    resto = max(teto - n_revisoes, 0)
+    return resto if novas is None else min(resto, novas)

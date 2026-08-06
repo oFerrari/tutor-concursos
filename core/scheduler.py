@@ -13,7 +13,7 @@ from datetime import date, timedelta
 
 from . import db
 from .scheduler_regras import (INTERVALOS, conta_como_erro, dias_ate_revisao,
-                               proxima_caixa)
+                               orcamento_novas, proxima_caixa)
 
 VERSAO = "scheduler-v18"
 
@@ -57,8 +57,7 @@ def fila(teto: int = TETO_DIARIO, novas: int | None = NOVAS_POR_DIA) -> list[dic
             LIMIT %(l)s""",
         {"l": teto},
     )
-    resto = max(teto - len(revisoes), 0)
-    sobra = resto if novas is None else min(resto, novas)
+    sobra = orcamento_novas(len(revisoes), teto, novas)
     if sobra == 0:
         return revisoes
     inéditas = db.query(

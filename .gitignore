@@ -6,7 +6,10 @@
 __pycache__/
 *.pyc
 
-# material de estudo (PDFs pessoais, não vão para o repositório)
+# material de estudo — dois destinos diferentes:
+#   corpus/  leis do Planalto (sem direito autoral, art. 8º IV da Lei 9.610) → VAI pro git.
+#            Resolve o bloqueio de rede corporativa: reingestão não depende de baixar de novo.
+#   acervo/  PDF de cursinho, material pago → NÃO vai pro git.
 acervo/
 
 # transitórios
