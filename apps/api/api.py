@@ -223,11 +223,19 @@ class IniciarSimuladoBody(BaseModel):
     n: int = simulado.N_PADRAO
     minutos: int | None = None
     disciplina: str | None = None
+    # Lista pronta (vinda de /desafio, bloco "mini_simulado") pula o sorteio
+    # aleatório — mesmo espírito de chat.simulado(questoes=...) aceitar uma
+    # lista já escolhida em vez de reamostrar o acervo todo de novo.
+    questao_ids: list[int] | None = None
 
 
 @app.post("/simulados")
 def rota_iniciar_simulado(body: IniciarSimuladoBody, uid: int = Depends(usuario_atual)):
-    qs = simulado.selecionar(body.n, body.disciplina)
+    if body.questao_ids:
+        mapa = questoes.obter_varias(body.questao_ids)
+        qs = [mapa[i] for i in body.questao_ids if i in mapa]
+    else:
+        qs = simulado.selecionar(body.n, body.disciplina)
     if not qs:
         raise HTTPException(404, "nenhuma questão no acervo (ou disciplina inexistente)")
     sid = simulado.iniciar(uid, len(qs), body.minutos)

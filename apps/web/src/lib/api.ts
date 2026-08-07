@@ -137,6 +137,97 @@ export function getStats(): Promise<Desempenho[]> {
   return chamar<Desempenho[]>("/stats");
 }
 
+// ---------------------------------------------------------- caderno de erros
+export type ErroCaderno = {
+  questao_id: number;
+  disciplina: string;
+  tema: string;
+  vezes: number;
+  ultima: string;
+  enunciado: string;
+};
+
+export function getErros(): Promise<ErroCaderno[]> {
+  return chamar<ErroCaderno[]>("/erros");
+}
+
+// ------------------------------------------------------------------ simulado
+// Sem dica, sem caixa exibida — a questão do simulado é mais magra de
+// propósito (core/simulado.py: "prova real não escolhe o que cai").
+export type QuestaoSimulado = {
+  id: number;
+  disciplina: string;
+  tema: string;
+  enunciado: string;
+  gabarito: string;
+};
+
+export function iniciarSimulado(
+  n: number,
+  minutos?: number,
+  disciplina?: string
+): Promise<{ simulado_id: number; questoes: QuestaoSimulado[] }> {
+  return chamar("/simulados", {
+    method: "POST",
+    body: JSON.stringify({ n, minutos, disciplina }),
+  });
+}
+
+/** Pula o sorteio — usa exatamente essas questões (bloco mini-simulado do desafio). */
+export function iniciarSimuladoComIds(
+  questaoIds: number[],
+  minutos?: number
+): Promise<{ simulado_id: number; questoes: QuestaoSimulado[] }> {
+  return chamar("/simulados", {
+    method: "POST",
+    body: JSON.stringify({ questao_ids: questaoIds, minutos }),
+  });
+}
+
+export type RespostaSimuladoItem = { questao_id: number; resposta: string; segundos: number };
+export type ResultadoSimulado = { total: number; acertos: number; parciais: number; erros: number; nota_pct: number };
+export type RelatorioDisciplina = { disciplina: string; questoes: number; acertos: number; pct: number };
+export type ErroSimulado = { tema: string; enunciado: string; gabarito: string; resposta: string; veredito: string };
+
+export function responderSimulado(
+  simuladoId: number,
+  respostas: RespostaSimuladoItem[],
+  segundosTotal: number
+): Promise<{ resultado: ResultadoSimulado; relatorio: RelatorioDisciplina[]; erros: ErroSimulado[] }> {
+  return chamar(`/simulados/${simuladoId}/respostas`, {
+    method: "POST",
+    body: JSON.stringify({ respostas, segundos_total: segundosTotal }),
+  });
+}
+
+export type HistoricoSimulado = {
+  id: number;
+  n_questoes: number;
+  minutos_alvo: number | null;
+  segundos_total: number | null;
+  criado_em: string;
+  acertos: number;
+  respondidas: number;
+  nota_pct: number | null;
+};
+
+export function getSimulados(): Promise<HistoricoSimulado[]> {
+  return chamar<HistoricoSimulado[]>("/simulados");
+}
+
+// -------------------------------------------------------------------- desafio
+export type PlanoDesafio = {
+  reincidentes: Questao[];
+  novas: Questao[];
+  mini_simulado: QuestaoSimulado[];
+  total_questoes: number;
+  estimativa_minutos: number;
+};
+
+export function getDesafio(): Promise<PlanoDesafio> {
+  return chamar<PlanoDesafio>("/desafio");
+}
+
 export type Registro = { caixa: number; prox_revisao: string };
 
 export function registrarTentativa(

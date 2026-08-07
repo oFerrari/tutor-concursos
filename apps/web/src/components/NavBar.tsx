@@ -8,6 +8,9 @@ import { limparToken } from "@/lib/api";
 // desafio entram aqui quando as telas ficarem prontas, não antes).
 const ITENS = [
   { href: "/fila", label: "fila" },
+  { href: "/desafio", label: "desafio" },
+  { href: "/erros", label: "erros" },
+  { href: "/simulado", label: "simulado" },
   { href: "/stats", label: "stats" },
 ];
 
