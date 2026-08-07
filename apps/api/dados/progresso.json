@@ -1,0 +1,442 @@
+{
+ "versao": "sincronizar-v2",
+ "gerado_em": "2026-08-07T08:32:58",
+ "usuario_email": "estudante@local",
+ "questoes": [
+  {
+   "chave": "f828203d1ead85ea",
+   "disciplina": "Direito Penal",
+   "tema": "Peculato culposo",
+   "enunciado": "Qual é a consequência jurídica para o funcionário público que repara o dano no peculato culposo antes da sentença irrecorrível?",
+   "gabarito": "A reparação do dano que precede à sentença irrecorrível extingue a punibilidade do agente. Caso seja posterior, reduz de metade a pena imposta.",
+   "dicas": [
+    "Observe os efeitos temporais da reparação do dano.",
+    "O marco processual decisivo é a sentença irrecorrível.",
+    "Antes da irrecorribilidade extingue-se a punibilidade."
+   ],
+   "criada_em": "2026-08-04T14:07:33.716210+00:00",
+   "doc_titulo": "cp",
+   "artigos": [
+    "CP|312"
+   ]
+  },
+  {
+   "chave": "d5eb5dfc3f90228b",
+   "disciplina": "Direito Penal",
+   "tema": "Modificação ou alteração não autorizada de sistema de informações",
+   "enunciado": "Quais são os requisitos e a consequência para a causa de aumento de pena no crime de modificação ou alteração não autorizada de sistema de informações?",
+   "gabarito": "As penas são aumentadas de um terço até a metade. O aumento incide se da modificação ou alteração resulta dano para a Administração Pública ou para o administrado.",
+   "dicas": [
+    "Verifique as disposições do parágrafo único.",
+    "Pense nas consequências práticas da alteração não autorizada.",
+    "O dano causado à Administração Pública ou ao administrado gera aumento de pena."
+   ],
+   "criada_em": "2026-08-04T14:07:33.730079+00:00",
+   "doc_titulo": "cp",
+   "artigos": [
+    "CP|313-B"
+   ]
+  },
+  {
+   "chave": "ad26116748d88f4d",
+   "disciplina": "Direito Penal",
+   "tema": "Emprego irregular de verbas ou rendas públicas",
+   "enunciado": "Qual é a conduta típica e a respectiva pena cominada ao crime de emprego irregular de verbas ou rendas públicas?",
+   "gabarito": "A conduta consiste em dar às verbas ou rendas públicas aplicação diversa da estabelecida em lei. A pena cominada é de detenção, de um a três meses, ou multa.",
+   "dicas": [
+    "Atente-se ao verbo principal do tipo penal.",
+    "A infração ocorre quando a destinação dada difere da legal.",
+    "A pena cominada é alternativa entre detenção e multa."
+   ],
+   "criada_em": "2026-08-04T14:07:33.733316+00:00",
+   "doc_titulo": "cp",
+   "artigos": [
+    "CP|315"
+   ]
+  },
+  {
+   "chave": "293bd12549b0286b",
+   "disciplina": "Direito Penal",
+   "tema": "Peculato mediante erro de outrem",
+   "enunciado": "Qual é a conduta típica exigida do funcionário público no crime de peculato mediante erro de outrem?",
+   "gabarito": "O funcionário deve apropriar-se de dinheiro ou qualquer utilidade que recebeu, no exercício do cargo, por erro de outrem.",
+   "dicas": [
+    "Observe o verbo nuclear utilizado no tipo penal.",
+    "O recebimento do bem decorre de uma falha alheia.",
+    "Trata-se de apropriação de dinheiro ou utilidade recebida por erro."
+   ],
+   "criada_em": "2026-08-04T14:14:16.242688+00:00",
+   "doc_titulo": "cp",
+   "artigos": [
+    "CP|313"
+   ]
+  },
+  {
+   "chave": "264c97778c4ba587",
+   "disciplina": "Direito Penal",
+   "tema": "Concussão",
+   "enunciado": "Qual é o verbo nuclear que caracteriza o crime de concussão praticado por funcionário público?",
+   "gabarito": "O verbo nuclear é exigir vantagem indevida, para si ou para outrem, direta ou indiretamente, em razão da função.",
+   "dicas": [
+    "Pense em uma conduta de imposição ou exigência.",
+    "Ocorre mesmo que a exigência seja feita fora da função ou antes de assumi-la, desde que em razão dela.",
+    "O tipo penal começa com o verbo exigir."
+   ],
+   "criada_em": "2026-08-04T14:14:16.246481+00:00",
+   "doc_titulo": "cp",
+   "artigos": [
+    "CP|316"
+   ]
+  },
+  {
+   "chave": "68d66dacdd3eb980",
+   "disciplina": "Direito Penal",
+   "tema": "Corrupção passiva",
+   "enunciado": "Quais são as três condutas alternativas que configuram o núcleo do crime de corrupção passiva?",
+   "gabarito": "As condutas são solicitar vantagem indevida, recebê-la ou aceitar promessa de tal vantagem, para si ou para outrem.",
+   "dicas": [
+    "Os verbos descrevem atos de pedir, ganhar ou concordar com promessa.",
+    "Envolve vantagem indevida relacionada à função pública.",
+    "Inclui solicitar, receber ou aceitar promessa."
+   ],
+   "criada_em": "2026-08-04T14:14:16.250805+00:00",
+   "doc_titulo": "cp",
+   "artigos": [
+    "CP|317"
+   ]
+  },
+  {
+   "chave": "197d3d7848babedc",
+   "disciplina": "Direito Penal",
+   "tema": "Inserção de dados falsos em sistema de informações",
+   "enunciado": "Quais são as finalidades específicas exigidas pelo tipo penal para a configuração do crime de inserção de dados falsos em sistema de informações praticado por funcionário autorizado?",
+   "gabarito": "O crime exige a finalidade específica de obter vantagem indevida para si ou para outrem, ou de causar dano. A ausência de um desses elementos subjetivos descaracteriza o tipo descrito no artigo.",
+   "dicas": [
+    "Pense no elemento subjetivo do tipo além do dolo.",
+    "O tipo penal exige um especial fim de agir.",
+    "A conduta deve visar um benefício próprio/alheio ou um prejuízo."
+   ],
+   "criada_em": "2026-08-04T14:16:57.843394+00:00",
+   "doc_titulo": "cp",
+   "artigos": [
+    "CP|313-A"
+   ]
+  },
+  {
+   "chave": "dc204eb1ed061f3c",
+   "disciplina": "Direito Penal",
+   "tema": "Extravio, sonegação ou inutilização de livro ou documento",
+   "enunciado": "Qual é a elementar relacionada ao vínculo do funcionário público com o objeto material que caracteriza o crime de extravio, sonegação ou inutilização de livro ou documento?",
+   "gabarito": "O funcionário deve ter a guarda do livro oficial ou do documento em razão do cargo. Sem essa relação funcional específica, o crime não se configura nos termos do artigo.",
+   "dicas": [
+    "Observe a condição do funcionário em relação ao objeto material.",
+    "O objeto deve estar sob a responsabilidade do agente devido às suas funções.",
+    "Trata-se de um crime próprio quanto ao sujeito ativo e sua relação com o documento."
+   ],
+   "criada_em": "2026-08-04T14:16:57.850011+00:00",
+   "doc_titulo": "cp",
+   "artigos": [
+    "CP|314"
+   ]
+  },
+  {
+   "chave": "ea28d737b2d67d0e",
+   "disciplina": "Direito Penal",
+   "tema": "Facilitação de contrabando ou descaminho",
+   "enunciado": "Qual é a conduta comissiva ou omissiva do funcionário público integrada ao tipo penal de facilitação de contrabando ou descaminho?",
+   "gabarito": "O funcionário deve facilitar a prática de contrabando ou descaminho mediante a infração de dever funcional. A pena prevista é de reclusão de três a oito anos, além de multa.",
+   "dicas": [
+    "Analise o verbo principal que dá nome ao delito.",
+    "A facilitação da prática ilícita deve estar associada a uma violação específica.",
+    "O agente público descumpre uma obrigação inerente à sua função para ajudar na infração de outra norma."
+   ],
+   "criada_em": "2026-08-04T14:16:57.853302+00:00",
+   "doc_titulo": "cp",
+   "artigos": [
+    "CP|318"
+   ]
+  },
+  {
+   "chave": "a5f25d58df705859",
+   "disciplina": "Direito Penal",
+   "tema": "Prevaricação",
+   "enunciado": "Qual é a conduta típica e o elemento subjetivo exigido no crime de prevaricação praticado por funcionário público?",
+   "gabarito": "O crime consiste em retardar, deixar de praticar indevidamente ato de ofício ou praticá-lo contra disposição expressa de lei. Exige-se o elemento subjetivo específico de satisfazer interesse ou sentimento pessoal.",
+   "dicas": [
+    "Observe a relação entre a omissão ou ação indevida do funcionário público.",
+    "O tipo penal exige uma finalidade específica relacionada a uma motivação interna do agente.",
+    "Trata-se de satisfazer interesse ou sentimento pessoal."
+   ],
+   "criada_em": "2026-08-04T14:17:00.746102+00:00",
+   "doc_titulo": "cp",
+   "artigos": [
+    "CP|319"
+   ]
+  },
+  {
+   "chave": "c535739a9ad7b0a2",
+   "disciplina": "Direito Penal",
+   "tema": "Acesso a aparelho de comunicação por preso",
+   "enunciado": "Qual é a conduta penalmente punida do Diretor de Penitenciária ou agente público relacionada ao uso de meios de comunicação pelo preso?",
+   "gabarito": "A conduta consiste em deixar de cumprir o dever de vedar ao preso o acesso a aparelho telefônico, de rádio ou similar que permita comunicação externa ou com outros presos. A pena prevista é de detenção, de 3 meses a 1 ano.",
+   "dicas": [
+    "Pense nas obrigações de segurança e controle dentro de um estabelecimento prisional.",
+    "O foco do tipo penal é a proibição de um equipamento específico que permita contato.",
+    "Envolve a omissão em impedir o acesso a aparelho telefônico, de rádio ou similar."
+   ],
+   "criada_em": "2026-08-04T14:17:00.758333+00:00",
+   "doc_titulo": "cp",
+   "artigos": [
+    "CP|319-A"
+   ]
+  },
+  {
+   "chave": "4af14bef159e6157",
+   "disciplina": "Direito Penal",
+   "tema": "Condescendência criminosa",
+   "enunciado": "Como se configura o crime de condescendência criminosa em relação à atuação do superior hierárquico perante um subordinado infrator?",
+   "gabarito": "O crime ocorre quando o funcionário, por indulgência, deixa de responsabilizar subordinado que cometeu infração no cargo, ou, se lhe faltar competência, deixa de levar o fato ao conhecimento da autoridade competente.",
+   "dicas": [
+    "Analise a postura de tolerância de um superior diante de uma falta cometida por quem está abaixo dele.",
+    "A motivação do agente está ligada a um sentimento específico de brandura.",
+    "Envolve deixar de responsabilizar o subordinado ou omitir-se em avisar a autoridade competente."
+   ],
+   "criada_em": "2026-08-04T14:17:00.762548+00:00",
+   "doc_titulo": "cp",
+   "artigos": [
+    "CP|320"
+   ]
+  },
+  {
+   "chave": "6d2c57c3d91067c5",
+   "disciplina": "Direito Penal",
+   "tema": "Advocacia administrativa",
+   "enunciado": "Qual é a consequência penal para o funcionário público que patrocina interesse privado legítimo valendo-se de sua qualidade?",
+   "gabarito": "A pena aplicável é de detenção, de um a três meses, ou multa. Se o interesse patrocinado for ilegítimo, a pena passa a ser de detenção, de três meses a um ano, além da multa.",
+   "dicas": [
+    "Observe a distinção entre a natureza do interesse patrocinado.",
+    "A pena base envolve detenção de curto prazo ou multa.",
+    "Trata-se do crime de advocacia administrativa com interesse legítimo."
+   ],
+   "criada_em": "2026-08-04T14:17:03.209061+00:00",
+   "doc_titulo": "cp",
+   "artigos": [
+    "CP|321"
+   ]
+  },
+  {
+   "chave": "f03e3a0d4a018101",
+   "disciplina": "Direito Penal",
+   "tema": "Violência arbitrária",
+   "enunciado": "Como é punido o funcionário público que pratica violência no exercício de sua função ou a pretexto de exercê-la?",
+   "gabarito": "A conduta é punida com pena de detenção, de seis meses a três anos, além da pena correspondente à violência praticada.",
+   "dicas": [
+    "Pense nas consequências cumulativas para o autor da violência.",
+    "O tipo penal exige que o ato ocorra no exercício da função ou a pretexto de exercê-la.",
+    "A pena privativa de liberdade é de detenção somada à pena do ato violento."
+   ],
+   "criada_em": "2026-08-04T14:17:03.212043+00:00",
+   "doc_titulo": "cp",
+   "artigos": [
+    "CP|322"
+   ]
+  },
+  {
+   "chave": "66a85d2b63abc443",
+   "disciplina": "Direito Penal",
+   "tema": "Abandono de função",
+   "enunciado": "Qual é a pena cominada ao funcionário que abandona cargo público fora dos casos permitidos em lei, resultando prejuízo público?",
+   "gabarito": "Se do abandono resulta prejuízo público, a pena aplicável é de detenção, de três meses a um ano, e multa.",
+   "dicas": [
+    "Atente-se para a qualificadora relacionada ao resultado do abandono.",
+    "O tipo penal básico é agravado pela ocorrência de prejuízo público.",
+    "A pena privativa de liberdade para essa hipótese qualificada é detenção de três meses a um ano, cumulada com multa."
+   ],
+   "criada_em": "2026-08-04T14:17:03.214647+00:00",
+   "doc_titulo": "cp",
+   "artigos": [
+    "CP|323"
+   ]
+  },
+  {
+   "chave": "99cdf3fd165f9d34",
+   "disciplina": "Direito Penal",
+   "tema": "Exercício funcional ilegalmente antecipado ou prolongado",
+   "enunciado": "Quais são as duas condutas alternativas que configuram o crime de exercício funcional ilegalmente antecipado ou prolongado?",
+   "gabarito": "As condutas são entrar no exercício de função pública antes de satisfeitas as exigências legais, ou continuar a exercê-la, sem autorização, após saber oficialmente da exoneração, remoção, substituição ou suspensão. A pena prevista é de detenção, de quinze dias a um mês, ou multa.",
+   "dicas": [
+    "Pense no momento inicial e final do vínculo funcional.",
+    "O tipo penal abrange tanto a entrada precipitada quanto a permanência irregular após o afastamento oficial.",
+    "Envolve entrar antes de cumprir exigências legais ou continuar após saber oficialmente da exoneração, remoção, substituição ou suspensão."
+   ],
+   "criada_em": "2026-08-04T14:17:05.960612+00:00",
+   "doc_titulo": "cp",
+   "artigos": [
+    "CP|324"
+   ]
+  },
+  {
+   "chave": "1726f8ff1c274342",
+   "disciplina": "Direito Penal",
+   "tema": "Violação de sigilo funcional",
+   "enunciado": "O que caracteriza o crime de violação de sigilo funcional na modalidade básica e qual a ressalva quanto à gravidade do fato?",
+   "gabarito": "O crime consiste em revelar fato de que o funcionário tem ciência em razão do cargo e que deva permanecer em segredo, ou facilitar-lhe a revelação. Aplica-se a pena se o fato não constituir crime mais grave.",
+   "dicas": [
+    "Observe a conduta relacionada a informações obtidas em razão do cargo.",
+    "O tipo penal pune tanto a revelação direta quanto a facilitação dela.",
+    "A punição exige que o segredo seja revelado e que o ato não constitua crime mais grave."
+   ],
+   "criada_em": "2026-08-04T14:17:05.963815+00:00",
+   "doc_titulo": "cp",
+   "artigos": [
+    "CP|325"
+   ]
+  },
+  {
+   "chave": "d90e5344de2c476a",
+   "disciplina": "Direito Penal",
+   "tema": "Violação do sigilo de proposta de concorrência",
+   "enunciado": "Qual é a conduta punida pelo crime de violação do sigilo de proposta de concorrência e qual a respectiva cominação de pena?",
+   "gabarito": "A conduta consiste em devassar o sigilo de proposta de concorrência pública, ou proporcionar a terceiro o ensejo de devassá-lo. A pena cominada é de detenção, de três meses a um ano, e multa.",
+   "dicas": [
+    "O delito protege o sigilo em procedimentos licitatórios específicos.",
+    "A lei pune tanto a ação direta de devassar quanto a de permitir que terceiros o façam.",
+    "Trata-se de devassar proposta de concorrência pública ou dar ensejo para que terceiro o faça, com pena de detenção e multa."
+   ],
+   "criada_em": "2026-08-04T14:17:05.967027+00:00",
+   "doc_titulo": "cp",
+   "artigos": [
+    "CP|326"
+   ]
+  }
+ ],
+ "progresso": [
+  {
+   "questao": "f828203d1ead85ea",
+   "caixa": 0,
+   "prox_revisao": "2026-08-05"
+  },
+  {
+   "questao": "d5eb5dfc3f90228b",
+   "caixa": 0,
+   "prox_revisao": "2026-08-05"
+  },
+  {
+   "questao": "293bd12549b0286b",
+   "caixa": 0,
+   "prox_revisao": "2026-08-05"
+  },
+  {
+   "questao": "ea28d737b2d67d0e",
+   "caixa": 0,
+   "prox_revisao": "2026-08-05"
+  },
+  {
+   "questao": "68d66dacdd3eb980",
+   "caixa": 0,
+   "prox_revisao": "2026-08-05"
+  },
+  {
+   "questao": "ad26116748d88f4d",
+   "caixa": 0,
+   "prox_revisao": "2026-08-05"
+  },
+  {
+   "questao": "197d3d7848babedc",
+   "caixa": 0,
+   "prox_revisao": "2026-08-05"
+  },
+  {
+   "questao": "264c97778c4ba587",
+   "caixa": 0,
+   "prox_revisao": "2026-08-05"
+  },
+  {
+   "questao": "dc204eb1ed061f3c",
+   "caixa": 0,
+   "prox_revisao": "2026-08-05"
+  }
+ ],
+ "tentativas": [
+  {
+   "questao": "f828203d1ead85ea",
+   "resposta": "perdao juridico",
+   "veredito": "incorreta",
+   "dicas_usadas": 3,
+   "segundos": 425,
+   "criada_em": "2026-08-04T14:40:13.706596+00:00"
+  },
+  {
+   "questao": "d5eb5dfc3f90228b",
+   "resposta": "dano à Administração ou ao administrado",
+   "veredito": "parcial",
+   "dicas_usadas": 3,
+   "segundos": 132,
+   "criada_em": "2026-08-04T14:45:10.096907+00:00"
+  },
+  {
+   "questao": "293bd12549b0286b",
+   "resposta": "peculato",
+   "veredito": "incorreta",
+   "dicas_usadas": 3,
+   "segundos": 53,
+   "criada_em": "2026-08-04T17:08:04.956201+00:00"
+  },
+  {
+   "questao": "ad26116748d88f4d",
+   "resposta": "reclusao",
+   "veredito": "incorreta",
+   "dicas_usadas": 3,
+   "segundos": 49,
+   "criada_em": "2026-08-04T17:26:02.138149+00:00"
+  },
+  {
+   "questao": "264c97778c4ba587",
+   "resposta": "concussao",
+   "veredito": "incorreta",
+   "dicas_usadas": 0,
+   "segundos": 4925,
+   "criada_em": "2026-08-04T18:50:31.024164+00:00"
+  },
+  {
+   "questao": "197d3d7848babedc",
+   "resposta": "prevaricacao",
+   "veredito": "incorreta",
+   "dicas_usadas": 4,
+   "segundos": 47,
+   "criada_em": "2026-08-04T18:51:53.531726+00:00"
+  },
+  {
+   "questao": "dc204eb1ed061f3c",
+   "resposta": "peculato",
+   "veredito": "incorreta",
+   "dicas_usadas": 1,
+   "segundos": 290,
+   "criada_em": "2026-08-04T18:56:43.666404+00:00"
+  },
+  {
+   "questao": "68d66dacdd3eb980",
+   "resposta": "corrupcao ativa, passiva e  peculato",
+   "veredito": "incorreta",
+   "dicas_usadas": 1,
+   "segundos": 142,
+   "criada_em": "2026-08-04T18:59:09.041791+00:00"
+  },
+  {
+   "questao": "68d66dacdd3eb980",
+   "resposta": "corrupcao ativa, passiva e  peculato",
+   "veredito": "incorreta",
+   "dicas_usadas": 1,
+   "segundos": 142,
+   "criada_em": "2026-08-04T18:59:09.054250+00:00"
+  },
+  {
+   "questao": "ea28d737b2d67d0e",
+   "resposta": "contrabando",
+   "veredito": "parcial",
+   "dicas_usadas": 4,
+   "segundos": 209,
+   "criada_em": "2026-08-04T19:02:38.716591+00:00"
+  }
+ ]
+}

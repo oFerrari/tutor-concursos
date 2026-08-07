@@ -12,7 +12,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from core import edital
+from core import auth, edital
+from core.config import CLI_USUARIO_EMAIL
 
 
 def main() -> int:
@@ -27,7 +28,8 @@ def main() -> int:
         print(f"arquivo não encontrado: {a.arquivo}", file=sys.stderr)
         return 1
 
-    r = edital.ingerir(a.arquivo, titulo=a.titulo, orgao=a.orgao, banca=a.banca)
+    usuario_id = auth.usuario_da_cli(CLI_USUARIO_EMAIL)
+    r = edital.ingerir(usuario_id, a.arquivo, titulo=a.titulo, orgao=a.orgao, banca=a.banca)
 
     print(f"edital_id={r['edital_id']}")
     print(f"\ndata da prova escolhida: {r['data_prova']}")

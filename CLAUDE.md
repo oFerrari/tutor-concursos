@@ -4,12 +4,22 @@ Contexto persistente do projeto. Leia antes de propor mudanças.
 Portável: serve para Antigravity, Claude Code, Cursor, Codex.
 (Para Claude Code: `ln -s AGENTS.md CLAUDE.md`.)
 
+**Monorepo.** Este arquivo fica na raiz (é onde as ferramentas de IA
+procuram por padrão), mas TODO caminho e comando abaixo — `core/`, `db/`,
+`chat.py`, `corpus/`, `.env` — é relativo a `apps/api/`, que é onde mora o
+backend inteiro. `cd apps/api` antes de rodar qualquer coisa deste
+documento, exceto `docker compose` (lê `docker-compose.yml` da raiz).
+Ver `README.md` (raiz) para a estrutura do monorepo (`apps/`, `packages/`).
+
 ---
 
 ## O que é
 
 Tutor socrático para concursos públicos brasileiros. RAG sobre lei seca +
-banco de questões + repetição espaçada. Uso pessoal, mono-usuário, CLI.
+banco de questões + repetição espaçada. Multiusuário desde a migração 008
+(ver Decisões); CLI própria (`chat.py`) e API HTTP (`api.py`) sobre a MESMA
+lógica de `core/*.py` — Next.js consumindo `api.py` é o próximo passo, ainda
+não escrito.
 Corpus atual: Código Penal (434 artigos), Constituição Federal (276 artigos) +
 ADCT (151 artigos) como normas separadas, todos do Planalto — mais um livro
 de histórico de emendas constitucionais como material `historico` (busca
@@ -24,7 +34,9 @@ cooperativa; este projeto é separado disso por decisão explícita.
 Postgres 17 + pgvector   docker compose, porta 5433
 embeddings               intfloat/multilingual-e5-base, 768 dim, LOCAL (CPU)
 LLM                      Gemini Flash via REST, adaptador trocável
-interface                CLI (rich). Sem frontend, de propósito.
+auth                     JWT (PyJWT) + bcrypt, stateless — sem tabela de sessão
+interface                CLI (rich, chat.py) + API HTTP (FastAPI, api.py) sobre o mesmo core/.
+                         Frontend (Next.js) ainda não escrito — é o próximo passo.
 ```
 
 ## Mapa
@@ -37,13 +49,17 @@ db/004_simulado.sql        tabela simulado, tentativa.simulado_id
 db/005_desempenho_json.sql v_desempenho_disciplina em float8 (JSON-pronta) + cobertura_pct
 db/006_tipo_historico.sql  documento.tipo aceita 'historico' (material com múltiplas versões do artigo)
 db/007_edital.sql          tabelas edital e topico
+db/008_usuario.sql         usuario, progresso (caixa/prox_revisao saem de questao), usuario_id em tudo pessoal
+db/009_cascade_usuario.sql ON DELETE CASCADE consistente em toda FK pra usuario
 core/chunking.py           lei -> chunks por artigo (função pura)
 core/embeddings.py         e5 local, prefixos query:/passage:, cache
 core/retrieval.py          dispositivo exato -> rubrica -> híbrida (RRF)
 core/llm.py                interface LLM + Gemini + Ollama, retry
 core/socratic.py           avaliação e geração de questões (schemas JSON)
+core/questoes.py           lookup simples do banco de questões (compartilhado, sem usuario_id)
+core/auth.py               hash de senha (bcrypt), token de sessão (JWT), usuário fixo da CLI
 core/scheduler_regras.py   regras de promoção — FUNÇÕES PURAS
-core/scheduler.py          fila, registro, caderno de erros, meta
+core/scheduler.py          fila, registro, caderno de erros, meta — tudo por usuario_id
 core/simulado.py           prova sob condição de exame: sem dica, corrige no final
 core/desafio.py            meta do dia: reincidentes + novas + mini-simulado, tempo estimado
 core/ritmo_regras.py       gatilho de intervenção proativa — FUNÇÕES PURAS
@@ -56,8 +72,9 @@ gerar.py                   geração com cobertura por seção
 diagnostico.py             auditoria do chunking, sem banco
 avaliar_retrieval.py       precision@k da busca híbrida contra gabarito de artigos
 simular.py                 simulação de meses de estudo, sem banco
-chat.py                    sessão de estudo
-sincronizar.py             exporta/importa questões e progresso entre máquinas
+chat.py                    sessão de estudo (CLI, usuário fixo por email)
+api.py                     API HTTP (FastAPI) — mesma lógica de core/, autenticada por JWT
+sincronizar.py             exporta/importa questões e progresso de UM usuário entre máquinas
 atualizar.sh               instala arquivos baixados do chat
 ```
 
@@ -165,6 +182,54 @@ viram ruído que o aluno aprende a ignorar. Disciplina fraca exige um mínimo
 de tentativas antes de disparar, mesma lição do simulador: percentual sobre
 amostra pequena é ruído, não tendência.
 
+**Multiusuário: o acervo é COMPARTILHADO, o progresso é PESSOAL (migração
+008).** `documento`/`chunk`/`questao` continuam sem `usuario_id` — é o
+mesmo Código Penal pra todo mundo, e gerar questão custa cota de LLM; negar
+reaproveitamento entre usuários pagaria a mesma pergunta N vezes. O que é
+estado de quem estuda (`caixa`, `prox_revisao`) SAI de `questao` e vai pra
+`progresso` (usuario_id, questao_id) — porque caixa é estado de QUEM
+responde, não da pergunta, e dois usuários estudando o mesmo banco
+compartilhado precisam de caixas independentes pra MESMA questão. Ausência
+de linha em `progresso` é o sinal de "esta pessoa nunca tentou esta
+questão" (antes esse sinal vinha de `tentativa` não ter linha; migrou pra
+`progresso`, que é o dado que efetivamente muda). `tentativa`, `erro_caderno`
+(PK virou composta), `simulado` e `edital` ganharam `usuario_id`.
+
+**`v_desempenho_disciplina`: o denominador da cobertura é o acervo INTEIRO
+da disciplina, não só o que o usuário já tocou.** Primeira versão da view
+pós-migração partia de `progresso` (só linhas existentes) — um usuário que
+respondeu 2 de 18 questões e dominou as 2 aparecia com 100% de cobertura.
+Corrigido partindo de `questao` (CROSS JOIN com os usuários que têm
+qualquer progresso) e trazendo `progresso`/`tentativa` como LEFT JOIN
+escopado — `questoes` conta o universo compartilhado, `dominadas` conta só
+o que ESTE usuário dominou. Achado revisando a própria migração antes de
+aplicar, não em produção — mas do tipo de erro que só aparece com mais de
+um usuário, que o dataset mono-usuário anterior nunca teria exposto.
+
+**Autenticação é JWT stateless, não sessão em tabela.** `api.py` e
+`chat.py` não compartilham processo nem memória; um token assinado
+(`core/auth.py`, bcrypt pro hash de senha, PyJWT pra sessão) evita precisar
+de mais uma tabela só pra sessão. Trade-off aceito: sem lista de revogação,
+um token vazado vale até expirar (uma semana) — aceitável pra uso
+pessoal/pequeno grupo, revisar se isso crescer.
+
+**A CLI não loga — resolve um usuário fixo pelo email do `.env`.**
+`chat.py`/`sincronizar.py`/`edital.py` (CLI) chamam
+`auth.usuario_da_cli(CLI_USUARIO_EMAIL)`, que cria a conta (sem senha
+usável) se não existir. Login de verdade com senha só existe pelo caminho
+da API — é o único lugar que precisa disso, porque é o único lugar onde
+"alguém que não é você" poderia estar do outro lado.
+
+**`ON DELETE CASCADE` consistente em toda FK pra `usuario` (migração 009).**
+A 008 só deu CASCADE em `progresso`; as outras (`tentativa`, `erro_caderno`,
+`simulado`, `edital`) ficaram RESTRICT por padrão do Postgres — inconsistência
+descoberta ao testar com usuário descartável: apagar a conta de teste
+travava num FK esquecido. Testar multiusuário sem isso exigiria apagar cada
+tabela na mão, na ordem certa — a mesma classe de erro já documentada em
+"Armadilhas de método" (lógica de limpeza ad-hoc é onde bug mora); um
+`DELETE FROM usuario` limpo é o que permite testar com conta descartável
+com confiança.
+
 **`corpus/` (lei do Planalto) vai para o git; `acervo/` (material pago) não.**
 Texto de lei não tem direito autoral no Brasil (art. 8º, IV da Lei 9.610).
 Levar o texto resolve o bloqueio de rede corporativa de uma vez: reingerir
@@ -254,10 +319,28 @@ lembrasse de rodar.
   de emergência. `core/embeddings.py` também não fixava `device="cpu"`
   (decisão já documentada em "Pilha"), então uma GPU incompatível com o
   build do torch instalado quebra em runtime em vez de nunca ser tocada.
+- **`VAR=valor cmd1 | cmd2` só passa a env var pro PRIMEIRO comando do
+  pipe, não pro segundo.** Testando isolamento multiusuário, um
+  `CLI_USUARIO_EMAIL=teste printf ... | python chat.py simulado` rodou o
+  `chat.py` com o email DEFAULT do `.env` — ou seja, contra o usuário real —
+  porque o prefixo só se aplicava ao `printf`. As duas tentativas foram
+  registradas na conta real antes de eu notar (progresso divergindo do
+  esperado). Corrigido colocando a env var no lado do pipe que efetivamente
+  a usa: `printf ... | CLI_USUARIO_EMAIL=teste python chat.py ...`. A
+  correção nos dados usou o mesmo método já validado (recomputar `caixa`
+  a partir do histórico real de tentativas, não da data de "hoje") —
+  restaurado e reverificado byte a byte contra backup antes de continuar.
+  Lição: ao testar isolamento entre usuários, um usuário "de teste" com
+  `usuario_da_cli()` + `ON DELETE CASCADE` (migração 009) que se apaga com
+  um `DELETE` só é mais seguro que confiar em escopo de env var em pipe.
 
 ## Limitações conhecidas
 
-- Mono-usuário. Onde entra `usuario_id` está marcado no schema.
+- Multiusuário desde a migração 008 — acervo compartilhado, progresso pessoal
+  (ver Decisões). `sincronizar.py` continua pensado pra alternância de UM
+  usuário entre duas máquinas, não pra distribuir contas.
+- JWT sem revogação: token vazado vale até expirar (uma semana, `core/auth.py`).
+  Aceitável pra uso pessoal/pequeno grupo; revisar se isso crescer.
 - PDF escaneado exige OCR antes (`ocrmypdf`).
 - Camada gratuita do Gemini: cota diária baixa e prompts podem ser usados
   para treinamento. Não sirva conteúdo sensível por esse caminho.
@@ -285,7 +368,9 @@ lembrasse de rodar.
 - Simulado por banca (peso de incidência real, não amostra uniforme).
   Simulado genérico (`chat.py simulado`) e desafio diário (`chat.py desafio`)
   já existem.
-- Next.js só depois — `scheduler` e `socratic` já são funções puras.
+- Next.js consumindo `api.py` — API já existe e testada (auth, fila,
+  diálogo turno a turno, simulado, desafio, stats, edital), frontend ainda
+  não escrito. `scheduler`/`socratic` continuam funções puras por baixo.
 - Se a rotina exportar/importar do `sincronizar.py` cansar: Postgres hospedado
   (Neon, Supabase) com `DATABASE_URL` único resolve, ao custo de exigir rede.
 - **Precisão de `retrieval.py` MEDIDA** (`avaliar_retrieval.py`, agora 22
@@ -362,11 +447,18 @@ lembrasse de rodar.
   `json.dumps`) até alguém tentar de verdade.
 - Ao sair de uma máquina: `python sincronizar.py exportar` antes do commit/push,
   sempre — senão a próxima exportação (de qualquer lado) sobrescreve progresso.
+- Testar qualquer coisa que grave em `tentativa`/`progresso`/`simulado`/`edital`
+  contra um usuário DESCARTÁVEL (`auth.usuario_da_cli("teste-x@local")`),
+  nunca contra a conta real (`CLI_USUARIO_EMAIL`). Apagar com
+  `DELETE FROM usuario WHERE email = '...'` — o `ON DELETE CASCADE` da
+  migração 009 limpa tentativa/progresso/erro_caderno/simulado/edital(+topico)
+  de uma vez, sem lógica de limpeza escrita na mão (ver Armadilhas de método).
 
 ## Comandos
 
 ```bash
-docker compose up -d && source .venv/bin/activate
+docker compose up -d          # da raiz do monorepo
+cd apps/api && source .venv/bin/activate
 python ingest.py corpus/cp.txt --disciplina "Direito Penal" --tipo lei --norma CP
 python ingest.py corpus/cf.txt --disciplina "Direito Constitucional" --tipo lei --norma CF
 python ingest.py corpus/adct.txt --disciplina "Direito Constitucional" --tipo lei --norma ADCT --titulo ADCT
@@ -389,6 +481,12 @@ python sincronizar.py exportar && git add -A && git commit -m "progresso" && git
 
 # ao chegar na outra (ingira o material antes, se ainda não ingeriu)
 git pull && python sincronizar.py importar
+
+# API (pra Next.js consumir depois; hoje só testada via TestClient/curl)
+uvicorn api:app --reload --port 8000
+curl -s -X POST localhost:8000/auth/registrar -H 'content-type: application/json' \
+     -d '{"email":"voce@exemplo.com","senha":"pelomenos8chars"}'
+curl -s localhost:8000/fila -H "Authorization: Bearer $TOKEN"
 ```
 
 

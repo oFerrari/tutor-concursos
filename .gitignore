@@ -1,7 +1,8 @@
 # segredos
 .env
 
-# ambiente
+# ambiente (todo o backend Python mora em apps/api/; os padrões abaixo
+# batem em qualquer profundidade, então não precisam de prefixo)
 .venv/
 __pycache__/
 *.pyc
@@ -15,5 +16,12 @@ acervo/
 # transitórios
 .llm_debug.txt
 *.sql.bak
-db/*.sql
-!db/0[0-9][0-9]_*.sql
+apps/api/db/*.sql
+!apps/api/db/0[0-9][0-9]_*.sql
+
+# monorepo JS (turborepo) — ainda sem workspace real, mas já correto pra
+# quando apps/web ou packages/* existirem
+node_modules/
+.turbo/
+.next/
+dist/

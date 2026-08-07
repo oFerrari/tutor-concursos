@@ -1,2 +1,2 @@
 * text=auto
-corpus/*.txt text eol=lf
+apps/api/corpus/*.txt text eol=lf

@@ -15,6 +15,11 @@ Sessão de estudo no terminal.
 
 Provar o loop aqui antes de escrever uma linha de Next.js. Se a tutoria
 funciona sem interface, o frontend é só apresentação.
+
+MULTIUSUÁRIO: a CLI não faz login — resolve (ou cria) UM usuário fixo pelo
+email de `CLI_USUARIO_EMAIL` no .env (default: estudante@local, o mesmo
+semeado pela migração 008). Login de verdade com senha só existe pelo
+caminho da API (api.py), pra quem for usar o frontend.
 """
 import json
 import sys
@@ -26,12 +31,17 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
-from core import desafio as desafio_mod
+from core import auth, desafio as desafio_mod
 from core import llm, ritmo, scheduler, simulado as simulado_mod, socratic
+from core.config import CLI_USUARIO_EMAIL
 
-VERSAO = "chat-v26"
+VERSAO = "chat-v27"
 con = Console()
 MAX_DICAS = 3
+
+
+def _usuario_id() -> int:
+    return auth.usuario_da_cli(CLI_USUARIO_EMAIL)
 
 
 def _dicas(q) -> list[str]:
@@ -43,32 +53,33 @@ MAX_TENTATIVAS = 3      # respostas erradas antes de revelar o gabarito
 
 
 def estudar() -> None:
-    pendentes = scheduler.fila()
+    uid = _usuario_id()
+    pendentes = scheduler.fila(uid)
     if not pendentes:
         con.print("[green]Nada pendente hoje.[/] Ingira material novo ou volte amanhã.")
         return
 
-    c = scheduler.carga_hoje()
+    c = scheduler.carga_hoje(uid)
     con.print(f"[bold]{len(pendentes)}[/] questões na fila · "
               f"{c['revisoes']} revisões venceram, {c['ineditas']} inéditas"
               + (f" · [yellow]{c['atraso']} de atraso[/]" if c["atraso"] else "") + "\n")
-    _mostrar_sugestao()
+    _mostrar_sugestao(uid)
 
-    _estudar_lista(pendentes)
+    _estudar_lista(uid, pendentes)
 
 
-def _mostrar_sugestao() -> None:
+def _mostrar_sugestao(uid: int) -> None:
     """
     Intervenção proativa: no máximo UMA sugestão, antes de começar a
     resolver. `core.ritmo` decide o quê (regra, não LLM — ver o porquê em
     ritmo_regras.py); aqui só é exibição.
     """
-    dica = ritmo.sugestao()
+    dica = ritmo.sugestao(uid)
     if dica:
         con.print(f"[cyan]💡 {dica}[/]\n")
 
 
-def _estudar_lista(pendentes: list) -> bool:
+def _estudar_lista(uid: int, pendentes: list) -> bool:
     """
     Loop socrático questão a questão, extraído de `estudar()` para ser
     reaproveitado por `desafio()` — mesmo modo de estudo, lista diferente de
@@ -102,7 +113,7 @@ def _estudar_lista(pendentes: list) -> bool:
             # contaria a mesma falha duas vezes. Dica pedida por iniciativa
             # própria conta, porque aí é ajuda escolhida.
             penalidade = erradas + dicas_pedidas
-            r = scheduler.registrar(q["id"], v, ultima_resposta, penalidade,
+            r = scheduler.registrar(uid, q["id"], v, ultima_resposta, penalidade,
                                     int(time.monotonic() - inicio))
             motivo = ("acertou de primeira" if v == "correta" and penalidade == 0 else
                       f"{erradas} erro(s), {dicas_pedidas} dica(s) pedida(s)")
@@ -192,6 +203,7 @@ def simulado(n: int = simulado_mod.N_PADRAO, minutos: int | None = None,
     bloco de mini-simulado do desafio ia reamostrar o acervo todo de novo,
     podendo repetir questão que já caiu em reincidentes/novas no mesmo dia.
     """
+    uid = _usuario_id()
     if questoes is None:
         questoes = simulado_mod.selecionar(n)
         if len(questoes) < n:
@@ -200,7 +212,7 @@ def simulado(n: int = simulado_mod.N_PADRAO, minutos: int | None = None,
         con.print("[yellow]Nenhuma questão no acervo ainda.[/]")
         return
 
-    sid = simulado_mod.iniciar(len(questoes), minutos)
+    sid = simulado_mod.iniciar(uid, len(questoes), minutos)
     con.print(Panel(
         f"{len(questoes)} questões" + (f" · meta de {minutos} min" if minutos else "") +
         " · sem dica, sem correção durante a prova — gabarito só no final.",
@@ -235,11 +247,11 @@ def simulado(n: int = simulado_mod.N_PADRAO, minutos: int | None = None,
             except llm.ErroLLM as e:
                 con.print(f"[red]LLM indisponível ao corrigir \"{q['tema']}\":[/] {e}")
                 continue
-            scheduler.registrar(q["id"], av["veredito"], resposta, 0, segundos, simulado_id=sid)
+            scheduler.registrar(uid, q["id"], av["veredito"], resposta, 0, segundos, simulado_id=sid)
             if av["veredito"] != "correta":
                 pendentes.append((q, resposta, av))
 
-    r = simulado_mod.finalizar(sid, segundos_total)
+    r = simulado_mod.finalizar(sid, uid, segundos_total)
     mm, ss = segundos_total // 60, segundos_total % 60
     con.print(Panel(
         f"{r['acertos']}/{r['total']} corretas ([bold]{r['nota_pct']}%[/]) · "
@@ -247,7 +259,7 @@ def simulado(n: int = simulado_mod.N_PADRAO, minutos: int | None = None,
         title="resultado", border_style="green"))
 
     t = Table("disciplina", "questões", "acertos", "% acerto")
-    for d in simulado_mod.relatorio(sid):
+    for d in simulado_mod.relatorio(sid, uid):
         t.add_row(d["disciplina"], str(d["questoes"]), str(d["acertos"]), f"{d['pct']}%")
     con.print(t)
 
@@ -266,7 +278,8 @@ def desafio(n_reincidentes: int = 3, n_novas: int = 5, n_simulado: int = 5) -> N
     (pontos fracos primeiro), mas do tamanho de uma sessão, com tempo
     estimado a partir do histórico real de `tentativa.segundos`.
     """
-    plano = desafio_mod.montar(n_reincidentes, n_novas, n_simulado)
+    uid = _usuario_id()
+    plano = desafio_mod.montar(uid, n_reincidentes, n_novas, n_simulado)
     if plano["total_questoes"] == 0:
         con.print("[yellow]Nada para compor um desafio ainda — "
                   "ingira material ou responda algumas questões primeiro.[/]")
@@ -277,16 +290,16 @@ def desafio(n_reincidentes: int = 3, n_novas: int = 5, n_simulado: int = 5) -> N
         f"{len(plano['mini_simulado'])} mini-simulado · "
         f"~{plano['estimativa_minutos']} min estimados",
         title="desafio de hoje", border_style="magenta"))
-    _mostrar_sugestao()
+    _mostrar_sugestao(uid)
 
     if plano["reincidentes"]:
         con.print("\n[bold]bloco 1 — pontos fracos[/]")
-        if _estudar_lista(plano["reincidentes"]):
+        if _estudar_lista(uid, plano["reincidentes"]):
             return   # usuário pediu "sair" — não emenda o próximo bloco
 
     if plano["novas"]:
         con.print("\n[bold]bloco 2 — questões novas[/]")
-        if _estudar_lista(plano["novas"]):
+        if _estudar_lista(uid, plano["novas"]):
             return
 
     if plano["mini_simulado"]:
@@ -295,7 +308,8 @@ def desafio(n_reincidentes: int = 3, n_novas: int = 5, n_simulado: int = 5) -> N
 
 
 def simulados() -> None:
-    hist = simulado_mod.historico()
+    uid = _usuario_id()
+    hist = simulado_mod.historico(uid)
     if not hist:
         con.print("[dim]nenhum simulado ainda. 'python chat.py simulado' para começar.[/]")
         return
@@ -325,8 +339,9 @@ def perguntar(pergunta: str) -> None:
 
 
 def erros() -> None:
+    uid = _usuario_id()
     t = Table("tema", "disciplina", "vezes", "último", title="caderno de erros")
-    for e in scheduler.caderno_erros():
+    for e in scheduler.caderno_erros(uid):
         t.add_row(e["tema"], e["disciplina"], str(e["vezes"]), str(e["ultima"]))
     con.print(t)
 
@@ -338,7 +353,8 @@ def _barra(pct: float | None, largura: int = 20) -> str:
 
 
 def stats(como_json: bool = False) -> None:
-    dados = scheduler.desempenho()
+    uid = _usuario_id()
+    dados = scheduler.desempenho(uid)
     if como_json:
         # Mesma função que vai virar endpoint um dia — testar o JSON aqui
         # agora é testar o contrato exato que o frontend vai receber depois.
@@ -391,7 +407,7 @@ def main() -> int:
         # com data: sempre vence a automática — saída de emergência se a
         # extração do PDF errou o dia da prova.
         data = date.fromisoformat(sys.argv[2]) if len(sys.argv) > 2 else None
-        m = scheduler.meta(data)
+        m = scheduler.meta(_usuario_id(), data)
         for k, v in m.items():
             if isinstance(v, dict):
                 con.print(f"{k.replace('_', ' ')}:")

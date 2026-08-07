@@ -32,7 +32,7 @@ from pathlib import Path
 
 from . import db
 
-VERSAO = "edital-v1"
+VERSAO = "edital-v2"
 
 MESES = {"janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5,
          "junho": 6, "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10,
@@ -116,8 +116,11 @@ def extrair_topicos(texto: str) -> list[dict]:
 
 
 # --------------------------------------------------------------- borda (db)
-def ingerir(caminho, titulo: str | None = None, orgao: str | None = None,
+def ingerir(usuario_id: int, caminho, titulo: str | None = None, orgao: str | None = None,
             banca: str | None = None) -> dict:
+    """Cada usuário tem seu próprio edital — dois concurseiros estudando o
+    mesmo acervo compartilhado podem visar provas diferentes, em datas
+    diferentes."""
     from pypdf import PdfReader
     caminho = Path(caminho)
     reader = PdfReader(str(caminho))
@@ -128,9 +131,9 @@ def ingerir(caminho, titulo: str | None = None, orgao: str | None = None,
     topicos = extrair_topicos(texto)
 
     eid = db.exec1(
-        """INSERT INTO edital (titulo, orgao, banca, data_prova, arquivo)
-           VALUES (%(t)s, %(o)s, %(b)s, %(d)s, %(a)s) RETURNING id""",
-        {"t": titulo or caminho.stem, "o": orgao, "b": banca,
+        """INSERT INTO edital (usuario_id, titulo, orgao, banca, data_prova, arquivo)
+           VALUES (%(u)s, %(t)s, %(o)s, %(b)s, %(d)s, %(a)s) RETURNING id""",
+        {"u": usuario_id, "t": titulo or caminho.stem, "o": orgao, "b": banca,
          "d": data_prova, "a": str(caminho)},
     )["id"]
     for t in topicos:
@@ -149,15 +152,21 @@ def ingerir(caminho, titulo: str | None = None, orgao: str | None = None,
     }
 
 
-def mais_recente() -> dict | None:
-    return db.exec1("SELECT id, titulo, data_prova FROM edital ORDER BY criado_em DESC LIMIT 1")
+def mais_recente(usuario_id: int) -> dict | None:
+    return db.exec1(
+        "SELECT id, titulo, data_prova FROM edital WHERE usuario_id = %(u)s "
+        "ORDER BY criado_em DESC LIMIT 1",
+        {"u": usuario_id},
+    )
 
 
-def cobertura(edital_id: int) -> list[dict]:
+def cobertura(edital_id: int, usuario_id: int) -> list[dict]:
     """
-    Por disciplina do edital: quantos tópicos existem e a cobertura
-    (aproximação 2 do docstring do módulo — por disciplina, não por
-    tópico individual).
+    Por disciplina do edital: quantos tópicos existem e a cobertura DESTE
+    usuário (aproximação 2 do docstring do módulo — por disciplina, não por
+    tópico individual). `caixa` mudou de tabela (agora vive em `progresso`,
+    por usuário) — por isso o LEFT JOIN em vez do antigo WHERE direto em
+    questao.
     """
     topicos = db.query(
         "SELECT disciplina, count(*) AS n FROM topico WHERE edital_id = %(e)s GROUP BY disciplina",
@@ -166,9 +175,12 @@ def cobertura(edital_id: int) -> list[dict]:
     resultado = []
     for t in topicos:
         r = db.exec1(
-            """SELECT count(*) AS total, count(*) FILTER (WHERE caixa >= 3) AS dominadas
-               FROM questao WHERE disciplina ILIKE %(d)s""",
-            {"d": f"%{t['disciplina']}%"},
+            """SELECT count(DISTINCT q.id) AS total,
+                      count(DISTINCT q.id) FILTER (WHERE p.caixa >= 3) AS dominadas
+               FROM questao q
+               LEFT JOIN progresso p ON p.questao_id = q.id AND p.usuario_id = %(u)s
+               WHERE q.disciplina ILIKE %(d)s""",
+            {"d": f"%{t['disciplina']}%", "u": usuario_id},
         ) or {"total": 0, "dominadas": 0}
         cobertura_pct = 100 * r["dominadas"] / r["total"] if r["total"] else 0.0
         resultado.append({
@@ -181,7 +193,7 @@ def cobertura(edital_id: int) -> list[dict]:
     return resultado
 
 
-def probabilidade_fechamento(edital_id: int, data_prova: date | None = None) -> dict:
+def probabilidade_fechamento(edital_id: int, usuario_id: int, data_prova: date | None = None) -> dict:
     """
     APROXIMAÇÃO por extrapolação linear de ritmo — não é um modelo
     estatístico (não modela variância nem esquecimento; mesma limitação já
@@ -200,12 +212,13 @@ def probabilidade_fechamento(edital_id: int, data_prova: date | None = None) -> 
         return {"erro": "edital sem data_prova reconhecida — sem data não dá pra estimar ritmo"}
 
     dias_restantes = max((data_prova - date.today()).days, 0)
-    cob = cobertura(edital_id)
+    cob = cobertura(edital_id, usuario_id)
     topicos_totais = sum(c["topicos_no_edital"] for c in cob)
     topicos_pendentes = sum(c["topicos_pendentes_estimado"] for c in cob)
     topicos_cobertos = topicos_totais - topicos_pendentes
 
-    primeira = db.exec1("SELECT min(criada_em)::date AS d FROM tentativa")
+    primeira = db.exec1("SELECT min(criada_em)::date AS d FROM tentativa WHERE usuario_id = %(u)s",
+                        {"u": usuario_id})
     dias_estudando = max((date.today() - primeira["d"]).days, 1) if primeira and primeira["d"] else 0
 
     ritmo_atual = topicos_cobertos / dias_estudando if dias_estudando else 0.0
