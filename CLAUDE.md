@@ -227,14 +227,21 @@ numa máquina nova não depende de baixar de novo.
   Rodar de novo sempre que mexer em `retrieval.py`, `embeddings.py` ou
   reingerir. Amostra pequena (15 casos, 1 norma) — não generaliza sozinha
   para CF/CPP quando forem ingeridos; expandir o gabarito então.
-- **Postgres `'portuguese'` não faz accent-folding.** "alguem" sem acento no
-  Art. 121 (typo isolado do Planalto, não sistêmico — só essa 1 ocorrência
-  em 434 artigos) fazia a busca lexical não encontrar NADA para "matar
-  alguém..." (0 linhas), porque `websearch_to_tsquery` mantém "alguém" (com
-  acento) sem stemizar, e o texto indexado tinha só "algu" (de "alguem").
-  Corrigido o typo pontual; a fragilidade estrutural continua aberta —
-  `unaccent` + configuração de busca dedicada resolveria de vez, mas exige
-  migração (recriar a coluna GENERATED `chunk.busca`) e não foi feito.
+- **Postgres `'portuguese'` não faz accent-folding — mas `unaccent` NÃO
+  entrou, de propósito.** "alguem" sem acento no Art. 121 (typo isolado, 1
+  ocorrência em 434 artigos) fazia a busca lexical não encontrar NADA para
+  "matar alguém..." Corrigido o typo pontual. Cheguei a desenhar a migração
+  (`unaccent` + configuração de busca dedicada + recriar `chunk.busca`), mas
+  parei ao investigar melhor: isso resolveria SÓ a fração "acento
+  presente/ausente" do problema — testei e "razão"/"razões" estemizam pra
+  radicais DIFERENTES (`razã` vs `razõ`, plural irregular em `-ão`), o que
+  `unaccent` não toca. Construir infraestrutura (extensão nova, índice
+  funcional, reingest de 434 chunks) pra cobrir uma fração de um problema
+  que `avaliar_retrieval.py` mede em 100% top-6 hoje é dívida disfarçada de
+  melhoria, não melhoria. Decisão: não fazer agora. Se algum dia isso virar
+  falha REAL (uma pergunta real não encontra o artigo por causa de plural),
+  a resposta é adicionar esse caso ao gabarito do `avaliar_retrieval.py`
+  primeiro — medir que dói antes de construir o que cura.
 
 ## Convenções
 
