@@ -51,6 +51,7 @@ db/006_tipo_historico.sql  documento.tipo aceita 'historico' (material com múlt
 db/007_edital.sql          tabelas edital e topico
 db/008_usuario.sql         usuario, progresso (caixa/prox_revisao saem de questao), usuario_id em tudo pessoal
 db/009_cascade_usuario.sql ON DELETE CASCADE consistente em toda FK pra usuario
+db/schema.dbml             schema documentado (DBML) — visualização, não fonte de verdade
 core/chunking.py           lei -> chunks por artigo (função pura)
 core/embeddings.py         e5 local, prefixos query:/passage:, cache
 core/retrieval.py          dispositivo exato -> rubrica -> híbrida (RRF)
@@ -219,6 +220,14 @@ pessoal/pequeno grupo, revisar se isso crescer.
 usável) se não existir. Login de verdade com senha só existe pelo caminho
 da API — é o único lugar que precisa disso, porque é o único lugar onde
 "alguém que não é você" poderia estar do outro lado.
+
+**`PATCH /me`/`DELETE /me` exigem a senha atual, mesmo já autenticado por
+token.** Token roubado (mas não a senha) não deveria bastar pra sequestrar
+a conta trocando e-mail/senha, nem pra apagá-la. Efeito colateral aceito: a
+conta criada por `usuario_da_cli` (sem senha usável) não consegue trocar
+senha por essa rota — ela nunca teria como chegar autenticada ali sem
+senha alguma; ganhar login via API pra essa conta seria um fluxo
+diferente (tipo reset), fora de escopo por ora.
 
 **`ON DELETE CASCADE` consistente em toda FK pra `usuario` (migração 009).**
 A 008 só deu CASCADE em `progresso`; as outras (`tentativa`, `erro_caderno`,

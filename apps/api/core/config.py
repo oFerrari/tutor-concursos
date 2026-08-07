@@ -14,5 +14,9 @@ EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "intfloat/multilingual-e5-base")
 JWT_SECRET       = os.getenv("JWT_SECRET", "")
 CLI_USUARIO_EMAIL = os.getenv("CLI_USUARIO_EMAIL", "estudante@local")
 
+# origens que podem chamar a API do navegador (CORS). Lista separada por
+# vírgula no .env; default cobre o Next.js local (apps/web, porta padrão).
+CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")]
+
 # Intervalos da revisão espaçada, em dias. O índice é a coluna questao.caixa.
 INTERVALOS = [1, 3, 7, 15, 30, 90]

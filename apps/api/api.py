@@ -20,15 +20,30 @@ import tempfile
 from datetime import date
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
 from core import auth, desafio, edital, questoes, ritmo, scheduler, simulado, socratic
+from core.config import CORS_ORIGINS
 from core.llm import ErroLLM
 
 VERSAO = "api-v1"
 
 app = FastAPI(title="Tutor de concursos — API", version=VERSAO)
+
+# CORS: só o Next.js local por padrão. Sem isso o navegador bloqueia a
+# resposta antes mesmo do JS ver — dá erro de rede genérico no fetch, não
+# um 403 explicável, então isso costuma ser o primeiro obstáculo silencioso
+# ao ligar um frontend de verdade contra a API.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # ---------------------------------------------------------------------- auth
@@ -55,13 +70,70 @@ def rota_login(c: Credenciais):
     return {"token": auth.emitir_token(u["id"]), "usuario": u}
 
 
-def usuario_atual(authorization: str | None = Header(default=None)) -> int:
-    if not authorization or not authorization.lower().startswith("bearer "):
-        raise HTTPException(401, "token ausente — envie 'Authorization: Bearer <token>'")
+# HTTPBearer (não Header solto) por causa do Swagger: com isso o /docs ganha
+# um botão "Authorize" que aceita só o token puro — sem ele, cada rota exigia
+# digitar "Bearer <token>" na mão em cada teste, e esquecer o prefixo dá 401
+# silencioso (aconteceu na prática: log mostrava login 200 e a rota seguinte
+# 401, porque o token colado sem "Bearer " não bate no Header solto).
+_security = HTTPBearer(auto_error=False)
+
+
+def usuario_atual(cred: HTTPAuthorizationCredentials | None = Depends(_security)) -> int:
+    if not cred:
+        raise HTTPException(401, "token ausente — clique em 'Authorize' no /docs "
+                                 "e cole SÓ o token (sem 'Bearer ', o Swagger adiciona)")
     try:
-        return auth.usuario_id_do_token(authorization.split(" ", 1)[1])
+        return auth.usuario_id_do_token(cred.credentials)
     except auth.ErroAuth as e:
         raise HTTPException(401, str(e))
+
+
+@app.get("/me")
+def rota_me(uid: int = Depends(usuario_atual)):
+    u = auth.obter(uid)
+    if not u:
+        raise HTTPException(404, "usuário não encontrado")
+    return u
+
+
+class AtualizarMeBody(BaseModel):
+    email: str | None = None
+    senha_atual: str | None = None
+    senha_nova: str | None = None
+
+
+@app.patch("/me")
+def rota_atualizar_me(body: AtualizarMeBody, uid: int = Depends(usuario_atual)):
+    # senha primeiro: se as duas coisas vierem juntas e a senha falhar
+    # (senha_atual errada), o email não deve mudar mesmo assim.
+    if body.senha_nova:
+        if not body.senha_atual:
+            raise HTTPException(422, "senha_atual é obrigatória pra trocar a senha")
+        try:
+            auth.atualizar_senha(uid, body.senha_atual, body.senha_nova)
+        except auth.ErroAuth as e:
+            raise HTTPException(400, str(e))
+    if body.email:
+        try:
+            auth.atualizar_email(uid, body.email)
+        except auth.ErroAuth as e:
+            raise HTTPException(400, str(e))
+    return auth.obter(uid)
+
+
+class ApagarContaBody(BaseModel):
+    senha: str
+
+
+@app.delete("/me")
+def rota_apagar_me(body: ApagarContaBody, uid: int = Depends(usuario_atual)):
+    """Irreversível — ON DELETE CASCADE (migração 009) limpa tentativa/
+    progresso/erro_caderno/simulado/edital(+topico) de uma vez."""
+    try:
+        auth.apagar_conta(uid, body.senha)
+    except auth.ErroAuth as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True}
 
 
 # ----------------------------------------------------------------- fila/estudo
@@ -78,6 +150,21 @@ def rota_carga(uid: int = Depends(usuario_atual)):
 @app.get("/sugestao")
 def rota_sugestao(uid: int = Depends(usuario_atual)):
     return {"sugestao": ritmo.sugestao(uid)}
+
+
+@app.get("/questoes/{qid}")
+def rota_questao(qid: int, uid: int = Depends(usuario_atual)):
+    """
+    Busca uma questão específica — usado pela tela de responder quando ela
+    é aberta direto (refresh, link compartilhado), sem depender de já ter
+    a lista da fila em memória no cliente. Não filtra por usuario_id porque
+    o banco de questões é compartilhado (ver Decisões no CLAUDE.md);
+    `uid` só garante que quem pergunta está autenticado.
+    """
+    q = questoes.obter_com_progresso(uid, qid)
+    if not q:
+        raise HTTPException(404, "questão não encontrada")
+    return q
 
 
 class AvaliarBody(BaseModel):

@@ -85,6 +85,50 @@ def usuario_id_do_token(token: str) -> int:
     return payload["usuario_id"]
 
 
+def obter(usuario_id: int) -> dict | None:
+    return db.exec1("SELECT id, email FROM usuario WHERE id = %(id)s", {"id": usuario_id})
+
+
+def atualizar_email(usuario_id: int, novo_email: str) -> dict:
+    novo_email = novo_email.strip().lower()
+    existente = db.exec1("SELECT id FROM usuario WHERE email = %(e)s AND id <> %(id)s",
+                         {"e": novo_email, "id": usuario_id})
+    if existente:
+        raise ErroAuth(f"já existe conta com o email {novo_email}")
+    db.query("UPDATE usuario SET email = %(e)s WHERE id = %(id)s",
+             {"e": novo_email, "id": usuario_id})
+    return {"id": usuario_id, "email": novo_email}
+
+
+def atualizar_senha(usuario_id: int, senha_atual: str, senha_nova: str) -> None:
+    """
+    Exige a senha ATUAL — mesmo padrão de qualquer troca de senha, pra quem
+    roubou o token (mas não a senha) não conseguir sequestrar a conta
+    trocando a senha por baixo. Efeito colateral aceito: a conta criada pela
+    CLI (`usuario_da_cli`, sem senha usável — `senha_hash=''`) não consegue
+    trocar senha por aqui, porque não existe "senha atual" pra confirmar
+    (e ela nem teria como chegar autenticada nesta rota sem uma senha antes).
+    Ganhar login via API pra essa conta é um fluxo diferente, fora de
+    escopo agora — não é bug, é o gap documentado desde `usuario_da_cli`.
+    """
+    if len(senha_nova) < 8:
+        raise ErroAuth("senha precisa de pelo menos 8 caracteres")
+    u = db.exec1("SELECT senha_hash FROM usuario WHERE id = %(id)s", {"id": usuario_id})
+    if not u or not confere_senha(senha_atual, u["senha_hash"]):
+        raise ErroAuth("senha atual incorreta")
+    db.query("UPDATE usuario SET senha_hash = %(h)s WHERE id = %(id)s",
+             {"h": hash_senha(senha_nova), "id": usuario_id})
+
+
+def apagar_conta(usuario_id: int, senha: str) -> None:
+    """Confirma com a senha antes de apagar — é irreversível (CASCADE limpa
+    tentativa/progresso/erro_caderno/simulado/edital todo de uma vez)."""
+    u = db.exec1("SELECT senha_hash FROM usuario WHERE id = %(id)s", {"id": usuario_id})
+    if not u or not confere_senha(senha, u["senha_hash"]):
+        raise ErroAuth("senha incorreta")
+    db.query("DELETE FROM usuario WHERE id = %(id)s", {"id": usuario_id})
+
+
 def usuario_da_cli(email: str) -> int:
     """
     A CLI não faz login — ela é UMA pessoa na sua própria máquina. Resolve

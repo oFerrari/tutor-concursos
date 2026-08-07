@@ -1,0 +1,156 @@
+// Schema do Tutor de Concursos — gerado a partir do banco real (db/001..009).
+// Fonte de verdade continua sendo db/00N_*.sql (migrações aplicadas em ordem);
+// este arquivo é DOCUMENTAÇÃO/VISUALIZAÇÃO, não schema executável — se os
+// dois divergirem, o banco (via migração) está certo, atualize este arquivo.
+// Renderiza em https://dbdiagram.io (cole o conteúdo) ou qualquer ferramenta DBML.
+
+Table usuario {
+  id         bigint      [pk, increment]
+  email      text        [not null, unique]
+  senha_hash text        [not null, note: "'' = conta criada pela CLI, sem senha usável"]
+  criado_em  timestamptz [not null, default: `now()`]
+
+  Note: "Uma linha por pessoa. auth.py: bcrypt + JWT stateless."
+}
+
+// ------------------------------------------------------------- acervo (COMPARTILHADO)
+// documento/chunk/questao NÃO têm usuario_id de propósito: é o mesmo Código
+// Penal pra todo mundo, e gerar questão custa cota de LLM — negar
+// reaproveitamento pagaria a mesma pergunta N vezes (ver CLAUDE.md).
+
+Table documento {
+  id         bigint      [pk, increment]
+  titulo     text        [not null]
+  disciplina text        [not null]
+  tipo       text        [not null, note: "lei | aula | resumo | jurisprudencia | historico"]
+  origem     text        [note: "caminho do arquivo ou URL"]
+  hash       text        [unique, note: "evita reingestão do mesmo arquivo"]
+  criado_em  timestamptz [not null, default: `now()`]
+}
+
+Table chunk {
+  id           bigint      [pk, increment]
+  documento_id bigint      [not null, ref: > documento.id]
+  ordem        int         [not null]
+  texto        text        [not null]
+  norma        text        [note: "preenchido quando documento.tipo = 'lei'"]
+  artigo       text
+  paragrafo    text
+  inciso       text
+  pagina       int
+  embedding    vector768   [note: "intfloat/multilingual-e5-base, HNSW cosine"]
+  busca        tsvector    [note: "GENERATED de texto — full-text 'portuguese'"]
+  rubrica      text        [note: "nome do dispositivo, ex. 'Concussão'"]
+  secao        text
+
+  indexes {
+    (documento_id, ordem) [unique]
+    (norma, artigo)       [name: "chunk_artigo_idx"]
+  }
+  Note: "Chunk = artigo, não N caracteres — unidade semântica completa."
+}
+
+Table questao {
+  id           bigint      [pk, increment]
+  documento_id bigint      [ref: > documento.id]
+  disciplina   text        [not null]
+  tema         text        [not null]
+  enunciado    text        [not null]
+  gabarito     text        [not null]
+  dicas        jsonb       [not null, default: `'[]'`, note: "3 dicas, ordem crescente"]
+  fonte_chunks "bigint[]"  [not null, default: `'{}'`, note: "proveniência — rastreia até o artigo"]
+  criada_em    timestamptz [not null, default: `now()`]
+
+  Note: "Banco de questões COMPARTILHADO. Sem caixa/prox_revisao aqui — isso é progresso, vive em `progresso`."
+}
+
+// --------------------------------------------------------- progresso (PESSOAL)
+// Migração 008: caixa/prox_revisao SAÍRAM de questao. Ausência de linha em
+// progresso = "esta pessoa nunca tentou esta questão".
+
+Table progresso {
+  usuario_id   bigint [not null, ref: > usuario.id]
+  questao_id   bigint [not null, ref: > questao.id]
+  caixa        smallint [not null, default: 0, note: "índice em INTERVALOS = [1,3,7,15,30,90] dias"]
+  prox_revisao date     [not null, default: `CURRENT_DATE`]
+
+  indexes {
+    (usuario_id, questao_id) [pk]
+    (usuario_id, prox_revisao, caixa) [name: "progresso_fila_idx"]
+  }
+}
+
+Table tentativa {
+  id           bigint      [pk, increment]
+  usuario_id   bigint      [not null, ref: > usuario.id]
+  questao_id   bigint      [not null, ref: > questao.id]
+  simulado_id  bigint      [ref: > simulado.id, note: "NULL = tentativa fora de simulado"]
+  resposta     text
+  veredito     text        [not null, note: "correta | parcial | incorreta"]
+  dicas_usadas smallint    [not null, default: 0]
+  segundos     int
+  criada_em    timestamptz [not null, default: `now()`]
+}
+
+Table erro_caderno {
+  usuario_id bigint [not null, ref: > usuario.id]
+  questao_id bigint [not null, ref: > questao.id]
+  disciplina text   [not null]
+  tema       text   [not null]
+  vezes      int    [not null, default: 1]
+  ultima     date   [not null, default: `CURRENT_DATE`]
+
+  indexes {
+    (usuario_id, questao_id) [pk]
+    (usuario_id, vezes, ultima) [name: "erro_reincidencia_idx"]
+  }
+  Note: "Derivado de tentativa — resumo materializado, não fonte de verdade."
+}
+
+Table simulado {
+  id             bigint      [pk, increment]
+  usuario_id     bigint      [not null, ref: > usuario.id]
+  n_questoes     int         [not null]
+  minutos_alvo   int         [note: "meta informativa, sem corte forçado"]
+  segundos_total int
+  criado_em      timestamptz [not null, default: `now()`]
+}
+
+Table edital {
+  id         bigint      [pk, increment]
+  usuario_id bigint      [not null, ref: > usuario.id]
+  titulo     text        [not null]
+  orgao      text
+  banca      text
+  data_prova date        [note: "melhor esforço extraído do PDF — não é contrato"]
+  arquivo    text
+  criado_em  timestamptz [not null, default: `now()`]
+}
+
+Table topico {
+  id         bigint [pk, increment]
+  edital_id  bigint [not null, ref: > edital.id]
+  disciplina text   [not null]
+  ordem      int    [not null]
+  texto      text   [not null, note: "subitem numerado achatado, ex. '1.1.1 Princípios...'"]
+}
+
+Table embedding_cache {
+  hash      text        [not null]
+  modelo    text        [not null]
+  embedding vector768   [not null]
+  criado_em timestamptz [not null, default: `now()`]
+
+  indexes {
+    (hash, modelo) [pk]
+  }
+  Note: "Vetor é função pura de (texto, modelo) — cache evita recomputar ao corrigir chunking."
+}
+
+// --------------------------------------------------------------------- views
+// v_desempenho_disciplina(usuario_id, disciplina, questoes, dominadas,
+// tentativas, acertos, pct_acerto float8, cobertura_pct float8)
+// FROM (SELECT DISTINCT usuario_id FROM progresso) CROSS JOIN questao
+// LEFT JOIN progresso/tentativa escopados por usuario_id.
+// `questoes` = acervo INTEIRO da disciplina (não só o que o usuário tocou);
+// float8 (não numeric) pra json.dumps direto, sem Decimal.
