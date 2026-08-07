@@ -13,7 +13,7 @@ Sem isso, modelo pequeno erra a sintaxe e a sessão de estudo morre no meio.
 """
 from . import llm, retrieval
 
-VERSAO = "socratic-v21"
+VERSAO = "socratic-v22"
 
 # ------------------------------------------------------------------ schemas
 # Subconjunto OpenAPI aceito pelo Gemini. propertyOrdering importa: o modelo
@@ -118,8 +118,14 @@ def avaliar(enunciado: str, gabarito: str, resposta: str, nivel: int,
            if historico else "")
     )
     prompt = "\n\n".join(partes)
+    # 800 truncava com frequência real (2 de 3 numa amostra manual) em
+    # resposta ERRADA: modelos com "thinking" gastam parte do orçamento de
+    # maxOutputTokens em raciocínio interno antes do JSON visível, e
+    # explicar um erro consome mais desse raciocínio do que confirmar um
+    # acerto. Sem thinkingConfig exposto aqui pra zerar isso, o caminho
+    # seguro é dar mais orçamento — mesmo padrão de explicar()/gerar_questoes.
     d = llm.obter().gerar_json(prompt, SISTEMA_AVALIADOR,
-                              max_tokens=800, schema=ESQUEMA_AVALIACAO)
+                              max_tokens=2000, schema=ESQUEMA_AVALIACAO)
     veredito = d.get("veredito", "parcial")
     if veredito not in ("correta", "parcial", "incorreta"):
         veredito = "parcial"
