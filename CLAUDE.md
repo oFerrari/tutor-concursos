@@ -40,6 +40,7 @@ core/socratic.py           avaliação e geração de questões (schemas JSON)
 core/scheduler_regras.py   regras de promoção — FUNÇÕES PURAS
 core/scheduler.py          fila, registro, caderno de erros, meta
 core/simulado.py           prova sob condição de exame: sem dica, corrige no final
+core/desafio.py            meta do dia: reincidentes + novas + mini-simulado, tempo estimado
 ingest.py                  ingestão (batch)
 reingest.py                reprocessa chunks preservando questões
 gerar.py                   geração com cobertura por seção
@@ -105,6 +106,15 @@ bancos; copiar a coluna crua faria a questão citar o artigo errado, calado.
 A importação resolve `(norma, artigo)` de volta contra os chunks locais.
 Resolve alternância entre duas máquinas de um usuário só; não resolve edição
 simultânea (para isso, Postgres hospedado com `DATABASE_URL` compartilhado).
+
+**Desafio diário é composição, não módulo novo.** `core/desafio.py` só decide
+QUAIS questões entram em cada um dos três blocos (reincidentes do caderno de
+erros, novas, mini-simulado); quem resolve de verdade é `chat._estudar_lista`
+(extraído de `estudar()`) e `chat.simulado` (agora aceita lista pronta em vez
+de sempre sortear). Estimativa de tempo vem de `avg(tentativa.segundos)` real,
+não de um número chutado — sem histórico, cai num default documentado.
+`_estudar_lista` devolve se o usuário pediu "sair", porque sem esse sinal o
+desafio emendava o próximo bloco mesmo depois da pessoa dizer que ia parar.
 
 **`corpus/` (lei do Planalto) vai para o git; `acervo/` (material pago) não.**
 Texto de lei não tem direito autoral no Brasil (art. 8º, IV da Lei 9.610).
@@ -214,6 +224,7 @@ python ingest.py corpus/cp.txt --disciplina "Direito Penal" --tipo lei --norma C
 python gerar.py --cobertura 3
 python gerar.py 3 --secao "FUNCIONARIO PUBLICO" --por-lote 3 --max 12
 python chat.py estudar
+python chat.py desafio             # meta do dia: pontos fracos + novas + mini-simulado
 python chat.py simulado 20 60      # 20 questões, meta de 60 min
 python chat.py simulados
 python chat.py erros | stats | stats --json | meta AAAA-MM-DD

@@ -3,6 +3,7 @@
 Sessão de estudo no terminal.
 
     python chat.py estudar          # fila de revisão do dia, modo socrático
+    python chat.py desafio          # meta do dia: pontos fracos + novas + mini-simulado
     python chat.py simulado [N] [minutos]   # prova: sem dica, corrige no final
     python chat.py simulados        # histórico de simulados feitos
     python chat.py perguntar "diferença entre dolo eventual e culpa consciente"
@@ -24,9 +25,10 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
+from core import desafio as desafio_mod
 from core import llm, scheduler, simulado as simulado_mod, socratic
 
-VERSAO = "chat-v23"
+VERSAO = "chat-v24"
 con = Console()
 MAX_DICAS = 3
 
@@ -50,6 +52,19 @@ def estudar() -> None:
               f"{c['revisoes']} revisões venceram, {c['ineditas']} inéditas"
               + (f" · [yellow]{c['atraso']} de atraso[/]" if c["atraso"] else "") + "\n")
 
+    _estudar_lista(pendentes)
+
+
+def _estudar_lista(pendentes: list) -> bool:
+    """
+    Loop socrático questão a questão, extraído de `estudar()` para ser
+    reaproveitado por `desafio()` — mesmo modo de estudo, lista diferente de
+    onde tirar as questões (fila do dia vs. composição do desafio).
+
+    Devolve True se o usuário pediu para SAIR no meio — `desafio()` precisa
+    saber disso para não emendar o próximo bloco depois que a pessoa já
+    disse que queria parar.
+    """
     for q in pendentes:
         dicas = _dicas(q)
         con.print(Panel(q["enunciado"],
@@ -98,7 +113,7 @@ def estudar() -> None:
                     con.print("[dim]nada respondido; nada registrado.[/]")
                 if resposta == "sair":
                     con.print("[dim]até a próxima.[/]")
-                    return
+                    return True
                 break
 
             if resposta == "dica":
@@ -153,15 +168,24 @@ def estudar() -> None:
 
         if veredito:
             fechar(veredito)
+    return False
 
 
-def simulado(n: int = simulado_mod.N_PADRAO, minutos: int | None = None) -> None:
-    questoes = simulado_mod.selecionar(n)
+def simulado(n: int = simulado_mod.N_PADRAO, minutos: int | None = None,
+             questoes: list | None = None) -> None:
+    """
+    `questoes` pronta (vinda de `desafio()`) pula a seleção aleatória —
+    quem decidiu quais entram já foi `core.desafio.montar()`. Sem isso, o
+    bloco de mini-simulado do desafio ia reamostrar o acervo todo de novo,
+    podendo repetir questão que já caiu em reincidentes/novas no mesmo dia.
+    """
+    if questoes is None:
+        questoes = simulado_mod.selecionar(n)
+        if len(questoes) < n:
+            con.print(f"[dim]só há {len(questoes)} questões no acervo; simulado sai menor.[/]")
     if not questoes:
         con.print("[yellow]Nenhuma questão no acervo ainda.[/]")
         return
-    if len(questoes) < n:
-        con.print(f"[dim]só há {len(questoes)} questões no acervo; simulado sai menor.[/]")
 
     sid = simulado_mod.iniciar(len(questoes), minutos)
     con.print(Panel(
@@ -221,6 +245,39 @@ def simulado(n: int = simulado_mod.N_PADRAO, minutos: int | None = None) -> None
                 f"[dim]sua resposta:[/] {resposta or '(em branco)'}\n"
                 f"[green]gabarito:[/] {q['gabarito']}",
                 title=f"{q['tema']} · {av['veredito']}", border_style="yellow"))
+
+
+def desafio(n_reincidentes: int = 3, n_novas: int = 5, n_simulado: int = 5) -> None:
+    """
+    Meta do dia em três blocos — mesma ordem de prioridade da fila normal
+    (pontos fracos primeiro), mas do tamanho de uma sessão, com tempo
+    estimado a partir do histórico real de `tentativa.segundos`.
+    """
+    plano = desafio_mod.montar(n_reincidentes, n_novas, n_simulado)
+    if plano["total_questoes"] == 0:
+        con.print("[yellow]Nada para compor um desafio ainda — "
+                  "ingira material ou responda algumas questões primeiro.[/]")
+        return
+
+    con.print(Panel(
+        f"{len(plano['reincidentes'])} pontos fracos · {len(plano['novas'])} novas · "
+        f"{len(plano['mini_simulado'])} mini-simulado · "
+        f"~{plano['estimativa_minutos']} min estimados",
+        title="desafio de hoje", border_style="magenta"))
+
+    if plano["reincidentes"]:
+        con.print("\n[bold]bloco 1 — pontos fracos[/]")
+        if _estudar_lista(plano["reincidentes"]):
+            return   # usuário pediu "sair" — não emenda o próximo bloco
+
+    if plano["novas"]:
+        con.print("\n[bold]bloco 2 — questões novas[/]")
+        if _estudar_lista(plano["novas"]):
+            return
+
+    if plano["mini_simulado"]:
+        con.print("\n[bold]bloco 3 — mini-simulado[/]")
+        simulado(len(plano["mini_simulado"]), questoes=plano["mini_simulado"])
 
 
 def simulados() -> None:
@@ -298,6 +355,8 @@ def main() -> int:
     cmd = sys.argv[1]
     if cmd == "estudar":
         estudar()
+    elif cmd == "desafio":
+        desafio()
     elif cmd == "simulado":
         n = int(sys.argv[2]) if len(sys.argv) > 2 else simulado_mod.N_PADRAO
         minutos = int(sys.argv[3]) if len(sys.argv) > 3 else None
