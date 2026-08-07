@@ -10,7 +10,10 @@ Portável: serve para Antigravity, Claude Code, Cursor, Codex.
 
 Tutor socrático para concursos públicos brasileiros. RAG sobre lei seca +
 banco de questões + repetição espaçada. Uso pessoal, mono-usuário, CLI.
-Corpus atual: Código Penal do Planalto (434 artigos).
+Corpus atual: Código Penal (434 artigos), Constituição Federal (276 artigos) +
+ADCT (151 artigos) como normas separadas, todos do Planalto — mais um livro
+de histórico de emendas constitucionais como material `historico` (busca
+híbrida, sem citação exata por artigo).
 
 **Não contém e nunca deve conter** dados de empresa. O autor trabalha numa
 cooperativa; este projeto é separado disso por decisão explícita.
@@ -32,6 +35,7 @@ db/002_rubrica_secao.sql   colunas rubrica e secao
 db/003_embedding_cache.sql cache de vetores por hash de conteúdo
 db/004_simulado.sql        tabela simulado, tentativa.simulado_id
 db/005_desempenho_json.sql v_desempenho_disciplina em float8 (JSON-pronta) + cobertura_pct
+db/006_tipo_historico.sql  documento.tipo aceita 'historico' (material com múltiplas versões do artigo)
 core/chunking.py           lei -> chunks por artigo (função pura)
 core/embeddings.py         e5 local, prefixos query:/passage:, cache
 core/retrieval.py          dispositivo exato -> rubrica -> híbrida (RRF)
@@ -136,6 +140,25 @@ Texto de lei não tem direito autoral no Brasil (art. 8º, IV da Lei 9.610).
 Levar o texto resolve o bloqueio de rede corporativa de uma vez: reingerir
 numa máquina nova não depende de baixar de novo.
 
+**CF e ADCT são normas SEPARADAS, não uma "CF" só.** O Ato das Disposições
+Constitucionais Transitórias reinicia sua própria numeração ("Art. 1º do
+ADCT" ≠ "Art. 1º da CF" — são dispositivos diferentes, citados diferente na
+prática). Ingerir os dois com `norma=CF` faria `chunk_artigo_idx` colidir
+exatamente como o livro de histórico de emendas colidia — o mesmo defeito,
+só que dentro de um documento por sinal legítimo. `corpus/cf.txt` (corpo
+principal) e `corpus/adct.txt` são arquivos e `documento` distintos.
+
+**`documento.tipo = 'historico'` existe pra material com múltiplas versões
+do mesmo artigo (emendas, "Redação Anterior") sem forçar `chunk_lei()`
+nele.** Cai em `chunk_generico()` — janela por parágrafo, sem tentar
+extrair (norma, artigo). Perde citação exata por dispositivo, mas fica
+disponível pra busca híbrida, e principalmente: não arrisca `art. X`
+devolver a versão REVOGADA em vez da vigente. `ingest.py`/`reingest.py`
+recusam automaticamente gravar como `--tipo lei` se a taxa de colisão de
+artigo (`chunking.taxa_colisao_artigo`) passar de 5% — antes disso só um
+`diagnostico.py` manual pegava esse tipo de problema, e só se alguém
+lembrasse de rodar.
+
 ## Invariantes (violação = bug)
 
 - Todo `Art.` do arquivo vira um chunk. `diagnostico.py` verifica.
@@ -162,6 +185,18 @@ numa máquina nova não depende de baixar de novo.
   runtime, silenciosamente. `grep -c` da palavra certa vs. errada no corpus
   é o jeito rápido de checar se é isolado ou sistêmico antes de decidir como
   corrigir (ver "Postgres 'portuguese' não faz accent-folding" em Aberto).
+- **CF compilada:** o aviso "Este texto não substitui..." e a lista de
+  assinatura dos constituintes vêm no MEIO do arquivo (fim do corpo
+  principal, ANTES do ADCT), não só no fim como no CP — cortar só pelo fim
+  do arquivo perderia o ADCT inteiro. E a palavra quebra entre "não" e
+  "substitui" com `\n`, não espaço — busca ingênua por essa frase falha se
+  não tolerar quebra de linha no meio.
+- **ADCT:** referência a "art. X da Lei nº ..." ou "art. X da Constituição
+  de 1967" no MEIO de um parágrafo, quebrada em nova linha pela extração,
+  casa com `RE_ARTIGO` como se fosse um artigo novo — gera chunk fantasma
+  (fragmento de outro artigo, com número de artigo errado). Baixo volume
+  (3 de 151, 2%) e a `taxa_colisao_artigo` já sinaliza; não vale regex mais
+  esperto pra 2% enquanto não aparecer caso real de citação errada.
 
 ## Armadilhas de método (custaram tempo)
 
@@ -218,15 +253,27 @@ numa máquina nova não depende de baixar de novo.
 - Next.js só depois — `scheduler` e `socratic` já são funções puras.
 - Se a rotina exportar/importar do `sincronizar.py` cansar: Postgres hospedado
   (Neon, Supabase) com `DATABASE_URL` único resolve, ao custo de exigir rede.
-- **Precisão de `retrieval.py` MEDIDA** (`avaliar_retrieval.py`, 15 casos
-  cobrindo os três caminhos): dispositivo 3/3 top-1, rubrica 4/4 top-1,
-  híbrida 8/8 top-6 mas só 4/8 top-1 — semântica encontra o artigo certo,
-  mas nem sempre em 1º lugar. Isso é esperado e aceitável: `buscar()` devolve
-  n=6 para o LLM, que escolhe o que citar; top-6 é a métrica que importa
-  para o produto, top-1 é diagnóstico de quão "óbvia" foi a recuperação.
-  Rodar de novo sempre que mexer em `retrieval.py`, `embeddings.py` ou
-  reingerir. Amostra pequena (15 casos, 1 norma) — não generaliza sozinha
-  para CF/CPP quando forem ingeridos; expandir o gabarito então.
+- **Precisão de `retrieval.py` MEDIDA** (`avaliar_retrieval.py`, agora 22
+  casos, 3 normas — CP/CF/ADCT): top-6 100%, top-1 77%. Híbrida fica em
+  top-6 100% mas só 8/12 top-1 — semântica encontra o artigo certo, nem
+  sempre em 1º lugar; aceitável, `buscar()` devolve n=6 pro LLM escolher o
+  que citar, top-6 é a métrica que importa pro produto. Rodar de novo
+  sempre que mexer em `retrieval.py`, `embeddings.py` ou reingerir.
+- **Bug real achado ao expandir pra multi-norma: artigos 1º-9º nunca
+  batiam em NENHUMA norma.** LC 95/1998 manda escrever "Art. 1º" a "Art.
+  9º" com ordinal e "Art. 10" em diante sem — mas ninguém pergunta "art.
+  1º", pergunta "art. 1". `por_dispositivo()` comparava a string crua;
+  corrigido tirando `[ºo]$` dos dois lados antes de comparar. Achado só
+  apareceu ao testar CF (art. 1º e 5º são dos mais cobrados que existem) —
+  o gabarito de 1 norma só nunca tinha um artigo baixo o bastante pra expor.
+- **Segundo bug da mesma expansão: "art. 121 do CP" podia devolver o art.
+  121 da CF primeiro.** Com 1 norma no banco, número de artigo já era
+  identidade única; com CP+CF+ADCT convivendo, vários números colidem
+  entre normas e `por_dispositivo()` ignorava qualquer norma que a pergunta
+  citasse. `_norma_mencionada()` casa a sigla (dinâmico, `SELECT DISTINCT
+  norma`) ou apelido comum ("constituição" → CF); some sem detecção clara
+  cai de volta pro empate alfabético de antes — limitação aceita e
+  documentada, não escondida.
 - **Postgres `'portuguese'` não faz accent-folding — mas `unaccent` NÃO
   entrou, de propósito.** "alguem" sem acento no Art. 121 (typo isolado, 1
   ocorrência em 434 artigos) fazia a busca lexical não encontrar NADA para
@@ -242,6 +289,17 @@ numa máquina nova não depende de baixar de novo.
   falha REAL (uma pergunta real não encontra o artigo por causa de plural),
   a resposta é adicionar esse caso ao gabarito do `avaliar_retrieval.py`
   primeiro — medir que dói antes de construir o que cura.
+  **Revalidado com o corpus 3x maior (CF + ADCT, 1340 chunks):** mesmas 8
+  palavras comuns checadas, zero ocorrências sem acento em ambos os
+  arquivos novos. A hipótese "com mais dado o problema apareceria de novo"
+  não se sustentou — decisão mantida.
+- **Scheduler validado em escala com dado real de 3 normas** (800 questões
+  sintéticas sobre os 1340 chunks reais, 60 dias simulados, 2 disciplinas
+  simultâneas): 0 anomalias, `stats --json`/`ritmo.sugestao()`/`desafio.montar()`
+  todos corretos com múltiplas disciplinas competindo pelo mesmo teto
+  diário. Mesmo método do harness original (scheduler-v19), só com acervo
+  maior — nada de novo quebrou ao crescer o corpus, que é exatamente o que
+  essa validação existia pra confirmar.
 
 ## Convenções
 
@@ -275,6 +333,10 @@ numa máquina nova não depende de baixar de novo.
 ```bash
 docker compose up -d && source .venv/bin/activate
 python ingest.py corpus/cp.txt --disciplina "Direito Penal" --tipo lei --norma CP
+python ingest.py corpus/cf.txt --disciplina "Direito Constitucional" --tipo lei --norma CF
+python ingest.py corpus/adct.txt --disciplina "Direito Constitucional" --tipo lei --norma ADCT --titulo ADCT
+python ingest.py corpus/livro-emendas.pdf --disciplina "Direito Constitucional" --tipo historico
+python avaliar_retrieval.py         # depois de qualquer ingestão nova ou mudança em retrieval.py
 python gerar.py --cobertura 3
 python gerar.py 3 --secao "FUNCIONARIO PUBLICO" --por-lote 3 --max 12
 python chat.py estudar

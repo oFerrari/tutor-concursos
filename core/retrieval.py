@@ -23,6 +23,7 @@ import re
 from . import db
 from .embeddings import embed_consulta
 
+VERSAO = "retrieval-v2"
 RRF_K = 60  # constante de amortecimento padrão do RRF
 
 RE_CITACAO = re.compile(r"(?i)\bart(?:igo)?s?\.?\s*(\d+[\-\wºo]*)")
@@ -68,17 +69,63 @@ def _termos_lexicais(pergunta: str) -> str:
     return " ".join(palavras) or pergunta
 
 
+def _normas_existentes() -> list[str]:
+    """Consulta o banco em vez de fixar uma lista — corpus cresce (CP, CF,
+    ADCT hoje; CPP, Lei 8.112 depois) e a lista hardcoded ficaria pra trás."""
+    return [r["norma"] for r in db.query(
+        "SELECT DISTINCT norma FROM chunk WHERE norma IS NOT NULL")]
+
+
+#  Gente fala "da constituição", não "da CF" — a sigla sozinha não cobre
+#  como a pergunta é feita de verdade. Alias só para os apelidos comuns;
+#  a sigla em si já é coberta dinamicamente por _normas_existentes().
+APELIDOS_NORMA = {
+    "CF": ("constituição", "constituicao"),
+    "CP": ("código penal", "codigo penal"),
+}
+
+
+def _norma_mencionada(pergunta: str) -> str | None:
+    """
+    "art. 121 do CP" e "art. 121 da CF" são perguntas DIFERENTES — mas
+    RE_CITACAO só pega o número. Com uma norma só no banco isso nunca doeu;
+    com CP+CF+ADCT convivendo (todas têm artigos de número baixo), sem isso
+    "art. 5" podia devolver a CF antes do CP mesmo quando a pergunta cita
+    "CP" explicitamente — ordem alfabética de norma não é intenção do
+    usuário. Casa como palavra inteira, case-insensitive; sigla ou apelido.
+    """
+    p = pergunta.upper()
+    for norma in _normas_existentes():
+        if re.search(rf"\b{re.escape(norma.upper())}\b", p):
+            return norma
+        for apelido in APELIDOS_NORMA.get(norma, ()):
+            if re.search(rf"\b{re.escape(apelido.upper())}\b", p):
+                return norma
+    return None
+
+
 def por_dispositivo(pergunta: str, n: int = 4) -> list[dict]:
+    """
+    Artigos 1º a 9º levam o ordinal "º" por convenção de redação legislativa
+    (LC 95/1998); do 10 em diante não. Quase ninguém digita "º" ao perguntar
+    — "art. 1" é o normal. Comparar cru contra `c.artigo` ("1º" no banco)
+    nunca batia para NENHUMA norma nos artigos 1-9, justamente os mais
+    citados (art. 1º e 5º da CF, por exemplo). Tira o "º"/"o" final dos dois
+    lados antes de comparar; não afeta sufixo de letra ("103-A"), só ordinal.
+    """
     m = RE_CITACAO.search(pergunta)
     if not m:
         return []
+    norma = _norma_mencionada(pergunta)
     return db.query(
         f"""SELECT {CAMPOS}, 1.0 AS score
             FROM chunk c JOIN documento d ON d.id = c.documento_id
-            WHERE c.artigo = %(art)s
+            WHERE regexp_replace(c.artigo, '[ºo]$', '', 'i')
+                  = regexp_replace(%(art)s, '[ºo]$', '', 'i')
+              AND (%(norma)s::text IS NULL OR c.norma = %(norma)s)
             ORDER BY d.tipo = 'lei' DESC, c.norma, c.ordem
             LIMIT %(n)s""",
-        {"art": m.group(1), "n": n},
+        {"art": m.group(1), "n": n, "norma": norma},
     )
 
 

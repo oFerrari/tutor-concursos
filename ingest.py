@@ -7,6 +7,15 @@ Ingestão de material.
     python ingest.py acervo/aula07.pdf --disciplina "Informática" --tipo aula --gerar 8
 
 Roda como worker: é batch, nunca está no caminho da requisição HTTP.
+
+GUARDA DE COLISÃO: --tipo lei assume uma versão vigente por artigo — é
+assim que lei compilada do Planalto é publicada. Um livro de histórico de
+emendas ou "redação anterior" reinicia "Art. 1º" a cada emenda; ingerir
+isso como lei corrompe citação exata (art. X pode devolver a versão
+revogada). Antes de gravar, medimos a taxa de colisão de (norma, artigo) —
+acima do limiar, abortamos SEM tocar no banco e sugerimos --tipo historico
+(mesmo chunk_generico de aula/resumo/jurisprudência: sem exact-match por
+artigo, mas com busca híbrida normal e zero risco de contaminar a lei).
 """
 import argparse
 import hashlib
@@ -16,7 +25,9 @@ from pathlib import Path
 
 from core import chunking, db, embeddings, socratic
 
+VERSAO = "ingest-v2"
 LOTE = 32
+LIMIAR_COLISAO = 0.05  # lei compilada legítima fica em ~0%; ver core.chunking.taxa_colisao_artigo
 
 
 def extrair(caminho: Path) -> list[tuple[int, str]]:
@@ -32,7 +43,8 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("arquivo", type=Path)
     ap.add_argument("--disciplina", required=True)
-    ap.add_argument("--tipo", default="aula", choices=["lei", "aula", "resumo", "jurisprudencia"])
+    ap.add_argument("--tipo", default="aula",
+                    choices=["lei", "aula", "resumo", "jurisprudencia", "historico"])
     ap.add_argument("--norma", help="sigla da norma, obrigatória quando --tipo lei (ex.: CF, CP, CPP)")
     ap.add_argument("--titulo")
     ap.add_argument("--gerar", type=int, default=0, help="gerar N questões após ingerir")
@@ -61,6 +73,18 @@ def main() -> int:
     chunks = (chunking.chunk_lei(bruto, a.norma) if a.tipo == "lei"
               else chunking.chunk_generico(bruto))
     print(f"{titulo}: {len(paginas)} páginas → {len(chunks)} chunks")
+
+    if a.tipo == "lei":
+        taxa = chunking.taxa_colisao_artigo(chunks)
+        if taxa > LIMIAR_COLISAO:
+            print(f"ABORTADO: {taxa:.0%} dos chunks colidem em (norma, artigo) — "
+                  f"muito acima do esperado para lei compilada (~0%). Isso indica "
+                  f"histórico de emendas, 'Redação Anterior' ou texto revogado "
+                  f"reaparecendo — ingerir como lei faria art. X poder devolver a "
+                  f"versão ERRADA (revogada) em vez da vigente.", file=sys.stderr)
+            print("nada foi gravado. Se o material é mesmo histórico/anotado, "
+                  "ingira de novo com --tipo historico.", file=sys.stderr)
+            return 1
 
     doc = db.exec1(
         """INSERT INTO documento (titulo, disciplina, tipo, origem, hash)

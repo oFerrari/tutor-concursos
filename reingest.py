@@ -28,8 +28,9 @@ from pathlib import Path
 
 from core import chunking, db, embeddings
 
-VERSAO = "reingest-v2"
+VERSAO = "reingest-v3"
 LOTE = 64
+LIMIAR_COLISAO = 0.05  # ver core.chunking.taxa_colisao_artigo
 
 
 def extrair(caminho: Path) -> str:
@@ -83,6 +84,13 @@ def main() -> int:
     if not chunks:
         print("o chunking não produziu nada; abortando sem alterar o banco.", file=sys.stderr)
         return 1
+    if doc["tipo"] == "lei":
+        taxa = chunking.taxa_colisao_artigo(chunks)
+        if taxa > LIMIAR_COLISAO:
+            print(f"ABORTADO: {taxa:.0%} dos chunks colidem em (norma, artigo) — "
+                  f"muito acima do esperado para lei compilada. Arquivo errado para "
+                  f"este documento? Nada foi alterado no banco.", file=sys.stderr)
+            return 1
 
     print(f"{doc['titulo']}: {antes['n']} chunks no banco → {len(chunks)} recalculados")
 

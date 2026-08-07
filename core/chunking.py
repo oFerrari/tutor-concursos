@@ -30,7 +30,7 @@ recuperável nem por semântica nem por palavra-chave.
 """
 import re
 
-VERSAO = "chunking-v12"
+VERSAO = "chunking-v13"
 
 RE_ARTIGO = re.compile(r"(?im)^\s*Art\.?\s*(\d+[\-\wºo]*)")
 RE_PARAGRAFO = re.compile(r"(?im)^\s*(?:§\s*(\d+[\wºo]*)|Par[áa]grafo\s+[úu]nico)")
@@ -282,6 +282,35 @@ def chunk_lei(texto: str, norma: str) -> list[dict]:
             "secao": secao,
         })
     return saida
+
+
+def taxa_colisao_artigo(chunks: list[dict]) -> float:
+    """
+    Fração dos chunks cujo (norma, artigo) JÁ apareceu antes na mesma lista.
+
+    Por quê: chunk_lei() assume "uma versão vigente por artigo" — é assim
+    que o Planalto publica lei compilada, e chunk_artigo_idx é montado com
+    essa suposição (nunca virou UNIQUE de propósito, mas o produto inteiro
+    conta com isso: por_dispositivo() devolve TODOS os chunks com aquele
+    artigo, e se houver mais de um, cita fonte errada sem avisar).
+
+    Um livro de histórico de emendas constitucionais reinicia "Art. 1º,
+    Art. 2º..." a cada emenda, e ainda repete "Redação Anterior" do mesmo
+    artigo — chunk_lei() não tem como saber que esse tipo de documento
+    pediria chunk_generico() em vez dela; quem chama (ingest.py) precisa
+    checar essa taxa DEPOIS e decidir.
+    """
+    if not chunks:
+        return 0.0
+    vistos = set()
+    colisoes = 0
+    for c in chunks:
+        chave = (c.get("norma"), c.get("artigo"))
+        if chave in vistos:
+            colisoes += 1
+        else:
+            vistos.add(chave)
+    return colisoes / len(chunks)
 
 
 def chunk_generico(texto: str, alvo: int = 1100, sobreposicao: int = 150) -> list[dict]:
