@@ -193,6 +193,16 @@ numa máquina nova não depende de baixar de novo.
 - Nunca `DELETE FROM documento` para reprocessar: use `reingest.py`.
 - `.env` e `acervo/` fora do git; `corpus/` e `dados/progresso.json` vão para o git.
   SQL só migrações numeradas.
+- **`docker-entrypoint-initdb.d` só roda em volume novo.** Migração numerada
+  nova (`db/00N_*.sql`) não se aplica sozinha a um container já existente —
+  ela só entra de fato num `docker compose down -v` (perde todos os dados)
+  ou aplicando na mão: `docker exec -i tutor-db psql -U tutor -d tutor -f
+  /docker-entrypoint-initdb.d/00N_nome.sql`. Commitar a migração não é
+  aplicar a migração; um `git pull` na outra máquina tem o mesmo problema se
+  o volume lá já existir. Custou o módulo de Simulados/Estatísticas inteiro
+  rodando contra a view/tabela antiga sem avisar (`chat.py simulado` batendo
+  em tabela inexistente, `stats --json` devolvendo `Decimal` que quebra
+  `json.dumps`) até alguém tentar de verdade.
 - Ao sair de uma máquina: `python sincronizar.py exportar` antes do commit/push,
   sempre — senão a próxima exportação (de qualquer lado) sobrescreve progresso.
 
