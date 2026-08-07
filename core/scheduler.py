@@ -15,7 +15,7 @@ from . import db
 from .scheduler_regras import (INTERVALOS, conta_como_erro, dias_ate_revisao,
                                orcamento_novas, proxima_caixa)
 
-VERSAO = "scheduler-v19"
+VERSAO = "scheduler-v20"
 
 # TETO_DIARIO: quantas questões por dia. NOVAS_POR_DIA=None significa "todo o
 # orçamento que sobrar depois das revisões" — cota fixa perdeu em todos os
@@ -135,19 +135,58 @@ def desempenho() -> list[dict]:
     return db.query("SELECT * FROM v_desempenho_disciplina ORDER BY pct_acerto NULLS LAST")
 
 
-def meta(data_prova: date) -> dict:
+def meta(data_prova: date | None = None) -> dict:
+    """
+    data_prova=None usa a data do edital mais recente ingerido
+    (core.edital.mais_recente()) — é o que faz `chat.py meta`, sem
+    argumento, funcionar depois de `python edital.py algum.pdf`. Passar a
+    data explicitamente sempre vence a automática: é a saída de emergência
+    se a extração do PDF errou (ver candidatos_data_prova em core/edital.py
+    — melhor esforço, não contrato).
+    """
+    from . import edital as edital_mod  # import local: scheduler.py não deve
+                                         # pagar o custo de edital.py toda vez
+    # Busca o edital SEMPRE, mesmo com data manual — se o operador corrigiu
+    # a data porque a extração automática errou, a probabilidade de
+    # fechamento tem que usar a correção, não recalcular do zero sem ela.
+    ed = edital_mod.mais_recente()
+    if data_prova is None:
+        data_prova = ed["data_prova"] if ed else None
+
     r = db.exec1(
         """SELECT COUNT(*) AS total,
                   COUNT(*) FILTER (WHERE caixa >= 3) AS dominadas,
                   COUNT(*) FILTER (WHERE prox_revisao <= CURRENT_DATE) AS pendentes_hoje
            FROM questao"""
     ) or {"total": 0, "dominadas": 0, "pendentes_hoje": 0}
+    respondidas = db.exec1(
+        "SELECT count(DISTINCT questao_id) AS n FROM tentativa"
+    )["n"]
+
+    if data_prova is None:
+        return {
+            "dias_restantes": None,
+            "cobertura_pct": round(100 * r["dominadas"] / r["total"], 1) if r["total"] else 0.0,
+            "questoes_pendentes": r["total"] - r["dominadas"],
+            "questoes_respondidas": respondidas,
+            "ritmo_necessario": None,
+            "pendentes_hoje": r["pendentes_hoje"],
+            "aviso": "sem data de prova conhecida — rode `python edital.py seu.pdf` "
+                     "ou passe a data manualmente",
+        }
+
     dias = max((data_prova - date.today()).days, 0)
     pendente = r["total"] - r["dominadas"]
-    return {
+    resultado = {
         "dias_restantes": dias,
         "cobertura_pct": round(100 * r["dominadas"] / r["total"], 1) if r["total"] else 0.0,
         "questoes_pendentes": pendente,
+        "questoes_respondidas": respondidas,
         "ritmo_necessario": -(-pendente // dias) if dias else None,
         "pendentes_hoje": r["pendentes_hoje"],
     }
+    if ed:
+        resultado["edital"] = ed["titulo"]
+        resultado["probabilidade_fechamento"] = edital_mod.probabilidade_fechamento(
+            ed["id"], data_prova=data_prova)
+    return resultado

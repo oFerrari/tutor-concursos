@@ -36,6 +36,7 @@ db/003_embedding_cache.sql cache de vetores por hash de conteúdo
 db/004_simulado.sql        tabela simulado, tentativa.simulado_id
 db/005_desempenho_json.sql v_desempenho_disciplina em float8 (JSON-pronta) + cobertura_pct
 db/006_tipo_historico.sql  documento.tipo aceita 'historico' (material com múltiplas versões do artigo)
+db/007_edital.sql          tabelas edital e topico
 core/chunking.py           lei -> chunks por artigo (função pura)
 core/embeddings.py         e5 local, prefixos query:/passage:, cache
 core/retrieval.py          dispositivo exato -> rubrica -> híbrida (RRF)
@@ -47,6 +48,8 @@ core/simulado.py           prova sob condição de exame: sem dica, corrige no f
 core/desafio.py            meta do dia: reincidentes + novas + mini-simulado, tempo estimado
 core/ritmo_regras.py       gatilho de intervenção proativa — FUNÇÕES PURAS
 core/ritmo.py              busca desempenho/reincidência/sequência, prioriza 1 sugestão
+core/edital.py             extrai data da prova e conteúdo programático de PDF de edital
+edital.py                  CLI de ingestão de edital, reporta candidatos (não decide calado)
 ingest.py                  ingestão (batch)
 reingest.py                reprocessa chunks preservando questões
 gerar.py                   geração com cobertura por seção
@@ -122,6 +125,33 @@ de sempre sortear). Estimativa de tempo vem de `avg(tentativa.segundos)` real,
 não de um número chutado — sem histórico, cai num default documentado.
 `_estudar_lista` devolve se o usuário pediu "sair", porque sem esse sinal o
 desafio emendava o próximo bloco mesmo depois da pessoa dizer que ia parar.
+
+**Edital vira dado real, não data digitada na mão — mas é MELHOR ESFORÇO
+reportado, não contrato.** `core/edital.py` extrai data da prova e conteúdo
+programático de um PDF de edital com heurística de texto (regex + pontuação
+por proximidade de palavra-chave), porque layout de edital varia por banca e
+não existe parser universal. `candidatos_data_prova()` devolve TODOS os
+candidatos com pontuação, não só "a resposta" — mesmo espírito de
+`diagnostico.py`: reportar pro operador conferir, nunca decidir calado.
+`chat.py meta` sem argumento usa a data do edital mais recente; passar data
+manual sempre vence (saída de emergência se a extração errou), e essa
+correção também alimenta `probabilidade_fechamento()` — sem isso, corrigir
+a data na mão deixaria a probabilidade calculando com a data errada do banco.
+
+Duas aproximações DECLARADAS em `core/edital.py`, não escondidas: (1) sem
+separação por cargo — concurso com mais de um cargo repete disciplina com
+conteúdo próprio, os tópicos se somam num grupo só; (2) cobertura por
+tópico é estimada por DISCIPLINA inteira (não há vínculo questão→tópico
+individual no schema), assume dificuldade uniforme dentro da disciplina.
+
+**"Probabilidade de fechamento" é extrapolação linear de ritmo, não modelo
+estatístico.** `ritmo_atual = tópicos cobertos / dias estudando; ritmo
+necessário = tópicos pendentes / dias restantes; probabilidade = min(100,
+100 * atual/necessário)`. Não modela variância nem esquecimento — mesma
+limitação já documentada em `simular.py`. Nomear isso de "probabilidade"
+sem dizer a fórmula seria o mesmo erro de "48% dominadas" virar "a
+ferramenta só acerta 48%" — por isso a fórmula fica no docstring da função,
+não só na cabeça de quem escreveu.
 
 **Intervenção proativa é regra, não o LLM decidindo quando falar.** O LLM já
 resolve a conversa livre (`socratic.explicar`); decidir QUANDO interromper é
@@ -245,11 +275,16 @@ lembrasse de rodar.
 - `parcial` desce uma caixa — decisão a revisitar com uso real.
 - Questões que cobram dois pontos ("conduta E pena") — prompt já corrigido,
   falta confirmar.
-- Ingerir CF, CPP, Lei 8.112 (mesmo pipeline, trocar `--norma`).
-- Parsear edital em tabela `topico` para cobertura por tópico.
+- Ingerir CPP, Lei 8.112 (mesmo pipeline, trocar `--norma`; CF+ADCT já feitos).
+- Vínculo questão→tópico individual (hoje `edital.cobertura()` estima por
+  disciplina inteira, não por tópico — ver aproximação (2) documentada
+  acima). Exigiria marcar cada questão gerada com o tópico de origem.
+- Separação por cargo no parsing de edital (hoje disciplinas de nomes
+  iguais entre cargos se somam — ver aproximação (1) documentada acima).
 - Provas anteriores da banca: gabarito oficial + peso de incidência real.
-- Simulado por banca (peso de incidência real, não amostra uniforme) e
-  desafio diário. Simulado genérico (`chat.py simulado`) já existe.
+- Simulado por banca (peso de incidência real, não amostra uniforme).
+  Simulado genérico (`chat.py simulado`) e desafio diário (`chat.py desafio`)
+  já existem.
 - Next.js só depois — `scheduler` e `socratic` já são funções puras.
 - Se a rotina exportar/importar do `sincronizar.py` cansar: Postgres hospedado
   (Neon, Supabase) com `DATABASE_URL` único resolve, ao custo de exigir rede.
@@ -337,13 +372,16 @@ python ingest.py corpus/cf.txt --disciplina "Direito Constitucional" --tipo lei 
 python ingest.py corpus/adct.txt --disciplina "Direito Constitucional" --tipo lei --norma ADCT --titulo ADCT
 python ingest.py corpus/livro-emendas.pdf --disciplina "Direito Constitucional" --tipo historico
 python avaliar_retrieval.py         # depois de qualquer ingestão nova ou mudança em retrieval.py
+python edital.py corpus/edital.pdf --orgao "PC-PR" --banca FGV   # data da prova + conteúdo programático
 python gerar.py --cobertura 3
 python gerar.py 3 --secao "FUNCIONARIO PUBLICO" --por-lote 3 --max 12
 python chat.py estudar
 python chat.py desafio             # meta do dia: pontos fracos + novas + mini-simulado
 python chat.py simulado 20 60      # 20 questões, meta de 60 min
 python chat.py simulados
-python chat.py erros | stats | stats --json | meta AAAA-MM-DD
+python chat.py erros | stats | stats --json
+python chat.py meta                 # usa a data do edital ingerido
+python chat.py meta 2026-11-15      # data manual, sempre vence a do edital
 python chat.py perguntar "art. 312"
 
 # ao sair de uma máquina

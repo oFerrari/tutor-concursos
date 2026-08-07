@@ -10,7 +10,8 @@ Sessão de estudo no terminal.
     python chat.py erros
     python chat.py stats            # barras no terminal
     python chat.py stats --json     # mesmo dado, formato que a futura API vai servir
-    python chat.py meta 2026-11-15
+    python chat.py meta                # usa a data do edital ingerido (python edital.py)
+    python chat.py meta 2026-11-15     # data manual, sempre vence a do edital
 
 Provar o loop aqui antes de escrever uma linha de Next.js. Se a tutoria
 funciona sem interface, o frontend é só apresentação.
@@ -28,7 +29,7 @@ from rich.table import Table
 from core import desafio as desafio_mod
 from core import llm, ritmo, scheduler, simulado as simulado_mod, socratic
 
-VERSAO = "chat-v25"
+VERSAO = "chat-v26"
 con = Console()
 MAX_DICAS = 3
 
@@ -386,12 +387,18 @@ def main() -> int:
     elif cmd == "stats":
         stats(como_json="--json" in sys.argv[2:])
     elif cmd == "meta":
-        if len(sys.argv) < 3:
-            con.print("uso: python chat.py meta AAAA-MM-DD")
-            return 1
-        m = scheduler.meta(date.fromisoformat(sys.argv[2]))
+        # sem data: usa o edital mais recente ingerido (python edital.py).
+        # com data: sempre vence a automática — saída de emergência se a
+        # extração do PDF errou o dia da prova.
+        data = date.fromisoformat(sys.argv[2]) if len(sys.argv) > 2 else None
+        m = scheduler.meta(data)
         for k, v in m.items():
-            con.print(f"{k.replace('_', ' ')}: [bold]{v}[/]")
+            if isinstance(v, dict):
+                con.print(f"{k.replace('_', ' ')}:")
+                for k2, v2 in v.items():
+                    con.print(f"  {k2.replace('_', ' ')}: [bold]{v2}[/]")
+            else:
+                con.print(f"{k.replace('_', ' ')}: [bold]{v}[/]")
     else:
         con.print(__doc__)
         return 1

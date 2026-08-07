@@ -42,7 +42,9 @@ A primeira execução baixa o modelo de embeddings (~1 GB). Depois roda offline.
 | `python chat.py erros` | caderno de erros por reincidência |
 | `python chat.py stats` | % de acerto e cobertura por disciplina, com barra no terminal |
 | `python chat.py stats --json` | mesmo dado, formato pronto pra um futuro endpoint consumir |
-| `python chat.py meta 2026-11-15` | dias restantes, cobertura, ritmo necessário |
+| `python edital.py ARQ.pdf --orgao O --banca B` | extrai data da prova + conteúdo programático de um edital |
+| `python chat.py meta` | dias restantes, cobertura, probabilidade de fechamento — usa o edital ingerido |
+| `python chat.py meta 2026-11-15` | mesma coisa, com data manual (sempre vence a do edital) |
 
 ## Mapa do código
 
@@ -58,6 +60,7 @@ core/socratic.py      avaliação e geração; retenção do gabarito em código
 core/scheduler.py     promoção de caixa, caderno de erros, meta
 core/simulado.py      prova sob condição de exame: sem dica, corrige no final
 core/desafio.py       meta do dia: reincidentes + novas + mini-simulado
+core/edital.py        extrai data da prova e conteúdo programático de PDF de edital
 ingest.py             worker de ingestão (batch)
 chat.py               sessão de estudo (CLI)
 ```
