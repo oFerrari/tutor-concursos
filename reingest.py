@@ -12,6 +12,14 @@ do cache para todo texto que continua igual — e as QUESTÕES do documento
 são preservadas, porque só a tabela chunk é substituída.
 
 Ao contrário de `DELETE FROM documento`, isto não apaga seu progresso.
+
+SEGURANÇA: todo chunk e embedding novo é calculado ANTES de qualquer DELETE.
+Uma versão anterior apagava primeiro e calculava depois — um erro no meio
+(já aconteceu: mudança de API do pgvector.Vector) deixava o documento com
+ZERO chunks e sem transação pra reverter (db.py usa autocommit=True). Se
+--norma não for passado, ele é inferido dos chunks ATUAIS — o que também
+falha nesse cenário, por isso --norma explícito existe como saída de
+emergência.
 """
 import argparse
 import hashlib
@@ -20,6 +28,7 @@ from pathlib import Path
 
 from core import chunking, db, embeddings
 
+VERSAO = "reingest-v2"
 LOTE = 64
 
 
@@ -34,6 +43,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--doc", type=int, required=True)
     ap.add_argument("--arquivo", type=Path, help="padrão: documento.origem")
+    ap.add_argument("--norma", help="sigla da norma; padrão: inferida dos chunks atuais")
     a = ap.parse_args()
 
     doc = db.exec1(
@@ -49,15 +59,21 @@ def main() -> int:
         print(f"arquivo não encontrado: {caminho}. Use --arquivo.", file=sys.stderr)
         return 1
 
-    norma = None
-    if doc["tipo"] == "lei":
+    norma = a.norma
+    if doc["tipo"] == "lei" and not norma:
+        # Inferir dos chunks ATUAIS só funciona se eles ainda existirem — se
+        # uma reingestão anterior falhou depois do DELETE (ver comentário
+        # abaixo sobre por que isso não deveria mais acontecer), a inferência
+        # fica impossível e trava reingest.py bem no momento em que mais se
+        # precisa dele. --norma explícito é o jeito de nunca ficar preso nisso.
         r = db.exec1(
             "SELECT norma FROM chunk WHERE documento_id = %(i)s AND norma IS NOT NULL LIMIT 1",
             {"i": a.doc},
         )
         norma = r["norma"] if r else None
         if not norma:
-            print("não consegui inferir a norma dos chunks atuais.", file=sys.stderr)
+            print("não consegui inferir a norma dos chunks atuais (podem não existir "
+                  "mais). Passe --norma explicitamente, ex.: --norma CP", file=sys.stderr)
             return 1
 
     antes = db.exec1("SELECT count(*) AS n FROM chunk WHERE documento_id = %(i)s", {"i": a.doc})
@@ -70,12 +86,24 @@ def main() -> int:
 
     print(f"{doc['titulo']}: {antes['n']} chunks no banco → {len(chunks)} recalculados")
 
-    # Substitui só os chunks. As questões apontam para documento_id e sobrevivem.
-    db.query("DELETE FROM chunk WHERE documento_id = %(i)s", {"i": a.doc})
-
+    # TUDO que pode falhar (rede, cache, encode do modelo) roda ANTES de
+    # tocar no banco. A versão anterior dava DELETE e só depois calculava
+    # embedding lote a lote — um erro no meio (como o bug de API do
+    # pgvector.Vector que apareceu aqui) deixava o documento com ZERO
+    # chunks, sem nada para reverter, porque autocommit=True não dá
+    # transação para desfazer. Calcular tudo primeiro e só then substituir
+    # é o que torna esse comando seguro de repetir depois de uma falha.
+    lotes_prontos = []
     for i in range(0, len(chunks), LOTE):
         lote = chunks[i:i + LOTE]
         vetores = embeddings.embed_passagens([c["texto"] for c in lote], relatorio=True)
+        lotes_prontos.append((i, lote, vetores))
+        print(f"  calculado {min(i + LOTE, len(chunks))}/{len(chunks)}")
+
+    # Substitui só os chunks. As questões apontam para documento_id e sobrevivem.
+    db.query("DELETE FROM chunk WHERE documento_id = %(i)s", {"i": a.doc})
+
+    for i, lote, vetores in lotes_prontos:
         for j, (c, v) in enumerate(zip(lote, vetores)):
             db.query(
                 """INSERT INTO chunk (documento_id, ordem, texto, norma, artigo,

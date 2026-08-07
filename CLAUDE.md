@@ -47,6 +47,7 @@ ingest.py                  ingestão (batch)
 reingest.py                reprocessa chunks preservando questões
 gerar.py                   geração com cobertura por seção
 diagnostico.py             auditoria do chunking, sem banco
+avaliar_retrieval.py       precision@k da busca híbrida contra gabarito de artigos
 simular.py                 simulação de meses de estudo, sem banco
 chat.py                    sessão de estudo
 sincronizar.py             exporta/importa questões e progresso entre máquinas
@@ -156,6 +157,11 @@ numa máquina nova não depende de baixar de novo.
   compilado. Sem cortar pelo marcador do aviso ANTES de gerar o `.txt`, esse
   texto vira corpo do último artigo — não é rubrica nem termina sem
   pontuação, então `_cortar_cauda` não descarta.
+- Acento faltando em palavra comum ("alguem" em vez de "alguém", Art. 121)
+  não aparece em nenhuma métrica estrutural — só quebra busca lexical em
+  runtime, silenciosamente. `grep -c` da palavra certa vs. errada no corpus
+  é o jeito rápido de checar se é isolado ou sistêmico antes de decidir como
+  corrigir (ver "Postgres 'portuguese' não faz accent-folding" em Aberto).
 
 ## Armadilhas de método (custaram tempo)
 
@@ -171,6 +177,18 @@ numa máquina nova não depende de baixar de novo.
   corpo.** O corpus com assinatura/rodapé colada no Art. 361 passava 434/434
   limpo — o defeito estava DENTRO do texto do último chunk, onde a métrica
   não olha. Só apareceu inspecionando `chunk_lei(...)[-1]` na mão.
+- **`DELETE` antes de validar que o `INSERT` vai funcionar é perigoso sem
+  transação.** `reingest.py` fazia `DELETE FROM chunk` e só DEPOIS calculava
+  embedding lote a lote — um erro no meio (aconteceu de verdade: API do
+  `pgvector.Vector` mudou entre versões, `.tolist()` deixou de existir)
+  deixava o documento com ZERO chunks, sem nada pra reverter, porque
+  `autocommit=True` não dá rollback. Pior: a norma que o comando precisa pra
+  rodar de novo é inferida DOS CHUNKS que acabaram de sumir — travava
+  exatamente no momento em que mais se precisava dele. Corrigido calculando
+  tudo antes de tocar no banco, e adicionando `--norma` explícito como saída
+  de emergência. `core/embeddings.py` também não fixava `device="cpu"`
+  (decisão já documentada em "Pilha"), então uma GPU incompatível com o
+  build do torch instalado quebra em runtime em vez de nunca ser tocada.
 
 ## Limitações conhecidas
 
@@ -200,12 +218,23 @@ numa máquina nova não depende de baixar de novo.
 - Next.js só depois — `scheduler` e `socratic` já são funções puras.
 - Se a rotina exportar/importar do `sincronizar.py` cansar: Postgres hospedado
   (Neon, Supabase) com `DATABASE_URL` único resolve, ao custo de exigir rede.
-- **Precisão de `retrieval.py` (busca híbrida RRF) nunca foi medida.** O que
-  já foi validado é upstream/downstream disso: chunking (434/434 artigos
-  limpos, `diagnostico.py`) e o scheduler (fiação SQL bate com a regra pura,
-  harness de integração). Falta o meio — dado um conjunto de queries com
-  artigo esperado conhecido ("art. 312" → peculato), medir precision@k da
-  recuperação exata e da híbrida. Sem isso, "RAG está bom" não tem lastro.
+- **Precisão de `retrieval.py` MEDIDA** (`avaliar_retrieval.py`, 15 casos
+  cobrindo os três caminhos): dispositivo 3/3 top-1, rubrica 4/4 top-1,
+  híbrida 8/8 top-6 mas só 4/8 top-1 — semântica encontra o artigo certo,
+  mas nem sempre em 1º lugar. Isso é esperado e aceitável: `buscar()` devolve
+  n=6 para o LLM, que escolhe o que citar; top-6 é a métrica que importa
+  para o produto, top-1 é diagnóstico de quão "óbvia" foi a recuperação.
+  Rodar de novo sempre que mexer em `retrieval.py`, `embeddings.py` ou
+  reingerir. Amostra pequena (15 casos, 1 norma) — não generaliza sozinha
+  para CF/CPP quando forem ingeridos; expandir o gabarito então.
+- **Postgres `'portuguese'` não faz accent-folding.** "alguem" sem acento no
+  Art. 121 (typo isolado do Planalto, não sistêmico — só essa 1 ocorrência
+  em 434 artigos) fazia a busca lexical não encontrar NADA para "matar
+  alguém..." (0 linhas), porque `websearch_to_tsquery` mantém "alguém" (com
+  acento) sem stemizar, e o texto indexado tinha só "algu" (de "alguem").
+  Corrigido o typo pontual; a fragilidade estrutural continua aberta —
+  `unaccent` + configuração de busca dedicada resolveria de vez, mas exige
+  migração (recriar a coluna GENERATED `chunk.busca`) e não foi feito.
 
 ## Convenções
 
@@ -214,7 +243,11 @@ numa máquina nova não depende de baixar de novo.
 - Antes de mexer em chunking: `python diagnostico.py corpus/cp.txt --norma CP`
   (segundos, sem banco). Só depois `reingest.py`.
 - Antes de mudar regra de agendamento: `python simular.py`.
+- Antes de mexer em `retrieval.py`/`embeddings.py` ou reingerir: `python avaliar_retrieval.py`
+  (precisa de banco com o CP ingerido; roda em segundos, sem custo de LLM).
 - Nunca `DELETE FROM documento` para reprocessar: use `reingest.py`.
+- `reingest.py --doc N` infere a norma dos chunks atuais; se algo já apagou
+  os chunks (ou você não tem certeza), passe `--norma CP` explícito.
 - `.env` e `acervo/` fora do git; `corpus/` e `dados/progresso.json` vão para o git.
   SQL só migrações numeradas.
 - **`docker-entrypoint-initdb.d` só roda em volume novo.** Migração numerada

@@ -16,13 +16,20 @@ from functools import lru_cache
 from . import db
 from .config import EMBEDDING_MODEL
 
+VERSAO = "embeddings-v2"
 DIMENSOES = 768  # precisa casar com vector(768) no schema
 
 
 @lru_cache(maxsize=1)
 def _modelo():
     from sentence_transformers import SentenceTransformer
-    return SentenceTransformer(EMBEDDING_MODEL)
+    # device="cpu" explícito: a decisão documentada é "LOCAL (CPU)", mas sem
+    # forçar isso o sentence-transformers autodetecta CUDA. Numa GPU
+    # incompatível com o build do torch instalado, isso quebra em runtime
+    # (CUDA error: no kernel image for device); numa GPU compatível, usaria
+    # VRAM calado, contradizendo a decisão. CPU é rápido o bastante para um
+    # modelo de 768 dim e evita as duas armadilhas.
+    return SentenceTransformer(EMBEDDING_MODEL, device="cpu")
 
 
 def _hash(texto: str) -> str:
@@ -39,7 +46,17 @@ def _do_cache(hashes: list[str]) -> dict[str, list[float]]:
     achados = {}
     for r in linhas:
         v = r["embedding"]
-        achados[r["hash"]] = v.tolist() if hasattr(v, "tolist") else list(v)
+        # register_vector decodifica `vector` como numpy array OU como
+        # pgvector.Vector dependendo da versão instalada — e a API mudou
+        # entre elas (.tolist() no numpy, .to_list() no pgvector-python
+        # atual; nenhum dos dois é iterável direto por list() sem isso).
+        # Cobrir os três evita depender de qual versão está no ambiente.
+        if hasattr(v, "tolist"):
+            achados[r["hash"]] = v.tolist()
+        elif hasattr(v, "to_list"):
+            achados[r["hash"]] = v.to_list()
+        else:
+            achados[r["hash"]] = list(v)
     return achados
 
 
