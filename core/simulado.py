@@ -23,7 +23,7 @@ o que importa (caixa, prox_revisao) já viaja pela tentativa comum.
 """
 from . import db, socratic
 
-VERSAO = "simulado-v1"
+VERSAO = "simulado-v2"
 
 N_PADRAO = 20
 
@@ -84,7 +84,7 @@ def relatorio(simulado_id: int) -> list[dict]:
                   count(*)                                          AS questoes,
                   count(*) FILTER (WHERE t.veredito = 'correta')     AS acertos,
                   round(100.0 * count(*) FILTER (WHERE t.veredito = 'correta')
-                        / count(*), 1)                               AS pct
+                        / count(*), 1)::float8                       AS pct
            FROM tentativa t JOIN questao q ON q.id = t.questao_id
            WHERE t.simulado_id = %(id)s
            GROUP BY q.disciplina ORDER BY pct""",
@@ -109,7 +109,7 @@ def historico(limite: int = 10) -> list[dict]:
                   count(t.id) FILTER (WHERE t.veredito = 'correta') AS acertos,
                   count(t.id)                                       AS respondidas,
                   round(100.0 * count(t.id) FILTER (WHERE t.veredito = 'correta')
-                        / NULLIF(count(t.id), 0), 1)                AS nota_pct
+                        / NULLIF(count(t.id), 0), 1)::float8        AS nota_pct
            FROM simulado s LEFT JOIN tentativa t ON t.simulado_id = s.id
            GROUP BY s.id ORDER BY s.criado_em DESC LIMIT %(l)s""",
         {"l": limite},
