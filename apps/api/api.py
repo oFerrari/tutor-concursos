@@ -307,7 +307,7 @@ class PerguntaBody(BaseModel):
 @app.post("/perguntar")
 def rota_perguntar(body: PerguntaBody, uid: int = Depends(usuario_atual)):
     try:
-        return socratic.explicar(body.pergunta)
+        return socratic.explicar(body.pergunta, uid)
     except ErroLLM as e:
         raise HTTPException(503, f"LLM indisponível: {e}")
 

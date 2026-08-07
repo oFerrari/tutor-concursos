@@ -13,7 +13,7 @@ Sem isso, modelo pequeno erra a sintaxe e a sessão de estudo morre no meio.
 """
 from . import llm, retrieval
 
-VERSAO = "socratic-v22"
+VERSAO = "socratic-v23"
 
 # ------------------------------------------------------------------ schemas
 # Subconjunto OpenAPI aceito pelo Gemini. propertyOrdering importa: o modelo
@@ -139,21 +139,68 @@ def avaliar(enunciado: str, gabarito: str, resposta: str, nivel: int,
     }
 
 
-def explicar(pergunta: str) -> dict:
-    """Modo livre: aluno pergunta, tutor responde ancorado no acervo."""
+def _resumo_desempenho(usuario_id: int) -> str | None:
+    """
+    Texto curto e pronto pra virar contexto de prompt — o modelo só LÊ este
+    resumo, nunca soma nada sozinho. Import local (não no topo do módulo):
+    `socratic.py` não deve carregar `scheduler.py` pra quem só usa
+    `avaliar()`/`gerar_questoes()`, que não tocam nisso.
+    """
+    from . import scheduler
+    dados = scheduler.desempenho(usuario_id)
+    if not dados:
+        return None
+    linhas = [
+        f"- {d['disciplina']}: {d['dominadas']}/{d['questoes']} dominadas, "
+        f"{d['pct_acerto'] or 0}% de acerto em {d['tentativas']} tentativas, "
+        f"{d['cobertura_pct'] or 0}% de cobertura"
+        for d in dados
+    ]
+    erros = scheduler.caderno_erros(usuario_id, limite=5)
+    if erros:
+        linhas.append("Temas que mais reincidem em erro: " +
+                      ", ".join(f"{e['tema']} ({e['vezes']}x)" for e in erros))
+    return "\n".join(linhas)
+
+
+def explicar(pergunta: str, usuario_id: int | None = None) -> dict:
+    """
+    Modo livre: aluno pergunta, tutor responde ancorado no acervo E no
+    próprio desempenho real (quando usuario_id vem preenchido).
+
+    Sem o desempenho como segunda fonte, "como estou indo em português?"
+    não tinha ONDE bater — a busca no acervo (RAG) não sabe nada sobre
+    quem pergunta, só sobre o texto de lei. Duas fontes de contexto, uma
+    resposta: o modelo escolhe qual usar (ou as duas), mas o resumo de
+    desempenho já vem pronto do banco — ele nunca soma nada sozinho, só lê.
+    """
     chunks = retrieval.buscar(pergunta, n=6)
-    if not chunks:
-        return {"resposta": "Não encontrei isso no material que você ingeriu ainda.", "fontes": []}
-    contexto = retrieval.formatar_contexto(chunks)
+    contexto_material = retrieval.formatar_contexto(chunks) if chunks else None
+    contexto_desempenho = _resumo_desempenho(usuario_id) if usuario_id else None
+
+    if not contexto_material and not contexto_desempenho:
+        return {"resposta": "Não encontrei isso no material, e ainda não tenho nenhum "
+                            "desempenho seu registrado.", "fontes": []}
+
+    partes = []
+    if contexto_material:
+        partes.append(f"MATERIAL (lei seca do acervo):\n{contexto_material}")
+    if contexto_desempenho:
+        partes.append(f"DESEMPENHO REAL DO ALUNO (dados do banco):\n{contexto_desempenho}")
+    partes.append(f"PERGUNTA DO ALUNO: {pergunta}")
+
     sistema = (
-        "Você é professor de concursos. Responda usando SOMENTE o material entre marcadores. "
-        "Cite a referência entre colchetes que acompanha cada trecho. Se o material não "
-        "cobrir a pergunta, diga isso em vez de completar com conhecimento próprio. "
-        "Explique com suas palavras em vez de transcrever o trecho inteiro. "
-        "Termine com uma pergunta que teste se o aluno entendeu."
+        "Você é professor de concursos, conversando naturalmente com o aluno. Você pode "
+        "receber até duas fontes de contexto: MATERIAL (lei seca do acervo) e DESEMPENHO REAL "
+        "DO ALUNO (dados do banco). Escolha a fonte certa pra pergunta: se for sobre o conteúdo "
+        "da lei, use o MATERIAL e cite a referência entre colchetes que acompanha cada trecho; "
+        "se for sobre o progresso ou desempenho do aluno, use o DESEMPENHO e NUNCA invente um "
+        "número que não esteja ali. Se a pergunta pedir as duas coisas, combine as duas fontes. "
+        "Se nenhuma fonte cobrir a pergunta, diga isso em vez de completar com conhecimento "
+        "próprio. Português brasileiro, tom direto. Termine com uma pergunta ou sugestão que "
+        "ajude o aluno a seguir estudando."
     )
-    resposta = llm.obter().gerar(f"MATERIAL:\n{contexto}\n\nPERGUNTA DO ALUNO: {pergunta}",
-                                 sistema, max_tokens=1500)
+    resposta = llm.obter().gerar("\n\n".join(partes), sistema, max_tokens=1500)
     return {"resposta": resposta, "fontes": chunks}
 
 

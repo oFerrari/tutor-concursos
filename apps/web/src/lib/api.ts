@@ -53,6 +53,21 @@ async function chamar<T>(caminho: string, opcoes: RequestInit = {}): Promise<T> 
   return resposta.json() as Promise<T>;
 }
 
+/** Upload multipart — sem Content-Type manual (o browser define o boundary sozinho). */
+async function chamarFormData<T>(caminho: string, form: FormData): Promise<T> {
+  const token = getToken();
+  const resposta = await fetch(`${API_URL}${caminho}`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+  if (!resposta.ok) {
+    const corpo = await resposta.json().catch(() => ({}));
+    throw new ErroApi(resposta.status, corpo.detail ?? `erro ${resposta.status}`);
+  }
+  return resposta.json() as Promise<T>;
+}
+
 // ---------------------------------------------------------------------- auth
 export type Usuario = { id: number; email: string };
 export type RespostaAuth = { token: string; usuario: Usuario };
@@ -226,6 +241,95 @@ export type PlanoDesafio = {
 
 export function getDesafio(): Promise<PlanoDesafio> {
   return chamar<PlanoDesafio>("/desafio");
+}
+
+// -------------------------------------------------------------- intervenção
+export function getSugestao(): Promise<{ sugestao: string | null }> {
+  return chamar("/sugestao");
+}
+
+// -------------------------------------------------------------- perguntar
+export type Fonte = {
+  id: number;
+  titulo: string;
+  norma?: string;
+  artigo?: string;
+  rubrica?: string;
+};
+
+export function perguntar(pergunta: string): Promise<{ resposta: string; fontes: Fonte[] }> {
+  return chamar("/perguntar", {
+    method: "POST",
+    body: JSON.stringify({ pergunta }),
+  });
+}
+
+// ------------------------------------------------------------ meta / edital
+export type Probabilidade =
+  | { erro: string }
+  | {
+      dias_restantes: number;
+      topicos_totais: number;
+      topicos_pendentes_estimado: number;
+      ritmo_atual_topicos_dia: number;
+      ritmo_necessario_topicos_dia: number | null;
+      probabilidade_fechamento_pct: number;
+    };
+
+export type Meta = {
+  dias_restantes: number | null;
+  cobertura_pct: number;
+  questoes_pendentes: number;
+  questoes_respondidas: number;
+  ritmo_necessario: number | null;
+  pendentes_hoje: number;
+  aviso?: string;
+  edital?: string;
+  probabilidade_fechamento?: Probabilidade;
+};
+
+// data no formato AAAA-MM-DD — sempre vence a do edital ingerido (mesma
+// regra de `chat.py meta AAAA-MM-DD`).
+export function getMeta(data?: string): Promise<Meta> {
+  return chamar<Meta>(data ? `/meta?data=${data}` : "/meta");
+}
+
+export type CoberturaDisciplina = {
+  disciplina: string;
+  topicos_no_edital: number;
+  questoes_disciplina: number;
+  cobertura_pct: number;
+  topicos_pendentes_estimado: number;
+};
+
+export type EditalAtual = { id: number; titulo: string; data_prova: string | null; cobertura: CoberturaDisciplina[] };
+
+export function getEdital(): Promise<EditalAtual> {
+  return chamar<EditalAtual>("/edital");
+}
+
+export type CandidatoData = { data: string; pontuacao: number; contexto: string };
+
+export type ResultadoIngestaoEdital = {
+  edital_id: number;
+  data_prova: string | null;
+  candidatos_data: CandidatoData[];
+  topicos: number;
+  disciplinas: string[];
+};
+
+export function ingerirEdital(
+  arquivo: File,
+  titulo?: string,
+  orgao?: string,
+  banca?: string
+): Promise<ResultadoIngestaoEdital> {
+  const form = new FormData();
+  form.append("arquivo", arquivo);
+  if (titulo) form.append("titulo", titulo);
+  if (orgao) form.append("orgao", orgao);
+  if (banca) form.append("banca", banca);
+  return chamarFormData<ResultadoIngestaoEdital>("/edital", form);
 }
 
 export type Registro = { caixa: number; prox_revisao: string };

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { NavBar } from "@/components/NavBar";
+import { Sugestao } from "@/components/Sugestao";
 import { Carga, ErroApi, Questao, getCarga, getFila, getToken, limparToken } from "@/lib/api";
 
 export default function PaginaFila() {
@@ -54,6 +55,7 @@ export default function PaginaFila() {
   return (
     <main className="mx-auto max-w-2xl p-8">
       <NavBar />
+      <Sugestao />
       <h1 className="mb-1 text-xl font-semibold">fila do dia</h1>
       <p className="mb-6 text-sm opacity-70">
         {questoes.length} questões · {carga.revisoes} revisões venceram, {carga.ineditas} inéditas

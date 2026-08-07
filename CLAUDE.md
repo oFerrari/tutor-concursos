@@ -99,6 +99,19 @@ vence recall: contexto extra só dá ao modelo material para citar fonte errada.
 o gabarito para julgar e é instruído a não revelar — mas instrução vaza. Quem
 decide revelar é `chat.py`, após 3 respostas erradas.
 
+**`socratic.explicar()` tem DUAS fontes de contexto — material E desempenho
+real do aluno — porque um professor que não sabe conversar sobre o próprio
+progresso do aluno não é professor.** Antes disso, "como estou indo em
+português?" não tinha onde bater: a busca (RAG) só sabe sobre o acervo de
+lei, nunca sobre quem pergunta. `_resumo_desempenho()` busca
+`scheduler.desempenho()` + `scheduler.caderno_erros()` e monta um resumo
+pronto — o modelo só LÊ esse resumo, nunca soma nada sozinho, mesmo
+princípio de "retenção imposta em código" acima. O modelo escolhe qual
+fonte usar (ou as duas) por instrução de prompt, não por classificação
+separada — mais simples que rotear a pergunta antes de perguntar, e testado
+que funciona: sem tentativa nenhuma, admite que não tem dado; com
+tentativa real, responde com o número exato do banco, nunca inventado.
+
 **Fila = revisões primeiro, novas com o orçamento restante.** Ordenar só por
 caixa causa INANIÇÃO: com centenas de questões inéditas, a promovida volta em
 3 dias e fica atrás de todas. Simulado em 90 dias: 8% de domínio contra 51%.

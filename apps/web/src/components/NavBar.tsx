@@ -12,6 +12,8 @@ const ITENS = [
   { href: "/erros", label: "erros" },
   { href: "/simulado", label: "simulado" },
   { href: "/stats", label: "stats" },
+  { href: "/perguntar", label: "perguntar" },
+  { href: "/meta", label: "meta" },
 ];
 
 export function NavBar() {

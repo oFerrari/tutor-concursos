@@ -322,7 +322,7 @@ def simulados() -> None:
 
 def perguntar(pergunta: str) -> None:
     with con.status("consultando o acervo…"):
-        r = socratic.explicar(pergunta)
+        r = socratic.explicar(pergunta, _usuario_id())
     con.print(Markdown(r["resposta"]))
     if r["fontes"]:
         # Listar tudo que foi recuperado engana: o modelo usa uma fração.

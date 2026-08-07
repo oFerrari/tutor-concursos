@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { DialogoQuestao } from "@/components/DialogoQuestao";
 import { NavBar } from "@/components/NavBar";
 import { SimuladoRunner } from "@/components/SimuladoRunner";
+import { Sugestao } from "@/components/Sugestao";
 import { ErroApi, PlanoDesafio, getDesafio, getToken, iniciarSimuladoComIds, limparToken } from "@/lib/api";
 
 type Bloco = "plano" | "reincidentes" | "novas" | "simulado" | "fim";
@@ -113,6 +114,7 @@ export default function PaginaDesafio() {
     return (
       <main className="mx-auto max-w-2xl p-8">
         <NavBar />
+        <Sugestao />
         <h1 className="mb-4 text-xl font-semibold">desafio de hoje</h1>
         <div className="rounded border border-black/10 p-4 text-sm">
           <p>{plano.reincidentes.length} pontos fracos</p>
