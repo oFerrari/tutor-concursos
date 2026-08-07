@@ -41,6 +41,8 @@ core/scheduler_regras.py   regras de promoção — FUNÇÕES PURAS
 core/scheduler.py          fila, registro, caderno de erros, meta
 core/simulado.py           prova sob condição de exame: sem dica, corrige no final
 core/desafio.py            meta do dia: reincidentes + novas + mini-simulado, tempo estimado
+core/ritmo_regras.py       gatilho de intervenção proativa — FUNÇÕES PURAS
+core/ritmo.py              busca desempenho/reincidência/sequência, prioriza 1 sugestão
 ingest.py                  ingestão (batch)
 reingest.py                reprocessa chunks preservando questões
 gerar.py                   geração com cobertura por seção
@@ -115,6 +117,18 @@ de sempre sortear). Estimativa de tempo vem de `avg(tentativa.segundos)` real,
 não de um número chutado — sem histórico, cai num default documentado.
 `_estudar_lista` devolve se o usuário pediu "sair", porque sem esse sinal o
 desafio emendava o próximo bloco mesmo depois da pessoa dizer que ia parar.
+
+**Intervenção proativa é regra, não o LLM decidindo quando falar.** O LLM já
+resolve a conversa livre (`socratic.explicar`); decidir QUANDO interromper é
+limiar sobre número (5 acertos seguidos, <50% de acerto, 3+ reincidências) —
+pedir pro modelo julgar isso a cada questão custaria cota e mudaria de
+sessão pra sessão sem ninguém pedir. `ritmo_regras.py` é puro, no mesmo
+molde de `scheduler_regras.py`; `ritmo.py` busca os dados e prioriza.
+Mostra no máximo UMA sugestão por sessão (reincidência > disciplina fraca >
+sequência de acertos) — três avisos empilhados deixam de ser proativos e
+viram ruído que o aluno aprende a ignorar. Disciplina fraca exige um mínimo
+de tentativas antes de disparar, mesma lição do simulador: percentual sobre
+amostra pequena é ruído, não tendência.
 
 **`corpus/` (lei do Planalto) vai para o git; `acervo/` (material pago) não.**
 Texto de lei não tem direito autoral no Brasil (art. 8º, IV da Lei 9.610).

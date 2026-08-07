@@ -26,9 +26,9 @@ from rich.panel import Panel
 from rich.table import Table
 
 from core import desafio as desafio_mod
-from core import llm, scheduler, simulado as simulado_mod, socratic
+from core import llm, ritmo, scheduler, simulado as simulado_mod, socratic
 
-VERSAO = "chat-v24"
+VERSAO = "chat-v25"
 con = Console()
 MAX_DICAS = 3
 
@@ -51,8 +51,20 @@ def estudar() -> None:
     con.print(f"[bold]{len(pendentes)}[/] questões na fila · "
               f"{c['revisoes']} revisões venceram, {c['ineditas']} inéditas"
               + (f" · [yellow]{c['atraso']} de atraso[/]" if c["atraso"] else "") + "\n")
+    _mostrar_sugestao()
 
     _estudar_lista(pendentes)
+
+
+def _mostrar_sugestao() -> None:
+    """
+    Intervenção proativa: no máximo UMA sugestão, antes de começar a
+    resolver. `core.ritmo` decide o quê (regra, não LLM — ver o porquê em
+    ritmo_regras.py); aqui só é exibição.
+    """
+    dica = ritmo.sugestao()
+    if dica:
+        con.print(f"[cyan]💡 {dica}[/]\n")
 
 
 def _estudar_lista(pendentes: list) -> bool:
@@ -264,6 +276,7 @@ def desafio(n_reincidentes: int = 3, n_novas: int = 5, n_simulado: int = 5) -> N
         f"{len(plano['mini_simulado'])} mini-simulado · "
         f"~{plano['estimativa_minutos']} min estimados",
         title="desafio de hoje", border_style="magenta"))
+    _mostrar_sugestao()
 
     if plano["reincidentes"]:
         con.print("\n[bold]bloco 1 — pontos fracos[/]")
