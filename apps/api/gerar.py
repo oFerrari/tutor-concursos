@@ -28,12 +28,13 @@ Artigo revogado e stub curto ficam de fora do alvo: não há o que cobrar deles.
 """
 import argparse
 import json
+import re
 import sys
 import unicodedata
 
 from core import db, llm, socratic
 
-VERSAO = "gerar-v15"
+VERSAO = "gerar-v16"
 
 MIN_TEXTO = 140          # abaixo disso é stub, revogado ou remissão
 ARTIGOS_POR_LOTE = 3     # artigos enviados por chamada
@@ -149,13 +150,23 @@ def descobertos(doc_id, secoes_alvo=None, limite=ARTIGOS_POR_LOTE):
     return db.query(SQL_DESCOBERTOS.format(filtro_secao=filtro), params)
 
 
+def _norm_artigo(a):
+    """LC 95/1998: Art. 1º-9º levam ordinal, Art. 10+ não — mas o modelo às
+    vezes devolve sem o ordinal mesmo instruído a preservar (achado gerando
+    pra CF: artigos 5º/6º/8º voltavam como '5'/'6'/'8'). Mesma normalização
+    de retrieval.por_dispositivo(), pro mesmo motivo: sem isso, a questão
+    inteira é descartada por "proveniência não confere" mesmo estando
+    certa, e a seção nunca sai da lista de descobertos."""
+    return re.sub(r"[ºo]$", "", (a or "").strip())
+
+
 def salvar(doc_id, disciplina, questoes, lote):
     """Grava e devolve quantas foram salvas. fonte_chunks vem do campo artigo."""
-    por_artigo = {c["artigo"]: c["id"] for c in lote if c["artigo"]}
+    por_artigo = {_norm_artigo(c["artigo"]): c["id"] for c in lote if c["artigo"]}
     salvas = 0
     for q in questoes:
         art = q.get("artigo")
-        cid = por_artigo.get(art)
+        cid = por_artigo.get(_norm_artigo(art))
         if cid is None:
             # Sem proveniência confiável a cobertura mentiria: prefiro
             # descartar a questão a registrar que um artigo foi coberto
@@ -212,7 +223,10 @@ def cobrir(doc_id, por_lote, maximo, secao=None):
         print(f"\nsecao …{sec}\n  artigos no lote: {arts}")
         try:
             questoes = socratic.gerar_questoes(lote, pedir)
-            falhas = 0
+            # `falhas` só zera quando algo é de fato SALVO (mais abaixo) —
+            # zerar aqui, só porque a chamada em si funcionou, é o bug que
+            # deixava o loop girar pra sempre: nunca passava de 1 antes de
+            # resetar de novo no próximo lote "bem-sucedido e inútil".
         except llm.ErroLLM as e:
             falhas += 1
             print(f"  lote falhou ({falhas}/{MAX_FALHAS}): {e}", file=sys.stderr)
@@ -227,7 +241,23 @@ def cobrir(doc_id, por_lote, maximo, secao=None):
             if falhas >= MAX_FALHAS:
                 break
             continue
-        total += salvar(doc_id, doc["disciplina"], questoes, lote)
+        salvas_agora = salvar(doc_id, doc["disciplina"], questoes, lote)
+        if salvas_agora == 0:
+            # A CHAMADA funcionou (não caiu no ErroLLM acima) mas nada foi
+            # aproveitável — sem isso `falhas` fica sempre 0 e o loop tenta
+            # a MESMA seção pra sempre, cada tentativa uma chamada real e
+            # paga ao LLM. Foi o que aconteceu gerando pra CF (bug do
+            # ordinal em _norm_artigo, corrigido acima) antes desta guarda
+            # existir: ~45 min girando sem UMA questão salva.
+            falhas += 1
+            print(f"  lote nao rendeu nenhuma questao aproveitavel ({falhas}/{MAX_FALHAS}).")
+            if falhas >= MAX_FALHAS:
+                print(f"  desistindo. {total} questoes salvas ate aqui; "
+                      f"rode de novo para continuar de onde parou.")
+                break
+            continue
+        falhas = 0
+        total += salvas_agora
 
     print(f"\n{total} questoes salvas.")
     if total:

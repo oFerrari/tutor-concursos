@@ -355,6 +355,24 @@ lembrasse de rodar.
   Lição: ao testar isolamento entre usuários, um usuário "de teste" com
   `usuario_da_cli()` + `ON DELETE CASCADE` (migração 009) que se apaga com
   um `DELETE` só é mais seguro que confiar em escopo de env var em pipe.
+- **`gerar.py` girava pra sempre numa seção, gastando cota real do LLM a
+  cada volta, sem NUNCA acionar `MAX_FALHAS`.** Achado gerando questões pra
+  CF pela primeira vez (CP não tem artigo baixo o bastante pra expor isso —
+  mesma classe de bug já documentada em `retrieval.por_dispositivo()`, LC
+  95/1998: Art. 1º-9º levam ordinal, Art. 10+ não). Dois defeitos
+  compostos: (1) `salvar()` comparava o artigo cru contra o que o modelo
+  devolve — pra "5º", "6º", "8º" o modelo às vezes respondia sem o ordinal,
+  então TODA questão da seção era descartada por "proveniência não
+  confere"; (2) `falhas` (o contador que decide quando desistir) resetava
+  pra 0 sempre que a CHAMADA ao LLM funcionava, mesmo com zero questão
+  salva — como a chamada nunca falhava (só o resultado vinha inútil),
+  `falhas` nunca chegava em `MAX_FALHAS`, e o loop tentava a MESMA seção
+  pra sempre. Rodou ~45 minutos sem salvar nada antes de eu notar que não
+  era rede lenta. Corrigido: `_norm_artigo()` tira `[ºo]$` dos dois lados
+  antes de comparar (mesma normalização de `retrieval.py`), e `falhas` só
+  zera quando `salvar()` de fato salva algo — "a chamada funcionou" e "a
+  chamada rendeu progresso" são coisas diferentes, e só a segunda deveria
+  resetar o contador de desistência.
 
 ## Limitações conhecidas
 
@@ -401,6 +419,18 @@ lembrasse de rodar.
   sempre em 1º lugar; aceitável, `buscar()` devolve n=6 pro LLM escolher o
   que citar, top-6 é a métrica que importa pro produto. Rodar de novo
   sempre que mexer em `retrieval.py`, `embeddings.py` ou reingerir.
+  **Depois de ingerir o livro de histórico de emendas (1340 chunks no
+  total), o mesmo gabarito de 22 casos caiu pra top-6 95% (21/22)** — "matar
+  alguém por motivo torpe mediante paga ou promessa" (esperado CP 121) saiu
+  do top-6 inteiro, devolvendo só outros artigos do CP (209, 158, 212, 141,
+  16, 138), nenhum do livro de histórico. Não é o histórico "roubando" a
+  vaga por conteúdo concorrente — mais provável é o HNSW (índice
+  aproximado, não exato) mudar de caminho de busca com mais vetores no
+  mesmo índice, deslocando um caso já limítrofe. Não investiguei a fundo
+  (fora do escopo de "ingerir e estudar" que motivou rodar isso agora);
+  registrado aqui pra não achar, num dia futuro, que foi regressão de uma
+  mudança em código. 95% continua bom pro produto — mas é uma medida, não
+  uma suposição, e por isso entra documentada mesmo sendo só 1 caso.
 - **Bug real achado ao expandir pra multi-norma: artigos 1º-9º nunca
   batiam em NENHUMA norma.** LC 95/1998 manda escrever "Art. 1º" a "Art.
   9º" com ordinal e "Art. 10" em diante sem — mas ninguém pergunta "art.
