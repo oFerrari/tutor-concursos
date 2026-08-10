@@ -1,6 +1,6 @@
 {
  "versao": "sincronizar-v2",
- "gerado_em": "2026-08-07T08:32:58",
+ "gerado_em": "2026-08-10T18:19:54",
  "usuario_email": "estudante@local",
  "questoes": [
   {
@@ -307,6 +307,567 @@
    "doc_titulo": "cp",
    "artigos": [
     "CP|326"
+   ]
+  },
+  {
+   "chave": "bc5d7c5a442f8ded",
+   "disciplina": "Direito Constitucional",
+   "tema": "Fundamentos da República Federativa do Brasil",
+   "enunciado": "Qual é o inciso do artigo 1º da Constituição Federal que estabelece a dignidade da pessoa humana como fundamento da República?",
+   "gabarito": "A dignidade da pessoa humana está prevista no inciso III do artigo 1º da Constituição Federal.",
+   "dicas": [
+    "Observe os incisos do primeiro artigo constitucional.",
+    "O fundamento em questão protege o valor intrínseco da pessoa.",
+    "Trata-se do terceiro inciso do dispositivo."
+   ],
+   "criada_em": "2026-08-07T20:46:11.968659+00:00",
+   "doc_titulo": "cf",
+   "artigos": [
+    "CF|1º"
+   ]
+  },
+  {
+   "chave": "14ac6567c778fad4",
+   "disciplina": "Direito Constitucional",
+   "tema": "Objetivos fundamentais da República",
+   "enunciado": "Qual é o objetivo fundamental da República Federativa do Brasil relacionado à erradicação de carências sociais e econômicas?",
+   "gabarito": "O objetivo fundamental é erradicar a pobreza e a marginalização e reduzir as desigualdades sociais e regionais, conforme o inciso III do artigo 3º.",
+   "dicas": [
+    "Busque os objetivos fundamentais listados no terceiro artigo.",
+    "O foco está nas condições econômicas e sociais desfavoráveis.",
+    "O texto menciona expressamente a pobreza e a marginalização."
+   ],
+   "criada_em": "2026-08-07T20:46:11.979822+00:00",
+   "doc_titulo": "cf",
+   "artigos": [
+    "CF|3º"
+   ]
+  },
+  {
+   "chave": "ee6c1f8d37b38fb3",
+   "disciplina": "Direito Constitucional",
+   "tema": "Relações internacionais",
+   "enunciado": "Qual princípio rege a República Federativa do Brasil nas suas relações internacionais conforme o inciso VIII do artigo 4º?",
+   "gabarito": "O Brasil rege-se pelo repúdio ao terrorismo e ao racismo nas suas relações internacionais.",
+   "dicas": [
+    "Consulte o artigo que trata das relações internacionais.",
+    "O princípio em questão condena práticas graves de violência e intolerância.",
+    "O dispositivo conjuga o repúdio a duas formas específicas de hostilidade."
+   ],
+   "criada_em": "2026-08-07T20:46:11.984118+00:00",
+   "doc_titulo": "cf",
+   "artigos": [
+    "CF|4º"
+   ]
+  },
+  {
+   "chave": "a17e21bd76c56bf9",
+   "disciplina": "Direito Constitucional",
+   "tema": "Ação Popular",
+   "enunciado": "Qual é a consequência financeira para o autor de uma ação popular, salvo comprovada má-fé?",
+   "gabarito": "O autor fica isento de custas judiciais e do ônus da sucumbência.",
+   "dicas": [
+    "Pense nas despesas processuais comuns em demandas judiciais.",
+    "O dispositivo protege o cidadão que atua em defesa do patrimônio público.",
+    "A isenção abrange dois encargos financeiros específicos do processo."
+   ],
+   "criada_em": "2026-08-08T13:36:18.584594+00:00",
+   "doc_titulo": "cf",
+   "artigos": [
+    "CF|5º"
+   ]
+  },
+  {
+   "chave": "9888bc732c62950a",
+   "disciplina": "Direito Constitucional",
+   "tema": "Direitos Sociais",
+   "enunciado": "Segundo a Constituição Federal, quais são os direitos fundamentais expressamente elencados como direitos sociais no caput do artigo?",
+   "gabarito": "São direitos sociais a educação, a saúde, a alimentação, o trabalho, a moradia, o transporte, o lazer, a segurança, a previdência social, a proteção à maternidade e à infância, e a assistência aos desamparados.",
+   "dicas": [
+    "Trata-se do rol que fundamenta as políticas públicas básicas do Estado.",
+    "Inclui necessidades essenciais como moradia, saúde e educação.",
+    "A lista possui doze itens enumerados na redação dada pela Emenda Constitucional nº 90."
+   ],
+   "criada_em": "2026-08-08T13:36:18.593790+00:00",
+   "doc_titulo": "cf",
+   "artigos": [
+    "CF|6º"
+   ]
+  },
+  {
+   "chave": "ff47b1690af6dee5",
+   "disciplina": "Direito Constitucional",
+   "tema": "Estabilidade Sindical",
+   "enunciado": "Qual é a garantia de emprego conferida ao empregado sindicalizado a partir do registro de sua candidatura a cargo de direção ou representação sindical?",
+   "gabarito": "É vedada a sua dispensa desde o registro da candidatura e, se eleito, ainda que suplente, até um ano após o final do mandato, salvo se cometer falta grave nos termos da lei.",
+   "dicas": [
+    "Trata-se de uma proteção contra a dispensa arbitrária do dirigente.",
+    "A estabilidade abrange tanto o período eletivo quanto o pós-mandato.",
+    "A vedação alcança inclusive os suplentes e exige a ausência de falta grave."
+   ],
+   "criada_em": "2026-08-08T13:36:18.596334+00:00",
+   "doc_titulo": "cf",
+   "artigos": [
+    "CF|8º"
+   ]
+  },
+  {
+   "chave": "5d3f4c6603843b61",
+   "disciplina": "Direito Constitucional",
+   "tema": "Direito de greve",
+   "enunciado": "A quem compete decidir sobre a oportunidade de exercer o direito de greve?",
+   "gabarito": "Compete aos próprios trabalhadores decidir sobre a oportunidade de exercê-lo e sobre os interesses que devam por meio dele defender.",
+   "dicas": [
+    "Pense nos titulares do direito social mencionado.",
+    "A norma constitucional confere autonomia aos próprios sujeitos da relação de trabalho.",
+    "A decisão cabe diretamente aos trabalhadores."
+   ],
+   "criada_em": "2026-08-08T13:36:21.204707+00:00",
+   "doc_titulo": "cf",
+   "artigos": [
+    "CF|9º"
+   ]
+  },
+  {
+   "chave": "9f9772c8ef499793",
+   "disciplina": "Direito Constitucional",
+   "tema": "Participação em colegiados",
+   "enunciado": "Qual é a exigência constitucional para a participação de trabalhadores e empregadores nos colegiados dos órgãos públicos?",
+   "gabarito": "É exigido que seus interesses profissionais ou previdenciários sejam objeto de discussão e deliberação no respectivo órgão.",
+   "dicas": [
+    "Observe o critério material para que ocorra tal participação.",
+    "O foco está na natureza dos interesses tratados no órgão público.",
+    "Envolve interesses profissionais ou previdenciários em discussão e deliberação."
+   ],
+   "criada_em": "2026-08-08T13:36:21.209510+00:00",
+   "doc_titulo": "cf",
+   "artigos": [
+    "CF|10"
+   ]
+  },
+  {
+   "chave": "b0aa7ec0d5b8984c",
+   "disciplina": "Direito Constitucional",
+   "tema": "Representação dos empregados",
+   "enunciado": "Qual é o quantitativo mínimo de empregados exigido em uma empresa para assegurar a eleição de um representante dos trabalhadores?",
+   "gabarito": "É assegurada a eleição nas empresas que possuem mais de duzentos empregados.",
+   "dicas": [
+    "Verifique o porte da empresa estabelecido no texto constitucional.",
+    "O limite numérico supera duzentos trabalhadores.",
+    "O requisito exige mais de 200 empregados."
+   ],
+   "criada_em": "2026-08-08T13:36:21.214396+00:00",
+   "doc_titulo": "cf",
+   "artigos": [
+    "CF|11"
+   ]
+  },
+  {
+   "chave": "23ee534074369cb0",
+   "disciplina": "Direito Constitucional",
+   "tema": "Nacionalidade",
+   "enunciado": "Qual é o requisito temporal de residência exigido para a naturalização ordinária de estrangeiros originários de países de língua portuguesa?",
+   "gabarito": "Exige-se apenas residência por um ano ininterrupto e idoneidade moral.",
+   "dicas": [
+    "O tema trata da naturalização de estrangeiros.",
+    "A exigência é diferenciada para pessoas vindas de países específicos.",
+    "O prazo de residência exigido é inferior a dois anos."
+   ],
+   "criada_em": "2026-08-08T13:36:28.594966+00:00",
+   "doc_titulo": "cf",
+   "artigos": [
+    "CF|12"
+   ]
+  },
+  {
+   "chave": "6c4dae0bb5ff3f1f",
+   "disciplina": "Direito Constitucional",
+   "tema": "Símbolos Nacionais",
+   "enunciado": "Quais são os elementos que compõem os símbolos da República Federativa do Brasil, além da bandeira?",
+   "gabarito": "São símbolos a bandeira, o hino, as armas e o selo nacionais.",
+   "dicas": [
+    "O dispositivo elenca quatro itens oficiais.",
+    "Inclui elementos visuais e sonoros da Pátria.",
+    "A resposta engloba armas, selo e hino."
+   ],
+   "criada_em": "2026-08-08T13:36:28.599174+00:00",
+   "doc_titulo": "cf",
+   "artigos": [
+    "CF|13"
+   ]
+  },
+  {
+   "chave": "7aa2846df96bbcc9",
+   "disciplina": "Direito Constitucional",
+   "tema": "Direitos Políticos",
+   "enunciado": "Qual é a idade mínima constitucionalmente exigida para a elegibilidade ao cargo de Senador?",
+   "gabarito": "A idade mínima exigida é de trinta e cinco anos.",
+   "dicas": [
+    "Trata-se de uma condição de elegibilidade relativa à idade.",
+    "O cargo compartilha o mesmo requisito etário do Presidente da República.",
+    "A idade é superior a trinta anos."
+   ],
+   "criada_em": "2026-08-08T13:36:28.604181+00:00",
+   "doc_titulo": "cf",
+   "artigos": [
+    "CF|14"
+   ]
+  },
+  {
+   "chave": "0f4174b70f17756d",
+   "disciplina": "Direito Constitucional",
+   "tema": "Perda ou suspensão de direitos políticos",
+   "enunciado": "Qual é a consequência jurídica para os direitos políticos decorrente de condenação criminal transitada em julgado?",
+   "gabarito": "Ocorre a suspensão dos direitos políticos, que perdura enquanto durarem os efeitos da condenação.",
+   "dicas": [
+    "Pense se o caso gera perda definitiva ou restrição temporária.",
+    "O dispositivo trata de restrição enquanto durarem os efeitos da pena.",
+    "A resposta envolve o termo suspensão."
+   ],
+   "criada_em": "2026-08-08T13:36:30.830134+00:00",
+   "doc_titulo": "cf",
+   "artigos": [
+    "CF|15"
+   ]
+  },
+  {
+   "chave": "513156925cf9581c",
+   "disciplina": "Direito Constitucional",
+   "tema": "Princípio da anualidade eleitoral",
+   "enunciado": "Qual é a regra de aplicação temporal para a lei que alterar o processo eleitoral?",
+   "gabarito": "A lei entra em vigor na data de sua publicação e não se aplica à eleição que ocorra até um ano da data de sua vigência.",
+   "dicas": [
+    "Observe quando a norma começa a valer segundo o texto constitucional.",
+    "Analise o prazo mínimo exigido de vigência antes de uma eleição.",
+    "A lei não se aplica a pleitos que ocorram em período inferior a um ano."
+   ],
+   "criada_em": "2026-08-08T13:36:30.834042+00:00",
+   "doc_titulo": "cf",
+   "artigos": [
+    "CF|16"
+   ]
+  },
+  {
+   "chave": "ba5d8eccbccd22f1",
+   "disciplina": "Direito Constitucional",
+   "tema": "Financiamento e fundo partidário",
+   "enunciado": "Qual percentual mínimo dos recursos do fundo partidário os partidos políticos devem aplicar na criação e na manutenção de programas de promoção e difusão da participação política das mulheres?",
+   "gabarito": "Os partidos políticos devem aplicar no mínimo 5% dos recursos do fundo partidário nessa finalidade.",
+   "dicas": [
+    "A questão aborda a aplicação específica de verbas do fundo partidário.",
+    "O foco está na promoção da participação política feminina.",
+    "O percentual exigido é inferior a 10%."
+   ],
+   "criada_em": "2026-08-08T13:36:30.836955+00:00",
+   "doc_titulo": "cf",
+   "artigos": [
+    "CF|17"
+   ]
+  },
+  {
+   "chave": "9284ce9614bc3cc1",
+   "disciplina": "Direito Constitucional",
+   "tema": "Organização político-administrativa",
+   "enunciado": "Qual é a cidade designada como Capital Federal pela Constituição?",
+   "gabarito": "Brasília é a Capital Federal.",
+   "dicas": [
+    "Observe o artigo 18 da Constituição Federal.",
+    "A resposta está expressa no primeiro parágrafo do artigo.",
+    "Trata-se da sede do governo federal brasileiro."
+   ],
+   "criada_em": "2026-08-08T13:36:32.792653+00:00",
+   "doc_titulo": "cf",
+   "artigos": [
+    "CF|18"
+   ]
+  },
+  {
+   "chave": "c8fa769c4771ca11",
+   "disciplina": "Direito Constitucional",
+   "tema": "Vedações constitucionais",
+   "enunciado": "Qual é a vedação imposta aos entes federativos em relação aos documentos públicos?",
+   "gabarito": "É vedado aos entes federativos recusar fé aos documentos públicos.",
+   "dicas": [
+    "Consulte o artigo 19 da Constituição Federal.",
+    "O tema trata de proibições direcionadas à União, aos Estados, ao DF e aos Municípios.",
+    "A proibição diz respeito à aceitação de papéis oficiais emitidos pelo poder público."
+   ],
+   "criada_em": "2026-08-08T13:36:32.797863+00:00",
+   "doc_titulo": "cf",
+   "artigos": [
+    "CF|19"
+   ]
+  },
+  {
+   "chave": "048ef4a5a74837df",
+   "disciplina": "Direito Constitucional",
+   "tema": "Bens da União",
+   "enunciado": "Qual classe de terras devolutas integra o patrimônio da União?",
+   "gabarito": "Integram os bens da União as terras devolutas indispensáveis à defesa das fronteiras, das fortificações e construções militares, das vias federais de comunicação e à preservação ambiental, definidas em lei.",
+   "dicas": [
+    "Verifique o artigo 20 da Constituição Federal.",
+    "O inciso II trata especificamente sobre imóveis públicos rurais não Ocupados.",
+    "A indispensabilidade está ligada à defesa nacional e à preservação ambiental."
+   ],
+   "criada_em": "2026-08-08T13:36:32.802846+00:00",
+   "doc_titulo": "cf",
+   "artigos": [
+    "CF|20"
+   ]
+  },
+  {
+   "chave": "f2e1f3535f13d93f",
+   "disciplina": "Direito Constitucional",
+   "tema": "Competências materiais da União",
+   "enunciado": "Qual é a responsabilidade civil estabelecida na Constituição Federal em relação aos danos nucleares?",
+   "gabarito": "A responsabilidade civil por danos nucleares independe da existência de culpa.",
+   "dicas": [
+    "Trata-se de uma regra específica sobre atividades nucleares.",
+    "O dispositivo aborda a exigência ou não de elemento subjetivo para a responsabilidade civil.",
+    "A norma constitucional expressa que a responsabilidade independe de culpa."
+   ],
+   "criada_em": "2026-08-08T13:36:35.112519+00:00",
+   "doc_titulo": "cf",
+   "artigos": [
+    "CF|21"
+   ]
+  },
+  {
+   "chave": "b308bd3bf57fd3cd",
+   "disciplina": "Direito Constitucional",
+   "tema": "Competência legislativa privativa da União",
+   "enunciado": "Qual espécie normativa pode autorizar os Estados a legislar sobre questões específicas das matérias de competência privativa da União?",
+   "gabarito": "Lei complementar poderá autorizar os Estados a legislar sobre questões específicas das matérias relacionadas no artigo.",
+   "dicas": [
+    "O tema diz respeito à possibilidade de delegação legislativa aos Estados.",
+    "Busque o parágrafo único do artigo correspondente.",
+    "A autorização depende de lei com quórum específico de complementar."
+   ],
+   "criada_em": "2026-08-08T13:36:35.115901+00:00",
+   "doc_titulo": "cf",
+   "artigos": [
+    "CF|22"
+   ]
+  },
+  {
+   "chave": "07158ea99fc818ec",
+   "disciplina": "Direito Constitucional",
+   "tema": "Competência comum",
+   "enunciado": "Qual é a competência comum atribuída à União, aos Estados, ao Distrito Federal e aos Municípios no que tange ao meio ambiente?",
+   "gabarito": "É competência comum proteger o meio ambiente e combater a poluição em qualquer de suas formas.",
+   "dicas": [
+    "Trata-se de uma atribuição administrativa compartilhada entre todos os entes federados.",
+    "O inciso correspondente foca na preservação ambiental.",
+    "A conduta envolve proteger o meio ambiente e combater a poluição."
+   ],
+   "criada_em": "2026-08-08T13:36:35.118488+00:00",
+   "doc_titulo": "cf",
+   "artigos": [
+    "CF|23"
+   ]
+  },
+  {
+   "chave": "7c36949bf6b70b80",
+   "disciplina": "Direito Constitucional",
+   "tema": "Competência legislativa concorrente",
+   "enunciado": "Qual é o efeito jurídico gerado pela superveniência de uma lei federal sobre normas gerais em relação à lei estadual?",
+   "gabarito": "A superveniência de lei federal sobre normas gerais suspende a eficácia da lei estadual, no que lhe for contrário.",
+   "dicas": [
+    "Analise os parágrafos finais do artigo que trata da legislação concorrente.",
+    "Observe o impacto que a nova lei federal exerce sobre a norma estadual preexistente.",
+    "O texto constitucional utiliza expressamente o termo suspensão da eficácia."
+   ],
+   "criada_em": "2026-08-08T13:36:36.902437+00:00",
+   "doc_titulo": "cf",
+   "artigos": [
+    "CF|24"
+   ]
+  },
+  {
+   "chave": "e127765897b9038d",
+   "disciplina": "Direito Constitucional",
+   "tema": "Competência dos Estados Federados",
+   "enunciado": "Qual espécie normativa é vedada expressamente pela Constituição Federal para a regulamentação dos serviços locais de gás canalizado pelos Estados?",
+   "gabarito": "É vedada a edição de medida provisória para a regulamentação dos serviços locais de gás canalizado.",
+   "dicas": [
+    "Verifique as regras aplicáveis à exploração de serviços locais de gás canalizado pelos Estados.",
+    "O impedimento recai sobre um instrumento normativo específico de competência típica do Poder Executivo.",
+    "Trata-se de uma vedação expressa à edição de medida provisória."
+   ],
+   "criada_em": "2026-08-08T13:36:36.905835+00:00",
+   "doc_titulo": "cf",
+   "artigos": [
+    "CF|25"
+   ]
+  },
+  {
+   "chave": "bd9e2b8c4bb96443",
+   "disciplina": "Direito Constitucional",
+   "tema": "Compromisso Constitucional",
+   "enunciado": "Quais autoridades devem prestar o compromisso de manter, defender e cumprir a Constituição no ato de sua promulgação?",
+   "gabarito": "O Presidente da República, o Presidente do Supremo Tribunal Federal e os membros do Congresso Nacional.",
+   "dicas": [
+    "Pense nas mais altas autoridades dos três Poderes da República.",
+    "Envolve os chefes do Executivo, do Judiciário e os integrantes do Poder Legislativo federal.",
+    "São exatamente três figuras ou órgãos citados no dispositivo do ADCT."
+   ],
+   "criada_em": "2026-08-08T13:36:54.874401+00:00",
+   "doc_titulo": "ADCT",
+   "artigos": [
+    "ADCT|1º"
+   ]
+  },
+  {
+   "chave": "1ab942a9210a8370",
+   "disciplina": "Direito Constitucional",
+   "tema": "Plebiscito de 1993",
+   "enunciado": "Qual órgão foi encarregado de expedir as normas regulamentadoras do plebiscito sobre a forma e o sistema de governo após a promulgação da Constituição?",
+   "gabarito": "O Tribunal Superior Eleitoral.",
+   "dicas": [
+    "Trata-se de um tribunal especializado da Justiça brasileira.",
+    "É a corte máxima da Justiça Eleitoral no país.",
+    "A sigla do órgão é TSE."
+   ],
+   "criada_em": "2026-08-08T13:36:54.877999+00:00",
+   "doc_titulo": "ADCT",
+   "artigos": [
+    "ADCT|2º"
+   ]
+  },
+  {
+   "chave": "897e09512d6930ba",
+   "disciplina": "Direito Constitucional",
+   "tema": "Revisão Constitucional",
+   "enunciado": "Qual é o quórum exigido de votos para a realização da revisão constitucional pelo Congresso Nacional em sessão unicameral?",
+   "gabarito": "Maioria absoluta dos membros do Congresso Nacional.",
+   "dicas": [
+    "O quórum não é de maioria simples nem de dois terços.",
+    "Refere-se à maioria absoluta.",
+    "A exigência recai sobre a maioria absoluta dos membros do Congresso Nacional."
+   ],
+   "criada_em": "2026-08-08T13:36:54.881247+00:00",
+   "doc_titulo": "ADCT",
+   "artigos": [
+    "ADCT|3º"
+   ]
+  },
+  {
+   "chave": "257cda6ffa05c4b6",
+   "disciplina": "Direito Constitucional",
+   "tema": "Termino do mandato presidencial",
+   "enunciado": "Qual era a data prevista para o término do mandato do atual Presidente da República?",
+   "gabarito": "O mandato do atual Presidente da República terminaria em 15 de março de 1990.",
+   "dicas": [
+    "Pense no início da redemocratização e nos primeiros anos da década de 1990.",
+    "A data envolve o mês de março.",
+    "Termina especificamente no dia 15 de março de 1990."
+   ],
+   "criada_em": "2026-08-08T13:38:12.365176+00:00",
+   "doc_titulo": "ADCT",
+   "artigos": [
+    "ADCT|4º"
+   ]
+  },
+  {
+   "chave": "597dcef9a022a896",
+   "disciplina": "Direito Constitucional",
+   "tema": "Competencia do Tribunal Superior Eleitoral",
+   "enunciado": "A quem cabia editar as normas necessárias à realização das eleições de 1988 na ausência de norma legal específica?",
+   "gabarito": "Cabia ao Tribunal Superior Eleitoral editar as normas necessárias à realização das eleições de 1988.",
+   "dicas": [
+    "Procure no artigo 5º do ADCT sobre a competência para reger o pleito de 1988.",
+    "Trata-se do órgão máximo da justiça eleitoral brasileira.",
+    "A sigla é TSE."
+   ],
+   "criada_em": "2026-08-08T13:38:12.369818+00:00",
+   "doc_titulo": "ADCT",
+   "artigos": [
+    "ADCT|5º"
+   ]
+  },
+  {
+   "chave": "50e31070bd894c72",
+   "disciplina": "Direito Constitucional",
+   "tema": "Registro provisório de partido político",
+   "enunciado": "Qual é a consequência para o novo partido político que não obtiver registro definitivo no Tribunal Superior Eleitoral no prazo de vinte e quatro meses?",
+   "gabarito": "O novo partido perderá automaticamente seu registro provisório.",
+   "dicas": [
+    "Analise o parágrafo final do artigo 6º do ADCT.",
+    "O prazo mencionado é de vinte e quatro meses contados da formação.",
+    "O partido sofre a perda automática do registro que possuía de forma provisória."
+   ],
+   "criada_em": "2026-08-08T13:38:12.374014+00:00",
+   "doc_titulo": "ADCT",
+   "artigos": [
+    "ADCT|6º"
+   ]
+  },
+  {
+   "chave": "322d980a890e84c7",
+   "disciplina": "Direito Constitucional",
+   "tema": "Anistia política",
+   "enunciado": "A partir de qual momento o disposto sobre a anistia no artigo 8º do ADCT passa a gerar efeitos financeiros?",
+   "gabarito": "Os efeitos financeiros são gerados a partir da promulgação da Constituição, sendo expressamente vedada a remuneração de qualquer espécie em caráter retroativo.",
+   "dicas": [
+    "Pense no marco temporal da Constituição Federal de 1988.",
+    "O dispositivo veda expressamente o pagamento retroativo de remuneração.",
+    "A resposta envolve a data da promulgação da Constituição."
+   ],
+   "criada_em": "2026-08-08T13:38:14.515804+00:00",
+   "doc_titulo": "ADCT",
+   "artigos": [
+    "ADCT|8º"
+   ]
+  },
+  {
+   "chave": "7fc1b2e43fe0a80d",
+   "disciplina": "Direito Constitucional",
+   "tema": "Reconhecimento de direitos pelo STF",
+   "enunciado": "Qual é o prazo para que o Supremo Tribunal Federal profira a decisão sobre o pedido de reconhecimento de direitos daqueles que foram cassados ou tiveram direitos políticos suspensos?",
+   "gabarito": "O Supremo Tribunal Federal proferirá a decisão no prazo de cento e vinte dias, a contar do pedido do interessado.",
+   "dicas": [
+    "O prazo está previsto no parágrafo único do artigo 9º do ADCT.",
+    "O prazo é contado a partir do pedido formalizado pelo interessado.",
+    "Trata-se de um prazo fixado em cento e vinte dias."
+   ],
+   "criada_em": "2026-08-08T13:38:14.520810+00:00",
+   "doc_titulo": "ADCT",
+   "artigos": [
+    "ADCT|9º"
+   ]
+  },
+  {
+   "chave": "6b27b397bb39bb59",
+   "disciplina": "Direito Constitucional",
+   "tema": "Licença-paternidade",
+   "enunciado": "Qual é o prazo da licença-paternidade aplicável até que venha lei disciplinando o disposto no artigo 7º, XIX, da Constituição?",
+   "gabarito": "O prazo da licença-paternidade é de cinco dias.",
+   "dicas": [
+    "A regra consta nos parágrafos do artigo 10 do ADCT.",
+    "Trata-se de uma medida provisória válida até ulterior disposição legal.",
+    "O prazo é inferior a uma semana."
+   ],
+   "criada_em": "2026-08-08T13:38:14.525888+00:00",
+   "doc_titulo": "ADCT",
+   "artigos": [
+    "ADCT|10"
+   ]
+  },
+  {
+   "chave": "d914a7d87e39a16c",
+   "disciplina": "Direito Constitucional",
+   "tema": "Poderes Constituintes das Assembleias Legislativas",
+   "enunciado": "Qual é o prazo estabelecido para que cada Assembleia Legislativa elabore a Constituição do Estado?",
+   "gabarito": "O prazo é de um ano, contado da promulgação da Constituição Federal. Deve ser observado o respeito aos princípios da Constituição Federal.",
+   "dicas": [
+    "Pense no intervalo temporal inicial após a promulgação da Constituição Federal.",
+    "O prazo é contado em meses ou anos a partir da promulgação da Constituição Federal.",
+    "Trata-se do prazo exato de um ano."
+   ],
+   "criada_em": "2026-08-08T13:38:15.701812+00:00",
+   "doc_titulo": "ADCT",
+   "artigos": [
+    "ADCT|11"
    ]
   }
  ],
