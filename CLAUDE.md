@@ -431,6 +431,37 @@ lembrasse de rodar.
   registrado aqui pra não achar, num dia futuro, que foi regressão de uma
   mudança em código. 95% continua bom pro produto — mas é uma medida, não
   uma suposição, e por isso entra documentada mesmo sendo só 1 caso.
+  **Atualização: voltou a 100% (22/22)** depois de um `reingest.py` do CP
+  feito por outro motivo (ver Armadilhas de método) — o caso limítrofe
+  era mesmo sensível a reindexação do HNSW, não regressão de código.
+- **`documento.hash` do CP ficou desatualizado por dias sem ninguém notar
+  — `corpus/cp.txt` levou 2 correções de conteúdo (normalização de linha,
+  remoção da assinatura colada no Art. 361) depois da ingestão original,
+  e nunca foi reingerido.** Passou desapercebido porque nada checa isso
+  automaticamente. Só apareceu porque rodar `ingest.py` de novo (script de
+  setup numa "máquina nova") comparou o hash do arquivo ATUAL contra o
+  hash ANTIGO gravado no banco, viu que não batia, e criou um documento
+  **duplicado** (434 chunks a mais, `documento_id` novo) em vez de
+  detectar "já ingerido". Pior: rodar `sincronizar.py importar` logo depois
+  bateu numa colisão em `(norma, artigo)` entre os dois documentos e
+  **reescreveu `fonte_chunks` das 18 questões de CP originais apontando
+  pro documento duplicado, errado**. Corrigido: apagar o duplicado,
+  `reingest.py --doc 3 --arquivo corpus/cp.txt --norma CP` (pega a correção
+  do Art. 361 que nunca tinha sido aplicada — o texto no banco AINDA tinha
+  a assinatura do Getúlio Vargas colada, só ficou visível inspecionando o
+  chunk na mão) e `sincronizar.py importar` de novo pra resolver
+  `fonte_chunks` contra os chunks certos. Confirmado zero órfão depois.
+- **`reingest.py` preserva a LINHA da questão (`documento_id`), não a
+  referência ao chunk (`fonte_chunks`).** O comentário do módulo diz
+  "questões preservadas", o que é verdade só pra metade do que importa:
+  `DELETE FROM chunk` + `INSERT` de novo dá IDs novos pra tudo, e
+  `fonte_chunks` guarda ID cru, não `(norma, artigo)` — vira referência
+  órfã silenciosa. `sincronizar.py importar` resolve isso de graça (ele já
+  trabalha por `(norma, artigo)`, não por ID), mas só se o pacote JSON
+  tiver as questões — quem não usa `sincronizar.py` e reingere um
+  documento com questões vai ficar com `fonte_chunks` quebrado sem aviso
+  nenhum. Not fixed: `reingest.py` deveria remapear `fonte_chunks` por
+  `(norma, artigo)` ele mesmo, não depender de outro script pra isso.
 - **Bug real achado ao expandir pra multi-norma: artigos 1º-9º nunca
   batiam em NENHUMA norma.** LC 95/1998 manda escrever "Art. 1º" a "Art.
   9º" com ordinal e "Art. 10" em diante sem — mas ninguém pergunta "art.
