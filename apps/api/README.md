@@ -96,6 +96,8 @@ método `gerar` e registre no dict de `llm.obter()`.
 ## Roteiro
 
 - **Feito** — schema, ingestão, busca híbrida, tutor socrático, revisão
-  espaçada, simulados, desafio diário, edital real, multiusuário, API HTTP.
-- **Próximo** — Next.js consumindo `api.py`: fila do dia, sessão de estudo,
-  simulado, caderno de erros, dashboard de estatísticas.
+  espaçada, simulados, desafio diário, edital real, multiusuário, API HTTP,
+  frontend (`apps/web`, 11 rotas consumindo esta API).
+- **Aberto** — simulado por banca específica (peso de incidência real, hoje
+  é amostra uniforme); testes automatizados de integração (auth, scheduler,
+  multiusuário hoje só verificados manualmente, ver `CLAUDE.md`).
