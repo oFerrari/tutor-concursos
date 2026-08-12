@@ -5,10 +5,10 @@ import { useRouter } from "next/navigation";
 import { NavBar } from "@/components/NavBar";
 import { Desempenho, ErroApi, getStats, getToken, limparToken } from "@/lib/api";
 
-function Barra({ pct, cor }: { pct: number; cor: string }) {
-  const largura = Math.max(0, Math.min(100, pct));
+function Barra({ pct, cor }: { pct: number | null; cor: string }) {
+  const largura = pct == null ? 0 : Math.max(0, Math.min(100, pct));
   return (
-    <div className="h-2 flex-1 overflow-hidden rounded-full bg-black/[0.06]">
+    <div className="h-2 flex-1 overflow-hidden rounded-full bg-line">
       <div className={`h-full rounded-full ${cor}`} style={{ width: `${largura}%` }} />
     </div>
   );
@@ -39,35 +39,39 @@ export default function PaginaStats() {
   return (
     <main className="mx-auto max-w-2xl p-8">
       <NavBar />
-      <h1 className="mb-1 text-xl font-semibold">estatísticas</h1>
-      <p className="mb-6 text-sm opacity-70">desempenho por disciplina — só o que você já respondeu.</p>
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold tracking-tight">estatísticas</h1>
+        <p className="mt-1 text-sm text-muted">desempenho por disciplina — só o que você já respondeu.</p>
+      </div>
 
-      {erro && <p className="text-red-600">{erro}</p>}
-      {!erro && !dados && <p className="text-sm opacity-60">carregando…</p>}
+      {erro && <p className="callout-danger">{erro}</p>}
+      {!erro && !dados && <p className="text-sm text-muted">carregando…</p>}
       {dados && dados.length === 0 && (
-        <p className="opacity-60">sem tentativas ainda — responda alguma questão na fila primeiro.</p>
+        <p className="text-muted">sem tentativas ainda — responda alguma questão na fila primeiro.</p>
       )}
 
       {dados && dados.length > 0 && (
-        <ul className="space-y-5">
+        <ul className="space-y-4">
           {dados.map((d) => (
-            <li key={d.disciplina} className="rounded border border-black/10 p-4">
+            <li key={d.disciplina} className="card">
               <div className="mb-3 flex items-baseline justify-between">
                 <p className="font-medium">{d.disciplina}</p>
-                <p className="text-xs opacity-60">
+                <p className="text-xs text-muted">
                   {d.dominadas}/{d.questoes} dominadas · {d.acertos}/{d.tentativas} tentativas certas
                 </p>
               </div>
 
               <div className="space-y-2">
                 <div className="flex items-center gap-3">
-                  <span className="w-20 text-xs opacity-60">acerto</span>
-                  <Barra pct={d.pct_acerto} cor="bg-emerald-600" />
-                  <span className="w-12 text-right text-xs tabular-nums">{d.pct_acerto.toFixed(0)}%</span>
+                  <span className="w-20 text-xs text-muted">acerto</span>
+                  <Barra pct={d.pct_acerto} cor="bg-success" />
+                  <span className="w-12 text-right text-xs tabular-nums">
+                    {d.pct_acerto == null ? "—" : `${d.pct_acerto.toFixed(0)}%`}
+                  </span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="w-20 text-xs opacity-60">cobertura</span>
-                  <Barra pct={d.cobertura_pct} cor="bg-sky-600" />
+                  <span className="w-20 text-xs text-muted">cobertura</span>
+                  <Barra pct={d.cobertura_pct} cor="bg-accent" />
                   <span className="w-12 text-right text-xs tabular-nums">{d.cobertura_pct.toFixed(0)}%</span>
                 </div>
               </div>

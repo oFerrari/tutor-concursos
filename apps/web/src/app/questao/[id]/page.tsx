@@ -31,15 +31,15 @@ export default function PaginaResponder() {
 
   if (erroCarregar) {
     return (
-      <main className="p-8">
-        <p className="text-red-600">{erroCarregar}</p>
+      <main className="mx-auto max-w-2xl p-8">
+        <p className="callout-danger">{erroCarregar}</p>
       </main>
     );
   }
   if (!questao) {
     return (
-      <main className="p-8">
-        <p className="text-sm opacity-60">carregando…</p>
+      <main className="mx-auto max-w-2xl p-8">
+        <p className="text-sm text-muted">carregando…</p>
       </main>
     );
   }

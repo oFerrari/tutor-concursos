@@ -77,18 +77,18 @@ export function SimuladoRunner({ simuladoId, questoes, onFinalizado, rotuloConti
   }
 
   if (etapa === "corrigindo") {
-    return <p className="text-sm opacity-60">corrigindo…</p>;
+    return <p className="text-sm text-muted">corrigindo…</p>;
   }
 
   if (etapa === "relatorio" && relatorioFinal) {
     const { resultado, relatorio, erros } = relatorioFinal;
     return (
       <div>
-        <div className="rounded border border-black/10 p-4">
+        <div className="card">
           <p className="text-lg font-medium">
             {resultado.acertos}/{resultado.total} corretas ({resultado.nota_pct}%)
           </p>
-          <p className="text-sm opacity-70">
+          <p className="text-sm text-muted">
             {resultado.parciais} parciais · {resultado.erros} erradas
           </p>
         </div>
@@ -96,20 +96,20 @@ export function SimuladoRunner({ simuladoId, questoes, onFinalizado, rotuloConti
         {relatorio.length > 0 && (
           <table className="mt-4 w-full text-sm">
             <thead>
-              <tr className="border-b border-black/10 text-left opacity-60">
-                <th className="py-1">disciplina</th>
-                <th className="py-1 text-right">acertos</th>
-                <th className="py-1 text-right">%</th>
+              <tr className="border-b border-line text-left text-muted">
+                <th className="py-1.5">disciplina</th>
+                <th className="py-1.5 text-right">acertos</th>
+                <th className="py-1.5 text-right">%</th>
               </tr>
             </thead>
             <tbody>
               {relatorio.map((r) => (
-                <tr key={r.disciplina} className="border-b border-black/5">
-                  <td className="py-1">{r.disciplina}</td>
-                  <td className="py-1 text-right tabular-nums">
+                <tr key={r.disciplina} className="border-b border-line">
+                  <td className="py-1.5">{r.disciplina}</td>
+                  <td className="py-1.5 text-right tabular-nums">
                     {r.acertos}/{r.questoes}
                   </td>
-                  <td className="py-1 text-right tabular-nums">{r.pct.toFixed(0)}%</td>
+                  <td className="py-1.5 text-right tabular-nums">{r.pct.toFixed(0)}%</td>
                 </tr>
               ))}
             </tbody>
@@ -118,12 +118,12 @@ export function SimuladoRunner({ simuladoId, questoes, onFinalizado, rotuloConti
 
         {erros.length > 0 && (
           <div className="mt-6">
-            <h2 className="mb-2 text-sm font-medium opacity-70">revisão</h2>
+            <h2 className="mb-2 text-sm font-medium text-muted">revisão</h2>
             <ul className="space-y-3">
               {erros.map((e, i) => (
-                <li key={i} className="rounded border border-amber-700/30 bg-amber-50 p-3 text-sm">
+                <li key={i} className="callout-warning !p-3">
                   <p className="font-medium">{e.tema}</p>
-                  <p className="mt-1 opacity-70">sua resposta: {e.resposta || "(em branco)"}</p>
+                  <p className="mt-1 opacity-80">sua resposta: {e.resposta || "(em branco)"}</p>
                   <p className="mt-1">gabarito: {e.gabarito}</p>
                 </li>
               ))}
@@ -131,10 +131,7 @@ export function SimuladoRunner({ simuladoId, questoes, onFinalizado, rotuloConti
           </div>
         )}
 
-        <button
-          onClick={() => onFinalizado(relatorioFinal)}
-          className="mt-6 rounded bg-black px-4 py-2 text-sm text-white"
-        >
+        <button onClick={() => onFinalizado(relatorioFinal)} className="btn-primary mt-6">
           {rotuloContinuar}
         </button>
       </div>
@@ -144,34 +141,30 @@ export function SimuladoRunner({ simuladoId, questoes, onFinalizado, rotuloConti
   const q = questoes[indice];
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between text-xs opacity-60">
+      <div className="mb-4 flex items-center justify-between text-xs text-muted">
         <span>
           {indice + 1}/{questoes.length} · {q.disciplina}
         </span>
-        <button onClick={finalizarAgora} className="underline">
+        <button onClick={finalizarAgora} className="link">
           finalizar agora
         </button>
       </div>
-      <div className="rounded border border-black/10 p-4">
+      <div className="card">
         <p>{q.enunciado}</p>
       </div>
       <textarea
         value={resposta}
         onChange={(e) => setResposta(e.target.value)}
         rows={4}
-        className="mt-4 w-full rounded border border-black/20 p-3 text-sm"
+        className="field mt-4"
         placeholder="sua resposta…"
       />
-      {erro && <p className="mt-2 text-sm text-red-600">{erro}</p>}
+      {erro && <p className="mt-2 text-sm text-danger">{erro}</p>}
       <div className="mt-3 flex justify-between">
-        <button onClick={() => proxima(true)} className="text-sm underline opacity-60">
+        <button onClick={() => proxima(true)} className="link">
           pular
         </button>
-        <button
-          onClick={() => proxima(false)}
-          disabled={!resposta.trim()}
-          className="rounded bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
-        >
+        <button onClick={() => proxima(false)} disabled={!resposta.trim()} className="btn-primary">
           {indice + 1 < questoes.length ? "próxima" : "finalizar"}
         </button>
       </div>

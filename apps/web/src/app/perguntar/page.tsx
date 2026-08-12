@@ -62,20 +62,22 @@ export default function PaginaPerguntar() {
   return (
     <main className="mx-auto max-w-2xl p-8">
       <NavBar />
-      <h1 className="mb-1 text-xl font-semibold">perguntar</h1>
-      <p className="mb-6 text-sm opacity-70">pergunta livre, ancorada no acervo — não é a questão do quadro.</p>
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold tracking-tight">perguntar</h1>
+        <p className="mt-1 text-sm text-muted">pergunta livre, ancorada no acervo — não é a questão do quadro.</p>
+      </div>
 
       {itens.length === 0 && !enviando && (
-        <p className="mb-6 text-sm opacity-50">nenhuma pergunta ainda.</p>
+        <p className="mb-6 text-sm text-muted">nenhuma pergunta ainda.</p>
       )}
 
       <ul className="mb-6 space-y-4">
         {itens.map((it, i) => (
-          <li key={i} className="rounded border border-black/10 p-4">
-            <p className="text-sm font-medium opacity-70">{it.pergunta}</p>
+          <li key={i} className="card">
+            <p className="text-sm font-medium text-muted">{it.pergunta}</p>
             <p className="mt-2 whitespace-pre-wrap text-sm">{it.resposta}</p>
             {(it.citadas.length > 0 || it.consultadas.length > 0) && (
-              <div className="mt-3 space-y-1 text-xs opacity-60">
+              <div className="mt-3 space-y-1 text-xs text-muted">
                 {it.citadas.length > 0 && <p>citado: {it.citadas.join(" · ")}</p>}
                 {it.consultadas.length > 0 && <p>consultado: {it.consultadas.join(" · ")}</p>}
               </div>
@@ -89,15 +91,11 @@ export default function PaginaPerguntar() {
           value={pergunta}
           onChange={(e) => setPergunta(e.target.value)}
           rows={3}
-          className="w-full rounded border border-black/20 p-3 text-sm"
+          className="field"
           placeholder="ex.: diferença entre dolo eventual e culpa consciente"
         />
-        {erro && <p className="text-sm text-red-600">{erro}</p>}
-        <button
-          type="submit"
-          disabled={enviando || !pergunta.trim()}
-          className="rounded bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
-        >
+        {erro && <p className="text-sm text-danger">{erro}</p>}
+        <button type="submit" disabled={enviando || !pergunta.trim()} className="btn-primary">
           {enviando ? "consultando o acervo…" : "perguntar"}
         </button>
       </form>

@@ -68,43 +68,45 @@ export default function PaginaSimulado() {
   return (
     <main className="mx-auto max-w-2xl p-8">
       <NavBar />
-      <h1 className="mb-1 text-xl font-semibold">simulado</h1>
-      <p className="mb-6 text-sm opacity-70">sem dica, sem correção durante a prova — gabarito só no final.</p>
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold tracking-tight">simulado</h1>
+        <p className="mt-1 text-sm text-muted">sem dica, sem correção durante a prova — gabarito só no final.</p>
+      </div>
 
-      <form onSubmit={comecar} className="max-w-xs space-y-3">
-        <div>
-          <label className="text-sm">quantas questões</label>
+      <form onSubmit={comecar} className="card max-w-xs space-y-3">
+        <div className="space-y-1">
+          <label className="text-sm text-muted">quantas questões</label>
           <input
             type="number"
             min={1}
             value={n}
             onChange={(e) => setN(Number(e.target.value))}
-            className="w-full rounded border border-black/20 px-3 py-2"
+            className="field"
           />
         </div>
-        <div>
-          <label className="text-sm">meta de minutos (opcional)</label>
+        <div className="space-y-1">
+          <label className="text-sm text-muted">meta de minutos (opcional)</label>
           <input
             type="number"
             min={1}
             value={minutos}
             onChange={(e) => setMinutos(e.target.value === "" ? "" : Number(e.target.value))}
-            className="w-full rounded border border-black/20 px-3 py-2"
+            className="field"
           />
         </div>
-        {erro && <p className="text-sm text-red-600">{erro}</p>}
-        <button type="submit" className="rounded bg-black px-4 py-2 text-sm text-white">
+        {erro && <p className="text-sm text-danger">{erro}</p>}
+        <button type="submit" className="btn-primary">
           começar
         </button>
       </form>
 
       {historico && historico.length > 0 && (
         <div className="mt-10">
-          <h2 className="mb-2 text-sm font-medium opacity-70">histórico</h2>
+          <h2 className="mb-2 text-sm font-medium text-muted">histórico</h2>
           <ul className="space-y-1 text-sm">
             {historico.map((h) => (
-              <li key={h.id} className="flex justify-between border-b border-black/5 py-1">
-                <span className="opacity-60">{h.criado_em.slice(0, 10)}</span>
+              <li key={h.id} className="flex justify-between border-b border-line py-1.5">
+                <span className="text-muted">{h.criado_em.slice(0, 10)}</span>
                 <span>
                   {h.respondidas}/{h.n_questoes} · {h.nota_pct ?? 0}%
                 </span>

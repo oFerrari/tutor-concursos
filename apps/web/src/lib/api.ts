@@ -144,7 +144,9 @@ export type Desempenho = {
   dominadas: number;
   tentativas: number;
   acertos: number;
-  pct_acerto: number;
+  // NULL quando a disciplina ainda não tem nenhuma tentativa (NULLIF na
+  // view v_desempenho_disciplina, db/008_usuario.sql) — não é 0%, é "sem dado".
+  pct_acerto: number | null;
   cobertura_pct: number;
 };
 

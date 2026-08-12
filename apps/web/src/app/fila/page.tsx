@@ -38,7 +38,7 @@ export default function PaginaFila() {
     return (
       <main className="mx-auto max-w-2xl p-8">
         <NavBar />
-        <p className="text-red-600">{erro}</p>
+        <p className="callout-danger">{erro}</p>
       </main>
     );
   }
@@ -47,7 +47,7 @@ export default function PaginaFila() {
     return (
       <main className="mx-auto max-w-2xl p-8">
         <NavBar />
-        <p className="text-sm opacity-60">carregando…</p>
+        <p className="text-sm text-muted">carregando…</p>
       </main>
     );
   }
@@ -56,26 +56,27 @@ export default function PaginaFila() {
     <main className="mx-auto max-w-2xl p-8">
       <NavBar />
       <Sugestao />
-      <h1 className="mb-1 text-xl font-semibold">fila do dia</h1>
-      <p className="mb-6 text-sm opacity-70">
-        {questoes.length} questões · {carga.revisoes} revisões venceram, {carga.ineditas} inéditas
-        {carga.atraso > 0 && <span className="text-amber-600"> · {carga.atraso} de atraso</span>}
-      </p>
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold tracking-tight">fila do dia</h1>
+        <p className="mt-1 text-sm text-muted">
+          {questoes.length} questões · {carga.revisoes} revisões venceram, {carga.ineditas} inéditas
+          {carga.atraso > 0 && <span className="text-warning"> · {carga.atraso} de atraso</span>}
+        </p>
+      </div>
 
       {questoes.length === 0 ? (
-        <p className="opacity-60">nada pendente hoje.</p>
+        <p className="text-muted">nada pendente hoje.</p>
       ) : (
         <ul className="space-y-3">
           {questoes.map((q) => (
             <li key={q.id}>
-              <Link
-                href={`/questao/${q.id}`}
-                className="block rounded border border-black/10 p-4 hover:border-black/30"
-              >
-                <p className="mb-1 text-xs opacity-60">
-                  {q.disciplina} · {q.tema} · caixa {q.caixa}
-                </p>
-                <p>{q.enunciado}</p>
+              <Link href={`/questao/${q.id}`} className="card-link">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <span className="badge-accent">{q.disciplina}</span>
+                  <span className="badge-neutral">caixa {q.caixa}</span>
+                </div>
+                <p className="text-xs text-muted">{q.tema}</p>
+                <p className="mt-1">{q.enunciado}</p>
               </Link>
             </li>
           ))}

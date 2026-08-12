@@ -20,9 +20,5 @@ export function Sugestao() {
 
   if (!texto) return null;
 
-  return (
-    <div className="mb-4 rounded border border-cyan-700/30 bg-cyan-50 px-3 py-2 text-sm text-cyan-800">
-      💡 {texto}
-    </div>
-  );
+  return <div className="callout-info mb-6">💡 {texto}</div>;
 }

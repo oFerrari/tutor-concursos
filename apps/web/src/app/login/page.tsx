@@ -30,40 +30,39 @@ export default function PaginaLogin() {
 
   return (
     <main className="flex flex-1 items-center justify-center p-8">
-      <form onSubmit={aoEnviar} className="w-full max-w-sm space-y-4">
-        <h1 className="text-xl font-semibold">Tutor de concursos</h1>
+      <form onSubmit={aoEnviar} className="card w-full max-w-sm space-y-4">
+        <div>
+          <p className="text-sm font-bold tracking-tight text-accent">tutor</p>
+          <h1 className="mt-1 text-xl font-semibold tracking-tight">entrar</h1>
+        </div>
 
         <div className="space-y-1">
-          <label htmlFor="email" className="text-sm">e-mail</label>
+          <label htmlFor="email" className="text-sm text-muted">e-mail</label>
           <input
             id="email"
             type="email"
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded border border-black/20 px-3 py-2"
+            className="field"
           />
         </div>
 
         <div className="space-y-1">
-          <label htmlFor="senha" className="text-sm">senha</label>
+          <label htmlFor="senha" className="text-sm text-muted">senha</label>
           <input
             id="senha"
             type="password"
             required
             value={senha}
             onChange={(e) => setSenha(e.target.value)}
-            className="w-full rounded border border-black/20 px-3 py-2"
+            className="field"
           />
         </div>
 
-        {erro && <p className="text-sm text-red-600">{erro}</p>}
+        {erro && <p className="text-sm text-danger">{erro}</p>}
 
-        <button
-          type="submit"
-          disabled={enviando}
-          className="w-full rounded bg-black py-2 text-white disabled:opacity-50"
-        >
+        <button type="submit" disabled={enviando} className="btn-primary w-full">
           {enviando ? "entrando…" : "entrar"}
         </button>
       </form>

@@ -1,26 +1,140 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f7f7f9;
+  --surface: #ffffff;
+  --surface-hover: #f0f0f4;
+  --foreground: #17171a;
+  --muted: #6c6c78;
+  --line: #e3e3e9;
+  --line-strong: #cccdd6;
+
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-foreground: #ffffff;
+  --accent-soft: #eef2ff;
+
+  --success: #059669;
+  --success-soft: #ecfdf5;
+  --warning: #b45309;
+  --warning-soft: #fffbeb;
+  --danger: #dc2626;
+  --danger-soft: #fef2f2;
+  --info: #0e7490;
+  --info-soft: #ecfeff;
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
   --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-soft: var(--accent-soft);
+
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
+/* Segue a preferência do sistema — sem toggle manual, mesmo espírito de
+   "regra sobre número, não julgamento a cada tela" já usado no scheduler. */
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #0b0b0f;
+    --surface: #15151b;
+    --surface-hover: #1c1c24;
+    --foreground: #ececef;
+    --muted: #93939f;
+    --line: #26262f;
+    --line-strong: #3a3a44;
+
+    --accent: #818cf8;
+    --accent-hover: #a5b4fc;
+    --accent-foreground: #0b0b0f;
+    --accent-soft: #1e1b4b;
+
+    --success: #34d399;
+    --success-soft: #052e21;
+    --warning: #fbbf24;
+    --warning-soft: #2e2205;
+    --danger: #f87171;
+    --danger-soft: #340a0a;
+    --info: #22d3ee;
+    --info-soft: #072a30;
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Componentes reaproveitados em todas as telas — um lugar só pra mudar o
+   visual, em vez de className repetida (e sutilmente diferente) em cada
+   página. Mesmo princípio de <DialogoQuestao>/<SimuladoRunner>: extrair o
+   que se repete pra não divergir com o tempo. */
+@layer components {
+  .card {
+    @apply rounded-xl border border-line bg-surface p-4 shadow-sm;
+  }
+
+  .card-link {
+    @apply block rounded-xl border border-line bg-surface p-4 shadow-sm transition-colors hover:border-line-strong hover:bg-surface-hover;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center rounded-lg border border-line px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .link {
+    @apply text-sm text-muted underline-offset-2 transition-colors hover:text-foreground hover:underline disabled:cursor-not-allowed disabled:opacity-40;
+  }
+
+  .field {
+    @apply w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft;
+  }
+
+  .badge-neutral {
+    @apply inline-flex items-center rounded-full bg-surface-hover px-2 py-0.5 text-xs font-medium text-muted;
+  }
+
+  .badge-accent {
+    @apply inline-flex items-center rounded-full bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent;
+  }
+
+  .callout-info {
+    @apply rounded-lg border border-info/25 bg-info-soft px-3 py-2 text-sm text-info;
+  }
+
+  .callout-warning {
+    @apply rounded-lg border border-warning/25 bg-warning-soft px-3 py-2 text-sm text-warning;
+  }
+
+  .callout-success {
+    @apply rounded-lg border border-success/25 bg-success-soft p-4 text-success;
+  }
+
+  .callout-danger {
+    @apply rounded-lg border border-danger/25 bg-danger-soft p-4 text-danger;
+  }
 }

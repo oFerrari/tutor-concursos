@@ -26,19 +26,29 @@ export function NavBar() {
   }
 
   return (
-    <nav className="mb-6 flex items-center justify-between border-b border-black/10 pb-3">
-      <div className="flex gap-4 text-sm">
-        {ITENS.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={pathname === item.href ? "font-semibold" : "opacity-60 hover:opacity-100"}
-          >
-            {item.label}
-          </Link>
-        ))}
+    <nav className="mb-8 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-surface px-4 py-3 shadow-sm">
+      <div className="flex flex-wrap items-center gap-1">
+        <Link href="/fila" className="mr-3 text-sm font-bold tracking-tight text-accent">
+          tutor
+        </Link>
+        {ITENS.map((item) => {
+          const ativo = pathname === item.href;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={
+                ativo
+                  ? "rounded-full bg-accent-soft px-3 py-1.5 text-sm font-medium text-accent"
+                  : "rounded-full px-3 py-1.5 text-sm text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+              }
+            >
+              {item.label}
+            </Link>
+          );
+        })}
       </div>
-      <button onClick={sair} className="text-sm underline opacity-60">
+      <button onClick={sair} className="link">
         sair
       </button>
     </nav>

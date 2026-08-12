@@ -140,17 +140,17 @@ export function DialogoQuestao({ questao, onFechado, onSair, rotuloContinuar = "
   }
 
   if (resultado) {
-    const cor = resultado.veredito === "correta" ? "text-emerald-700" : "text-amber-700";
+    const estilo = resultado.veredito === "correta" ? "callout-success" : "callout-warning !p-4";
     return (
       <div>
-        <div className={`rounded border p-4 ${cor}`}>
-          <p className="font-medium">{resultado.veredito}</p>
-          <p className="text-sm opacity-80">{resultado.comentario}</p>
-          <p className="mt-2 text-sm opacity-80">
+        <div className={estilo}>
+          <p className="font-medium capitalize">{resultado.veredito}</p>
+          <p className="mt-1 text-sm opacity-90">{resultado.comentario}</p>
+          <p className="mt-2 text-sm opacity-90">
             caixa {resultado.caixa} · volta em {resultado.prox_revisao}
           </p>
         </div>
-        <button onClick={continuar} className="mt-4 rounded bg-black px-4 py-2 text-sm text-white">
+        <button onClick={continuar} className="btn-primary mt-4">
           {viaSair ? "sair" : rotuloContinuar}
         </button>
       </div>
@@ -161,34 +161,38 @@ export function DialogoQuestao({ questao, onFechado, onSair, rotuloContinuar = "
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
-        <p className="text-xs opacity-60">
-          {questao.disciplina} · {questao.tema} · caixa {questao.caixa}
-        </p>
-        {onSair && (
-          <button onClick={sair} className="text-sm underline opacity-60">
-            sair
-          </button>
-        )}
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-xs">
+          <span className="badge-accent">{questao.disciplina}</span>
+          <span className="text-muted">{questao.tema}</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="badge-neutral">caixa {questao.caixa}</span>
+          {onSair && (
+            <button onClick={sair} className="link">
+              sair
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="rounded border border-black/10 p-4">
+      <div className="card">
         <p>{questao.enunciado}</p>
       </div>
 
       {historico.length > 0 && (
         <div className="mt-4 space-y-3">
           {historico.map((t, i) => (
-            <div key={i} className="rounded border border-black/10 bg-black/[0.02] p-3 text-sm">
-              <p className="opacity-70">
-                <span className="font-medium">você:</span> {t.resposta}
+            <div key={i} className="rounded-xl border border-line bg-surface-hover p-3 text-sm">
+              <p className="text-muted">
+                <span className="font-medium text-foreground">você:</span> {t.resposta}
               </p>
               <p className="mt-1">{t.comentario}</p>
-              {t.pergunta && <p className="mt-1 text-cyan-700">→ {t.pergunta}</p>}
+              {t.pergunta && <p className="mt-1 text-info">→ {t.pergunta}</p>}
             </div>
           ))}
           {avisouContrato && !gabaritoRevelado && (
-            <p className="text-xs opacity-50">
+            <p className="text-xs text-muted">
               (a pergunta acima é uma pista; sua resposta continua valendo para a questão do quadro)
             </p>
           )}
@@ -198,7 +202,7 @@ export function DialogoQuestao({ questao, onFechado, onSair, rotuloContinuar = "
       {dicasMostradas > 0 && (
         <div className="mt-4 space-y-1">
           {questao.dicas.slice(0, dicasMostradas).map((d, i) => (
-            <p key={i} className="text-sm text-amber-700">
+            <p key={i} className="text-sm text-warning">
               dica {i + 1}: {d}
             </p>
           ))}
@@ -206,10 +210,10 @@ export function DialogoQuestao({ questao, onFechado, onSair, rotuloContinuar = "
       )}
 
       {gabaritoRevelado ? (
-        <div className="mt-4 rounded border border-emerald-700/30 bg-emerald-50 p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-emerald-700">gabarito</p>
+        <div className="callout-success mt-4">
+          <p className="text-xs font-medium uppercase tracking-wide">gabarito</p>
           <p className="mt-1 text-sm">{questao.gabarito}</p>
-          <p className="mt-3 text-sm opacity-60">registrando…</p>
+          <p className="mt-3 text-sm opacity-70">registrando…</p>
         </div>
       ) : (
         <form onSubmit={aoEnviar} className="mt-4 space-y-2">
@@ -217,28 +221,19 @@ export function DialogoQuestao({ questao, onFechado, onSair, rotuloContinuar = "
             value={resposta}
             onChange={(e) => setResposta(e.target.value)}
             rows={3}
-            className="w-full rounded border border-black/20 p-3 text-sm"
+            className="field"
             placeholder="sua resposta…"
           />
-          {erro && <p className="text-sm text-red-600">{erro}</p>}
+          {erro && <p className="text-sm text-danger">{erro}</p>}
           <div className="flex items-center justify-between">
-            <button
-              type="button"
-              onClick={pedirDica}
-              disabled={restamDicas <= 0}
-              className="text-sm underline opacity-70 disabled:opacity-30"
-            >
+            <button type="button" onClick={pedirDica} disabled={restamDicas <= 0} className="link">
               pedir dica ({restamDicas} disponível{restamDicas === 1 ? "" : "eis"})
             </button>
-            <button
-              type="submit"
-              disabled={enviando || !resposta.trim()}
-              className="rounded bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
-            >
+            <button type="submit" disabled={enviando || !resposta.trim()} className="btn-primary">
               {enviando ? "corrigindo…" : "responder"}
             </button>
           </div>
-          <p className="text-xs opacity-50">
+          <p className="text-xs text-muted">
             tentativa {erradas + 1} de {MAX_TENTATIVAS}
           </p>
         </form>

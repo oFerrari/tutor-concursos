@@ -80,29 +80,31 @@ export default function PaginaMeta() {
   return (
     <main className="mx-auto max-w-2xl p-8">
       <NavBar />
-      <h1 className="mb-1 text-xl font-semibold">meta até a prova</h1>
-      <p className="mb-6 text-sm opacity-70">dias restantes, cobertura e probabilidade de fechamento.</p>
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold tracking-tight">meta até a prova</h1>
+        <p className="mt-1 text-sm text-muted">dias restantes, cobertura e probabilidade de fechamento.</p>
+      </div>
 
-      {erro && <p className="mb-4 text-red-600">{erro}</p>}
+      {erro && <p className="mb-4 callout-danger">{erro}</p>}
 
       {meta && (
-        <div className="rounded border border-black/10 p-4 text-sm">
+        <div className="card text-sm">
           {meta.aviso ? (
-            <p className="text-amber-700">{meta.aviso}</p>
+            <p className="text-warning">{meta.aviso}</p>
           ) : (
             <>
-              <p>{meta.dias_restantes} dias restantes {meta.edital && <span className="opacity-60">· {meta.edital}</span>}</p>
-              <p className="mt-1 opacity-70">
+              <p>{meta.dias_restantes} dias restantes {meta.edital && <span className="text-muted">· {meta.edital}</span>}</p>
+              <p className="mt-1 text-muted">
                 cobertura {meta.cobertura_pct}% · {meta.questoes_pendentes} questões pendentes ·{" "}
                 {meta.questoes_respondidas} já respondidas
               </p>
               {meta.ritmo_necessario != null && (
-                <p className="mt-1 opacity-70">ritmo necessário: {meta.ritmo_necessario} questões/dia</p>
+                <p className="mt-1 text-muted">ritmo necessário: {meta.ritmo_necessario} questões/dia</p>
               )}
               {probOk && (
-                <p className="mt-2 font-medium">
-                  probabilidade de fechamento: {prob.probabilidade_fechamento_pct}%
-                  <span className="ml-2 font-normal opacity-60">
+                <p className="mt-3 font-medium">
+                  probabilidade de fechamento: <span className="text-accent">{prob.probabilidade_fechamento_pct}%</span>
+                  <span className="ml-2 font-normal text-muted">
                     (ritmo atual {prob.ritmo_atual_topicos_dia}, necessário{" "}
                     {prob.ritmo_necessario_topicos_dia ?? "—"} tópicos/dia)
                   </span>
@@ -115,21 +117,21 @@ export default function PaginaMeta() {
 
       {edital && edital.cobertura.length > 0 && (
         <div className="mt-6">
-          <h2 className="mb-2 text-sm font-medium opacity-70">cobertura por disciplina — {edital.titulo}</h2>
+          <h2 className="mb-2 text-sm font-medium text-muted">cobertura por disciplina — {edital.titulo}</h2>
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-black/10 text-left opacity-60">
-                <th className="py-1">disciplina</th>
-                <th className="py-1 text-right">tópicos</th>
-                <th className="py-1 text-right">cobertura</th>
+              <tr className="border-b border-line text-left text-muted">
+                <th className="py-1.5">disciplina</th>
+                <th className="py-1.5 text-right">tópicos</th>
+                <th className="py-1.5 text-right">cobertura</th>
               </tr>
             </thead>
             <tbody>
               {edital.cobertura.map((c) => (
-                <tr key={c.disciplina} className="border-b border-black/5">
-                  <td className="py-1">{c.disciplina}</td>
-                  <td className="py-1 text-right tabular-nums">{c.topicos_no_edital}</td>
-                  <td className="py-1 text-right tabular-nums">{c.cobertura_pct}%</td>
+                <tr key={c.disciplina} className="border-b border-line">
+                  <td className="py-1.5">{c.disciplina}</td>
+                  <td className="py-1.5 text-right tabular-nums">{c.topicos_no_edital}</td>
+                  <td className="py-1.5 text-right tabular-nums">{c.cobertura_pct}%</td>
                 </tr>
               ))}
             </tbody>
@@ -137,8 +139,8 @@ export default function PaginaMeta() {
         </div>
       )}
 
-      <div className="mt-8 border-t border-black/10 pt-6">
-        <h2 className="mb-2 text-sm font-medium opacity-70">
+      <div className="mt-8 border-t border-line pt-6">
+        <h2 className="mb-3 text-sm font-medium text-muted">
           {edital ? "ingerir outro edital" : "ingerir edital"}
         </h2>
         <form onSubmit={aoEnviarEdital} className="max-w-sm space-y-3">
@@ -146,38 +148,34 @@ export default function PaginaMeta() {
             type="file"
             accept="application/pdf"
             onChange={(e) => setArquivo(e.target.files?.[0] ?? null)}
-            className="block w-full text-sm"
+            className="block w-full text-sm text-muted"
           />
           <input
             type="text"
             placeholder="órgão (opcional)"
             value={orgao}
             onChange={(e) => setOrgao(e.target.value)}
-            className="w-full rounded border border-black/20 px-3 py-2 text-sm"
+            className="field"
           />
           <input
             type="text"
             placeholder="banca (opcional)"
             value={banca}
             onChange={(e) => setBanca(e.target.value)}
-            className="w-full rounded border border-black/20 px-3 py-2 text-sm"
+            className="field"
           />
-          <button
-            type="submit"
-            disabled={!arquivo || enviando}
-            className="rounded bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
-          >
+          <button type="submit" disabled={!arquivo || enviando} className="btn-primary">
             {enviando ? "processando…" : "enviar"}
           </button>
         </form>
 
         {resultadoUpload && (
-          <div className="mt-4 rounded border border-black/10 bg-black/[0.02] p-3 text-sm">
+          <div className="mt-4 card text-sm">
             <p>
               data da prova identificada: <strong>{resultadoUpload.data_prova ?? "não encontrada"}</strong>
             </p>
             {resultadoUpload.candidatos_data.length > 1 && (
-              <div className="mt-2 text-xs opacity-70">
+              <div className="mt-2 text-xs text-muted">
                 <p>outros candidatos (confira se a escolha acima está certa):</p>
                 <ul className="mt-1 space-y-1">
                   {resultadoUpload.candidatos_data.slice(1).map((c, i) => (
@@ -188,7 +186,7 @@ export default function PaginaMeta() {
                 </ul>
               </div>
             )}
-            <p className="mt-2">
+            <p className="mt-2 text-muted">
               {resultadoUpload.topicos} tópicos em {resultadoUpload.disciplinas.length} disciplinas
             </p>
           </div>

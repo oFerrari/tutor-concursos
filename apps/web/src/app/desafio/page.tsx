@@ -85,7 +85,7 @@ export default function PaginaDesafio() {
     return (
       <main className="mx-auto max-w-2xl p-8">
         <NavBar />
-        <p className="text-red-600">{erro}</p>
+        <p className="callout-danger">{erro}</p>
       </main>
     );
   }
@@ -94,7 +94,7 @@ export default function PaginaDesafio() {
     return (
       <main className="mx-auto max-w-2xl p-8">
         <NavBar />
-        <p className="text-sm opacity-60">carregando…</p>
+        <p className="text-sm text-muted">carregando…</p>
       </main>
     );
   }
@@ -104,8 +104,8 @@ export default function PaginaDesafio() {
       return (
         <main className="mx-auto max-w-2xl p-8">
           <NavBar />
-          <h1 className="mb-4 text-xl font-semibold">desafio de hoje</h1>
-          <p className="opacity-60">
+          <h1 className="mb-4 text-2xl font-semibold tracking-tight">desafio de hoje</h1>
+          <p className="text-muted">
             nada pra compor um desafio ainda — responda algumas questões na fila primeiro.
           </p>
         </main>
@@ -115,14 +115,14 @@ export default function PaginaDesafio() {
       <main className="mx-auto max-w-2xl p-8">
         <NavBar />
         <Sugestao />
-        <h1 className="mb-4 text-xl font-semibold">desafio de hoje</h1>
-        <div className="rounded border border-black/10 p-4 text-sm">
+        <h1 className="mb-4 text-2xl font-semibold tracking-tight">desafio de hoje</h1>
+        <div className="card space-y-1 text-sm">
           <p>{plano.reincidentes.length} pontos fracos</p>
           <p>{plano.novas.length} novas</p>
           <p>{plano.mini_simulado.length} mini-simulado</p>
-          <p className="mt-2 opacity-60">~{plano.estimativa_minutos} min estimados</p>
+          <p className="mt-2 text-muted">~{plano.estimativa_minutos} min estimados</p>
         </div>
-        <button onClick={comecar} className="mt-4 rounded bg-black px-4 py-2 text-sm text-white">
+        <button onClick={comecar} className="btn-primary mt-4">
           começar
         </button>
       </main>
@@ -134,7 +134,7 @@ export default function PaginaDesafio() {
     const total = (bloco === "reincidentes" ? plano.reincidentes : plano.novas).length;
     return (
       <main className="mx-auto max-w-2xl p-8">
-        <p className="mb-4 text-xs uppercase tracking-wide opacity-50">
+        <p className="mb-4 text-xs font-medium uppercase tracking-wide text-muted">
           {bloco === "reincidentes" ? "bloco 1 — pontos fracos" : "bloco 2 — novas"} · {indice + 1}/{total}
         </p>
         <DialogoQuestao
@@ -150,7 +150,7 @@ export default function PaginaDesafio() {
   if (bloco === "simulado" && sessaoSimulado) {
     return (
       <main className="mx-auto max-w-2xl p-8">
-        <p className="mb-4 text-xs uppercase tracking-wide opacity-50">bloco 3 — mini-simulado</p>
+        <p className="mb-4 text-xs font-medium uppercase tracking-wide text-muted">bloco 3 — mini-simulado</p>
         <SimuladoRunner
           simuladoId={sessaoSimulado.id}
           questoes={sessaoSimulado.questoes}
@@ -165,9 +165,9 @@ export default function PaginaDesafio() {
   return (
     <main className="mx-auto max-w-2xl p-8">
       <NavBar />
-      <h1 className="mb-4 text-xl font-semibold">desafio concluído</h1>
-      {erro && <p className="mb-4 text-red-600">{erro}</p>}
-      <button onClick={() => router.push("/stats")} className="rounded bg-black px-4 py-2 text-sm text-white">
+      <h1 className="mb-4 text-2xl font-semibold tracking-tight">desafio concluído</h1>
+      {erro && <p className="mb-4 callout-danger">{erro}</p>}
+      <button onClick={() => router.push("/stats")} className="btn-primary">
         ver estatísticas
       </button>
     </main>
