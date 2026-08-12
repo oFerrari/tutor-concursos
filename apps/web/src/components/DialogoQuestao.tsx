@@ -177,7 +177,7 @@ export function DialogoQuestao({ questao, onFechado, onSair, rotuloContinuar = "
       </div>
 
       <div className="card">
-        <p>{questao.enunciado}</p>
+        <p className="text-base font-medium leading-relaxed">{questao.enunciado}</p>
       </div>
 
       {historico.length > 0 && (

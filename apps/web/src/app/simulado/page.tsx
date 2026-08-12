@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { NavBar } from "@/components/NavBar";
 import { SimuladoRunner } from "@/components/SimuladoRunner";
 import { ErroApi, HistoricoSimulado, QuestaoSimulado, getSimulados, getToken, iniciarSimulado, limparToken } from "@/lib/api";
 
@@ -50,7 +49,7 @@ export default function PaginaSimulado() {
 
   if (sessao && !finalizado) {
     return (
-      <main className="mx-auto max-w-2xl p-8">
+      <div className="mx-auto max-w-2xl p-6 md:p-10">
         <SimuladoRunner
           simuladoId={sessao.id}
           questoes={sessao.questoes}
@@ -61,13 +60,12 @@ export default function PaginaSimulado() {
             getSimulados().then(setHistorico).catch(() => {});
           }}
         />
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="mx-auto max-w-2xl p-8">
-      <NavBar />
+    <div className="mx-auto max-w-2xl p-6 md:p-10">
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">simulado</h1>
         <p className="mt-1 text-sm text-muted">sem dica, sem correção durante a prova — gabarito só no final.</p>
@@ -115,6 +113,6 @@ export default function PaginaSimulado() {
           </ul>
         </div>
       )}
-    </main>
+    </div>
   );
 }

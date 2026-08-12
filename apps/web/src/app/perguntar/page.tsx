@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { NavBar } from "@/components/NavBar";
 import { ErroApi, Fonte, getToken, limparToken, perguntar } from "@/lib/api";
 
 type Item = { pergunta: string; resposta: string; citadas: string[]; consultadas: string[] };
@@ -60,8 +59,7 @@ export default function PaginaPerguntar() {
   }
 
   return (
-    <main className="mx-auto max-w-2xl p-8">
-      <NavBar />
+    <div className="mx-auto max-w-2xl p-6 md:p-10">
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">perguntar</h1>
         <p className="mt-1 text-sm text-muted">pergunta livre, ancorada no acervo — não é a questão do quadro.</p>
@@ -99,6 +97,6 @@ export default function PaginaPerguntar() {
           {enviando ? "consultando o acervo…" : "perguntar"}
         </button>
       </form>
-    </main>
+    </div>
   );
 }

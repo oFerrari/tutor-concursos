@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { NavBar } from "@/components/NavBar";
 import { Desempenho, ErroApi, getStats, getToken, limparToken } from "@/lib/api";
 
 function Barra({ pct, cor }: { pct: number | null; cor: string }) {
@@ -37,8 +36,7 @@ export default function PaginaStats() {
   }, [router]);
 
   return (
-    <main className="mx-auto max-w-2xl p-8">
-      <NavBar />
+    <div className="mx-auto max-w-2xl p-6 md:p-10">
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">estatísticas</h1>
         <p className="mt-1 text-sm text-muted">desempenho por disciplina — só o que você já respondeu.</p>
@@ -79,6 +77,6 @@ export default function PaginaStats() {
           ))}
         </ul>
       )}
-    </main>
+    </div>
   );
 }

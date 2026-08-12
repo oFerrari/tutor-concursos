@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { NavBar } from "@/components/NavBar";
 import { Sugestao } from "@/components/Sugestao";
 import { Carga, ErroApi, Questao, getCarga, getFila, getToken, limparToken } from "@/lib/api";
 
@@ -36,28 +35,25 @@ export default function PaginaFila() {
 
   if (erro) {
     return (
-      <main className="mx-auto max-w-2xl p-8">
-        <NavBar />
+      <div className="mx-auto max-w-2xl p-6 md:p-10">
         <p className="callout-danger">{erro}</p>
-      </main>
+      </div>
     );
   }
 
   if (!questoes || !carga) {
     return (
-      <main className="mx-auto max-w-2xl p-8">
-        <NavBar />
+      <div className="mx-auto max-w-2xl p-6 md:p-10">
         <p className="text-sm text-muted">carregando…</p>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="mx-auto max-w-2xl p-8">
-      <NavBar />
+    <div className="mx-auto max-w-3xl p-6 md:p-10">
       <Sugestao />
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">fila do dia</h1>
+        <h1 className="text-3xl font-bold tracking-tight">fila do dia</h1>
         <p className="mt-1 text-sm text-muted">
           {questoes.length} questões · {carga.revisoes} revisões venceram, {carga.ineditas} inéditas
           {carga.atraso > 0 && <span className="text-warning"> · {carga.atraso} de atraso</span>}
@@ -70,18 +66,18 @@ export default function PaginaFila() {
         <ul className="space-y-3">
           {questoes.map((q) => (
             <li key={q.id}>
-              <Link href={`/questao/${q.id}`} className="card-link">
+              <Link href={`/questao/${q.id}`} className="card-link cursor-pointer">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <span className="badge-accent">{q.disciplina}</span>
                   <span className="badge-neutral">caixa {q.caixa}</span>
                 </div>
-                <p className="text-xs text-muted">{q.tema}</p>
-                <p className="mt-1">{q.enunciado}</p>
+                <p className="mb-2 text-sm text-muted">{q.tema}</p>
+                <p className="text-base font-medium leading-relaxed text-foreground">{q.enunciado}</p>
               </Link>
             </li>
           ))}
         </ul>
       )}
-    </main>
+    </div>
   );
 }

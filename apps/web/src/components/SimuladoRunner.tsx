@@ -150,7 +150,7 @@ export function SimuladoRunner({ simuladoId, questoes, onFinalizado, rotuloConti
         </button>
       </div>
       <div className="card">
-        <p>{q.enunciado}</p>
+        <p className="text-base font-medium leading-relaxed">{q.enunciado}</p>
       </div>
       <textarea
         value={resposta}

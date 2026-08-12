@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { DialogoQuestao } from "@/components/DialogoQuestao";
-import { NavBar } from "@/components/NavBar";
 import { SimuladoRunner } from "@/components/SimuladoRunner";
 import { Sugestao } from "@/components/Sugestao";
 import { ErroApi, PlanoDesafio, getDesafio, getToken, iniciarSimuladoComIds, limparToken } from "@/lib/api";
@@ -83,37 +82,33 @@ export default function PaginaDesafio() {
 
   if (erro && bloco === "plano") {
     return (
-      <main className="mx-auto max-w-2xl p-8">
-        <NavBar />
+      <div className="mx-auto max-w-2xl p-6 md:p-10">
         <p className="callout-danger">{erro}</p>
-      </main>
+      </div>
     );
   }
 
   if (!plano) {
     return (
-      <main className="mx-auto max-w-2xl p-8">
-        <NavBar />
+      <div className="mx-auto max-w-2xl p-6 md:p-10">
         <p className="text-sm text-muted">carregando…</p>
-      </main>
+      </div>
     );
   }
 
   if (bloco === "plano") {
     if (plano.total_questoes === 0) {
       return (
-        <main className="mx-auto max-w-2xl p-8">
-          <NavBar />
+        <div className="mx-auto max-w-2xl p-6 md:p-10">
           <h1 className="mb-4 text-2xl font-semibold tracking-tight">desafio de hoje</h1>
           <p className="text-muted">
             nada pra compor um desafio ainda — responda algumas questões na fila primeiro.
           </p>
-        </main>
+        </div>
       );
     }
     return (
-      <main className="mx-auto max-w-2xl p-8">
-        <NavBar />
+      <div className="mx-auto max-w-2xl p-6 md:p-10">
         <Sugestao />
         <h1 className="mb-4 text-2xl font-semibold tracking-tight">desafio de hoje</h1>
         <div className="card space-y-1 text-sm">
@@ -125,7 +120,7 @@ export default function PaginaDesafio() {
         <button onClick={comecar} className="btn-primary mt-4">
           começar
         </button>
-      </main>
+      </div>
     );
   }
 
@@ -133,7 +128,7 @@ export default function PaginaDesafio() {
     const q = (bloco === "reincidentes" ? plano.reincidentes : plano.novas)[indice];
     const total = (bloco === "reincidentes" ? plano.reincidentes : plano.novas).length;
     return (
-      <main className="mx-auto max-w-2xl p-8">
+      <div className="mx-auto max-w-2xl p-6 md:p-10">
         <p className="mb-4 text-xs font-medium uppercase tracking-wide text-muted">
           {bloco === "reincidentes" ? "bloco 1 — pontos fracos" : "bloco 2 — novas"} · {indice + 1}/{total}
         </p>
@@ -143,13 +138,13 @@ export default function PaginaDesafio() {
           onFechado={() => proximaDoBloco(bloco)}
           onSair={sairDoDesafio}
         />
-      </main>
+      </div>
     );
   }
 
   if (bloco === "simulado" && sessaoSimulado) {
     return (
-      <main className="mx-auto max-w-2xl p-8">
+      <div className="mx-auto max-w-2xl p-6 md:p-10">
         <p className="mb-4 text-xs font-medium uppercase tracking-wide text-muted">bloco 3 — mini-simulado</p>
         <SimuladoRunner
           simuladoId={sessaoSimulado.id}
@@ -157,19 +152,18 @@ export default function PaginaDesafio() {
           rotuloContinuar="concluir desafio"
           onFinalizado={() => setBloco("fim")}
         />
-      </main>
+      </div>
     );
   }
 
   // fim
   return (
-    <main className="mx-auto max-w-2xl p-8">
-      <NavBar />
+    <div className="mx-auto max-w-2xl p-6 md:p-10">
       <h1 className="mb-4 text-2xl font-semibold tracking-tight">desafio concluído</h1>
       {erro && <p className="mb-4 callout-danger">{erro}</p>}
       <button onClick={() => router.push("/stats")} className="btn-primary">
         ver estatísticas
       </button>
-    </main>
+    </div>
   );
 }

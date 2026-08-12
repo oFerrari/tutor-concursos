@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { NavBar } from "@/components/NavBar";
 import { ErroApi, ErroCaderno, getErros, getToken, limparToken } from "@/lib/api";
 
 export default function PaginaErros() {
@@ -29,10 +28,9 @@ export default function PaginaErros() {
   }, [router]);
 
   return (
-    <main className="mx-auto max-w-2xl p-8">
-      <NavBar />
+    <div className="mx-auto max-w-3xl p-6 md:p-10">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">caderno de erros</h1>
+        <h1 className="text-3xl font-bold tracking-tight">caderno de erros</h1>
         <p className="mt-1 text-sm text-muted">ordenado por reincidência — o que mais volta primeiro.</p>
       </div>
 
@@ -46,21 +44,20 @@ export default function PaginaErros() {
         <ul className="space-y-3">
           {erros.map((e) => (
             <li key={e.questao_id}>
-              <Link href={`/questao/${e.questao_id}`} className="card-link">
-                <div className="mb-2 flex items-center justify-between gap-2 text-xs">
-                  <span className="badge-accent">
-                    {e.disciplina} · {e.tema}
-                  </span>
-                  <span className="whitespace-nowrap text-muted">
+              <Link href={`/questao/${e.questao_id}`} className="card-link cursor-pointer">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <span className="badge-accent">{e.disciplina}</span>
+                  <span className="whitespace-nowrap text-xs text-muted">
                     {e.vezes}× · última {e.ultima}
                   </span>
                 </div>
-                <p className="text-sm">{e.enunciado}</p>
+                <p className="mb-2 text-sm text-muted">{e.tema}</p>
+                <p className="text-base font-medium leading-relaxed text-foreground">{e.enunciado}</p>
               </Link>
             </li>
           ))}
         </ul>
       )}
-    </main>
+    </div>
   );
 }

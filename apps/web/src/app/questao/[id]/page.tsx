@@ -31,27 +31,27 @@ export default function PaginaResponder() {
 
   if (erroCarregar) {
     return (
-      <main className="mx-auto max-w-2xl p-8">
+      <div className="mx-auto max-w-2xl p-6 md:p-10">
         <p className="callout-danger">{erroCarregar}</p>
-      </main>
+      </div>
     );
   }
   if (!questao) {
     return (
-      <main className="mx-auto max-w-2xl p-8">
+      <div className="mx-auto max-w-2xl p-6 md:p-10">
         <p className="text-sm text-muted">carregando…</p>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="mx-auto max-w-2xl p-8">
+    <div className="mx-auto max-w-2xl p-6 md:p-10">
       <DialogoQuestao
         questao={questao}
         rotuloContinuar="voltar pra fila"
         onFechado={() => router.push("/fila")}
         onSair={() => router.push("/fila")}
       />
-    </main>
+    </div>
   );
 }

@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { NavBar } from "@/components/NavBar";
 import {
   EditalAtual,
   ErroApi,
@@ -50,6 +49,9 @@ export default function PaginaMeta() {
       router.push("/login");
       return;
     }
+    // Busca inicial no mount — carregar() já trata seus próprios erros
+    // (401 redireciona, resto vira setErro), então chamar sem esperar aqui é seguro.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     carregar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
@@ -78,8 +80,7 @@ export default function PaginaMeta() {
   const probOk = prob && !("erro" in prob);
 
   return (
-    <main className="mx-auto max-w-2xl p-8">
-      <NavBar />
+    <div className="mx-auto max-w-2xl p-6 md:p-10">
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">meta até a prova</h1>
         <p className="mt-1 text-sm text-muted">dias restantes, cobertura e probabilidade de fechamento.</p>
@@ -192,6 +193,6 @@ export default function PaginaMeta() {
           </div>
         )}
       </div>
-    </main>
+    </div>
   );
 }

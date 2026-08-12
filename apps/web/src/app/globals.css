@@ -1,27 +1,31 @@
 @import "tailwindcss";
 
+/* Identidade "FerrarIA": grafite quase-preto + grená profundo — de propósito
+   NÃO índigo (Claude), azul (Gemini) nem roxo/verde (QConcursos). O grená é
+   discreto, não vermelho de corrida — é sóbrio o suficiente pra ficar horas
+   estudando sem cansar a vista. */
 :root {
-  --background: #f7f7f9;
+  --background: #faf9f8;
   --surface: #ffffff;
-  --surface-hover: #f0f0f4;
-  --foreground: #17171a;
-  --muted: #6c6c78;
-  --line: #e3e3e9;
-  --line-strong: #cccdd6;
+  --surface-hover: #f4efee;
+  --foreground: #1c1917;
+  --muted: #78716c;
+  --line: #e7e2df;
+  --line-strong: #d6cec9;
 
-  --accent: #4f46e5;
-  --accent-hover: #4338ca;
+  --accent: #9a1c2b;
+  --accent-hover: #7d1622;
   --accent-foreground: #ffffff;
-  --accent-soft: #eef2ff;
+  --accent-soft: #fbe8e9;
 
-  --success: #059669;
-  --success-soft: #ecfdf5;
-  --warning: #b45309;
-  --warning-soft: #fffbeb;
-  --danger: #dc2626;
-  --danger-soft: #fef2f2;
-  --info: #0e7490;
-  --info-soft: #ecfeff;
+  --success: #2f6b4f;
+  --success-soft: #eaf3ee;
+  --warning: #92600a;
+  --warning-soft: #fbf1e0;
+  --danger: #b3261e;
+  --danger-soft: #fceceb;
+  --info: #2b5f73;
+  --info-soft: #e9f1f3;
 }
 
 @theme inline {
@@ -55,27 +59,27 @@
    "regra sobre número, não julgamento a cada tela" já usado no scheduler. */
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0b0b0f;
-    --surface: #15151b;
-    --surface-hover: #1c1c24;
-    --foreground: #ececef;
-    --muted: #93939f;
-    --line: #26262f;
-    --line-strong: #3a3a44;
+    --background: #121011;
+    --surface: #1c1a1a;
+    --surface-hover: #262323;
+    --foreground: #f2ede9;
+    --muted: #a39c97;
+    --line: #322d2c;
+    --line-strong: #453f3d;
 
-    --accent: #818cf8;
-    --accent-hover: #a5b4fc;
-    --accent-foreground: #0b0b0f;
-    --accent-soft: #1e1b4b;
+    --accent: #d94452;
+    --accent-hover: #e5636f;
+    --accent-foreground: #1c0a0c;
+    --accent-soft: #2e1417;
 
-    --success: #34d399;
-    --success-soft: #052e21;
-    --warning: #fbbf24;
-    --warning-soft: #2e2205;
-    --danger: #f87171;
-    --danger-soft: #340a0a;
-    --info: #22d3ee;
-    --info-soft: #072a30;
+    --success: #4f9d78;
+    --success-soft: #12241c;
+    --warning: #d3982f;
+    --warning-soft: #2b2210;
+    --danger: #e2685f;
+    --danger-soft: #2c1614;
+    --info: #5fa3bd;
+    --info-soft: #16262c;
   }
 }
 
@@ -87,15 +91,14 @@ body {
 
 /* Componentes reaproveitados em todas as telas — um lugar só pra mudar o
    visual, em vez de className repetida (e sutilmente diferente) em cada
-   página. Mesmo princípio de <DialogoQuestao>/<SimuladoRunner>: extrair o
-   que se repete pra não divergir com o tempo. */
+   página. */
 @layer components {
   .card {
     @apply rounded-xl border border-line bg-surface p-4 shadow-sm;
   }
 
   .card-link {
-    @apply block rounded-xl border border-line bg-surface p-4 shadow-sm transition-colors hover:border-line-strong hover:bg-surface-hover;
+    @apply block rounded-xl border border-line bg-surface p-5 shadow-sm transition-all hover:border-line-strong hover:bg-surface-hover hover:shadow-md;
   }
 
   .btn-primary {
@@ -136,5 +139,18 @@ body {
 
   .callout-danger {
     @apply rounded-lg border border-danger/25 bg-danger-soft p-4 text-danger;
+  }
+
+  /* -------------------------------------------------------- shell / home */
+  .widget {
+    @apply rounded-2xl border border-line bg-surface p-5 shadow-sm;
+  }
+
+  .sidebar-link {
+    @apply flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:bg-surface-hover hover:text-foreground;
+  }
+
+  .sidebar-link-ativo {
+    @apply flex items-center gap-3 rounded-lg bg-accent-soft px-3 py-2 text-sm font-medium text-accent;
   }
 }
