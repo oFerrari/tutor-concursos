@@ -260,6 +260,10 @@ def rota_responder_simulado(sid: int, body: RespostasSimuladoBody, uid: int = De
     respostas de uma vez, corrige tudo, registra e devolve o relatório. É a
     versão HTTP do laço final de `chat.simulado()`.
     """
+    if not simulado.pertence_a(sid, uid):
+        # 404, não 403: não confirma pra quem tenta adivinhar que o id existe
+        # e só não é seu (mesmo espírito da mensagem de login em auth.py).
+        raise HTTPException(404, "simulado não encontrado")
     qmap = questoes.obter_varias([r.questao_id for r in body.respostas])
     for item in body.respostas:
         q = qmap.get(item.questao_id)

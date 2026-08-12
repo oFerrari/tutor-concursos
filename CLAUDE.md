@@ -68,7 +68,7 @@ core/ritmo.py              busca desempenho/reincidência/sequência, prioriza 1
 core/edital.py             extrai data da prova e conteúdo programático de PDF de edital
 edital.py                  CLI de ingestão de edital, reporta candidatos (não decide calado)
 ingest.py                  ingestão (batch)
-reingest.py                reprocessa chunks preservando questões
+reingest.py                reprocessa chunks preservando questões (linha E fonte_chunks)
 gerar.py                   geração com cobertura por seção
 diagnostico.py             auditoria do chunking, sem banco
 avaliar_retrieval.py       precision@k da busca híbrida contra gabarito de artigos
@@ -451,17 +451,22 @@ lembrasse de rodar.
   a assinatura do Getúlio Vargas colada, só ficou visível inspecionando o
   chunk na mão) e `sincronizar.py importar` de novo pra resolver
   `fonte_chunks` contra os chunks certos. Confirmado zero órfão depois.
-- **`reingest.py` preserva a LINHA da questão (`documento_id`), não a
-  referência ao chunk (`fonte_chunks`).** O comentário do módulo diz
-  "questões preservadas", o que é verdade só pra metade do que importa:
-  `DELETE FROM chunk` + `INSERT` de novo dá IDs novos pra tudo, e
-  `fonte_chunks` guarda ID cru, não `(norma, artigo)` — vira referência
-  órfã silenciosa. `sincronizar.py importar` resolve isso de graça (ele já
-  trabalha por `(norma, artigo)`, não por ID), mas só se o pacote JSON
-  tiver as questões — quem não usa `sincronizar.py` e reingere um
-  documento com questões vai ficar com `fonte_chunks` quebrado sem aviso
-  nenhum. Not fixed: `reingest.py` deveria remapear `fonte_chunks` por
-  `(norma, artigo)` ele mesmo, não depender de outro script pra isso.
+- **`reingest.py` agora remapeia `fonte_chunks` ele mesmo (corrigido —
+  `reingest-v4`).** Gap antigo: `DELETE FROM chunk` + `INSERT` de novo dá
+  IDs novos pra tudo, e `fonte_chunks` guardava ID cru, não `(norma,
+  artigo)` — virava referência órfã silenciosa pra quem reingeria sem
+  depois rodar `sincronizar.py importar` (que resolvia de graça, mas só se
+  o pacote JSON tivesse as questões). Corrigido igual `sincronizar.py`
+  resolve: captura `(norma, artigo)` dos chunks ANTIGOS antes do `DELETE`,
+  e depois do `INSERT` novo traduz cada id antigo referenciado por alguma
+  questão pro novo id com o MESMO `(norma, artigo)`. Referência sem
+  correspondência (artigo saiu do material) fica órfã DECLARADA — reportada
+  no fim, não escondida. Validado contra o CP real (18 questões, todas
+  remapeadas certo, zero órfão, `avaliar_retrieval.py` intacto em 100%
+  top-6 depois). Achado rodando de verdade, não só em teoria: a comparação
+  `fonte_chunks && ids_antigos` quebrava com `bigint[] && smallint[]` — o
+  psycopg manda uma lista de int Python como `smallint[]` por padrão, e
+  a coluna é `bigint[]`; precisou de `::bigint[]` explícito no SQL.
 - **Bug real achado ao expandir pra multi-norma: artigos 1º-9º nunca
   batiam em NENHUMA norma.** LC 95/1998 manda escrever "Art. 1º" a "Art.
   9º" com ordinal e "Art. 10" em diante sem — mas ninguém pergunta "art.

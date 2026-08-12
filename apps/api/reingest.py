@@ -13,6 +13,18 @@ são preservadas, porque só a tabela chunk é substituída.
 
 Ao contrário de `DELETE FROM documento`, isto não apaga seu progresso.
 
+FONTE_CHUNKS SOBREVIVE À REINGESTÃO (antes não sobrevivia — gap documentado
+no CLAUDE.md, corrigido aqui): `DELETE FROM chunk` + `INSERT` de novo dá IDs
+novos pra tudo, e `questao.fonte_chunks` guarda ID cru, não (norma, artigo)
+— sem remapear, a referência ficava órfã em silêncio (mesmo problema que
+`sincronizar.py` já resolve na importação, só que aqui era pra dentro de UM
+banco só). A ideia é a mesma de `sincronizar.py`: capturar (norma, artigo)
+dos chunks ANTIGOS antes do DELETE, e depois de inserir os novos, traduzir
+cada id antigo referenciado em `fonte_chunks` para o novo id que tem o
+MESMO (norma, artigo). Referência sem correspondência nova (artigo saiu do
+material, ou renumerou) fica órfã DECLARADA — reportada no fim, não
+escondida — porque decidir sozinho qual chunk é o certo seria adivinhar.
+
 SEGURANÇA: todo chunk e embedding novo é calculado ANTES de qualquer DELETE.
 Uma versão anterior apagava primeiro e calculava depois — um erro no meio
 (já aconteceu: mudança de API do pgvector.Vector) deixava o documento com
@@ -28,7 +40,7 @@ from pathlib import Path
 
 from core import chunking, db, embeddings
 
-VERSAO = "reingest-v3"
+VERSAO = "reingest-v4"
 LOTE = 64
 LIMIAR_COLISAO = 0.05  # ver core.chunking.taxa_colisao_artigo
 
@@ -108,6 +120,25 @@ def main() -> int:
         lotes_prontos.append((i, lote, vetores))
         print(f"  calculado {min(i + LOTE, len(chunks))}/{len(chunks)}")
 
+    # Captura ANTES do DELETE: (norma, artigo) de cada chunk atual, e quais
+    # questões referenciam algum deles em fonte_chunks. É o material bruto
+    # pra remapear depois — mesmo princípio de "calcular tudo antes de tocar
+    # no banco" do bloco de embeddings acima, só que para o remapeamento.
+    chunks_antigos = db.query(
+        "SELECT id, norma, artigo FROM chunk WHERE documento_id = %(i)s AND artigo IS NOT NULL",
+        {"i": a.doc},
+    )
+    norma_artigo_por_id_antigo = {c["id"]: (c["norma"], c["artigo"]) for c in chunks_antigos}
+    ids_antigos = list(norma_artigo_por_id_antigo)
+    questoes_afetadas = db.query(
+        # fonte_chunks é bigint[] (_int8) — sem o cast explícito, psycopg
+        # manda uma lista de int Python como smallint[] por padrão e o
+        # Postgres recusa comparar os dois tipos de array (achado rodando
+        # isto de verdade, não em teoria).
+        "SELECT id, fonte_chunks FROM questao WHERE fonte_chunks && %(ids)s::bigint[]",
+        {"ids": ids_antigos},
+    ) if ids_antigos else []
+
     # Substitui só os chunks. As questões apontam para documento_id e sobrevivem.
     db.query("DELETE FROM chunk WHERE documento_id = %(i)s", {"i": a.doc})
 
@@ -123,6 +154,42 @@ def main() -> int:
                  "r": c.get("rubrica"), "s": c.get("secao"), "e": v},
             )
         print(f"  gravados {min(i + LOTE, len(chunks))}/{len(chunks)}")
+
+    if questoes_afetadas:
+        mapa_novo = {
+            f"{r['norma']}|{r['artigo']}": r["id"]
+            for r in db.query(
+                "SELECT id, norma, artigo FROM chunk WHERE documento_id = %(i)s AND artigo IS NOT NULL",
+                {"i": a.doc},
+            )
+        }
+        remapeadas = 0
+        sem_correspondencia = []
+        for q in questoes_afetadas:
+            novo_fonte = []
+            mudou = False
+            for cid in q["fonte_chunks"]:
+                na = norma_artigo_por_id_antigo.get(cid)
+                if na is None:
+                    novo_fonte.append(cid)  # não veio deste lote de remapeamento — preserva como estava
+                    continue
+                novo_id = mapa_novo.get(f"{na[0]}|{na[1]}")
+                if novo_id is None:
+                    sem_correspondencia.append((q["id"], na))
+                    novo_fonte.append(cid)  # órfão DECLARADO — não escondido, ver docstring do módulo
+                    continue
+                mudou = mudou or novo_id != cid
+                novo_fonte.append(novo_id)
+            if mudou:
+                db.query("UPDATE questao SET fonte_chunks = %(f)s WHERE id = %(i)s",
+                         {"f": novo_fonte, "i": q["id"]})
+                remapeadas += 1
+        print(f"fonte_chunks remapeado em {remapeadas}/{len(questoes_afetadas)} questão(ões) "
+              f"afetada(s) via (norma, artigo).")
+        if sem_correspondencia:
+            print(f"  aviso: {len(sem_correspondencia)} referência(s) sem chunk novo "
+                  f"correspondente (artigo saiu do material ou renumerou) — fonte_chunks "
+                  f"ficou com o id antigo, órfão. Confira: {sem_correspondencia[:5]}")
 
     novo_hash = hashlib.sha256(caminho.read_bytes()).hexdigest()
     db.query("UPDATE documento SET hash = %(h)s WHERE id = %(i)s",

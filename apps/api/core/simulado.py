@@ -45,6 +45,23 @@ def selecionar(n: int = N_PADRAO, disciplina: str | None = None) -> list[dict]:
     )
 
 
+def pertence_a(simulado_id: int, usuario_id: int) -> bool:
+    """
+    Checagem de posse ANTES de aceitar respostas — achado testando
+    isolamento multiusuário: sem isso, `POST /simulados/{sid}/respostas`
+    processava `sid` de QUALQUER pessoa (o id só identifica a sessão, não
+    quem pode responder por ela). `scheduler.registrar` grava a tentativa
+    com o usuario_id de quem chamou, então a CAIXA de ninguém vaza — mas
+    a tentativa fica com o `simulado_id` alheio, e `historico()` (join só
+    por simulado_id, sem usuario_id) contava essa tentativa "estrangeira"
+    na nota do simulado de quem nunca pediu aquela resposta.
+    """
+    return db.exec1(
+        "SELECT 1 FROM simulado WHERE id = %(id)s AND usuario_id = %(u)s",
+        {"id": simulado_id, "u": usuario_id},
+    ) is not None
+
+
 def iniciar(usuario_id: int, n_questoes: int, minutos_alvo: int | None = None) -> int:
     r = db.exec1(
         """INSERT INTO simulado (usuario_id, n_questoes, minutos_alvo)
@@ -117,7 +134,11 @@ def historico(usuario_id: int, limite: int = 10) -> list[dict]:
                   count(t.id)                                       AS respondidas,
                   round(100.0 * count(t.id) FILTER (WHERE t.veredito = 'correta')
                         / NULLIF(count(t.id), 0), 1)::float8        AS nota_pct
-           FROM simulado s LEFT JOIN tentativa t ON t.simulado_id = s.id
+           -- t.usuario_id = s.usuario_id além de t.simulado_id = s.id: defesa em
+           -- profundidade contra a mesma classe de bug que motivou pertence_a()
+           -- acima — se algum dia outra rota inserir tentativa com simulado_id
+           -- alheio de novo, ela ainda não entra na nota de quem não pediu.
+           FROM simulado s LEFT JOIN tentativa t ON t.simulado_id = s.id AND t.usuario_id = s.usuario_id
            WHERE s.usuario_id = %(u)s
            GROUP BY s.id ORDER BY s.criado_em DESC LIMIT %(l)s""",
         {"u": usuario_id, "l": limite},
