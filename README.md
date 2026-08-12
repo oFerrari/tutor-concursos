@@ -53,9 +53,11 @@ cp .env.example .env   # cole GEMINI_API_KEY; gere JWT_SECRET:
 
 # 3. reingerir o texto (corpus/ já veio pelo git — isso é rápido, só CPU,
 #    sem custo de LLM; repita pra cada norma que já tiver corpus/*.txt)
-python ingest.py corpus/cp.txt  --disciplina "Direito Penal"          --tipo lei --norma CP
-python ingest.py corpus/cf.txt  --disciplina "Direito Constitucional" --tipo lei --norma CF
-python ingest.py corpus/adct.txt --disciplina "Direito Constitucional" --tipo lei --norma ADCT --titulo ADCT
+python ingest.py corpus/cp.txt      --disciplina "Direito Penal"            --tipo lei --norma CP
+python ingest.py corpus/cf.txt      --disciplina "Direito Constitucional"    --tipo lei --norma CF
+python ingest.py corpus/adct.txt    --disciplina "Direito Constitucional"    --tipo lei --norma ADCT --titulo ADCT
+python ingest.py corpus/cpp.txt     --disciplina "Direito Processual Penal"  --tipo lei --norma CPP --titulo "Código de Processo Penal"
+python ingest.py corpus/lei8112.txt --disciplina "Direito Administrativo"   --tipo lei --norma L8112 --titulo "Lei 8.112/1990"
 python ingest.py corpus/CF88_Livro_EC91_2016.pdf --disciplina "Direito Constitucional" --tipo historico
 
 # 4. trazer as questões geradas e o progresso — isso SIM veio pelo git

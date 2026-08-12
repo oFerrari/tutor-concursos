@@ -18,12 +18,12 @@ Ver `README.md` (raiz) para a estrutura do monorepo (`apps/`, `packages/`).
 Tutor socrático para concursos públicos brasileiros. RAG sobre lei seca +
 banco de questões + repetição espaçada. Multiusuário desde a migração 008
 (ver Decisões); CLI própria (`chat.py`) e API HTTP (`api.py`) sobre a MESMA
-lógica de `core/*.py` — Next.js consumindo `api.py` é o próximo passo, ainda
-não escrito.
+lógica de `core/*.py`, e um frontend Next.js (`apps/web`) consumindo a API.
 Corpus atual: Código Penal (434 artigos), Constituição Federal (276 artigos) +
-ADCT (151 artigos) como normas separadas, todos do Planalto — mais um livro
-de histórico de emendas constitucionais como material `historico` (busca
-híbrida, sem citação exata por artigo).
+ADCT (151 artigos), Código de Processo Penal (848 chunks) e Lei 8.112/1990 —
+regime jurídico dos servidores civis (245 chunks) — como normas separadas,
+todos do Planalto — mais um livro de histórico de emendas constitucionais
+como material `historico` (busca híbrida, sem citação exata por artigo).
 
 **Não contém e nunca deve conter** dados de empresa. O autor trabalha numa
 cooperativa; este projeto é separado disso por decisão explícita.
@@ -67,6 +67,7 @@ core/ritmo_regras.py       gatilho de intervenção proativa — FUNÇÕES PURAS
 core/ritmo.py              busca desempenho/reincidência/sequência, prioriza 1 sugestão
 core/edital.py             extrai data da prova e conteúdo programático de PDF de edital
 edital.py                  CLI de ingestão de edital, reporta candidatos (não decide calado)
+corpus/html_para_texto.py  converte HTML compilado do Planalto pra .txt (cp1252, descarta tachado/revogado)
 ingest.py                  ingestão (batch)
 reingest.py                reprocessa chunks preservando questões (linha E fonte_chunks)
 gerar.py                   geração com cobertura por seção
@@ -398,7 +399,6 @@ lembrasse de rodar.
 - `parcial` desce uma caixa — decisão a revisitar com uso real.
 - Questões que cobram dois pontos ("conduta E pena") — prompt já corrigido,
   falta confirmar.
-- Ingerir CPP, Lei 8.112 (mesmo pipeline, trocar `--norma`; CF+ADCT já feitos).
 - Vínculo questão→tópico individual (hoje `edital.cobertura()` estima por
   disciplina inteira, não por tópico — ver aproximação (2) documentada
   acima). Exigiria marcar cada questão gerada com o tópico de origem.
@@ -434,6 +434,23 @@ lembrasse de rodar.
   **Atualização: voltou a 100% (22/22)** depois de um `reingest.py` do CP
   feito por outro motivo (ver Armadilhas de método) — o caso limítrofe
   era mesmo sensível a reindexação do HNSW, não regressão de código.
+  **Depois de ingerir CPP (848 chunks) e Lei 8.112 (245 chunks, acervo total
+  2433 chunks/6 documentos), caiu pra top-6 91% (20/22)** — dois casos
+  novos, e desta vez com explicação mais concreta que "HNSW mudou de
+  caminho": "servidor público que se apropria de dinheiro..." (esperado CP
+  312, peculato) passou a devolver só artigos da Lei 8.112 (arts. 31, 13,
+  30, 120 — todos sobre servidor público); "ofender a dignidade de alguém
+  com xingamento" (esperado CP 140, injúria) passou a devolver CPP 30 no
+  lugar. **Aqui parece ser concorrência de conteúdo real, não só
+  reindexação**: L8112 é inteiro sobre "servidor público", o mesmo
+  vocabulário do enunciado de peculato — diferente do caso ADCT, onde o
+  livro de histórico não tinha nada a ver semanticamente com o que sumiu.
+  Não investiguei a fundo nem tentei corrigir (fora do escopo de "ingerir
+  CPP e Lei 8.112" que motivou rodar isso agora); registrado pra não achar,
+  num dia futuro, que foi regressão de mudança em código. 91% ainda é
+  aceitável pro produto (a busca por dispositivo exato, que é a maioria do
+  uso real, continua 100%) — mas é hipótese plausível, não medida
+  confirmada, e por isso entra como hipótese, não como fato.
 - **`documento.hash` do CP ficou desatualizado por dias sem ninguém notar
   — `corpus/cp.txt` levou 2 correções de conteúdo (normalização de linha,
   remoção da assinatura colada no Art. 361) depois da ingestão original,
@@ -550,7 +567,10 @@ cd apps/api && source .venv/bin/activate
 python ingest.py corpus/cp.txt --disciplina "Direito Penal" --tipo lei --norma CP
 python ingest.py corpus/cf.txt --disciplina "Direito Constitucional" --tipo lei --norma CF
 python ingest.py corpus/adct.txt --disciplina "Direito Constitucional" --tipo lei --norma ADCT --titulo ADCT
+python ingest.py corpus/cpp.txt --disciplina "Direito Processual Penal" --tipo lei --norma CPP --titulo "Código de Processo Penal"
+python ingest.py corpus/lei8112.txt --disciplina "Direito Administrativo" --tipo lei --norma L8112 --titulo "Lei 8.112/1990"
 python ingest.py corpus/livro-emendas.pdf --disciplina "Direito Constitucional" --tipo historico
+python corpus/html_para_texto.py corpus/Arquivo.html corpus/norma.txt --cortar-em "MARCADOR"  # converte HTML do Planalto pra .txt antes de ingerir
 python avaliar_retrieval.py         # depois de qualquer ingestão nova ou mudança em retrieval.py
 python edital.py corpus/edital.pdf --orgao "PC-PR" --banca FGV   # data da prova + conteúdo programático
 python gerar.py --cobertura 3
