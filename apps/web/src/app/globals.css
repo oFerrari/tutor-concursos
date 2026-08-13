@@ -147,10 +147,10 @@ body {
   }
 
   .sidebar-link {
-    @apply flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:bg-surface-hover hover:text-foreground;
+    @apply flex items-center gap-3 rounded-lg px-3 py-2.5 text-[0.95rem] font-medium text-muted transition-colors hover:bg-surface-hover hover:text-foreground;
   }
 
   .sidebar-link-ativo {
-    @apply flex items-center gap-3 rounded-lg bg-accent-soft px-3 py-2 text-sm font-medium text-accent;
+    @apply flex items-center gap-3 rounded-r-md border-l-2 border-accent bg-accent-soft px-3 py-2.5 text-[0.95rem] font-semibold text-accent;
   }
 }
