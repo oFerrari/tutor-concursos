@@ -1,178 +1,591 @@
 @import "tailwindcss";
 
-/* Identidade "FerrarIA": neutros da escala `zinc` + rubi profundo.
-   Os neutros SÃO os valores do zinc do Tailwind (background = #09090b é
-   zinc-950, surface ~zinc-900, muted = zinc-400, line = zinc-800) — a
-   paleta pedida, mas via token e não classe fixa no JSX, porque
-   `bg-zinc-950` cravado no componente mataria o modo claro (não existe
-   como reverter um literal). O accent é rubi (rose-700/600), NÃO índigo:
-   índigo é a cor do Estratégia e do Claude — a identidade aqui é própria.
-   Rubi profundo em vez do vermelho claro anterior (#d94452), que era
-   chapado e agressivo demais pra uma tela que se olha por horas. */
+/* ============================================================================
+   FerrarIA — design system portado do protótipo MVP (`FerrarIA.dc.html`).
+
+   TEMA ÚNICO E ESCURO, de propósito. O protótipo nasceu preto-e-rubro e
+   nunca desenhou a contraparte clara; derivar um modo claro aqui seria
+   inventar uma decisão de design que o protótipo não tomou — e um tema
+   claro "adivinhado" envelhece pior que tema nenhum. Se um dia existir,
+   ele volta como um bloco `[data-tema="claro"]`, e NÃO como
+   `prefers-color-scheme`: a identidade é escura por padrão, não por
+   preferência do sistema operacional.
+
+   Regra de uso: nenhum componente crava cor literal. O protótipo usa
+   `style="background: #0f0f11"` porque é um mockup de arquivo único; aqui
+   cada valor vira token e cada padrão repetido vira classe em
+   `@layer components`. Mudança de identidade acontece NESTE arquivo.
+   ============================================================================ */
+
 :root {
-  --background: #fafafa;
-  --surface: #ffffff;
-  --surface-hover: #f4f4f5;
-  --foreground: #18181b;
-  --muted: #71717a;
-  --line: #e4e4e7;
-  --line-strong: #d4d4d8;
+  color-scheme: dark;
 
-  --accent: #be123c;
-  --accent-hover: #9f1239;
-  --accent-foreground: #ffffff;
-  --accent-soft: #fff1f2;
+  /* -- superfícies -----------------------------------------------------
+     Cinco degraus, do fundo ao hover. A distinção entre `chrome` e
+     `surface` é a mesma do protótipo: a casca (nav lateral, rail) é mais
+     escura que o card, então o conteúdo "flutua" sem precisar de sombra. */
+  --background: #0a0a0b;
+  --chrome: #0d0d0f;
+  --surface: #0f0f11;
+  --surface-input: #101012;
+  --surface-raised: #131315;
+  --surface-hover: #16161a;
 
-  --success: #15803d;
-  --success-soft: #f0fdf4;
-  --warning: #a16207;
-  --warning-soft: #fefce8;
-  --danger: #b91c1c;
-  --danger-soft: #fef2f2;
-  --info: #0e7490;
-  --info-soft: #ecfeff;
+  /* -- linhas ----------------------------------------------------------
+     Quatro pesos, por função e não por tom: divisória interna, borda de
+     card, borda de controle e tracejado/hover. */
+  --line-soft: #1a1a1e;
+  --line: #1e1e22;
+  --line-strong: #26262c;
+  --line-stronger: #2e2e36;
+
+  /* -- texto -----------------------------------------------------------
+     `body` é o texto DENTRO de controle (chip, botão fantasma), mais
+     apagado que `foreground` mas ainda legível; `label` só existe para o
+     rótulo mono maiúsculo, que é decorativo e nunca carrega informação
+     que não esteja repetida no valor abaixo dele. */
+  --foreground: #ededf0;
+  --body: #cfcfd4;
+  --muted: #8a8a92;
+  --subtle: #6a6a72;
+  --label: #55555c;
+
+  /* -- rubro -----------------------------------------------------------
+     `accent` é o rubro de PREENCHIMENTO (botão, barra); `accent-text` é o
+     mesmo rubro um passo mais claro, para uso como TEXTO sobre fundo
+     escuro — #ff2f3a em corpo de texto vibra. Texto sobre o rubro é
+     PRETO, não branco: é o contraste do protótipo e o que passa em AA. */
+  --accent: #ff2f3a;
+  --accent-hover: #ff4d56;
+  --accent-text: #ff3b46;
+  --accent-link-hover: #ff6169;
+  --accent-foreground: #0a0a0b;
+  --accent-soft: #1c1214;
+  --accent-line: #3a1e22;
+
+  /* -- semânticas ------------------------------------------------------
+     Verde e âmbar existem no protótipo (acerto / atenção). `info` é
+     deliberadamente NEUTRO: o protótipo não tem cor de informação, e
+     enfiar um azul aqui quebraria a paleta de duas cores. */
+  --success: #3ecf8e;
+  --success-soft: #101613;
+  --success-line: #234a38;
+
+  --warning: #e3b341;
+  --warning-soft: #16130c;
+  --warning-line: #5c4a1d;
+
+  --danger: #ff5a63;
+  --danger-soft: #170f11;
+  --danger-line: #3a1e22;
+
+  --info: #cfcfd4;
+  --info-soft: #101012;
+  --info-line: #26262c;
+
+  /* -- efeitos ---------------------------------------------------------
+     No escuro, sombra preta não separa nada; o que separa é BRILHO. Por
+     isso o realce do rubro é glow, e sombra só aparece em elemento que
+     de fato sobrepõe conteúdo (drawer, sidebar expandida por hover). */
+  --glow-accent: 0 0 18px rgba(255, 47, 58, 0.45);
+  --ring-accent: 0 0 0 3px rgba(255, 47, 58, 0.35);
+  --ring-success: 0 0 0 3px rgba(62, 207, 142, 0.35);
+  --shadow-float: 0 20px 50px rgba(0, 0, 0, 0.4);
+  --shadow-drawer: 0 24px 60px rgba(0, 0, 0, 0.6);
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-chrome: var(--chrome);
   --color-surface: var(--surface);
+  --color-surface-input: var(--surface-input);
+  --color-surface-raised: var(--surface-raised);
   --color-surface-hover: var(--surface-hover);
-  --color-foreground: var(--foreground);
-  --color-muted: var(--muted);
+
+  --color-line-soft: var(--line-soft);
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
+  --color-line-stronger: var(--line-stronger);
+
+  --color-foreground: var(--foreground);
+  --color-body: var(--body);
+  --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
+  --color-label: var(--label);
 
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
+  --color-accent-text: var(--accent-text);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent-soft: var(--accent-soft);
+  --color-accent-line: var(--accent-line);
 
   --color-success: var(--success);
   --color-success-soft: var(--success-soft);
+  --color-success-line: var(--success-line);
   --color-warning: var(--warning);
   --color-warning-soft: var(--warning-soft);
+  --color-warning-line: var(--warning-line);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
+  --color-danger-line: var(--danger-line);
   --color-info: var(--info);
   --color-info-soft: var(--info-soft);
+  --color-info-line: var(--info-line);
 
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Space Grotesk para texto, IBM Plex Mono para rótulo e número — a
+     dupla do protótipo. Mono aqui não é "código": é o carimbo de dado
+     medido (rótulo de KPI, contador, percentual). */
+  --font-sans: var(--font-space-grotesk);
+  --font-mono: var(--font-ibm-plex-mono);
 }
 
-/* Segue a preferência do sistema — sem toggle manual, mesmo espírito de
-   "regra sobre número, não julgamento a cada tela" já usado no scheduler. */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #09090b;      /* zinc-950 */
-    --surface: #17171a;         /* ~zinc-900 */
-    --surface-hover: #232327;   /* ~zinc-800 */
-    --foreground: #f4f4f5;      /* zinc-100 */
-    --muted: #a1a1aa;           /* zinc-400 */
-    --line: #27272a;            /* zinc-800 */
-    --line-strong: #3f3f46;     /* zinc-700 */
+/* --------------------------------------------------------------------------
+   base
+   -------------------------------------------------------------------------- */
 
-    --accent: #e11d48;          /* rose-600 — rubi, mais legível no escuro */
-    --accent-hover: #f43f5e;    /* rose-500 */
-    --accent-foreground: #ffffff;
-    --accent-soft: #2c1019;
+/* Dentro de `@layer base` DE PROPÓSITO — e isto custou uma tela inteira
+   vermelha pra aprender. Regra escrita FORA de camada vence QUALQUER regra
+   dentro de camada, por mais específica que seja: é assim que `@layer`
+   funciona em CSS, não é questão de especificidade. Como todo `<Link>` do
+   Next vira `<a>`, um `a { color: rubro }` solto pintou de vermelho a
+   sidebar inteira, os botões e os cards — passando por cima de
+   `.sidebar-link` e até de `text-accent-foreground`. No protótipo isso não
+   acontecia porque lá os itens de menu eram `<div>`, não link.
 
-    --success: #4ade80;
-    --success-soft: #0c2417;
-    --warning: #fbbf24;
-    --warning-soft: #2a2109;
-    --danger: #fb7185;
-    --danger-soft: #2c1015;
-    --info: #22d3ee;
-    --info-soft: #0c2830;
+   Consequência da correção: `a` herda a cor do contexto. Link que deve ser
+   rubro pede rubro explicitamente (`text-accent-text` ou a classe `.link`). */
+@layer base {
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-weight: 600;
+    letter-spacing: -0.4px;
+    line-height: 1.2;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+::selection {
+  background: var(--accent);
+  color: var(--accent-foreground);
 }
 
-/* Componentes reaproveitados em todas as telas — um lugar só pra mudar o
-   visual, em vez de className repetida (e sutilmente diferente) em cada
-   página. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Barra de rolagem fina e escura — a padrão do sistema é clara e rasga a
+   tela inteira num app que é preto de ponta a ponta. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #232329;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #33333c;
+}
+
+@keyframes pxRise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes pxPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   componentes — um lugar só para mudar o visual, em vez de className
+   repetida (e sutilmente diferente) em cada página.
+   -------------------------------------------------------------------------- */
+
 @layer components {
+  /* ------------------------------------------------------------ rótulos */
+
+  /* O rótulo mono maiúsculo é a assinatura do protótipo: aparece acima de
+     todo bloco de dado. Miúdo e apagado de propósito — quem lê a tela lê
+     o VALOR; o rótulo só diz de que valor se trata. */
+  .rotulo {
+    @apply font-mono text-[10.5px] uppercase tracking-[1.5px] text-label;
+  }
+
+  .rotulo-lg {
+    @apply font-mono text-[11.5px] uppercase tracking-[1.5px] text-label;
+  }
+
+  /* Variante rubra — o "// bom dia, andrei" do painel. Um por tela. */
+  .rotulo-accent {
+    @apply font-mono text-[11.5px] uppercase tracking-[1.5px] text-accent-text;
+  }
+
+  .mono-num {
+    @apply font-mono tabular-nums;
+  }
+
+  /* ------------------------------------------------------------- blocos */
+
   .card {
-    @apply rounded-xl border border-line bg-surface p-4 shadow-sm;
+    @apply rounded-2xl border border-line bg-surface p-5;
   }
 
+  /* Card clicável: borda acende no rubro e o bloco sobe 2px. Sem sombra —
+     no escuro, o que comunica "levantou" é a borda, não a sombra. */
   .card-link {
-    @apply block rounded-xl border border-line bg-surface p-5 shadow-sm transition-all hover:border-line-strong hover:bg-surface-hover hover:shadow-md;
+    @apply block rounded-2xl border border-line bg-surface p-5 transition-all duration-150
+           hover:-translate-y-0.5 hover:border-accent hover:bg-surface-raised;
   }
 
+  .widget {
+    @apply rounded-2xl border border-line bg-surface p-5;
+  }
+
+  .widget-acao {
+    @apply block rounded-[14px] border border-line bg-surface p-4 transition-all duration-150
+           hover:-translate-y-0.5 hover:border-accent hover:bg-surface-raised;
+  }
+
+  /* Casca: sidebar, rail, cabeçalho — um degrau MAIS escuro que o card. */
+  .chrome {
+    @apply bg-chrome;
+  }
+
+  /* Card do rail: menor que o card de conteúdo (raio 14, padding 14) —
+     a coluna tem 300px, um card de 20px de padding come o dado. */
+  .painel {
+    @apply rounded-[14px] border border-line bg-surface p-3.5;
+  }
+
+  /* Linha "rótulo à esquerda, número mono à direita" do raio-x. */
+  .dado-linha {
+    @apply flex items-baseline justify-between gap-3 text-[13px];
+  }
+
+  /* Brilho rubro difuso no topo do conteúdo. Puramente decorativo, sem
+     eventos de ponteiro, e o único gradiente do sistema. */
+  .brilho-topo {
+    position: absolute;
+    top: -180px;
+    left: 25%;
+    width: 720px;
+    height: 360px;
+    pointer-events: none;
+    background: radial-gradient(ellipse at center, rgba(255, 47, 58, 0.12), transparent 70%);
+  }
+
+  /* ------------------------------------------------------------ botões */
+
+  /* Pílula rubra com texto PRETO. Todo botão do sistema é pílula
+     (radius 999px) — o protótipo não tem um único botão de canto reto. */
   .btn-primary {
-    @apply inline-flex items-center justify-center rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-accent px-4 py-2
+           text-[13px] font-semibold text-accent-foreground transition-colors
+           hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .btn-ghost {
-    @apply inline-flex items-center justify-center rounded-lg border border-line px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50;
-  }
-
-  .link {
-    @apply text-sm text-muted underline-offset-2 transition-colors hover:text-foreground hover:underline disabled:cursor-not-allowed disabled:opacity-40;
-  }
-
-  .field {
-    @apply w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft;
-  }
-
-  .badge-neutral {
-    @apply inline-flex items-center rounded-full bg-surface-hover px-2 py-0.5 text-xs font-medium text-muted;
-  }
-
-  .badge-accent {
-    @apply inline-flex items-center rounded-full bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent;
-  }
-
-  .callout-info {
-    @apply rounded-lg border border-info/25 bg-info-soft px-3 py-2 text-sm text-info;
-  }
-
-  .callout-warning {
-    @apply rounded-lg border border-warning/25 bg-warning-soft px-3 py-2 text-sm text-warning;
-  }
-
-  .callout-success {
-    @apply rounded-lg border border-success/25 bg-success-soft p-4 text-success;
-  }
-
-  .callout-danger {
-    @apply rounded-lg border border-danger/25 bg-danger-soft p-4 text-danger;
-  }
-
-  /* -------------------------------------------------------- shell / home */
-  .widget {
-    @apply rounded-2xl border border-line bg-surface p-5 shadow-sm;
-  }
-
-  /* Card da "trilha" do dia: mesma base do widget, mas clicável e com
-     realce no hover (borda acende + fundo levanta), pra deixar óbvio que
-     cada métrica leva a algum lugar. */
-  .widget-acao {
-    @apply block rounded-2xl border border-line bg-surface p-5 shadow-sm transition-all
-           hover:border-accent/40 hover:bg-surface-hover hover:shadow-lg;
-  }
-
-  /* CTA principal — grande, com gradiente no rubi e sombra colorida
-     (não é o botão chapado de antes). */
-  .btn-cta {
-    @apply inline-flex items-center justify-center gap-2.5 rounded-xl bg-gradient-to-br from-accent to-accent-hover
-           px-7 py-3.5 text-base font-semibold text-accent-foreground shadow-lg shadow-accent/25
-           transition-all hover:shadow-xl hover:shadow-accent/35 hover:brightness-110
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-line-strong
+           bg-transparent px-4 py-2 text-[13px] text-body transition-all
+           hover:border-line-stronger hover:bg-surface-hover hover:text-foreground
            disabled:cursor-not-allowed disabled:opacity-50;
   }
 
-  .sidebar-link {
-    @apply flex items-center gap-3 rounded-lg px-3 py-2.5 text-[0.95rem] font-medium text-muted transition-colors hover:bg-surface-hover hover:text-foreground;
+  /* CTA principal: mesma pílula, maior, com glow em vez de gradiente. */
+  .btn-cta {
+    @apply inline-flex items-center justify-center gap-2.5 rounded-full bg-accent px-7 py-3.5
+           text-[15px] font-semibold text-accent-foreground transition-all
+           hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50;
+    box-shadow: var(--glow-accent);
   }
 
+  /* Botão de largura cheia da sidebar ("nova sessão") — o único canto
+     arredondado-e-não-pílula, porque acompanha a coluna. */
+  .btn-bloco {
+    @apply flex w-full items-center justify-center gap-2 rounded-xl bg-accent px-3 py-2.5
+           text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent-hover;
+  }
+
+  .btn-icone {
+    @apply inline-flex h-[34px] w-[34px] items-center justify-center rounded-[10px] border
+           border-line-strong bg-transparent text-body transition-colors
+           hover:bg-surface-hover hover:text-foreground;
+  }
+
+  .link {
+    @apply text-[13px] text-subtle underline-offset-2 transition-colors
+           hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40;
+  }
+
+  /* -------------------------------------------------------- formulário */
+
+  .field {
+    @apply w-full rounded-xl border border-line-strong bg-surface-input px-3.5 py-3 text-sm
+           text-foreground transition-colors placeholder:text-subtle
+           focus:border-accent focus:outline-none;
+  }
+
+  .field:focus {
+    box-shadow: var(--ring-accent);
+  }
+
+  /* Alternativa de múltipla escolha (A/B/C do tutor socrático). */
+  .opcao {
+    @apply flex w-full cursor-pointer items-start gap-3.5 rounded-xl border border-line
+           bg-[#0c0c0e] px-4 py-3.5 text-left text-sm transition-all
+           hover:border-line-stronger hover:bg-surface-raised;
+  }
+
+  .opcao-ativa {
+    @apply flex w-full cursor-pointer items-start gap-3.5 rounded-xl border border-accent
+           bg-accent-soft px-4 py-3.5 text-left text-sm;
+  }
+
+  /* Área de arrastar arquivo (edital, PDFs da biblioteca). */
+  .drop {
+    @apply cursor-pointer rounded-2xl border border-dashed border-line-stronger bg-surface
+           px-6 py-8 text-center transition-all hover:border-accent hover:bg-surface-raised;
+  }
+
+  /* ------------------------------------------------- selos e etiquetas */
+
+  .badge-neutral {
+    @apply inline-flex items-center rounded-full border border-line-strong px-3 py-1
+           font-mono text-[11px] uppercase tracking-[0.08em] text-body;
+  }
+
+  .badge-accent {
+    @apply inline-flex items-center rounded-full border border-accent bg-accent-soft px-3 py-1
+           font-mono text-[11px] uppercase tracking-[0.08em] text-accent-text;
+  }
+
+  .chip {
+    @apply inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full
+           border border-line-strong px-3.5 py-1.5 text-[13px] text-body transition-all
+           hover:border-line-stronger hover:bg-surface-hover hover:text-foreground;
+  }
+
+  .chip-ativo {
+    @apply inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full
+           border border-accent bg-accent-soft px-3.5 py-1.5 text-[13px] text-accent-text;
+  }
+
+  /* ----------------------------------------------------------- avisos */
+
+  /* Info é NEUTRO com uma barra rubra à esquerda — o protótipo resolve
+     "atenção" com o rubro na borda, não com um azul que não existe na
+     paleta. */
+  .callout-info {
+    @apply rounded-xl border border-info-line border-l-2 border-l-accent bg-info-soft
+           px-4 py-3 text-sm text-body;
+  }
+
+  .callout-warning {
+    @apply rounded-xl border border-warning-line bg-warning-soft px-4 py-3 text-sm text-warning;
+  }
+
+  .callout-success {
+    @apply rounded-xl border border-success-line bg-success-soft p-4 text-success;
+  }
+
+  .callout-danger {
+    @apply rounded-xl border border-danger-line bg-danger-soft p-4 text-danger;
+  }
+
+  /* ---------------------------------------------------------- medidas */
+
+  .barra {
+    @apply h-1.5 overflow-hidden rounded-full bg-line-soft;
+  }
+
+  .barra-grossa {
+    @apply h-2 overflow-hidden rounded-full bg-line-soft;
+  }
+
+  .barra-fill {
+    @apply h-full rounded-full transition-[width] duration-300;
+  }
+
+  .tabela {
+    @apply w-full text-sm;
+  }
+
+  .tabela thead th {
+    @apply border-b border-line-soft pb-2 text-left font-mono text-[10.5px] font-normal
+           uppercase tracking-[1.5px] text-label;
+  }
+
+  .tabela tbody td {
+    @apply border-b border-line-soft py-2.5;
+  }
+
+  /* --------------------------------------------------------- sidebar */
+
+  .sidebar-link {
+    @apply flex items-center gap-2.5 rounded-[10px] px-2.5 py-2.5 text-sm text-muted
+           transition-all duration-150 hover:bg-surface-hover hover:text-foreground;
+  }
+
+  .sidebar-link:hover svg {
+    color: var(--accent-text);
+  }
+
+  /* Ativo = fundo rubro apagado + texto rubro. Sem barra lateral: no
+     protótipo o próprio bloco pintado já marca a posição. */
   .sidebar-link-ativo {
-    @apply flex items-center gap-3 rounded-r-md border-l-2 border-accent bg-accent-soft px-3 py-2.5 text-[0.95rem] font-semibold text-accent;
+    @apply flex items-center gap-2.5 rounded-[10px] bg-accent-soft px-2.5 py-2.5 text-sm
+           font-medium text-accent-text;
+  }
+
+  /* Marca: quadrado rubro com glow + "Ferrar" claro e "IA" rubro. */
+  .marca-icone {
+    @apply flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-accent
+           text-accent-foreground;
+    box-shadow: var(--glow-accent);
+  }
+
+  .marca-texto {
+    @apply text-base font-bold tracking-[0.2px] text-foreground;
+  }
+
+  /* ------------------------------------------------ telas de entrada */
+
+  /* Grade técnica atrás da marca no login. Duas linhas de gradiente + uma
+     máscara radial que apaga as bordas — sem a máscara a grade vira papel
+     quadriculado e compete com o texto em cima dela. */
+  .grade-fundo {
+    position: absolute;
+    inset: 0;
+    opacity: 0.5;
+    pointer-events: none;
+    background-image: linear-gradient(#141418 1px, transparent 1px),
+      linear-gradient(90deg, #141418 1px, transparent 1px);
+    background-size: 46px 46px;
+    mask-image: radial-gradient(100% 80% at 30% 20%, #000 30%, transparent 75%);
+  }
+
+  /* Brilho rubro subindo do canto inferior esquerdo do painel da marca. */
+  .brilho-canto {
+    background: radial-gradient(120% 100% at 10% 110%, rgba(255, 47, 58, 0.2), transparent 60%),
+      var(--background);
+  }
+
+  /* ------------------------------------------------------- conversa */
+
+  /* Balão do tutor: canto superior esquerdo "mordido" (4px) — é o que
+     ancora a fala no avatar à esquerda sem precisar de setinha. */
+  .balao-tutor {
+    @apply rounded-[14px] rounded-tl-[4px] border border-line bg-surface px-[18px] py-4;
+  }
+
+  .balao-usuario {
+    @apply max-w-[78%] rounded-[14px] rounded-tr-[4px] border border-[#2a1a1d] bg-accent-soft px-4 py-3
+           text-[15px] leading-relaxed;
+  }
+
+  /* Passo numerado da rota do dia, dentro do balão. */
+  .passo-rota {
+    @apply flex items-center gap-2.5 rounded-[10px] border border-line bg-surface-raised px-3 py-2.5;
+  }
+
+  .passo-numero {
+    @apply flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-accent-soft
+           font-mono text-[11px] font-semibold text-accent-text;
+  }
+
+  /* Cabeçalho de card de conteúdo (questão, flashcard): faixa mono
+     maiúscula sobre fundo de casca, separada por linha. */
+  .faixa-card {
+    @apply flex flex-wrap items-center gap-3.5 border-b border-line-soft bg-chrome px-[18px] py-3
+           font-mono text-[10.5px] uppercase tracking-[1.2px] text-subtle;
+  }
+
+  /* ------------------------------------------- alternativa respondida */
+
+  .opcao-certa {
+    @apply flex w-full items-start gap-3.5 rounded-xl border border-success-line bg-success-soft
+           px-4 py-3.5 text-left text-sm;
+  }
+
+  .opcao-errada {
+    @apply flex w-full items-start gap-3.5 rounded-xl border border-danger-line bg-danger-soft
+           px-4 py-3.5 text-left text-sm;
+  }
+
+  /* Quadradinho com a letra A/B/C. */
+  .letra {
+    @apply flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] bg-surface-hover
+           font-mono text-[12px] font-semibold text-muted;
+  }
+
+  .letra-ativa {
+    @apply flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] bg-accent
+           font-mono text-[12px] font-semibold text-accent-foreground;
+  }
+
+  .letra-certa {
+    @apply flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] bg-success
+           font-mono text-[12px] font-semibold text-accent-foreground;
+  }
+
+  /* --------------------------------------------------------- selos */
+
+  /* Pílula de status com bolinha à esquerda (biblioteca). */
+  .selo {
+    @apply inline-flex items-center gap-[7px] whitespace-nowrap rounded-full border px-2.5 py-1 text-[11.5px];
+  }
+
+  /* Sem `@apply .selo` nas variantes: em Tailwind v4 o `@apply` resolve
+     UTILITÁRIO, não classe de componente declarada aqui — compor uma na
+     outra compila calado e não aplica nada. As utilidades ficam repetidas
+     de propósito. */
+  .selo-ok {
+    @apply inline-flex items-center gap-[7px] whitespace-nowrap rounded-full border
+           border-success-line bg-success-soft px-2.5 py-1 text-[11.5px] text-success;
+  }
+
+  .selo-processando {
+    @apply inline-flex items-center gap-[7px] whitespace-nowrap rounded-full border
+           border-warning-line bg-warning-soft px-2.5 py-1 text-[11.5px] text-warning;
+  }
+
+  .selo-falha {
+    @apply inline-flex items-center gap-[7px] whitespace-nowrap rounded-full border
+           border-danger-line bg-danger-soft px-2.5 py-1 text-[11.5px] text-danger;
+  }
+
+  .selo-ponto {
+    @apply h-1.5 w-1.5 shrink-0 rounded-full bg-current;
   }
 }

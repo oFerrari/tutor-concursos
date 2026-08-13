@@ -1,16 +1,26 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Space_Grotesk, IBM_Plex_Mono } from "next/font/google";
 import { AppShell } from "@/components/AppShell";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// Dupla tipográfica do protótipo: Space Grotesk carrega o texto (tem o
+// desenho meio técnico que combina com a identidade) e IBM Plex Mono é
+// reservada a rótulo e número — mono aqui não significa "código", significa
+// "dado medido". Os pesos são só os realmente usados no design system
+// (400/500/600/700 no sans, 400/500/600 no mono); pedir a família inteira
+// baixaria arquivo que nenhuma tela renderiza.
+const spaceGrotesk = Space_Grotesk({
+  variable: "--font-space-grotesk",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const ibmPlexMono = IBM_Plex_Mono({
+  variable: "--font-ibm-plex-mono",
   subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -22,7 +32,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="pt-BR"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      // `dark` fixo, sem `prefers-color-scheme`: o design system é escuro
+      // por identidade, não por preferência do SO (ver globals.css).
+      className={`${spaceGrotesk.variable} ${ibmPlexMono.variable} h-full antialiased`}
     >
       <body className="h-full">
         <AppShell>{children}</AppShell>

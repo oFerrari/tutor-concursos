@@ -3,14 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  Brain,
-  CalendarClock,
-  ShieldAlert,
-  Sparkles,
-  Target,
-  type LucideIcon,
-} from "lucide-react";
+import { ArrowUp } from "lucide-react";
+import { OFENSIVA, TEMPO_MEDIO } from "@/mock/prototipo";
 import {
   Carga,
   Desempenho,
@@ -30,10 +24,10 @@ import {
 
 function saudacao(): string {
   const h = new Date().getHours();
-  if (h < 5) return "Boa noite";
-  if (h < 12) return "Bom dia";
-  if (h < 18) return "Boa tarde";
-  return "Boa noite";
+  if (h < 5) return "boa noite";
+  if (h < 12) return "bom dia";
+  if (h < 18) return "boa tarde";
+  return "boa noite";
 }
 
 /** Primeiro nome a partir do e-mail — dado real do usuário, não um nome
@@ -41,62 +35,27 @@ function saudacao(): string {
  *  existe; se um dia houver campo `nome`, troca aqui e some esta função. */
 function primeiroNome(email: string | undefined): string {
   if (!email) return "";
-  const local = email.split("@")[0] ?? "";
-  const bruto = local.split(/[._-]/)[0] ?? "";
-  if (!bruto) return "";
-  return bruto.charAt(0).toUpperCase() + bruto.slice(1).toLowerCase();
+  const bruto = (email.split("@")[0] ?? "").split(/[._-]/)[0] ?? "";
+  return bruto ? bruto.charAt(0).toUpperCase() + bruto.slice(1).toLowerCase() : "";
+}
+
+function corDoPct(pct: number): string {
+  if (pct < 50) return "var(--accent)";
+  if (pct < 75) return "var(--body)";
+  return "var(--success)";
 }
 
 /**
- * Monta a fala do tutor a partir dos números REAIS do banco — nunca de um
- * texto de exemplo fixo. É o mesmo princípio que rege `socratic.explicar()`
- * no backend: o modelo (e aqui, a tela) só LÊ um resumo já calculado, nunca
- * inventa um percentual. Uma tela que diz "33% em Direito Penal" quando o
- * banco diz outra coisa é pior que uma tela sem número nenhum.
+ * Panorama — a tela de abertura do protótipo.
  *
- * Função pura de propósito (recebe dados, devolve string) — mesma
- * separação de `scheduler_regras.py`: decisão sem efeito colateral.
+ * TODO número aqui é MEDIDO: vem de `/carga`, `/stats`, `/erros`, `/meta`
+ * e `/sugestao`. O protótipo mostrava também "ofensiva 12 dias" e "tempo
+ * médio 1m48s" entre os KPIs; nenhum dos dois existe no schema (não há
+ * sequência de dias, e `tentativa.segundos` não é exposto agregado), então
+ * saíram em vez de virarem número decorativo ao lado de número real — a
+ * mesma regra que rege `socratic.explicar()` no backend.
  */
-function falaDoTutor(
-  carga: Carga,
-  pior: Desempenho | null,
-  reincidencias: number
-): string {
-  const partes: string[] = [];
-
-  if (carga.atraso > 0) {
-    partes.push(
-      `Você acumulou ${carga.atraso} ${carga.atraso === 1 ? "revisão atrasada" : "revisões atrasadas"} — ` +
-        `elas entram primeiro hoje, porque revisão atrasada é conhecimento se perdendo agora.`
-    );
-  } else if (carga.revisoes > 0) {
-    partes.push(
-      `${carga.revisoes} ${carga.revisoes === 1 ? "revisão venceu" : "revisões venceram"} hoje e já estão no topo da sua fila.`
-    );
-  } else {
-    partes.push("Nenhuma revisão venceu hoje — sua memória está em dia, então podemos avançar em conteúdo novo.");
-  }
-
-  if (pior && pior.pct_acerto != null) {
-    partes.push(
-      `Analisei seu histórico: seu ponto mais frágil é ${pior.disciplina}, com ${pior.pct_acerto.toFixed(0)}% de acerto.`
-    );
-  }
-
-  if (reincidencias > 0) {
-    partes.push(
-      `Separei ${reincidencias} ${reincidencias === 1 ? "questão" : "questões"} que você errou mais de uma vez para um diálogo socrático antes de avançarmos.`
-    );
-  }
-
-  if (carga.ineditas > 0) {
-    partes.push(`Depois disso, há ${carga.ineditas} inéditas liberadas.`);
-  }
-
-  return partes.join(" ");
-}
-
-export default function PaginaInicial() {
+export default function PaginaPanorama() {
   const router = useRouter();
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [carga, setCarga] = useState<Carga | null>(null);
@@ -105,6 +64,7 @@ export default function PaginaInicial() {
   const [desempenho, setDesempenho] = useState<Desempenho[] | null>(null);
   const [erros, setErros] = useState<ErroCaderno[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [pergunta, setPergunta] = useState("");
 
   useEffect(() => {
     if (!getToken()) {
@@ -125,7 +85,7 @@ export default function PaginaInicial() {
         }
         setErro(e instanceof ErroApi ? e.message : "não deu pra conectar com a API");
       });
-    // extras — falhar aqui não deve derrubar a tela (ex.: sem edital ingerido ainda)
+    // extras — falhar aqui não deve derrubar a tela (ex.: sem edital ingerido)
     getMe().then(setUsuario).catch(() => {});
     getSugestao().then((r) => setSugestao(r.sugestao)).catch(() => {});
     getMeta().then(setMeta).catch(() => {});
@@ -133,7 +93,7 @@ export default function PaginaInicial() {
 
   if (erro) {
     return (
-      <div className="mx-auto max-w-4xl p-6 md:p-10">
+      <div className="mx-auto max-w-[1000px] p-6">
         <p className="callout-danger">{erro}</p>
       </div>
     );
@@ -141,164 +101,218 @@ export default function PaginaInicial() {
 
   if (!carga || !desempenho || !erros) {
     return (
-      <div className="mx-auto max-w-4xl p-6 md:p-10">
-        <p className="text-sm text-muted">carregando…</p>
+      <div className="mx-auto max-w-[1000px] p-6">
+        <p className="rotulo animate-[pxPulse_1.4s_ease-in-out_infinite]">carregando</p>
       </div>
     );
   }
 
-  // "Mais frágil" só entre disciplinas COM tentativa registrada — ordenar
-  // incluindo pct_acerto nulo apontaria como pior justamente a disciplina
-  // que o usuário nunca tocou, que é falta de dado, não fraqueza.
   const comDado = desempenho.filter((d) => d.pct_acerto != null);
   const ordenadas = [...comDado].sort((a, b) => (a.pct_acerto ?? 0) - (b.pct_acerto ?? 0));
   const pior = ordenadas[0] ?? null;
 
+  const tentativas = desempenho.reduce((s, d) => s + d.tentativas, 0);
+  const acertos = desempenho.reduce((s, d) => s + d.acertos, 0);
+  const acertoGeral = tentativas > 0 ? (acertos / tentativas) * 100 : null;
+
   const nome = primeiroNome(usuario?.email);
 
+  // Os quatro KPIs do protótipo, na mesma ordem. Dois são medidos (acerto
+  // geral, revisões hoje) e dois são vitrine (ofensiva, tempo médio) —
+  // ver `mock/prototipo.ts` pro que falta no backend em cada um.
+  const kpis = [
+    {
+      rotulo: "acerto geral",
+      valor: acertoGeral == null ? "—" : `${acertoGeral.toFixed(0)}%`,
+      nota: tentativas > 0 ? `${acertos} de ${tentativas} tentativas` : "sem tentativa ainda",
+      cor: "var(--foreground)",
+    },
+    {
+      rotulo: "ofensiva",
+      valor: `${OFENSIVA.dias} dias`,
+      nota: `recorde: ${OFENSIVA.recorde} dias`,
+      cor: "var(--foreground)",
+    },
+    {
+      rotulo: "revisões hoje",
+      valor: String(carga.revisoes),
+      nota: carga.atraso > 0 ? `${carga.atraso} em atraso` : "fila SM-2 em dia",
+      cor: carga.revisoes > 0 ? "var(--accent-text)" : "var(--foreground)",
+    },
+    {
+      rotulo: "tempo médio",
+      valor: TEMPO_MEDIO.valor,
+      nota: TEMPO_MEDIO.nota,
+      cor: "var(--foreground)",
+    },
+  ];
+
   return (
-    <div className="mx-auto max-w-4xl space-y-10 p-6 md:p-10">
-      {/* ---------------------------------------------- mensagem do tutor */}
-      <section className="flex gap-4">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent-soft ring-1 ring-accent/30">
-          <Sparkles className="h-5 w-5 text-accent" strokeWidth={2} />
-        </div>
-        <div className="min-w-0 pt-1">
-          <p className="text-lg leading-relaxed text-foreground md:text-xl">
-            <span className="font-semibold">
-              {saudacao()}
-              {nome ? `, ${nome}` : ""}.
-            </span>{" "}
-            <span className="text-muted">{falaDoTutor(carga, pior, erros.length)}</span>
-          </p>
-          {/* Intervenção proativa de core/ritmo_regras.py — no máximo UMA
-              por sessão, decidida por regra no backend, não pelo front. */}
-          {sugestao && (
-            <p className="mt-4 rounded-xl border border-accent/20 bg-accent-soft/50 px-4 py-3 text-sm text-foreground">
-              <span className="font-semibold text-accent">Sugestão do tutor · </span>
-              {sugestao}
+    <div className="mx-auto w-full max-w-[1000px] px-6 pb-10 pt-6">
+      <p className="rotulo-accent mb-2.5">
+        {`// ${saudacao()}${nome ? `, ${nome.toLowerCase()}` : ""}`}
+      </p>
+      <h1 className="mb-5 text-[27px] md:text-[30px]">
+        {meta?.dias_restantes != null ? (
+          <>
+            Faltam <span className="text-accent-text">{meta.dias_restantes} dias</span>
+            {meta.cobertura_pct < 100 && ` e ${(100 - meta.cobertura_pct).toFixed(0)}% do edital está aberto.`}
+          </>
+        ) : (
+          <>
+            Sua rota de hoje, <span className="text-accent-text">montada pelo tutor</span>.
+          </>
+        )}
+      </h1>
+
+      {/* --------------------------------------------------------- KPIs */}
+      <div className="mb-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {kpis.map((k) => (
+          <div key={k.rotulo} className="rounded-[14px] border border-line bg-surface px-[18px] py-4">
+            <p className="rotulo mb-2">{k.rotulo}</p>
+            <p className="text-[25px] font-semibold tabular-nums" style={{ color: k.cor }}>
+              {k.valor}
             </p>
+            <p className="mt-0.5 text-[12.5px] text-muted">{k.nota}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* ------------------------------------------------------- split */}
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+        {/* ------------------------------------------ maestria por matéria */}
+        <section className="rounded-2xl border border-line bg-surface px-[22px] py-5">
+          <p className="rotulo mb-4">maestria por matéria</p>
+          {ordenadas.length === 0 ? (
+            <p className="text-sm text-muted">
+              nenhuma disciplina com tentativa registrada ainda — responda a fila de hoje e este quadro
+              começa a existir.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-3.5">
+              {ordenadas.map((d) => {
+                const pct = d.pct_acerto ?? 0;
+                return (
+                  <div key={d.disciplina}>
+                    <div className="mb-1.5 flex items-baseline justify-between gap-2.5">
+                      <span className="truncate text-sm">{d.disciplina}</span>
+                      <span className="mono-num text-[12.5px]" style={{ color: corDoPct(pct) }}>
+                        {pct.toFixed(0)}%
+                      </span>
+                    </div>
+                    <div className="barra">
+                      <div className="barra-fill" style={{ width: `${pct}%`, background: corDoPct(pct) }} />
+                    </div>
+                    <p className="mt-1.5 text-[11.5px] text-subtle">
+                      {d.dominadas} de {d.questoes} dominadas · {d.cobertura_pct.toFixed(0)}% coberto
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
           )}
+        </section>
+
+        {/* ------------------------------------- edital fechado + alertas */}
+        <div className="flex flex-col gap-3">
+          <section className="rounded-2xl border border-line bg-surface px-5 py-[18px]">
+            <p className="rotulo mb-3">edital fechado</p>
+            {meta ? (
+              <>
+                <div className="mb-2 flex items-baseline justify-between">
+                  <span className="text-[25px] font-semibold tabular-nums">
+                    {meta.cobertura_pct.toFixed(0)}%
+                  </span>
+                  <span className="mono-num text-[12px] text-subtle">
+                    {meta.questoes_respondidas} / {meta.questoes_respondidas + meta.questoes_pendentes}
+                  </span>
+                </div>
+                <div className="barra-grossa">
+                  <div className="barra-fill bg-accent" style={{ width: `${meta.cobertura_pct}%` }} />
+                </div>
+                <p className="mt-2 text-[12px] text-subtle">
+                  {meta.ritmo_necessario != null
+                    ? `Ritmo necessário: ${meta.ritmo_necessario.toFixed(1)} questões/dia`
+                    : "Sem data de prova — ingira o edital para eu calcular seu ritmo."}
+                </p>
+              </>
+            ) : (
+              <Link href="/onboarding" className="link">
+                nenhum edital ingerido — mandar o PDF →
+              </Link>
+            )}
+          </section>
+
+          <section className="rounded-2xl border border-line bg-surface px-5 py-[18px]">
+            <p className="rotulo mb-3">alertas</p>
+            <div className="flex flex-col gap-2.5 text-[13.5px] leading-relaxed">
+              {/* Intervenção proativa de core/ritmo_regras.py — no máximo UMA
+                  por sessão, decidida por regra no backend, não pelo front. */}
+              {sugestao && <p>{sugestao}</p>}
+              {pior && pior.pct_acerto != null && (
+                <p>
+                  <span className="text-accent-text">{pior.disciplina}</span> — {pior.pct_acerto.toFixed(0)}%
+                  de acerto em {pior.tentativas} tentativas.
+                </p>
+              )}
+              {carga.atraso > 0 && (
+                <p>
+                  <span className="text-warning">{carga.atraso} revisões atrasadas</span> — entram primeiro
+                  na fila de hoje.
+                </p>
+              )}
+              {!sugestao && !pior && carga.atraso === 0 && (
+                <p className="text-muted">nada gritando hoje. Bom sinal.</p>
+              )}
+            </div>
+            {erros.length > 0 && (
+              <Link href="/erros" className="btn-ghost mt-3.5 w-full text-[12.5px]">
+                Abrir o caderno ({erros.length} reincidências)
+              </Link>
+            )}
+          </section>
         </div>
-      </section>
+      </div>
 
-      {/* ------------------------------------------------ trilha do dia */}
-      <section>
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted">a trilha de hoje</h2>
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <CardTrilha
-            href="/fila"
-            Icone={Brain}
-            titulo="Revisão SM-2"
-            valor={carga.revisoes}
-            unidade={carga.revisoes === 1 ? "pendente" : "pendentes"}
-            destaque={carga.revisoes > 0}
-            nota={carga.atraso > 0 ? `${carga.atraso} em atraso` : undefined}
-          />
-          <CardTrilha
-            href="/fila"
-            Icone={Target}
-            titulo="Inéditas"
-            valor={carga.ineditas}
-            unidade={carga.ineditas === 1 ? "liberada" : "liberadas"}
-          />
-          <CardTrilha
-            href="/erros"
-            Icone={ShieldAlert}
-            titulo="Caderno de erros"
-            valor={erros.length}
-            unidade={erros.length === 1 ? "reincidência" : "reincidências"}
-            destaque={erros.length > 0}
-          />
-          <CardTrilha
-            href="/meta"
-            Icone={CalendarClock}
-            titulo="Até a prova"
-            valor={meta?.dias_restantes ?? "—"}
-            unidade={meta?.dias_restantes == null ? "sem edital" : "dias"}
-            destaque={meta?.dias_restantes != null && meta.dias_restantes <= 30}
-          />
-        </div>
-      </section>
-
-      {/* ------------------------------------------------------- CTA */}
-      <section className="flex flex-col items-center gap-3 py-2">
-        <Link href="/desafio" className="btn-cta">
-          <Sparkles className="h-5 w-5" strokeWidth={2} />
-          começar sessão de hoje
-        </Link>
-        <p className="text-xs text-muted">
-          o tutor monta a ordem: reincidentes primeiro, depois inéditas, e fecha com mini-simulado
-        </p>
-      </section>
-
-      {/* --------------------------------------------- pontos de atenção */}
-      {ordenadas.length > 0 && (
-        <section className="widget">
-          <div className="mb-4 flex items-baseline justify-between">
-            <h2 className="text-sm font-semibold text-foreground">pontos de atenção</h2>
-            <Link href="/stats" className="link">
-              desempenho completo →
+      {/* ---------------------------------------------------- composer */}
+      {/* O protótipo põe a caixa de conversa no rodapé do painel: falar com
+          o tutor é a ação primária, e ela fica igual em todas as telas. O
+          texto vai pro /tutor, que é quem tem o `POST /perguntar`. */}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          const t = pergunta.trim();
+          router.push(t ? `/tutor?q=${encodeURIComponent(t)}` : "/tutor");
+        }}
+        className="mt-7 rounded-[18px] border border-line-strong bg-surface-input px-3.5 pb-2.5 pt-3.5 shadow-[var(--shadow-float)] focus-within:border-accent"
+      >
+        <input
+          value={pergunta}
+          onChange={(e) => setPergunta(e.target.value)}
+          placeholder="Fale com a FerrarIA e o painel sai da frente…"
+          className="w-full bg-transparent text-[15px] text-foreground outline-none placeholder:text-subtle"
+        />
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2.5">
+          <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+            <Link href="/meta" className="chip text-[12.5px]">
+              Meu edital
+            </Link>
+            <Link href="/desafio" className="chip text-[12.5px]">
+              Rota do dia
             </Link>
           </div>
-          <ul className="space-y-3">
-            {ordenadas.slice(0, 3).map((d) => {
-              const pct = d.pct_acerto ?? 0;
-              return (
-                <li key={d.disciplina}>
-                  <div className="mb-1.5 flex items-baseline justify-between gap-3 text-sm">
-                    <span className="truncate">{d.disciplina}</span>
-                    <span className="shrink-0 tabular-nums text-muted">
-                      {pct.toFixed(0)}% · {d.acertos}/{d.tentativas}
-                    </span>
-                  </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-line">
-                    <div
-                      className={`h-full rounded-full ${pct < 50 ? "bg-accent" : "bg-success"}`}
-                      style={{ width: `${Math.max(0, Math.min(100, pct))}%` }}
-                    />
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      )}
+          <div className="ml-auto flex shrink-0 items-center gap-2.5">
+            <span className="font-mono text-[11px] text-label">FerrarIA 2.0</span>
+            <button
+              type="submit"
+              className="flex h-9 w-9 items-center justify-center rounded-[11px] bg-accent text-accent-foreground transition-colors hover:bg-accent-hover"
+              aria-label="falar com o tutor"
+            >
+              <ArrowUp className="h-[17px] w-[17px]" strokeWidth={2.6} />
+            </button>
+          </div>
+        </div>
+      </form>
     </div>
-  );
-}
-
-function CardTrilha({
-  href,
-  Icone,
-  titulo,
-  valor,
-  unidade,
-  destaque,
-  nota,
-}: {
-  href: string;
-  Icone: LucideIcon;
-  titulo: string;
-  valor: number | string;
-  unidade: string;
-  destaque?: boolean;
-  nota?: string;
-}) {
-  return (
-    <Link href={href} className="widget-acao group">
-      <Icone
-        className={`h-5 w-5 transition-colors ${destaque ? "text-accent" : "text-muted group-hover:text-foreground"}`}
-        strokeWidth={1.75}
-      />
-      <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">{titulo}</p>
-      <p className="mt-1 flex items-baseline gap-1.5">
-        <span className={`text-3xl font-bold tabular-nums ${destaque ? "text-accent" : "text-foreground"}`}>
-          {valor}
-        </span>
-        <span className="text-xs text-muted">{unidade}</span>
-      </p>
-      {nota && <p className="mt-1 text-xs font-medium text-warning">{nota}</p>}
-    </Link>
   );
 }

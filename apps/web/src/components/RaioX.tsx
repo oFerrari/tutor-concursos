@@ -1,0 +1,177 @@
+"use client";
+
+import Link from "next/link";
+import { X } from "lucide-react";
+import { Carga, Desempenho, EditalAtual, ErroCaderno, Meta } from "@/lib/api";
+import { FLASHCARDS_NA_FILA, LIGA, MESA_ATUAL, OFENSIVA } from "@/mock/prototipo";
+
+/**
+ * "Raio-X do aluno" — a terceira coluna do protótipo. Painel de contexto
+ * permanente: o que a tela do meio estiver fazendo, esta coluna responde
+ * sempre às mesmas perguntas (quanto falta, onde estou fraco, quanto a
+ * memória está devendo).
+ *
+ * Meta, maestria e carga vêm de endpoint real (`/meta`, `/edital`,
+ * `/stats`, `/carga`, `/erros`). Ofensiva, liga e "flashcards na fila" são
+ * vitrine — estão em `mock/prototipo.ts`, com o que falta no backend
+ * anotado lá. Não misture: se um dia esses três ganharem rota, o import do
+ * mock some e nada mais muda aqui.
+ */
+
+function formatarDataProva(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const [ano, mes, dia] = iso.split("-");
+  return ano && mes && dia ? `${dia}/${mes}` : null;
+}
+
+function corDoPct(pct: number): string {
+  if (pct < 50) return "var(--accent-text)";
+  if (pct < 75) return "var(--body)";
+  return "var(--success)";
+}
+
+type Props = {
+  meta: Meta | null;
+  edital: EditalAtual | null;
+  desempenho: Desempenho[] | null;
+  carga: Carga | null;
+  erros: ErroCaderno[] | null;
+  onFechar: () => void;
+};
+
+export function RaioX({ meta, edital, desempenho, carga, erros, onFechar }: Props) {
+  const dataProva = formatarDataProva(edital?.data_prova);
+  const comDado = (desempenho ?? []).filter((d) => d.pct_acerto != null);
+  const ordenadas = [...comDado].sort((a, b) => (a.pct_acerto ?? 0) - (b.pct_acerto ?? 0));
+
+  return (
+    <aside
+      className="chrome fixed inset-y-0 right-0 z-40 flex w-[300px] max-w-[88vw] shrink-0 flex-col gap-4
+                 overflow-y-auto border-l border-line-soft px-[18px] pb-7 pt-[18px]
+                 shadow-[var(--shadow-drawer)]
+                 xl:static xl:z-auto xl:max-w-none xl:shadow-none"
+    >
+      <div className="flex items-center justify-between gap-2.5">
+        <p className="rotulo tracking-[1.8px]">raio-x do aluno</p>
+        <button onClick={onFechar} className="btn-icone h-7 w-7 xl:hidden" aria-label="fechar raio-x">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      {/* ------------------------------------------------ meta até a prova */}
+      <div className="painel p-4">
+        <p className="rotulo mb-2">meta até a prova</p>
+        {meta?.dias_restantes != null ? (
+          <div className="flex items-baseline gap-2">
+            <span className="text-[34px] font-bold leading-none tabular-nums text-accent-text">
+              {meta.dias_restantes}
+            </span>
+            <span className="text-[13.5px] text-muted">dias{dataProva ? ` · ${dataProva}` : ""}</span>
+          </div>
+        ) : (
+          <Link href="/onboarding" className="text-[13.5px] text-muted underline-offset-2 hover:text-foreground">
+            sem edital ingerido →
+          </Link>
+        )}
+        <p className="mt-1.5 text-[12.5px] text-subtle">{edital?.titulo ?? MESA_ATUAL.cargo}</p>
+
+        {meta && (
+          <div className="mt-3.5">
+            <div className="mb-1.5 flex items-baseline justify-between gap-2">
+              <span className="rotulo">edital fechado</span>
+              <span className="mono-num text-[12.5px] text-foreground">{meta.cobertura_pct.toFixed(0)}%</span>
+            </div>
+            <div className="barra-grossa">
+              <div
+                className="barra-fill bg-accent"
+                style={{ width: `${Math.max(0, Math.min(100, meta.cobertura_pct))}%` }}
+              />
+            </div>
+            <p className="mt-1.5 text-[12px] text-subtle">
+              {meta.questoes_respondidas} de {meta.questoes_respondidas + meta.questoes_pendentes} questões
+              {meta.ritmo_necessario != null && ` · ritmo: ${meta.ritmo_necessario.toFixed(1)}/dia`}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* ------------------------------------------------ ofensiva + liga */}
+      <div className="grid grid-cols-2 gap-2.5">
+        <div className="painel">
+          <p className="rotulo mb-1.5">ofensiva</p>
+          <p className="text-xl font-semibold">🔥 {OFENSIVA.dias}</p>
+          <p className="mt-0.5 text-[11.5px] text-subtle">recorde {OFENSIVA.recorde}</p>
+        </div>
+        <div className="painel">
+          <p className="rotulo mb-1.5">liga</p>
+          <p className="text-xl font-semibold">🏆 {LIGA.nome}</p>
+          <p className="mt-0.5 text-[11.5px] text-subtle">{LIGA.posicao}</p>
+        </div>
+      </div>
+
+      {/* --------------------------------------------- cards de maestria */}
+      {ordenadas.length > 0 && (
+        <div>
+          <p className="rotulo mb-2.5">cards de maestria</p>
+          <div className="flex flex-col gap-2">
+            {ordenadas.slice(0, 5).map((d) => {
+              const pct = d.pct_acerto ?? 0;
+              return (
+                <Link
+                  key={d.disciplina}
+                  href="/stats"
+                  className="rounded-xl border border-line bg-surface px-3.5 py-3 transition-all
+                             hover:border-line-stronger hover:bg-surface-raised"
+                >
+                  <div className="mb-2 flex items-baseline justify-between gap-2.5">
+                    <span className="truncate text-[13.5px]">{d.disciplina}</span>
+                    <span className="mono-num shrink-0 text-[12px]" style={{ color: corDoPct(pct) }}>
+                      {pct.toFixed(0)}%
+                    </span>
+                  </div>
+                  <div className="h-[5px] overflow-hidden rounded-full bg-line-soft">
+                    <div
+                      className="barra-fill"
+                      style={{ width: `${Math.max(0, Math.min(100, pct))}%`, background: corDoPct(pct) }}
+                    />
+                  </div>
+                  <p className="mt-1.5 text-[11.5px] text-subtle">
+                    {d.dominadas} de {d.questoes} dominadas · {d.cobertura_pct.toFixed(0)}% coberto
+                  </p>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------- carga de memória */}
+      {carga && (
+        <div className="painel p-4">
+          <p className="rotulo mb-2.5">carga de memória</p>
+          <div className="flex flex-col gap-2">
+            <div className="dado-linha">
+              <span className="text-[#b6b6bd]">Revisões SM-2 hoje</span>
+              <span className={`mono-num ${carga.revisoes > 0 ? "text-accent-text" : "text-body"}`}>
+                {carga.revisoes}
+              </span>
+            </div>
+            <div className="dado-linha">
+              <span className="text-[#b6b6bd]">Erros pendentes</span>
+              <span className={`mono-num ${(erros?.length ?? 0) > 0 ? "text-accent-text" : "text-body"}`}>
+                {erros?.length ?? 0}
+              </span>
+            </div>
+            <div className="dado-linha">
+              <span className="text-[#b6b6bd]">Flashcards na fila</span>
+              <span className="mono-num text-body">{FLASHCARDS_NA_FILA}</span>
+            </div>
+          </div>
+          <Link href="/fila" className="btn-ghost mt-3.5 w-full text-[12.5px]">
+            Abrir a fila
+          </Link>
+        </div>
+      )}
+    </aside>
+  );
+}
