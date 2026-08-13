@@ -35,46 +35,24 @@ function formatarData(iso: string): string {
   return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
 }
 
-/**
- * Tooltip próprio, não o `title` nativo do navegador — o nativo tem
- * atraso (~1s) e visual fora do nosso controle. Só existe quando a
- * sidebar está recolhida (com texto visível ao lado do ícone, a etiqueta
- * já está na tela, tooltip seria redundante). `group-hover` com transição
- * rápida (100ms) é o que dá a sensação de "aparece na hora".
- */
-function Etiqueta({ texto }: { texto: string }) {
-  return (
-    <span
-      className="pointer-events-none absolute left-full top-1/2 z-20 ml-3 -translate-y-1/2 whitespace-nowrap
-                 rounded-md bg-foreground px-2.5 py-1.5 text-xs font-medium text-background opacity-0
-                 shadow-md transition-opacity duration-100 group-hover:opacity-100"
-    >
-      {texto}
-    </span>
-  );
-}
-
 function ItemNav({
   href,
   label,
   Icone,
   ativo,
-  recolhida,
+  mostrarLabel,
 }: {
   href: string;
   label: string;
   Icone: LucideIcon;
   ativo: boolean;
-  recolhida: boolean;
+  mostrarLabel: boolean;
 }) {
   return (
-    <div className="group relative">
-      <Link href={href} className={ativo ? "sidebar-link-ativo" : "sidebar-link"}>
-        <Icone className="h-5 w-5 shrink-0" strokeWidth={1.75} />
-        {!recolhida && <span>{label}</span>}
-      </Link>
-      {recolhida && <Etiqueta texto={label} />}
-    </div>
+    <Link href={href} className={ativo ? "sidebar-link-ativo" : "sidebar-link"}>
+      <Icone className="h-5 w-5 shrink-0" strokeWidth={1.75} />
+      {mostrarLabel && <span className="whitespace-nowrap">{label}</span>}
+    </Link>
   );
 }
 
@@ -83,10 +61,22 @@ type Props = {
   onAlternar: () => void;
 };
 
+const LARGURA_RECOLHIDA = "w-16";
+const LARGURA_ABERTA = "w-64";
+
+/**
+ * Recolhida = só ícone, MAS passar o mouse expande a sidebar inteira por
+ * cima do conteúdo (overlay, sem empurrar o layout) até o mouse saltar
+ * pra fora — o botão de alternar (`onAlternar`) continua fixando o estado
+ * permanente; o hover é só um "espiar" temporário. Dois elementos: o
+ * placeholder reserva o espaço real no layout (nunca muda de largura
+ * sozinho), a <aside> de dentro é quem visualmente cresce.
+ */
 export function Sidebar({ recolhida, onAlternar }: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const [recentes, setRecentes] = useState<HistoricoSimulado[] | null>(null);
+  const [espiando, setEspiando] = useState(false);
 
   useEffect(() => {
     // "Recentes" mostra simulados de verdade (têm data, são sessão
@@ -102,69 +92,68 @@ export function Sidebar({ recolhida, onAlternar }: Props) {
     router.push("/login");
   }
 
+  const aberta = !recolhida || espiando;
+
   return (
-    <aside
-      className={`flex h-full flex-col border-r border-line bg-surface transition-[width] duration-200 ${
-        recolhida ? "w-16" : "w-64"
-      }`}
-    >
-      <div className="flex items-center justify-between gap-2 px-4 py-4">
-        {!recolhida && (
-          <Link href="/" className="text-sm font-bold tracking-tight text-accent">
-            FerrarIA
-          </Link>
-        )}
-        <div className="group relative">
+    <div className={`relative h-full shrink-0 ${recolhida ? LARGURA_RECOLHIDA : LARGURA_ABERTA}`}>
+      <aside
+        onMouseEnter={() => recolhida && setEspiando(true)}
+        onMouseLeave={() => setEspiando(false)}
+        className={`absolute inset-y-0 left-0 z-30 flex h-full flex-col border-r border-line bg-surface
+                    transition-[width] duration-150 ${aberta ? `${LARGURA_ABERTA} shadow-xl` : LARGURA_RECOLHIDA}`}
+      >
+        <div className="flex items-center justify-between gap-2 px-4 py-4">
+          {aberta && (
+            <Link href="/" className="text-sm font-bold tracking-tight text-accent">
+              FerrarIA
+            </Link>
+          )}
           <button
             onClick={onAlternar}
             className="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
           >
             {recolhida ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
           </button>
-          {recolhida && <Etiqueta texto="expandir" />}
         </div>
-      </div>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto px-3">
-        {ITENS.map((item) => (
-          <ItemNav
-            key={item.href}
-            href={item.href}
-            label={item.label}
-            Icone={item.Icone}
-            ativo={pathname === item.href}
-            recolhida={recolhida}
-          />
-        ))}
+        <nav className="flex-1 space-y-1 overflow-y-auto px-3">
+          {ITENS.map((item) => (
+            <ItemNav
+              key={item.href}
+              href={item.href}
+              label={item.label}
+              Icone={item.Icone}
+              ativo={pathname === item.href}
+              mostrarLabel={aberta}
+            />
+          ))}
 
-        {!recolhida && recentes && recentes.length > 0 && (
-          <div className="mt-6">
-            <p className="px-3 text-xs font-medium uppercase tracking-wide text-muted">recentes</p>
-            <div className="mt-1 space-y-0.5">
-              {recentes.map((s) => (
-                <Link
-                  key={s.id}
-                  href="/simulado"
-                  className="flex items-center justify-between rounded-lg px-3 py-1.5 text-xs text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
-                >
-                  <span>simulado · {formatarData(s.criado_em)}</span>
-                  <span className="tabular-nums">{s.nota_pct ?? 0}%</span>
-                </Link>
-              ))}
+          {aberta && recentes && recentes.length > 0 && (
+            <div className="mt-6">
+              <p className="px-3 text-xs font-medium uppercase tracking-wide text-muted">recentes</p>
+              <div className="mt-1 space-y-0.5">
+                {recentes.map((s) => (
+                  <Link
+                    key={s.id}
+                    href="/simulado"
+                    className="flex items-center justify-between rounded-lg px-3 py-1.5 text-xs text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+                  >
+                    <span>simulado · {formatarData(s.criado_em)}</span>
+                    <span className="tabular-nums">{s.nota_pct ?? 0}%</span>
+                  </Link>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
-      </nav>
+          )}
+        </nav>
 
-      <div className="border-t border-line px-3 py-3">
-        <div className="group relative">
-          <button onClick={sair} className={recolhida ? "sidebar-link w-full justify-center" : "sidebar-link w-full"}>
+        <div className="border-t border-line px-3 py-3">
+          <button onClick={sair} className={aberta ? "sidebar-link w-full" : "sidebar-link w-full justify-center"}>
             <LogOut className="h-5 w-5 shrink-0" strokeWidth={1.75} />
-            {!recolhida && <span>sair</span>}
+            {aberta && <span>sair</span>}
           </button>
-          {recolhida && <Etiqueta texto="sair" />}
         </div>
-      </div>
-    </aside>
+      </aside>
+    </div>
   );
 }

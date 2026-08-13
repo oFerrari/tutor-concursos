@@ -1,31 +1,36 @@
 @import "tailwindcss";
 
-/* Identidade "FerrarIA": grafite quase-preto + grená profundo — de propósito
-   NÃO índigo (Claude), azul (Gemini) nem roxo/verde (QConcursos). O grená é
-   discreto, não vermelho de corrida — é sóbrio o suficiente pra ficar horas
-   estudando sem cansar a vista. */
+/* Identidade "FerrarIA": neutros da escala `zinc` + rubi profundo.
+   Os neutros SÃO os valores do zinc do Tailwind (background = #09090b é
+   zinc-950, surface ~zinc-900, muted = zinc-400, line = zinc-800) — a
+   paleta pedida, mas via token e não classe fixa no JSX, porque
+   `bg-zinc-950` cravado no componente mataria o modo claro (não existe
+   como reverter um literal). O accent é rubi (rose-700/600), NÃO índigo:
+   índigo é a cor do Estratégia e do Claude — a identidade aqui é própria.
+   Rubi profundo em vez do vermelho claro anterior (#d94452), que era
+   chapado e agressivo demais pra uma tela que se olha por horas. */
 :root {
-  --background: #faf9f8;
+  --background: #fafafa;
   --surface: #ffffff;
-  --surface-hover: #f4efee;
-  --foreground: #1c1917;
-  --muted: #78716c;
-  --line: #e7e2df;
-  --line-strong: #d6cec9;
+  --surface-hover: #f4f4f5;
+  --foreground: #18181b;
+  --muted: #71717a;
+  --line: #e4e4e7;
+  --line-strong: #d4d4d8;
 
-  --accent: #9a1c2b;
-  --accent-hover: #7d1622;
+  --accent: #be123c;
+  --accent-hover: #9f1239;
   --accent-foreground: #ffffff;
-  --accent-soft: #fbe8e9;
+  --accent-soft: #fff1f2;
 
-  --success: #2f6b4f;
-  --success-soft: #eaf3ee;
-  --warning: #92600a;
-  --warning-soft: #fbf1e0;
-  --danger: #b3261e;
-  --danger-soft: #fceceb;
-  --info: #2b5f73;
-  --info-soft: #e9f1f3;
+  --success: #15803d;
+  --success-soft: #f0fdf4;
+  --warning: #a16207;
+  --warning-soft: #fefce8;
+  --danger: #b91c1c;
+  --danger-soft: #fef2f2;
+  --info: #0e7490;
+  --info-soft: #ecfeff;
 }
 
 @theme inline {
@@ -59,27 +64,27 @@
    "regra sobre número, não julgamento a cada tela" já usado no scheduler. */
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #121011;
-    --surface: #1c1a1a;
-    --surface-hover: #262323;
-    --foreground: #f2ede9;
-    --muted: #a39c97;
-    --line: #322d2c;
-    --line-strong: #453f3d;
+    --background: #09090b;      /* zinc-950 */
+    --surface: #17171a;         /* ~zinc-900 */
+    --surface-hover: #232327;   /* ~zinc-800 */
+    --foreground: #f4f4f5;      /* zinc-100 */
+    --muted: #a1a1aa;           /* zinc-400 */
+    --line: #27272a;            /* zinc-800 */
+    --line-strong: #3f3f46;     /* zinc-700 */
 
-    --accent: #d94452;
-    --accent-hover: #e5636f;
-    --accent-foreground: #1c0a0c;
-    --accent-soft: #2e1417;
+    --accent: #e11d48;          /* rose-600 — rubi, mais legível no escuro */
+    --accent-hover: #f43f5e;    /* rose-500 */
+    --accent-foreground: #ffffff;
+    --accent-soft: #2c1019;
 
-    --success: #4f9d78;
-    --success-soft: #12241c;
-    --warning: #d3982f;
-    --warning-soft: #2b2210;
-    --danger: #e2685f;
-    --danger-soft: #2c1614;
-    --info: #5fa3bd;
-    --info-soft: #16262c;
+    --success: #4ade80;
+    --success-soft: #0c2417;
+    --warning: #fbbf24;
+    --warning-soft: #2a2109;
+    --danger: #fb7185;
+    --danger-soft: #2c1015;
+    --info: #22d3ee;
+    --info-soft: #0c2830;
   }
 }
 
@@ -144,6 +149,23 @@ body {
   /* -------------------------------------------------------- shell / home */
   .widget {
     @apply rounded-2xl border border-line bg-surface p-5 shadow-sm;
+  }
+
+  /* Card da "trilha" do dia: mesma base do widget, mas clicável e com
+     realce no hover (borda acende + fundo levanta), pra deixar óbvio que
+     cada métrica leva a algum lugar. */
+  .widget-acao {
+    @apply block rounded-2xl border border-line bg-surface p-5 shadow-sm transition-all
+           hover:border-accent/40 hover:bg-surface-hover hover:shadow-lg;
+  }
+
+  /* CTA principal — grande, com gradiente no rubi e sombra colorida
+     (não é o botão chapado de antes). */
+  .btn-cta {
+    @apply inline-flex items-center justify-center gap-2.5 rounded-xl bg-gradient-to-br from-accent to-accent-hover
+           px-7 py-3.5 text-base font-semibold text-accent-foreground shadow-lg shadow-accent/25
+           transition-all hover:shadow-xl hover:shadow-accent/35 hover:brightness-110
+           disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .sidebar-link {

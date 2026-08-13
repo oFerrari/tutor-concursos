@@ -86,6 +86,13 @@ export function registrar(email: string, senha: string): Promise<RespostaAuth> {
   });
 }
 
+/** Conta autenticada (id + email). Hoje só o e-mail existe — a saudação da
+ *  home deriva o primeiro nome dele. Se um dia a tabela `usuario` ganhar
+ *  coluna `nome`, o campo aparece aqui e a derivação some. */
+export function getMe(): Promise<Usuario> {
+  return chamar<Usuario>("/me");
+}
+
 // ----------------------------------------------------------------------- fila
 export type Questao = {
   id: number;

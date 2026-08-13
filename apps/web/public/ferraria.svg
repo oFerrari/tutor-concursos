@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Orelha Esquerda -->
+  <rect x="60" y="200" width="70" height="140" rx="35" fill="#4A90E2" />
+  
+  <!-- Orelha Direita -->
+  <rect x="382" y="200" width="70" height="140" rx="35" fill="#4A90E2" />
+
+  <!-- Estrutura Principal do Rosto (Branca) -->
+  <rect x="96" y="110" width="320" height="290" rx="110" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="4" />
+
+  <!-- Detalhe Azul no Topo da Cabeça -->
+  <path d="M 180 110 Q 256 80 332 110 L 310 140 Q 256 120 202 140 Z" fill="#4A90E2" />
+
+  <!-- Tela (Visor Escuro) -->
+  <rect x="126" y="155" width="260" height="200" rx="70" fill="#16202C" />
+
+  <!-- Olho Esquerdo (Feliz) -->
+  <path d="M 170 230 Q 200 195 230 230" fill="none" stroke="#00E5FF" stroke-width="20" stroke-linecap="round"/>
+
+  <!-- Olho Direito (Feliz) -->
+  <path d="M 282 230 Q 312 195 342 230" fill="none" stroke="#00E5FF" stroke-width="20" stroke-linecap="round"/>
+
+  <!-- Sorriso -->
+  <path d="M 200 285 Q 256 335 312 285" fill="none" stroke="#00E5FF" stroke-width="22" stroke-linecap="round"/>
+</svg>
