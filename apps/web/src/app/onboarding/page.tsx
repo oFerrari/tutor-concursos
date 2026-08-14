@@ -1,10 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Upload } from "lucide-react";
 import { MarcaGlifo } from "@/components/Marca";
-import { ErroApi, criarRascunho } from "@/lib/api";
+import { ErroApi, MesaNaLista, criarRascunho, getMesaAtiva, getMesas } from "@/lib/api";
 import { ENTREVISTA } from "@/mock/prototipo";
 
 /**
@@ -38,6 +38,25 @@ export default function PaginaOnboarding() {
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
+  // Esta tela é o destino de DOIS caminhos: a conta nova (que nunca viu o
+  // produto) e a criação da segunda, terceira, quarta mesa — porque mesa
+  // nova nunca tem edital e é aqui que ele entra. Chamar de "primeiro
+  // contato" e se apresentar ("Sou a FerrarIA") na quarta vez é a tela
+  // fingindo que não conhece quem já usa o produto há semanas.
+  //
+  // O sinal de primeira vez: nenhuma mesa com edital ainda. `getMesas()`
+  // custa uma consulta por mesa, e uma conta tem unidades delas — barato
+  // numa tela que não é quente, e não vale inventar um endpoint pra isso.
+  const [mesas, setMesas] = useState<MesaNaLista[] | null>(null);
+  useEffect(() => {
+    getMesas().then(setMesas).catch(() => setMesas([]));
+  }, []);
+  const primeiraVez = mesas !== null && !mesas.some((m) => m.edital_id !== null);
+  // A mesa ATIVA, não "a primeira sem edital": com duas mesas incompletas,
+  // a segunda condição nomearia a errada — e a tela estaria dizendo pra
+  // qual mesa o PDF vai enquanto a API grava noutra (o header manda).
+  const alvo = mesas?.find((m) => m.id === getMesaAtiva()) ?? null;
+
   async function enviarEdital(arquivo: File) {
     setErro(null);
     setEnviando(true);
@@ -62,16 +81,36 @@ export default function PaginaOnboarding() {
         <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] bg-accent text-accent-foreground">
           <MarcaGlifo className="h-[18px] w-[18px]" />
         </span>
-        <div>
-          <p className="rotulo mb-2">FerrarIA · primeiro contato</p>
-          <h1 className="text-[26px] leading-tight tracking-[-0.3px]">
-            Sou a FerrarIA. Vou te <span className="text-accent-text">ferrar</span> de estudar até você
-            passar.
-          </h1>
-          <p className="mt-2.5 text-[15px] leading-[1.65] text-muted">
-            Me dê o PDF do seu edital e três respostas. Com isso eu monto sua árvore de tópicos, calculo o
-            ritmo necessário e começo a te cobrar todos os dias.
+        {/* Nada de texto antes de saber QUAL dos dois é o caso: um quadro
+            piscando "primeiro contato" pra quem tem quatro mesas (ou o
+            contrário) é pior que meio segundo de espaço vazio. */}
+        <div className={mesas === null ? "opacity-0" : ""}>
+          <p className="rotulo mb-2">
+            {primeiraVez ? "FerrarIA · primeiro contato" : "FerrarIA · edital da mesa"}
           </p>
+          {primeiraVez ? (
+            <>
+              <h1 className="text-[26px] leading-tight tracking-[-0.3px]">
+                Sou a FerrarIA. Vou te <span className="text-accent-text">ferrar</span> de estudar até
+                você passar.
+              </h1>
+              <p className="mt-2.5 text-[15px] leading-[1.65] text-muted">
+                Me dê o PDF do seu edital e três respostas. Com isso eu monto sua árvore de tópicos,
+                calculo o ritmo necessário e começo a te cobrar todos os dias.
+              </p>
+            </>
+          ) : (
+            <>
+              <h1 className="text-[26px] leading-tight tracking-[-0.3px]">
+                Falta o edital{" "}
+                {alvo && <>de <span className="text-accent-text">{alvo.nome}</span></>}.
+              </h1>
+              <p className="mt-2.5 text-[15px] leading-[1.65] text-muted">
+                Sem ele esta mesa não recorta nada — mostra o acervo inteiro e a meta fica sem prazo.
+                Suba o PDF e eu extraio as matérias e os tópicos; você confere antes de valer.
+              </p>
+            </>
+          )}
         </div>
       </div>
 
@@ -118,7 +157,12 @@ export default function PaginaOnboarding() {
 
       {erro && <p className="callout-danger mb-4 !p-3 text-[13px]">{erro}</p>}
 
-      {/* ------------------------------------------------- entrevista */}
+      {/* ------------------------------------------------- entrevista
+          Só no primeiro contato. Perguntar "quantas horas por dia?" de novo
+          a cada mesa nova é ruído: a resposta é da PESSOA, não do concurso,
+          e ela não muda por ter aberto um segundo edital. (Continua sem
+          gravar em lugar nenhum — ver o aviso logo abaixo do bloco.) */}
+      {primeiraVez && (
       <div className="mb-4 overflow-hidden rounded-2xl border border-line bg-surface">
         {ENTREVISTA.map((p) => (
           <div
@@ -140,19 +184,25 @@ export default function PaginaOnboarding() {
           </div>
         ))}
       </div>
+      )}
 
-      <p className="mb-4 text-[12px] text-subtle">
-        as três respostas ainda não são gravadas — não há campo de preferência no schema. O edital, sim.
-      </p>
+      {primeiraVez && (
+        <p className="mb-4 text-[12px] text-subtle">
+          as três respostas ainda não são gravadas — não há campo de preferência no schema. O edital, sim.
+        </p>
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-3.5">
-        <p className="font-mono text-[11.5px] text-subtle">{status}</p>
+        <p className="font-mono text-[11.5px] text-subtle">{primeiraVez ? status : ""}</p>
         <div className="flex gap-2">
-          <button onClick={() => router.push("/")} className="btn-ghost">
-            Configuro depois
+          {/* Sem edital, "montar meu plano" não monta plano nenhum — a mesa
+              segue sem recorte. Duas saídas com o mesmo destino e nomes
+              diferentes prometiam coisas diferentes; ficou uma, honesta. */}
+          <button onClick={() => router.push("/mesas")} className="btn-ghost">
+            Voltar pras mesas
           </button>
           <button onClick={() => router.push("/")} className="btn-primary">
-            Montar meu plano
+            Configuro o edital depois
           </button>
         </div>
       </div>

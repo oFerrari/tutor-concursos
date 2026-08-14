@@ -190,10 +190,18 @@ export default function PaginaMesas() {
       setOrgao("");
       setBanca("");
       setCriando(false);
-      // Entra direto na mesa recém-criada: quem acabou de criar quer
-      // estudar nela, e o próximo passo (subir o edital) é na tela dela.
+      // Entra direto na mesa recém-criada E vai pro upload do edital.
+      //
+      // Mesa nova NUNCA tem edital — é o que a criação produz. Mandar pra
+      // /meta fazia a tela abrir dizendo "esta mesa ainda não tem edital"
+      // com um botão que leva exatamente pra /onboarding: um clique a mais
+      // pra nenhuma informação nova. /meta é tela de LEITURA (quanto falta,
+      // quanto está coberto) e não tem o que ler numa mesa recém-criada.
+      //
+      // Entrar numa mesa que JÁ existe continua indo pro panorama (ver
+      // `entrar`) — lá há o que mostrar.
       setMesaAtiva(nova.id);
-      router.push("/meta");
+      router.push("/onboarding");
     } catch (e) {
       setErro(e instanceof ErroApi ? e.message : "Não deu pra criar a mesa");
       setSalvando(false);
