@@ -149,6 +149,16 @@ export function getMe(): Promise<Usuario> {
   return chamar<Usuario>("/me");
 }
 
+/** As três respostas do onboarding (horas/nível/turno). Faz merge no
+ *  servidor: mandar só `turno` não apaga o que já estava lá. */
+export function salvarPerfil(perfil: {
+  horas?: string;
+  nivel?: string;
+  turno?: string;
+}): Promise<{ perfil: Record<string, string> }> {
+  return chamar("/me/perfil", { method: "PUT", body: JSON.stringify(perfil) });
+}
+
 // ---------------------------------------------------------------------- mesas
 /**
  * Uma mesa é um concurso-alvo: guarda o edital e RECORTA o que aparece

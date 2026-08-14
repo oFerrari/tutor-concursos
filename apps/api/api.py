@@ -195,6 +195,27 @@ def rota_apagar_mesa(mid: int, uid: int = Depends(usuario_atual)):
     return {"ok": True}
 
 
+class PerfilBody(BaseModel):
+    horas: str | None = None
+    nivel: str | None = None
+    turno: str | None = None
+
+
+@app.put("/me/perfil")
+def rota_perfil(body: PerfilBody, uid: int = Depends(usuario_atual)):
+    """
+    As três respostas do onboarding, que desde o protótipo eram pedidas e
+    não tinham onde ser gravadas (migração 015).
+
+    PUT e não PATCH em `/me`: trocar preferência de estudo não é a mesma
+    operação que trocar e-mail ou senha, e aquela rota exige a senha atual
+    de propósito (token roubado não deve sequestrar a conta). Exigir senha
+    pra dizer que você estuda de manhã seria atrito sem ameaça
+    correspondente.
+    """
+    return {"perfil": auth.atualizar_perfil(uid, body.model_dump(exclude_none=True))}
+
+
 @app.get("/me")
 def rota_me(uid: int = Depends(usuario_atual)):
     u = auth.obter(uid)
@@ -465,7 +486,8 @@ def rota_perguntar(body: PerguntaBody, uid: int = Depends(usuario_atual),
     historico = conversa.historico_para_prompt(conv["id"])
     conversa.gravar(conv["id"], "aluno", body.pergunta)
     try:
-        r = socratic.explicar(body.pergunta, uid, m["disciplinas"], m, historico)
+        r = socratic.explicar(body.pergunta, uid, m["disciplinas"], m, historico,
+                              auth.perfil(uid))
     except ErroLLM as e:
         raise HTTPException(503, f"LLM indisponível: {e}")
 

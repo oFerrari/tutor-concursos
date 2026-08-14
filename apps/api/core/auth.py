@@ -15,10 +15,12 @@ força-bruta de senha vazada viável.
 import bcrypt
 import jwt
 
+import json
+
 from . import db
 from .config import JWT_SECRET
 
-VERSAO = "auth-v1"
+VERSAO = "auth-v2"
 
 ALGORITMO = "HS256"
 EXPIRA_HORAS = 24 * 7   # uma semana — uso pessoal/pequeno grupo, não banco
@@ -145,3 +147,40 @@ def usuario_da_cli(email: str) -> int:
         {"e": email},
     )
     return r["id"]
+
+
+# --------------------------------------------------------------- perfil
+# Campos aceitos e seus valores. Lista fechada de propósito: o perfil vai
+# direto pro prompt do tutor, e campo livre vindo do cliente é injeção de
+# instrução disfarçada de preferência ("nível: ignore as regras acima").
+# Crescer aqui é uma linha; deixar aberto é um buraco.
+CAMPOS_PERFIL = {
+    "horas": {"1h", "2h", "4h", "6h+"},
+    "nivel": {"Começando", "Intermediário", "Avançado"},
+    "turno": {"Manhã", "Tarde", "Noite", "Madrugada"},
+}
+
+
+def atualizar_perfil(usuario_id: int, perfil: dict) -> dict:
+    """
+    Grava só o que é conhecido E válido. Campo desconhecido ou valor fora da
+    lista é IGNORADO em silêncio — não é erro do usuário, é cliente
+    desatualizado ou payload malicioso, e nos dois casos a resposta certa é
+    seguir com o que dá pra aproveitar.
+
+    Faz merge com o que já existe: mandar `{"turno": "Noite"}` não deve
+    apagar as horas respondidas na semana passada.
+    """
+    limpo = {k: v for k, v in (perfil or {}).items()
+             if k in CAMPOS_PERFIL and v in CAMPOS_PERFIL[k]}
+    r = db.exec1(
+        "UPDATE usuario SET perfil = perfil || %(p)s::jsonb WHERE id = %(i)s "
+        "RETURNING perfil",
+        {"p": json.dumps(limpo), "i": usuario_id},
+    )
+    return r["perfil"] if r else {}
+
+
+def perfil(usuario_id: int) -> dict:
+    r = db.exec1("SELECT perfil FROM usuario WHERE id = %(i)s", {"i": usuario_id})
+    return (r["perfil"] if r else {}) or {}

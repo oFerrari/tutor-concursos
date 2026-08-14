@@ -4,7 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Upload } from "lucide-react";
 import { MarcaGlifo } from "@/components/Marca";
-import { ErroApi, MesaNaLista, criarRascunho, getMesaAtiva, getMesas } from "@/lib/api";
+import {
+  ErroApi,
+  MesaNaLista,
+  criarRascunho,
+  getMesaAtiva,
+  getMesas,
+  salvarPerfil,
+} from "@/lib/api";
 import { ENTREVISTA } from "@/mock/prototipo";
 
 /**
@@ -174,7 +181,16 @@ export default function PaginaOnboarding() {
               {p.opcoes.map((o) => (
                 <button
                   key={o}
-                  onClick={() => setRespostas((r) => ({ ...r, [p.chave]: o }))}
+                  onClick={() => {
+                    const novas = { ...respostas, [p.chave]: o };
+                    setRespostas(novas);
+                    // Grava a cada clique, não num "salvar" no fim: são três
+                    // escolhas de um toque e a pessoa costuma sair da tela
+                    // pelo upload do PDF, não por um botão de confirmar —
+                    // um "salvar" que ela nunca aperta é preferência
+                    // perdida. Falhar aqui não pode travar o onboarding.
+                    salvarPerfil(novas).catch(() => {});
+                  }}
                   className={respostas[p.chave] === o ? "chip-ativo" : "chip"}
                 >
                   {o}
@@ -188,7 +204,8 @@ export default function PaginaOnboarding() {
 
       {primeiraVez && (
         <p className="mb-4 text-[12px] text-subtle">
-          as três respostas ainda não são gravadas — não há campo de preferência no schema. O edital, sim.
+          Salvo a cada escolha. O tutor usa isso pra calibrar o tamanho do que sugere — não
+          adianta propor três horas de estudo a quem tem uma.
         </p>
       )}
 

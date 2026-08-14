@@ -13,7 +13,7 @@ Sem isso, modelo pequeno erra a sintaxe e a sessão de estudo morre no meio.
 """
 from . import llm, retrieval
 
-VERSAO = "socratic-v29"
+VERSAO = "socratic-v30"
 
 # ------------------------------------------------------------------ schemas
 # Subconjunto OpenAPI aceito pelo Gemini. propertyOrdering importa: o modelo
@@ -249,6 +249,46 @@ def avaliar_questao(questao: dict, resposta: str, nivel: int = 0,
     return avaliar(questao["enunciado"], questao["gabarito"], resposta, nivel, historico)
 
 
+def _resumo_perfil(perfil: dict | None) -> str | None:
+    """
+    Como esta pessoa estuda — o que os números não dizem.
+
+    Vira FRASE, não JSON despejado: o modelo lê melhor "estuda cerca de 2h
+    por dia, se considera Intermediário" do que `{"horas":"2h"}`, e a frase
+    deixa explícito o que é declaração do aluno (e portanto pode estar
+    desatualizada) em vez de parecer medida do sistema.
+
+    Só os campos conhecidos entram (a lista fechada mora em
+    `auth.CAMPOS_PERFIL`): perfil vai direto pro prompt, e texto livre
+    vindo do cliente aqui seria injeção de instrução disfarçada de
+    preferência.
+    """
+    if not perfil:
+        return None
+    # Revalida na LEITURA, contra a mesma lista fechada usada na escrita.
+    # `auth.atualizar_perfil` já filtra, então isto é redundante hoje — e é
+    # de propósito: o destino deste texto é o prompt, e o dia em que alguém
+    # gravar perfil por outro caminho (import, migração, script) não pode
+    # ser o dia em que "nivel: ignore as regras acima" chega ao modelo.
+    # Import local: `socratic` não deve carregar `auth` pra quem só usa
+    # `avaliar()` — mesmo motivo do import de `scheduler` abaixo.
+    from .auth import CAMPOS_PERFIL
+
+    valido = {k: v for k, v in perfil.items()
+              if k in CAMPOS_PERFIL and v in CAMPOS_PERFIL[k]}
+    partes = []
+    if valido.get("horas"):
+        partes.append(f"estuda cerca de {valido['horas']} por dia")
+    if valido.get("nivel"):
+        partes.append(f"se considera {valido['nivel']}")
+    if valido.get("turno"):
+        partes.append(f"rende melhor de {valido['turno']}")
+    if not partes:
+        return None
+    return ("Declarado por ele no onboarding (pode estar desatualizado): "
+            + ", ".join(partes) + ".")
+
+
 def _resumo_desempenho(usuario_id: int, disciplinas: list[str] | None = None) -> str | None:
     """
     Texto curto e pronto pra virar contexto de prompt — o modelo só LÊ este
@@ -304,7 +344,8 @@ def _resumo_mesa(mesa_: dict | None) -> str | None:
 def explicar(pergunta: str, usuario_id: int | None = None,
              disciplinas: list[str] | None = None,
              mesa_: dict | None = None,
-             historico: list[dict] | None = None) -> dict:
+             historico: list[dict] | None = None,
+             perfil: dict | None = None) -> dict:
     """
     Modo livre: aluno pergunta, tutor responde ancorado no acervo E no
     próprio desempenho real (quando usuario_id vem preenchido).
@@ -326,6 +367,7 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     contexto_material = retrieval.formatar_contexto(chunks) if chunks else None
     contexto_desempenho = _resumo_desempenho(usuario_id, disciplinas) if usuario_id else None
     contexto_mesa = _resumo_mesa(mesa_)
+    contexto_perfil = _resumo_perfil(perfil)
 
     if not contexto_material and not contexto_desempenho:
         return {"resposta": "Não encontrei isso no material, e ainda não tenho nenhum "
@@ -339,8 +381,9 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     # prompt vazando como citação é pior que citação errada — expõe o
     # andaime e destrói a confiança nas citações verdadeiras da mesma frase.
     partes = []
-    if contexto_mesa:
-        partes.append(f"### Contexto do aluno\n{contexto_mesa}")
+    if contexto_mesa or contexto_perfil:
+        bloco = "\n".join(x for x in (contexto_mesa, contexto_perfil) if x)
+        partes.append(f"### Contexto do aluno\n{bloco}")
     if contexto_material:
         partes.append(f"### Trechos de lei recuperados\n{contexto_material}")
     if contexto_desempenho:
@@ -373,6 +416,9 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         "na prova do aluno. "
         "Os números do aluno servem pra responder 'como estou indo' e pra escolher o que sugerir "
         "no fim; NÃO os repita em toda resposta, e NUNCA invente um número que não esteja ali. "
+        "O tempo disponível e o nível declarados calibram o TAMANHO da sugestão final: não "
+        "proponha três horas de estudo a quem declarou 1h por dia, nem trate como iniciante quem "
+        "se declarou avançado. Não comente o perfil em si — use-o. "
         "Se o aluno pedir questão, exercício ou simulado: NÃO escreva a questão na resposta. "
         "Diga que dá pra gerar e mande ele usar o botão \"Quero questões sobre isto\", logo "
         "abaixo. O app monta a questão a partir dos trechos de lei do acervo, confere de qual "
