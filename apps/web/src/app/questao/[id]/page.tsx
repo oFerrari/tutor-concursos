@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { DialogoQuestao } from "@/components/DialogoQuestao";
+import { Voltar } from "@/components/Voltar";
 import { ErroApi, Questao, getQuestao, getToken } from "@/lib/api";
 
 export default function PaginaResponder() {
@@ -46,6 +47,10 @@ export default function PaginaResponder() {
 
   return (
     <div className="mx-auto max-w-2xl p-6 md:p-10">
+      {/* href fixo, não router.back(): a origem daqui é sempre a fila, e
+          o back() do navegador poderia devolver pra uma questão já
+          respondida se a pessoa chegou navegando entre elas. */}
+      <Voltar href="/fila" rotulo="voltar pra fila" />
       <DialogoQuestao
         questao={questao}
         rotuloContinuar="voltar pra fila"

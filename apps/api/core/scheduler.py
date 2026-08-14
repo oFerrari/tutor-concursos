@@ -288,8 +288,12 @@ def meta(usuario_id: int, data_prova: date | None = None, mesa_id: int | None = 
             "questoes_respondidas": respondidas,
             "ritmo_necessario": None,
             "pendentes_hoje": r["pendentes_hoje"],
-            "aviso": "sem data de prova conhecida — rode `python edital.py seu.pdf` "
-                     "ou passe a data manualmente",
+            # Mensagem NEUTRA DE INTERFACE. Dizia "rode `python edital.py
+            # seu.pdf`" — instrução de terminal aparecendo pra quem está no
+            # navegador, onde não existe terminal nenhum. `core/` é
+            # compartilhado por CLI e API: o que sai daqui não pode
+            # presumir por qual das duas a pessoa chegou.
+            "aviso": "sem data de prova conhecida — ingira o edital ou informe a data",
         }
 
     dias = max((data_prova - date.today()).days, 0)

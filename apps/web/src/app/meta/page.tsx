@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Upload } from "lucide-react";
 import {
   EditalAtual,
   ErroApi,
@@ -9,7 +11,6 @@ import {
   getEdital,
   getMeta,
   getToken,
-  criarRascunho,
   limparToken,
 } from "@/lib/api";
 
@@ -18,8 +19,6 @@ export default function PaginaMeta() {
   const [meta, setMeta] = useState<Meta | null>(null);
   const [edital, setEdital] = useState<EditalAtual | null>(null);
   const [erro, setErro] = useState<string | null>(null);
-
-  const [enviando, setEnviando] = useState(false);
 
   async function carregar() {
     try {
@@ -50,20 +49,6 @@ export default function PaginaMeta() {
     carregar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
-
-  async function enviarEdital(arquivo: File) {
-    setEnviando(true);
-    setErro(null);
-    try {
-      // Vai pra CURADORIA, não direto pro banco: o edital pode ter vários
-      // cargos, e quem escolhe qual entra na mesa é a pessoa.
-      const d = await criarRascunho(arquivo, arquivo.name.replace(/\.pdf$/i, ""));
-      router.push(`/edital/${d.id}`);
-    } catch (e) {
-      setErro(e instanceof ErroApi ? e.message : "não deu pra ler o edital");
-      setEnviando(false);
-    }
-  }
 
   const prob = meta?.probabilidade_fechamento;
   const probOk = prob && !("erro" in prob);
@@ -129,28 +114,24 @@ export default function PaginaMeta() {
         </div>
       )}
 
+      {/* Ingerir edital mora no /onboarding, não aqui. Esta tela é de
+          LEITURA — quanto falta, quanto está coberto — e enfiar um upload
+          no rodapé dela fazia a tela sem edital abrir com um formulário em
+          vez de dizer o que está acontecendo. */}
       <div className="mt-8 border-t border-line pt-6">
-        <h2 className="mb-3 text-sm font-medium text-muted">
-          {edital ? "ingerir outro edital" : "ingerir edital"}
+        <h2 className="mb-2 text-sm font-medium text-muted">
+          {edital ? "trocar o edital desta mesa" : "esta mesa ainda não tem edital"}
         </h2>
-        <input
-          type="file"
-          accept="application/pdf"
-          disabled={enviando}
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            // zera pra permitir reescolher o MESMO arquivo (o `change` só
-            // dispara quando o value muda)
-            e.target.value = "";
-            if (f) enviarEdital(f);
-          }}
-          className="block w-full text-sm text-muted"
-        />
-        <p className="mt-2 text-[12px] text-subtle">
-          {enviando
-            ? "lendo o edital…"
-            : "o PDF vai pra uma tela de conferência: você escolhe o cargo e revisa as matérias antes de valer."}
+        <p className="mb-3.5 text-[13px] text-muted">
+          {edital
+            ? "Subir um edital novo substitui este nos cálculos de meta e no recorte da mesa."
+            : "Sem edital eu não sei a data da prova, quantos tópicos faltam nem quais matérias " +
+              "recortar — a mesa mostra o acervo inteiro e a meta fica sem prazo."}
         </p>
+        <Link href="/onboarding" className="btn-primary inline-flex">
+          <Upload className="h-4 w-4" />
+          {edital ? "subir outro edital" : "subir o PDF do edital"}
+        </Link>
       </div>
     </div>
   );

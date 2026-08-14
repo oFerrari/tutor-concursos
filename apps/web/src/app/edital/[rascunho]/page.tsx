@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Check, Plus, X } from "lucide-react";
+import { Voltar } from "@/components/Voltar";
 import {
   DisciplinaEdital,
   ErroApi,
@@ -117,6 +118,7 @@ export default function PaginaCuradoria() {
 
   return (
     <div className="mx-auto max-w-2xl p-6 md:p-10">
+      <Voltar />
       <p className="rotulo mb-2">conferir antes de valer</p>
       <h1 className="text-2xl font-semibold tracking-tight">{draft.titulo}</h1>
       <p className="mt-1.5 text-sm text-muted">
@@ -136,8 +138,9 @@ export default function PaginaCuradoria() {
             Este edital tem {draft.estrutura.cargos.length} cargos. Qual é o seu?
           </h2>
           <p className="mb-3 text-[13px] text-muted">
-            Só o conteúdo do cargo escolhido entra na sua mesa. O que é comum a todos vem junto
-            de qualquer jeito.
+            Só o conteúdo do cargo escolhido entra na sua mesa. O que é comum a todos (Português,
+            RLM, Informática…) vem junto de qualquer jeito. O número é quantas matérias
+            <em> só daquele cargo</em> entram — por isso cargos diferentes repetem o mesmo número.
           </p>
           <div className="flex flex-wrap gap-2">
             {draft.estrutura.cargos.map((c) => (
@@ -148,7 +151,9 @@ export default function PaginaCuradoria() {
               >
                 {c.nome === cargo && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
                 {c.nome}
-                <span className="opacity-60">· {c.disciplinas.length}</span>
+                <span className="opacity-60">
+                  · {c.disciplinas.length} {c.disciplinas.length === 1 ? "matéria" : "matérias"}
+                </span>
               </button>
             ))}
           </div>
