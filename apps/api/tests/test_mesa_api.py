@@ -131,6 +131,40 @@ def test_cartao_mede_progresso_em_topicos_do_edital(client, usuario, duas_discip
     assert m["cobertura_topicos_pct"] == 100.0
 
 
+def test_topicos_cobertos_pesam_pelo_tamanho_da_disciplina(client, usuario, duas_disciplinas):
+    """
+    O meio da escala, que as pontas 0/100 não pegam: duas disciplinas com
+    PESOS diferentes no edital. Dominar tudo da disciplina que vale 30
+    tópicos e nada da que vale 10 tem que dar 30/40, não 50% (média simples
+    entre disciplinas) nem a fração de QUESTÕES dominadas — que aqui seria
+    outra, porque o número de questões de cada disciplina no acervo não tem
+    relação com quantos tópicos o edital dá a ela.
+    """
+    pesada, leve = duas_disciplinas
+    mesa = _criar_mesa(client, usuario, "Pesos diferentes", disciplina=pesada)
+    eid = db.exec1("SELECT id FROM edital WHERE mesa_id = %(m)s", {"m": mesa["id"]})["id"]
+    db.query("DELETE FROM topico WHERE edital_id = %(e)s", {"e": eid})
+    for disciplina, n in ((pesada, 30), (leve, 10)):
+        db.query(
+            "INSERT INTO topico (edital_id, disciplina, ordem, texto) "
+            "SELECT %(e)s, %(d)s, g, %(d)s || ' ' || g FROM generate_series(1, %(n)s) g",
+            {"e": eid, "d": disciplina, "n": n},
+        )
+    db.query(
+        "INSERT INTO progresso (usuario_id, questao_id, caixa) "
+        "SELECT %(u)s, id, 3 FROM questao WHERE disciplina = %(d)s",
+        {"u": usuario["id"], "d": pesada},
+    )
+
+    m = client.get("/mesas", headers=usuario["headers"]).json()[0]
+    assert m["topicos"] == 40
+    assert m["topicos_cobertos"] == 30
+    assert m["cobertura_topicos_pct"] == 75.0
+    # E o par por questão continua sendo outro número — os dois convivem no
+    # payload de propósito (o cartão mostra tópicos, o painel mostra questões).
+    assert m["cobertura_pct"] != 75.0
+
+
 def test_crud_da_mesa(client, usuario):
     m = _criar_mesa(client, usuario, "PF Agente")
     assert m["nome"] == "PF Agente"
