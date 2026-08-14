@@ -21,8 +21,8 @@ POR QUE (norma, artigo) E NÃO SÓ artigo: com CP + CF + ADCT no mesmo banco,
 número da resposta certa por coincidência quando a norma errada também usa
 aquele número — bug de avaliação mascarando bug de busca.
 
-Três categorias, precisão esperada em ordem decrescente (é a mesma ordem de
-prioridade que `retrieval.buscar()` usa):
+Quatro categorias, precisão esperada em ordem decrescente (as três primeiras
+seguem a ordem de prioridade que `retrieval.buscar()` usa):
   dispositivo — citação exata ("art. 312"). Deve ser ~100%: é busca por
                 metadado, não há ambiguidade possível.
   rubrica     — nome do crime ("concussão"). Deve ser ~100% pelo mesmo motivo.
@@ -30,10 +30,42 @@ prioridade que `retrieval.buscar()` usa):
                 Aqui SIM cabe imprecisão de rank — o objetivo realista é
                 top-N alto (o artigo aparece no contexto que o LLM vê), não
                 top-1 perfeito.
+  administrativo — a categoria que nasceu de uma FALHA REAL observada em uso,
+                não de hipótese: o tutor perguntado sobre "administração
+                direta e indireta" respondeu sem nunca ver o art. 37 da CF,
+                que é o caput do assunto. Ver o comentário no bloco dos casos.
+
+MEDIDA DE 14/08/2026, acervo de 2433 chunks (CP, CF, ADCT, livro de emendas,
+CPP, Lei 8.112) — a linha de base contra a qual comparar qualquer mexida em
+retrieval.py/embeddings.py:
+
+    top1  21/32 (66%)      top6  28/32 (88%)
+    dispositivo    top1 5/6    top6 6/6
+    rubrica        top1 4/4    top6 4/4
+    hibrida        top1 7/12   top6 10/12
+    administrativo top1 5/10   top6 8/10
+
+O número global CAIU de 91% (20/22) para 88% (28/32) ao acrescentar estes 10
+casos, e isso é a métrica ficando honesta, não a busca piorando: os dois
+zeros da categoria nova já falhavam antes — só não havia caso que os
+apontasse. Métrica que só mede o que já funciona não arbitra nada (mesma
+lição de "Medir ausência não é medir defeito" no CLAUDE.md).
+
+Os quatro top6 perdidos, com o diagnóstico de cada um:
+  · CP 312 (peculato) e CP 140 (injúria) — concorrência de conteúdo com a
+    Lei 8.112 e o CPP, já documentada no CLAUDE.md.
+  · CF 37 em "administração direta e indireta" e "princípios da administração
+    pública" — DOIS efeitos somados. (1) O art. 37 tem 13.059 caracteres
+    contra 1.245 de média: fica 3º no ranking lexical e 83º no semântico,
+    porque o embedding médio de um texto que cobre concurso, licitação, teto
+    e improbidade dilui o assunto do caput. Ampliar o pool de candidatos de
+    30 para 200 NÃO resolve (testado). (2) O livro de emendas (`tipo =
+    'historico'`, chunk por janela) ocupou 4 das 6 vagas em "princípios da
+    administração pública" — uma delas uma página de legenda de símbolos.
 """
 from core import retrieval
 
-VERSAO = "avaliar_retrieval-v2"
+VERSAO = "avaliar_retrieval-v3"
 
 CASOS = [
     # categoria, pergunta, norma esperada, artigo esperado
@@ -63,6 +95,30 @@ CASOS = [
     ("hibrida", "direito de reunião pacífica, sem armas, em locais abertos ao público", "CF", "5º"),
     ("hibrida", "emenda constitucional tendente a abolir cláusula pétrea não pode ser deliberada", "CF", "60"),
     ("hibrida", "plebiscito sobre a forma de governo, república ou monarquia", "ADCT", "2º"),
+
+    # ------------------------------------------------ Direito Administrativo
+    # Categoria própria porque o defeito que ela mede é diferente do resto:
+    # a matéria de prova "Direito Administrativo" mora em DOIS lugares do
+    # acervo — a Lei 8.112 (rotulada assim) e o Capítulo VII da CF (rotulado
+    # "Direito Constitucional", porque a norma é a Constituição). O aluno
+    # pergunta pela matéria; o acervo está organizado por norma.
+    #
+    # E os quatro primeiros casos batem TODOS no art. 37 da CF, que tem
+    # 13.059 caracteres — dez vezes a média do acervo (1.245). É o teste de
+    # esforço da decisão "chunk = artigo": ela está certa para o artigo
+    # típico e é justamente nos artigos-monstro (37 e 5º da CF) que o
+    # embedding médio dilui o assunto. Sem estes casos no gabarito, "a busca
+    # está em 91%" continuaria verdadeiro e continuaria escondendo isto.
+    ("administrativo", "administração direta e indireta", "CF", "37"),
+    ("administrativo", "princípios da administração pública", "CF", "37"),
+    ("administrativo", "investidura em cargo público depende de aprovação em concurso", "CF", "37"),
+    ("administrativo", "é vedada a acumulação remunerada de cargos públicos", "CF", "37"),
+    ("administrativo", "servidor nomeado adquire estabilidade após três anos de exercício", "CF", "41"),
+    ("administrativo", "formas de provimento de cargo público", "L8112", "8o"),
+    ("administrativo", "posse do servidor e prazo para entrar em exercício", "L8112", "13"),
+    ("administrativo", "servidor nomeado fica sujeito a estágio probatório", "L8112", "20"),
+    ("administrativo", "vencimento é a retribuição pecuniária pelo exercício do cargo", "L8112", "40"),
+    ("administrativo", "licença ao servidor para tratamento de saúde com perícia médica", "L8112", "202"),
 ]
 
 
