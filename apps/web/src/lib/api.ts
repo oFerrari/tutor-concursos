@@ -175,6 +175,11 @@ export type MesaNaLista = Mesa & {
   questoes: number;
   dominadas: number;
   cobertura_pct: number;
+  /** Tópicos do edital ESTIMADOS como cobertos — mesma conta que a
+   *  probabilidade de fechamento usa (cobertura de questões da disciplina
+   *  aplicada aos tópicos dela). Sem edital, 0. */
+  topicos_cobertos: number;
+  cobertura_topicos_pct: number;
   ultimo_estudo: string | null;
 };
 

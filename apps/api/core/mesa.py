@@ -19,7 +19,7 @@ degradação graciosa, não defeito.
 """
 from . import db
 
-VERSAO = "mesa-v1"
+VERSAO = "mesa-v2"
 
 NOME_PADRAO = "Mesa principal"
 
@@ -123,6 +123,19 @@ def obter(usuario_id: int, mesa_id: int) -> dict | None:
     )
 
 
+def _topicos_cobertos(edital_id: int | None, usuario_id: int) -> int:
+    """
+    Import LOCAL, não no topo: `core/edital.py` já importa este módulo (usa
+    `filtro()` em `probabilidade_fechamento`). Importar de volta lá em cima
+    fecharia o ciclo e quebraria a carga do pacote.
+    """
+    if not edital_id:
+        return 0
+    from . import edital as edital_mod
+    return sum(c["topicos_no_edital"] - c["topicos_pendentes_estimado"]
+               for c in edital_mod.cobertura(edital_id, usuario_id))
+
+
 def listar(usuario_id: int) -> list[dict]:
     """
     Cada mesa com o resumo do edital vigente MAIS o progresso dentro do
@@ -134,6 +147,15 @@ def listar(usuario_id: int) -> list[dict]:
     disciplinas da mesa), só que agregada. Ter duas definições de cobertura
     convivendo é como a 008 quase nasceu errada; aqui o número do cartão e
     o número do painel têm que ser o mesmo número.
+
+    `topicos_cobertos` é o MESMO número que `probabilidade_fechamento()` já
+    usa pra estimar ritmo — por isso ele sai de `edital.cobertura()`, a
+    função, e não de um SQL parecido escrito aqui. É a aproximação 2
+    declarada em core/edital.py: não existe vínculo questão→tópico, então a
+    cobertura de uma disciplina é a das QUESTÕES dela, aplicada aos tópicos
+    daquela disciplina (média por disciplina, ponderada por quantos tópicos
+    o edital dá a cada uma). Não é "90 tópicos revisados"; é "o equivalente
+    a 90 tópicos, se a dificuldade for uniforme dentro da disciplina".
 
     N+1 consultas de propósito: cada mesa tem uma lista de disciplinas
     diferente, então não há um GROUP BY único que sirva. Uma conta tem
@@ -171,6 +193,9 @@ def listar(usuario_id: int) -> list[dict]:
         m["dominadas"] = r["dominadas"]
         m["cobertura_pct"] = (round(100.0 * r["dominadas"] / r["questoes"], 1)
                               if r["questoes"] else 0.0)
+        m["topicos_cobertos"] = _topicos_cobertos(m["edital_id"], usuario_id)
+        m["cobertura_topicos_pct"] = (round(100.0 * m["topicos_cobertos"] / m["topicos"], 1)
+                                      if m["topicos"] else 0.0)
         # "Último estudo" DENTRO do recorte: a conta pode ter estudado hoje
         # noutra mesa, e dizer "há 2 horas" num concurso que você não abre
         # há um mês seria a tela mentindo com dado verdadeiro.

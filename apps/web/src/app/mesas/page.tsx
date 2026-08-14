@@ -57,7 +57,14 @@ function CartaoMesa({
   onEntrar: () => void;
   onApagar: () => void;
 }) {
-  const cor = mesa.cobertura_pct >= 75 ? "var(--success)" : "var(--accent)";
+  // TÓPICOS é a unidade do edital — é assim que o concurseiro pensa a
+  // prova ("faltam X tópicos"), e é a mesma conta que a probabilidade de
+  // fechamento usa na tela de meta. Questões viram a unidade só quando não
+  // há edital: aí "0 / 0 tópicos" não diria nada, e o que existe de real
+  // pra mostrar é o acervo inteiro.
+  const porTopico = mesa.topicos > 0;
+  const pct = porTopico ? mesa.cobertura_topicos_pct : mesa.cobertura_pct;
+  const cor = pct >= 75 ? "var(--success)" : "var(--accent)";
   return (
     <div className="relative">
       <button
@@ -77,37 +84,36 @@ function CartaoMesa({
         </div>
 
         <div className="mt-auto w-full">
-          {/* CONTAGEM, não a lista. Despejar as disciplinas aqui fazia um
-              cartão de 13 linhas ao lado de um de 3 — a grade perdia o
-              alinhamento e o número, que é o que se compara entre mesas,
-              sumia no meio do texto. A lista inteira fica no `title` (hover)
-              e na tela do edital, onde ela é o assunto. */}
-          <p
-            className="mb-2 truncate text-[12px] text-subtle"
-            title={mesa.disciplinas?.join(" · ")}
-          >
-            {mesa.disciplinas
-              ? `${mesa.disciplinas.length} disciplinas · ${mesa.topicos} tópicos`
-              : "sem edital — mostra o acervo inteiro"}
-          </p>
+          {/* A lista de disciplinas NÃO cabe aqui: uma mesa de 13 matérias
+              ao lado de uma de 3 desalinhava a grade e afogava o número, que
+              é o que se compara entre mesas. Ela vive no `title` (hover) e na
+              tela do edital, onde é o assunto. Só a mesa SEM edital ganha
+              linha própria — porque aí a ausência de recorte é a informação. */}
+          {!mesa.disciplinas && (
+            <p className="mb-2 truncate text-[12px] text-subtle">
+              sem edital — mostra o acervo inteiro
+            </p>
+          )}
           <div className="mb-1.5 flex items-baseline justify-between gap-2.5">
-            {/* QUESTÕES, não tópicos: a barra mede o que o sistema
-                realmente acompanha (caixa >= 3 por questão). Escrever
-                "x / y tópicos" sugeriria um controle por tópico que não
-                existe — a cobertura por tópico é estimada por disciplina
-                inteira (aproximação declarada em core/edital.py). */}
-            <span className="font-mono text-[11.5px] text-subtle">
-              {mesa.dominadas} / {mesa.questoes} questões
+            <span
+              className="font-mono text-[11.5px] text-subtle"
+              title={
+                porTopico
+                  ? `${mesa.disciplinas?.length} disciplinas: ${mesa.disciplinas?.join(", ")}\n` +
+                    `estimado a partir de ${mesa.dominadas} de ${mesa.questoes} questões dominadas`
+                  : undefined
+              }
+            >
+              {porTopico
+                ? `${mesa.topicos_cobertos} / ${mesa.topicos} tópicos`
+                : `${mesa.dominadas} / ${mesa.questoes} questões`}
             </span>
             <span className="mono-num text-[12.5px]" style={{ color: cor }}>
-              {mesa.cobertura_pct}%
+              {Math.round(pct)}%
             </span>
           </div>
           <div className="barra">
-            <div
-              className="barra-fill"
-              style={{ width: `${mesa.cobertura_pct}%`, background: cor }}
-            />
+            <div className="barra-fill" style={{ width: `${pct}%`, background: cor }} />
           </div>
           <p className="mt-2.5 text-[12px] text-subtle">{haQuantoTempo(mesa.ultimo_estudo)}</p>
         </div>

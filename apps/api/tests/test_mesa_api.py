@@ -91,6 +91,46 @@ def test_listar_traz_cobertura_no_mesmo_criterio_do_painel(client, usuario, duas
     assert m["ultimo_estudo"] is None   # ninguém estudou nesta conta ainda
 
 
+def test_cartao_mede_progresso_em_topicos_do_edital(client, usuario, duas_disciplinas):
+    """
+    O cartão da mesa fala em TÓPICOS (a unidade do edital), e esse número é
+    ESTIMADO — não há vínculo questão→tópico no schema (aproximação 2 de
+    core/edital.py). O que este teste trava é a estimativa não ter virado uma
+    TERCEIRA definição de cobertura: ela é a das questões da disciplina
+    aplicada aos tópicos dela, a mesma que `probabilidade_fechamento()` usa.
+
+    Por isso as pontas: 0 questão dominada -> 0 tópico coberto; TODAS
+    dominadas -> todos os tópicos. Se as duas contas divergirem, o cartão e
+    a tela de meta passam a dar números diferentes pra mesma mesa.
+    """
+    dentro, _ = duas_disciplinas
+    mesa = _criar_mesa(client, usuario, "Por tópico", disciplina=dentro)
+    eid = db.exec1("SELECT id FROM edital WHERE mesa_id = %(m)s", {"m": mesa["id"]})["id"]
+    db.query(
+        "INSERT INTO topico (edital_id, disciplina, ordem, texto) "
+        "SELECT %(e)s, %(d)s, g, '1.' || g || ' outro tópico' FROM generate_series(2, 4) g",
+        {"e": eid, "d": dentro},
+    )
+
+    m = client.get("/mesas", headers=usuario["headers"]).json()[0]
+    assert m["topicos"] == 4
+    assert m["dominadas"] == 0
+    assert m["topicos_cobertos"] == 0
+    assert m["cobertura_topicos_pct"] == 0.0
+
+    # Dominar = caixa >= 3, o mesmo critério de v_desempenho_disciplina.
+    db.query(
+        "INSERT INTO progresso (usuario_id, questao_id, caixa) "
+        "SELECT %(u)s, id, 3 FROM questao WHERE disciplina = %(d)s",
+        {"u": usuario["id"], "d": dentro},
+    )
+
+    m = client.get("/mesas", headers=usuario["headers"]).json()[0]
+    assert m["dominadas"] == m["questoes"] > 0
+    assert m["topicos_cobertos"] == 4
+    assert m["cobertura_topicos_pct"] == 100.0
+
+
 def test_crud_da_mesa(client, usuario):
     m = _criar_mesa(client, usuario, "PF Agente")
     assert m["nome"] == "PF Agente"
