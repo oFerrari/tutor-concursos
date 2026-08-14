@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ErroApi,
   ErroSimulado,
@@ -9,6 +9,7 @@ import {
   ResultadoSimulado,
   responderSimulado,
 } from "@/lib/api";
+import { decorridos } from "@/lib/tempo";
 
 export type RelatorioSimulado = {
   resultado: ResultadoSimulado;
@@ -38,18 +39,32 @@ export function SimuladoRunner({ simuladoId, questoes, onFinalizado, rotuloConti
   const [erro, setErro] = useState<string | null>(null);
   const [relatorioFinal, setRelatorioFinal] = useState<RelatorioSimulado | null>(null);
 
-  const inicioQuestao = useRef(Date.now());
-  const inicioTotal = useRef(Date.now());
+  // Relógios em null, não em Date.now(): `useRef(Date.now())` avalia o
+  // relógio A CADA render (o valor só é usado no primeiro, mas a chamada
+  // acontece sempre) — é impureza de render de verdade, não implicância do
+  // linter. Quem marca a largada é o efeito, depois do primeiro paint.
+  const inicioQuestao = useRef<number | null>(null);
+  const inicioTotal = useRef<number | null>(null);
+
+  useEffect(() => {
+    inicioTotal.current = Date.now();
+  }, []);
+
+  // Zerar o cronômetro da questão ao TROCAR de questão, em vez de na mão
+  // dentro de proxima(): o gatilho verdadeiro é "apareceu outra questão na
+  // tela", e isso é exatamente o que `indice` diz. Cobre o mount também.
+  useEffect(() => {
+    inicioQuestao.current = Date.now();
+  }, [indice]);
 
   function proxima(pular: boolean) {
-    const segundos = Math.round((Date.now() - inicioQuestao.current) / 1000);
+    const segundos = decorridos(inicioQuestao.current);
     const novasRespostas = [
       ...respostas,
       { questao_id: questoes[indice].id, resposta: pular ? "" : resposta, segundos },
     ];
     setRespostas(novasRespostas);
     setResposta("");
-    inicioQuestao.current = Date.now();
 
     if (indice + 1 < questoes.length) {
       setIndice(indice + 1);
@@ -65,7 +80,7 @@ export function SimuladoRunner({ simuladoId, questoes, onFinalizado, rotuloConti
 
   async function finalizar(todasRespostas: typeof respostas) {
     setEtapa("corrigindo");
-    const segundosTotal = Math.round((Date.now() - inicioTotal.current) / 1000);
+    const segundosTotal = decorridos(inicioTotal.current);
     try {
       const r = await responderSimulado(simuladoId, todasRespostas, segundosTotal);
       setRelatorioFinal(r);

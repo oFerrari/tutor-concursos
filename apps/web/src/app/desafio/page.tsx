@@ -132,7 +132,15 @@ export default function PaginaDesafio() {
         <p className="mb-4 text-xs font-medium uppercase tracking-wide text-muted">
           {bloco === "reincidentes" ? "bloco 1 — pontos fracos" : "bloco 2 — novas"} · {indice + 1}/{total}
         </p>
+        {/* key={q.id} NÃO é detalhe de performance — é o que faz a próxima
+            questão realmente começar do zero. Sem key, o React reaproveita
+            a MESMA instância (mesmo tipo, mesma posição) e todo o estado
+            interno sobrevive: `resultado` continua preenchido, então a
+            questão 2 abria já na tela de resultado da questão 1, e clicar
+            "próxima" pulava o bloco inteiro sem registrar tentativa
+            nenhuma. Encontrado ao conferir o cronômetro, não em produção. */}
         <DialogoQuestao
+          key={q.id}
           questao={q}
           rotuloContinuar="próxima"
           onFechado={() => proximaDoBloco(bloco)}

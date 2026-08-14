@@ -1,7 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Avaliacao, ErroApi, Questao, Turno, avaliar, registrarTentativa } from "@/lib/api";
+import { decorridos } from "@/lib/tempo";
 
 // Mesmas constantes de chat.py — MAX_DICAS/MAX_TENTATIVAS são regra de
 // produto, não capricho de UI, então ficam iguais dos dois lados.
@@ -46,7 +47,21 @@ export function DialogoQuestao({ questao, onFechado, onSair, rotuloContinuar = "
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  const inicio = useRef<number>(Date.now());
+  // Começa null e recebe a largada no efeito: `useRef(Date.now())` avalia o
+  // relógio a CADA render (só o primeiro valor é usado, mas a chamada
+  // acontece sempre) — impureza de render de verdade, não implicância do
+  // linter.
+  //
+  // `questao.id` na dependência é cinto e suspensório: hoje quem usa este
+  // componente numa sequência remonta a cada questão (`key={q.id}` em
+  // /desafio), então o efeito rodaria uma vez de qualquer jeito. Mas se
+  // alguém tirar o key um dia, o cronômetro continua certo em vez de a
+  // segunda questão herdar o tempo da primeira em silêncio.
+  const inicio = useRef<number | null>(null);
+
+  useEffect(() => {
+    inicio.current = Date.now();
+  }, [questao.id]);
 
   async function fechar(
     veredito: Avaliacao["veredito"],
@@ -57,7 +72,7 @@ export function DialogoQuestao({ questao, onFechado, onSair, rotuloContinuar = "
     // PENALIDADE = errar, não receber dica. Dica automática ao errar já
     // conta como erro; contar as duas juntaria a mesma falha duas vezes.
     const penalidade = erradasFinal + dicasPedidasFinal;
-    const segundos = Math.round((Date.now() - inicio.current) / 1000);
+    const segundos = decorridos(inicio.current);
     const r = await registrarTentativa(questao.id, veredito, respostaFinal, penalidade, segundos);
     setResultado({
       veredito,

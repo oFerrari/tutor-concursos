@@ -74,11 +74,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       setEstreito(window.innerWidth < 1280);
     }
     medir();
+    // O disable cobre os três setState abaixo (a regra reporta uma vez por
+    // efeito): medir a janela EXIGE o browser, e o valor certo só existe
+    // depois do mount — é o caso legítimo que a regra não distingue.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setRecolhida(window.localStorage.getItem(CHAVE_RECOLHIDA) === "1");
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRailAberto(window.innerWidth >= 1280);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMontado(true);
     window.addEventListener("resize", medir);
     return () => window.removeEventListener("resize", medir);
