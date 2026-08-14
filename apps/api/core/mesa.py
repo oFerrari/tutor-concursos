@@ -60,6 +60,24 @@ def filtro(coluna: str) -> str:
                       OR md.nome ILIKE '%%' || {coluna} || '%%'))"""
 
 
+def contar_questoes(disciplinas_: list[str] | None) -> int:
+    """
+    Quantas questões do acervo caem no recorte. Serve pra tela EXPLICAR o
+    vazio em vez de mostrá-lo: uma mesa de TI (ou bancária, ou fiscal) num
+    acervo que só tem Direito ingerido devolve zero, e isso é a verdade
+    sobre o ACERVO, não sobre a mesa nem sobre o edital.
+
+    Fora de `contexto()` de propósito: `contexto` roda na dependência de
+    TODA requisição escopada por mesa, e isto é um COUNT com ILIKE que só
+    duas telas precisam. Quem quer o número pede em `GET /mesa`.
+    """
+    r = db.exec1(
+        f"SELECT count(*) AS n FROM questao q WHERE {filtro('q.disciplina')}",
+        {"disc": disciplinas_},
+    )
+    return r["n"] if r else 0
+
+
 def disciplinas(mesa_id: int | None) -> list[str] | None:
     """Disciplinas do edital mais recente da mesa. `None` = sem filtro."""
     if mesa_id is None:

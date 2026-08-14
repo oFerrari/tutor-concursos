@@ -183,9 +183,11 @@ export function getMesas(): Promise<MesaNaLista[]> {
 }
 
 /** Em qual mesa a API está me atendendo agora — com o fallback já
- *  resolvido lá, pra este cliente não ter uma segunda cópia da regra. */
-export function getMesaAtual(): Promise<Mesa> {
-  return chamar<Mesa>("/mesa");
+ *  resolvido lá, pra este cliente não ter uma segunda cópia da regra.
+ *  `questoes` = quantas questões do acervo caem no recorte desta mesa;
+ *  serve pras telas de estudo explicarem o vazio em vez de exibi-lo. */
+export function getMesaAtual(): Promise<Mesa & { questoes: number }> {
+  return chamar<Mesa & { questoes: number }>("/mesa");
 }
 
 export function criarMesa(nome: string, orgao?: string, banca?: string): Promise<Mesa> {

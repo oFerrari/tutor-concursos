@@ -129,11 +129,18 @@ export default function PaginaOnboarding() {
               ? `data da prova: ${resultado.data_prova}`
               : "não achei a data da prova — dá pra informar na tela do edital"}
           </p>
-          {/* Reporta os candidatos em vez de decidir calado — mesma
-              postura de `edital.py` na CLI. */}
+          {/* Reporta as datas descartadas em vez de decidir calado — mesma
+              postura de `edital.py` na CLI. O rótulo dizia "outros
+              candidatos", que num edital de concurso lê como "outras
+              PESSOAS inscritas": são outras DATAS achadas no PDF, e a
+              escolhida acima é a que aparece mais perto de "prova
+              objetiva". */}
           {resultado.candidatos_data.length > 1 && (
-            <p className="mt-2 font-mono text-[11.5px] opacity-80">
-              outros candidatos: {resultado.candidatos_data.slice(1, 4).map((c) => c.data).join(" · ")}
+            <p className="mt-2 text-[11.5px] opacity-80">
+              outras datas que achei no PDF (a de cima é a mais provável):{" "}
+              <span className="font-mono">
+                {resultado.candidatos_data.slice(1, 4).map((c) => c.data).join(" · ")}
+              </span>
             </p>
           )}
         </div>

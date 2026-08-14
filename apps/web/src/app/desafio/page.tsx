@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { AvisoAcervo } from "@/components/AvisoAcervo";
 import { DialogoQuestao } from "@/components/DialogoQuestao";
 import { SimuladoRunner } from "@/components/SimuladoRunner";
 import { Sugestao } from "@/components/Sugestao";
@@ -101,7 +102,8 @@ export default function PaginaDesafio() {
       return (
         <div className="mx-auto max-w-2xl p-6 md:p-10">
           <h1 className="mb-4 text-2xl font-semibold tracking-tight">desafio de hoje</h1>
-          <p className="text-muted">
+          <AvisoAcervo />
+          <p className="mt-4 text-muted">
             nada pra compor um desafio ainda — responda algumas questões na fila primeiro.
           </p>
         </div>

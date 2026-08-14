@@ -136,8 +136,12 @@ def rota_mesa_atual(m: dict = Depends(mesa_atual)):
     mesa mais antiga da conta"): duas cópias da mesma regra divergem, e
     divergir aqui significaria a sidebar dizer um nome enquanto a fila
     responde por outra mesa.
+
+    `questoes` vem junto pras telas de estudo poderem EXPLICAR o vazio
+    ("o acervo ainda não cobre estas disciplinas") em vez de mostrar uma
+    lista vazia sem motivo. É a única rota que paga esse COUNT.
     """
-    return m
+    return {**m, "questoes": mesa.contar_questoes(m["disciplinas"])}
 
 
 @app.get("/mesas")

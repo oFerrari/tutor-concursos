@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { AvisoAcervo } from "@/components/AvisoAcervo";
 import { useRouter } from "next/navigation";
 import { Sugestao } from "@/components/Sugestao";
 import { Carga, ErroApi, Questao, getCarga, getFila, getToken, limparToken } from "@/lib/api";
@@ -61,7 +62,10 @@ export default function PaginaFila() {
       </div>
 
       {questoes.length === 0 ? (
-        <p className="text-muted">nada pendente hoje.</p>
+        <>
+          <AvisoAcervo />
+          <p className="mt-4 text-muted">nada pendente hoje.</p>
+        </>
       ) : (
         <ul className="space-y-3">
           {questoes.map((q) => (
