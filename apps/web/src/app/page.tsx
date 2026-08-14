@@ -10,11 +10,13 @@ import {
   Desempenho,
   ErroApi,
   ErroCaderno,
+  Mesa,
   Meta,
   Usuario,
   getCarga,
   getErros,
   getMe,
+  getMesaAtual,
   getMeta,
   getStats,
   getSugestao,
@@ -58,6 +60,9 @@ function corDoPct(pct: number): string {
 export default function PaginaPanorama() {
   const router = useRouter();
   const [usuario, setUsuario] = useState<Usuario | null>(null);
+  // Só pra saber SE há alvo — o número é o mesmo com ou sem, o que muda
+  // é o que ele significa, e o rótulo precisa dizer qual dos dois é.
+  const [mesa, setMesa] = useState<Mesa | null>(null);
   const [carga, setCarga] = useState<Carga | null>(null);
   const [sugestao, setSugestao] = useState<string | null>(null);
   const [meta, setMeta] = useState<Meta | null>(null);
@@ -87,6 +92,7 @@ export default function PaginaPanorama() {
       });
     // extras — falhar aqui não deve derrubar a tela (ex.: sem edital ingerido)
     getMe().then(setUsuario).catch(() => {});
+    getMesaAtual().then(setMesa).catch(() => {});
     getSugestao().then((r) => setSugestao(r.sugestao)).catch(() => {});
     getMeta().then(setMeta).catch(() => {});
   }, [router]);
@@ -141,7 +147,15 @@ export default function PaginaPanorama() {
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
         {/* ------------------------------------------ maestria por matéria */}
         <section className="rounded-2xl border border-line bg-surface px-[22px] py-5">
-          <p className="rotulo mb-4">maestria por matéria</p>
+          {/* Mesmo cuidado do raio-x: sem alvo, isto é o histórico inteiro
+              do aluno, não o recorte de uma mesa. O rótulo diz qual dos
+              dois é, porque o número é o mesmo e o significado não. */}
+          <p className="rotulo mb-4">
+            maestria por matéria
+            {mesa?.origem_alvo === "nenhum" && (
+              <span className="opacity-60"> · acervo inteiro</span>
+            )}
+          </p>
           {ordenadas.length === 0 ? (
             <p className="text-sm text-muted">
               nenhuma disciplina com tentativa registrada ainda — responda a fila de hoje e este quadro

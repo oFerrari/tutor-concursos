@@ -116,6 +116,18 @@ export default function PaginaCuradoria() {
   const precisaEscolher = draft.estrutura.cargos.length > 1 && !cargo;
   const totalTopicos = disciplinas.reduce((n, d) => n + d.topicos.length, 0);
 
+  // Disciplina com contagem MUITO acima das outras costuma ser erro de
+  // parsing: um cabeçalho que o extrator não reconheceu faz a matéria
+  // seguinte engolir os tópicos da anterior. Esta tela existe justamente
+  // pra o erro do extrator morrer aqui — então ela precisa APONTAR o
+  // suspeito, não só permitir corrigi-lo. Mediana e não média: uma
+  // disciplina inflada puxa a média e esconde a si mesma.
+  const contagens = [...disciplinas.map((d) => d.topicos.length)].sort((a, b) => a - b);
+  const mediana = contagens.length
+    ? contagens[Math.floor(contagens.length / 2)]
+    : 0;
+  const suspeito = (n: number) => mediana > 0 && n >= mediana * 4 && n >= 20;
+
   return (
     <div className="mx-auto max-w-2xl p-6 md:p-10">
       <Voltar />
@@ -139,8 +151,8 @@ export default function PaginaCuradoria() {
           </h2>
           <p className="mb-3 text-[13px] text-muted">
             Só o conteúdo do cargo escolhido entra na sua mesa. O que é comum a todos (Português,
-            RLM, Informática…) vem junto de qualquer jeito. O número é quantas matérias
-            <em> só daquele cargo</em> entram — por isso cargos diferentes repetem o mesmo número.
+            RLM, Informática…) vem junto de qualquer jeito, e o número no chip já inclui esses
+            comuns — é quantas matérias a mesa vai ter se você escolher aquele cargo.
           </p>
           <div className="flex flex-wrap gap-2">
             {draft.estrutura.cargos.map((c) => (
@@ -151,8 +163,17 @@ export default function PaginaCuradoria() {
               >
                 {c.nome === cargo && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
                 {c.nome}
-                <span className="opacity-60">
-                  · {c.disciplinas.length} {c.disciplinas.length === 1 ? "matéria" : "matérias"}
+                {/* O TOTAL que vai entrar (comuns + próprias), não só as
+                    próprias. O chip dizia "7 matérias" e a lista abaixo
+                    abria com 14 — o número estava certo e respondia outra
+                    pergunta. Quem escolhe cargo quer saber com quantas
+                    matérias vai ficar. O detalhe do rateio fica no hover. */}
+                <span
+                  className="opacity-60"
+                  title={`${draft.estrutura.comuns.length} comuns a todos os cargos + ` +
+                         `${c.disciplinas.length} só deste cargo`}
+                >
+                  · {draft.estrutura.comuns.length + c.disciplinas.length} matérias
                 </span>
               </button>
             ))}
@@ -178,6 +199,14 @@ export default function PaginaCuradoria() {
                 className="flex items-center gap-3 rounded-xl border border-line bg-surface px-3.5 py-2.5"
               >
                 <span className="min-w-0 flex-1 truncate text-[14px]">{d.disciplina}</span>
+                {suspeito(d.topicos.length) && (
+                  <span
+                    className="shrink-0 rounded-md border border-warning-line bg-warning-soft px-1.5 py-0.5 text-[10.5px] text-warning"
+                    title="Muito mais tópicos que as outras matérias — pode ser um cabeçalho que a leitura não reconheceu, fazendo esta matéria engolir os tópicos da anterior. Vale conferir no PDF."
+                  >
+                    confira
+                  </span>
+                )}
                 <span className="mono-num shrink-0 text-[12px] text-subtle">
                   {d.topicos.length || "—"}
                 </span>

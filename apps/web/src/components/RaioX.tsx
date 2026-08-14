@@ -45,6 +45,10 @@ type Props = {
 
 export function RaioX({ meta, mesa, edital, desempenho, carga, erros, onFechar }: Props) {
   const dataProva = formatarDataProva(edital?.data_prova);
+  // Sem alvo, os blocos deste rail mostram o histórico INTEIRO do aluno. O
+  // rail continua útil assim (é raio-x DO ALUNO, não da mesa) — o que não
+  // pode é rotular isso como progresso de um edital que não existe.
+  const semAlvo = mesa?.origem_alvo === "nenhum";
   const comDado = (desempenho ?? []).filter((d) => d.pct_acerto != null);
   const ordenadas = [...comDado].sort((a, b) => (a.pct_acerto ?? 0) - (b.pct_acerto ?? 0));
 
@@ -74,30 +78,50 @@ export function RaioX({ meta, mesa, edital, desempenho, carga, erros, onFechar }
           </div>
         ) : (
           <Link href="/meta" className="text-[13.5px] text-muted underline-offset-2 hover:text-foreground">
-            sem edital nesta mesa →
+            {semAlvo ? "sem alvo nesta mesa →" : "sem data de prova →"}
           </Link>
         )}
         <p className="mt-1.5 text-[12.5px] text-subtle">
           {edital?.titulo ?? mesa?.nome ?? "—"}
         </p>
 
-        {meta && (
-          <div className="mt-3.5">
-            <div className="mb-1.5 flex items-baseline justify-between gap-2">
-              <span className="rotulo">edital fechado</span>
-              <span className="mono-num text-[12.5px] text-foreground">{meta.cobertura_pct.toFixed(0)}%</span>
+        {/* SEM ALVO não existe "edital fechado" pra medir: o percentual
+            aqui seria a cobertura do acervo INTEIRO com o rótulo de um
+            edital que não existe — exatamente o "4/54 · 7%" que saiu do
+            cartão do lobby, e que continuava vivo aqui. Em vez do número,
+            a explicação do que os blocos abaixo estão mostrando: eles são
+            do ALUNO, e sem recorte eles cobrem tudo. */}
+        {semAlvo ? (
+          <p className="mt-3 text-[12px] leading-relaxed text-subtle">
+            Sem alvo definido, os números abaixo são do seu histórico inteiro — não do
+            recorte desta mesa. Nada foi perdido: seu progresso é seu, e passa a ser
+            filtrado assim que a mesa tiver edital ou matérias escolhidas.
+          </p>
+        ) : (
+          meta && (
+            <div className="mt-3.5">
+              <div className="mb-1.5 flex items-baseline justify-between gap-2">
+                {/* "edital fechado" só quando existe edital. Com alvo
+                    manual é a mesma conta e outro nome — chamar de edital
+                    o que a pessoa escolheu à mão faria a tela afirmar um
+                    documento que não foi subido. */}
+                <span className="rotulo">
+                  {mesa?.origem_alvo === "manual" ? "matérias fechadas" : "edital fechado"}
+                </span>
+                <span className="mono-num text-[12.5px] text-foreground">{meta.cobertura_pct.toFixed(0)}%</span>
+              </div>
+              <div className="barra-grossa">
+                <div
+                  className="barra-fill bg-accent"
+                  style={{ width: `${Math.max(0, Math.min(100, meta.cobertura_pct))}%` }}
+                />
+              </div>
+              <p className="mt-1.5 text-[12px] text-subtle">
+                {meta.questoes_respondidas} de {meta.questoes_respondidas + meta.questoes_pendentes} questões
+                {meta.ritmo_necessario != null && ` · ritmo: ${meta.ritmo_necessario.toFixed(1)}/dia`}
+              </p>
             </div>
-            <div className="barra-grossa">
-              <div
-                className="barra-fill bg-accent"
-                style={{ width: `${Math.max(0, Math.min(100, meta.cobertura_pct))}%` }}
-              />
-            </div>
-            <p className="mt-1.5 text-[12px] text-subtle">
-              {meta.questoes_respondidas} de {meta.questoes_respondidas + meta.questoes_pendentes} questões
-              {meta.ritmo_necessario != null && ` · ritmo: ${meta.ritmo_necessario.toFixed(1)}/dia`}
-            </p>
-          </div>
+          )
         )}
       </div>
 
@@ -120,7 +144,9 @@ export function RaioX({ meta, mesa, edital, desempenho, carga, erros, onFechar }
       {/* --------------------------------------------- cards de maestria */}
       {ordenadas.length > 0 && (
         <div>
-          <p className="rotulo mb-2.5">cards de maestria</p>
+          <p className="rotulo mb-2.5">
+            cards de maestria{semAlvo && <span className="opacity-60"> · acervo inteiro</span>}
+          </p>
           <div className="flex flex-col gap-2">
             {ordenadas.slice(0, 5).map((d) => {
               const pct = d.pct_acerto ?? 0;
@@ -156,7 +182,9 @@ export function RaioX({ meta, mesa, edital, desempenho, carga, erros, onFechar }
       {/* ------------------------------------------- carga de memória */}
       {carga && (
         <div className="painel p-4">
-          <p className="rotulo mb-2.5">carga de memória</p>
+          <p className="rotulo mb-2.5">
+            carga de memória{semAlvo && <span className="opacity-60"> · acervo inteiro</span>}
+          </p>
           <div className="flex flex-col gap-2">
             <div className="dado-linha">
               <span className="text-[#b6b6bd]">Revisões SM-2 hoje</span>
