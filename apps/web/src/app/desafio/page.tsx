@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AvisoAcervo } from "@/components/AvisoAcervo";
 import { QuestaoInterativa } from "@/components/QuestaoInterativa";
@@ -25,22 +25,42 @@ export default function PaginaDesafio() {
   const [indice, setIndice] = useState(0);
   const [sessaoSimulado, setSessaoSimulado] = useState<{ id: number; questoes: PlanoDesafio["mini_simulado"] } | null>(null);
 
+  // Orçamento de tempo escolhido pelo aluno. `null` = desafio cheio.
+  const [minutos, setMinutos] = useState<number | null>(null);
+
+  // `buscar` NÃO mexe em estado de forma síncrona — o `setPlano` acontece
+  // no `.then`. É o que permite chamá-la do efeito sem cascata de render;
+  // o reset visual (limpar o plano na tela) mora no handler do clique,
+  // que é onde ele é de fato um efeito de interação.
+  const buscar = useCallback(
+    (orcamento: number | null) => {
+      getDesafio(orcamento ?? undefined)
+        .then(setPlano)
+        .catch((e) => {
+          if (e instanceof ErroApi && e.status === 401) {
+            limparToken();
+            router.push("/login");
+            return;
+          }
+          setErro(e instanceof ErroApi ? e.message : "Não deu pra conectar com a API");
+        });
+    },
+    [router]
+  );
+
+  function trocarOrcamento(op: number | null) {
+    setPlano(null);
+    setMinutos(op);
+    buscar(op);
+  }
+
   useEffect(() => {
     if (!getToken()) {
       router.push("/login");
       return;
     }
-    getDesafio()
-      .then(setPlano)
-      .catch((e) => {
-        if (e instanceof ErroApi && e.status === 401) {
-          limparToken();
-          router.push("/login");
-          return;
-        }
-        setErro(e instanceof ErroApi ? e.message : "Não deu pra conectar com a API");
-      });
-  }, [router]);
+    buscar(null);
+  }, [router, buscar]);
 
   async function irPara(proximo: Bloco) {
     if (!plano) return;
@@ -119,8 +139,32 @@ export default function PaginaDesafio() {
           <p>{plano.mini_simulado.length} mini-simulado</p>
           <p className="mt-2 text-muted">~{plano.estimativa_minutos} min estimados</p>
         </div>
-        <button onClick={comecar} className="btn-primary mt-4">
-          começar
+
+        {/* "Só tenho N minutos hoje". A conta usa a SUA velocidade média
+            real, então 20 minutos rendem mais pra quem responde rápido —
+            número fixo pra todo mundo seria chute onde existe medida. */}
+        <div className="mt-4">
+          <p className="rotulo mb-2">tenho menos tempo hoje</p>
+          <div className="flex flex-wrap gap-2">
+            {[10, 20, 30, null].map((op) => (
+              <button
+                key={op ?? "cheio"}
+                onClick={() => trocarOrcamento(op)}
+                className={minutos === op ? "chip-ativo" : "chip"}
+              >
+                {op ? `${op} min` : "sessão cheia"}
+              </button>
+            ))}
+          </div>
+          {minutos !== null && plano.estimativa_minutos < minutos && (
+            <p className="mt-2 text-[12.5px] text-subtle">
+              Cabiam mais, mas o acervo desta mesa acabou antes do tempo.
+            </p>
+          )}
+        </div>
+
+        <button onClick={comecar} className="btn-primary mt-5">
+          Começar
         </button>
       </div>
     );

@@ -402,10 +402,15 @@ export type PlanoDesafio = {
   mini_simulado: QuestaoSimulado[];
   total_questoes: number;
   estimativa_minutos: number;
+  /** O que foi PEDIDO, pra tela poder dizer "você pediu 20, cabem 18"
+   *  quando o acervo acaba antes do tempo. `null` = sem orçamento. */
+  minutos_pedidos: number | null;
 };
 
-export function getDesafio(): Promise<PlanoDesafio> {
-  return chamar<PlanoDesafio>("/desafio");
+/** `minutos` = "só tenho N minutos hoje". O servidor corta os blocos pra
+ *  caber usando a SUA velocidade média real, não um número fixo. */
+export function getDesafio(minutos?: number): Promise<PlanoDesafio> {
+  return chamar<PlanoDesafio>(minutos ? `/desafio?minutos=${minutos}` : "/desafio");
 }
 
 // -------------------------------------------------------------- intervenção

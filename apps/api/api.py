@@ -322,8 +322,11 @@ def rota_registrar_tentativa(qid: int, body: RegistrarBody, uid: int = Depends(u
 # -------------------------------------------------------------------- desafio
 @app.get("/desafio")
 def rota_desafio(n_reincidentes: int = 3, n_novas: int = 5, n_simulado: int = 5,
+                 minutos: int | None = None,
                  uid: int = Depends(usuario_atual), m: dict = Depends(mesa_atual)):
-    return desafio.montar(uid, n_reincidentes, n_novas, n_simulado, m["disciplinas"])
+    """`minutos` é o "só tenho 20 minutos hoje": o desafio encolhe pra caber,
+    cortando na ordem que rende mais por minuto (ver desafio.orcamento_blocos)."""
+    return desafio.montar(uid, n_reincidentes, n_novas, n_simulado, m["disciplinas"], minutos)
 
 
 # ------------------------------------------------------------------- simulado

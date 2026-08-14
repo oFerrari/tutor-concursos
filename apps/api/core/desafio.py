@@ -23,12 +23,18 @@ Sem histórico ainda (usuário novo), cai num default documentado abaixo.
 from . import db, mesa
 from .scheduler import CAMPOS_Q, JOIN_CTX
 
-VERSAO = "desafio-v3"
+VERSAO = "desafio-v4"
 
 # Sem tentativa nenhuma DESTE usuário ainda não há média para calcular. 90s é
 # chute conservador para uma resposta dissertativa curta — melhor superestimar
 # o tempo de um desafio novo do que prometer 5 minutos e entregar 15.
 SEGUNDOS_PADRAO = 90
+
+# Mini-simulado com 2 questões não é simulado, é um par de questões sem
+# dica. O bloco tem tamanho mínimo pra existir: abaixo disso ele sai
+# INTEIRO do desafio e o tempo vai pros outros dois, que rendem mais por
+# minuto. Cortar até virar enfeite é pior que cortar de vez.
+MIN_SIMULADO = 3
 
 
 def tempo_medio_segundos(usuario_id: int) -> float:
@@ -41,6 +47,36 @@ def tempo_medio_segundos(usuario_id: int) -> float:
         {"u": usuario_id},
     )
     return r["media"] if r and r["media"] else float(SEGUNDOS_PADRAO)
+
+
+def orcamento_blocos(cabem: int, n_reincidentes: int, n_novas: int,
+                     n_simulado: int) -> tuple[int, int, int]:
+    """
+    Como cortar os três blocos quando o tempo não dá pra tudo. FUNÇÃO PURA
+    — nem banco nem relógio, testável sozinha (mesmo molde de
+    `scheduler_regras` e `ritmo_regras`).
+
+    A ORDEM DO CORTE é a decisão de produto aqui, e ela não é arbitrária:
+
+      1. REINCIDENTES ficam. É o que a pessoa erra de novo e de novo; num
+         orçamento apertado é o que mais rende por minuto.
+      2. NOVAS vêm depois. Material inédito é o mais caro cognitivamente —
+         é o primeiro a sair de uma sessão de "só tenho 20 minutos e estou
+         cansado", não o último.
+      3. MINI-SIMULADO é o primeiro a cair, E CAI INTEIRO (ver MIN_SIMULADO):
+         ele existe pra medir sob condição de prova, e medida sobre amostra
+         de 2 questões é ruído — a mesma lição de "percentual sobre amostra
+         pequena é ruído, não tendência" que já vale em `ritmo_regras`.
+
+    `cabem <= 0` devolve zeros: quem pediu 0 minuto recebe desafio vazio, e
+    a tela diz isso — melhor que entregar 1 questão fingindo que coube.
+    """
+    if cabem <= 0:
+        return 0, 0, 0
+    reincidentes = min(n_reincidentes, cabem)
+    novas = min(n_novas, cabem - reincidentes)
+    simulado = min(n_simulado, cabem - reincidentes - novas)
+    return reincidentes, novas, (simulado if simulado >= MIN_SIMULADO else 0)
 
 
 def _novas(usuario_id: int, limite: int, excluir: set[int],
@@ -103,11 +139,27 @@ def _mini_simulado(limite: int, excluir: set[int],
 
 
 def montar(usuario_id: int, n_reincidentes: int = 3, n_novas: int = 5,
-           n_simulado: int = 5, disciplinas: list[str] | None = None) -> dict:
-    """Monta o desafio do dia. Cada bloco pode vir menor (ou vazio) que o
+           n_simulado: int = 5, disciplinas: list[str] | None = None,
+           minutos: int | None = None) -> dict:
+    """
+    Monta o desafio do dia. Cada bloco pode vir menor (ou vazio) que o
     pedido se o acervo não tiver material suficiente — não é erro, é reflexo
     honesto do que existe (e com mesa, "o que existe" já é o recorte do
-    edital dela)."""
+    edital dela).
+
+    `minutos` é o ORÇAMENTO de tempo — o "só tenho 20 minutos hoje". Ele não
+    é um limite aproximado de fachada: o número de questões sai da
+    velocidade REAL desta pessoa (`avg(tentativa.segundos)`), então 20
+    minutos de quem responde em 40s rende o dobro de quem responde em 80s.
+    Prometer "10 questões em 20 minutos" pra todo mundo seria o mesmo erro
+    que `simular.py` documenta — número fixo onde existe medida.
+    """
+    media = tempo_medio_segundos(usuario_id)
+    if minutos is not None:
+        cabem = int(minutos * 60 // media)
+        n_reincidentes, n_novas, n_simulado = orcamento_blocos(
+            cabem, n_reincidentes, n_novas, n_simulado)
+
     reincidentes = _reincidentes(usuario_id, n_reincidentes, disciplinas)
     usados = {q["id"] for q in reincidentes}
 
@@ -122,5 +174,9 @@ def montar(usuario_id: int, n_reincidentes: int = 3, n_novas: int = 5,
         "novas": novas,
         "mini_simulado": mini_simulado,
         "total_questoes": total,
-        "estimativa_minutos": round(tempo_medio_segundos(usuario_id) * total / 60) if total else 0,
+        "estimativa_minutos": round(media * total / 60) if total else 0,
+        # Devolvido pra tela poder dizer "você pediu 20, cabem 18" em vez de
+        # entregar menos calada. Pedido e entregue divergem quando o acervo
+        # acaba antes do tempo — que é informação, não defeito.
+        "minutos_pedidos": minutos,
     }
