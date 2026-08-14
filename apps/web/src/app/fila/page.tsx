@@ -30,7 +30,7 @@ export default function PaginaFila() {
           router.push("/login");
           return;
         }
-        setErro(e instanceof ErroApi ? e.message : "não deu pra conectar com a API");
+        setErro(e instanceof ErroApi ? e.message : "Não deu pra conectar com a API");
       });
   }, [router]);
 
@@ -45,7 +45,7 @@ export default function PaginaFila() {
   if (!questoes || !carga) {
     return (
       <div className="mx-auto max-w-2xl p-6 md:p-10">
-        <p className="text-sm text-muted">carregando…</p>
+        <p className="text-sm text-muted">Carregando…</p>
       </div>
     );
   }
@@ -54,7 +54,7 @@ export default function PaginaFila() {
     <div className="mx-auto max-w-3xl p-6 md:p-10">
       <Sugestao />
       <div className="mb-6">
-        <h1 className="text-3xl font-bold tracking-tight">fila do dia</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Fila do dia</h1>
         <p className="mt-1 text-sm text-muted">
           {questoes.length} questões · {carga.revisoes} revisões venceram, {carga.ineditas} inéditas
           {carga.atraso > 0 && <span className="text-warning"> · {carga.atraso} de atraso</span>}
@@ -64,7 +64,7 @@ export default function PaginaFila() {
       {questoes.length === 0 ? (
         <>
           <AvisoAcervo />
-          <p className="mt-4 text-muted">nada pendente hoje.</p>
+          <p className="mt-4 text-muted">Nada pendente hoje.</p>
         </>
       ) : (
         <ul className="space-y-3">
@@ -73,7 +73,7 @@ export default function PaginaFila() {
               <Link href={`/questao/${q.id}`} className="card-link cursor-pointer">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <span className="badge-accent">{q.disciplina}</span>
-                  <span className="badge-neutral">caixa {q.caixa}</span>
+                  <span className="badge-neutral">Caixa {q.caixa}</span>
                 </div>
                 <p className="mb-2 text-sm text-muted">{q.tema}</p>
                 <p className="text-base font-medium leading-relaxed text-foreground">{q.enunciado}</p>

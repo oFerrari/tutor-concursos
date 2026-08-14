@@ -76,12 +76,12 @@ export function DialogoQuestao({ questao, onFechado, onSair, rotuloContinuar = "
     const r = await registrarTentativa(questao.id, veredito, respostaFinal, penalidade, segundos);
     setResultado({
       veredito,
-      // "acertou de primeira" só quando penalidade é 0 — correta na 2ª
+      // "Acertou de primeira" só quando penalidade é 0 — correta na 2ª
       // tentativa (após erro) segue mostrando o que aconteceu, porque foi
       // isso que decidiu se a caixa promoveu ou ficou igual.
       comentario:
         veredito === "correta" && penalidade === 0
-          ? "acertou de primeira"
+          ? "Acertou de primeira"
           : `${erradasFinal} erro(s), ${dicasPedidasFinal} dica(s) pedida(s)`,
       caixa: r.caixa,
       prox_revisao: r.prox_revisao,
@@ -121,7 +121,7 @@ export function DialogoQuestao({ questao, onFechado, onSair, rotuloContinuar = "
         setResposta("");
       }
     } catch (e) {
-      setErro(e instanceof ErroApi ? e.message : "não deu pra conectar com a API");
+      setErro(e instanceof ErroApi ? e.message : "Não deu pra conectar com a API");
     } finally {
       setEnviando(false);
     }
@@ -182,7 +182,7 @@ export function DialogoQuestao({ questao, onFechado, onSair, rotuloContinuar = "
           <span className="text-muted">{questao.tema}</span>
         </div>
         <div className="flex items-center gap-3">
-          <span className="badge-neutral">caixa {questao.caixa}</span>
+          <span className="badge-neutral">Caixa {questao.caixa}</span>
           {onSair && (
             <button onClick={sair} className="link">
               sair
@@ -200,7 +200,7 @@ export function DialogoQuestao({ questao, onFechado, onSair, rotuloContinuar = "
           {historico.map((t, i) => (
             <div key={i} className="rounded-xl border border-line bg-surface-hover p-3 text-sm">
               <p className="text-muted">
-                <span className="font-medium text-foreground">você:</span> {t.resposta}
+                <span className="font-medium text-foreground">Você:</span> {t.resposta}
               </p>
               <p className="mt-1">{t.comentario}</p>
               {t.pergunta && <p className="mt-1 text-info">→ {t.pergunta}</p>}
@@ -228,7 +228,7 @@ export function DialogoQuestao({ questao, onFechado, onSair, rotuloContinuar = "
         <div className="callout-success mt-4">
           <p className="text-xs font-medium uppercase tracking-wide">gabarito</p>
           <p className="mt-1 text-sm">{questao.gabarito}</p>
-          <p className="mt-3 text-sm opacity-70">registrando…</p>
+          <p className="mt-3 text-sm opacity-70">Registrando…</p>
         </div>
       ) : (
         <form onSubmit={aoEnviar} className="mt-4 space-y-2">
@@ -237,7 +237,7 @@ export function DialogoQuestao({ questao, onFechado, onSair, rotuloContinuar = "
             onChange={(e) => setResposta(e.target.value)}
             rows={3}
             className="field"
-            placeholder="sua resposta…"
+            placeholder="Sua resposta…"
           />
           {erro && <p className="text-sm text-danger">{erro}</p>}
           <div className="flex items-center justify-between">
@@ -245,7 +245,7 @@ export function DialogoQuestao({ questao, onFechado, onSair, rotuloContinuar = "
               pedir dica ({restamDicas} disponível{restamDicas === 1 ? "" : "eis"})
             </button>
             <button type="submit" disabled={enviando || !resposta.trim()} className="btn-primary">
-              {enviando ? "corrigindo…" : "responder"}
+              {enviando ? "Corrigindo…" : "responder"}
             </button>
           </div>
           <p className="text-xs text-muted">

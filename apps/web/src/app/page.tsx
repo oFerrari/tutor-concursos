@@ -89,7 +89,7 @@ export default function PaginaPanorama() {
           router.push("/login");
           return;
         }
-        setErro(e instanceof ErroApi ? e.message : "não deu pra conectar com a API");
+        setErro(e instanceof ErroApi ? e.message : "Não deu pra conectar com a API");
       });
     // extras — falhar aqui não deve derrubar a tela (ex.: sem edital ingerido)
     getMe().then(setUsuario).catch(() => {});
@@ -275,7 +275,7 @@ export default function PaginaPanorama() {
                 </p>
               )}
               {!sugestao && !pior && carga.atraso === 0 && (
-                <p className="text-muted">nada gritando hoje. Bom sinal.</p>
+                <p className="text-muted">Nada gritando hoje. Bom sinal.</p>
               )}
             </div>
             {erros.length > 0 && (

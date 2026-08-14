@@ -86,13 +86,13 @@ export function SimuladoRunner({ simuladoId, questoes, onFinalizado, rotuloConti
       setRelatorioFinal(r);
       setEtapa("relatorio");
     } catch (e) {
-      setErro(e instanceof ErroApi ? e.message : "não deu pra corrigir o simulado");
+      setErro(e instanceof ErroApi ? e.message : "Não deu pra corrigir o simulado");
       setEtapa("respondendo");
     }
   }
 
   if (etapa === "corrigindo") {
-    return <p className="text-sm text-muted">corrigindo…</p>;
+    return <p className="text-sm text-muted">Corrigindo…</p>;
   }
 
   if (etapa === "relatorio" && relatorioFinal) {
@@ -112,8 +112,8 @@ export function SimuladoRunner({ simuladoId, questoes, onFinalizado, rotuloConti
           <table className="mt-4 w-full text-sm">
             <thead>
               <tr className="border-b border-line text-left text-muted">
-                <th className="py-1.5">disciplina</th>
-                <th className="py-1.5 text-right">acertos</th>
+                <th className="py-1.5">Disciplina</th>
+                <th className="py-1.5 text-right">Acertos</th>
                 <th className="py-1.5 text-right">%</th>
               </tr>
             </thead>
@@ -133,13 +133,13 @@ export function SimuladoRunner({ simuladoId, questoes, onFinalizado, rotuloConti
 
         {erros.length > 0 && (
           <div className="mt-6">
-            <h2 className="mb-2 text-sm font-medium text-muted">revisão</h2>
+            <h2 className="mb-2 text-sm font-medium text-muted">Revisão</h2>
             <ul className="space-y-3">
               {erros.map((e, i) => (
                 <li key={i} className="callout-warning !p-3">
                   <p className="font-medium">{e.tema}</p>
-                  <p className="mt-1 opacity-80">sua resposta: {e.resposta || "(em branco)"}</p>
-                  <p className="mt-1">gabarito: {e.gabarito}</p>
+                  <p className="mt-1 opacity-80">Sua resposta: {e.resposta || "(em branco)"}</p>
+                  <p className="mt-1">Gabarito: {e.gabarito}</p>
                 </li>
               ))}
             </ul>
@@ -172,7 +172,7 @@ export function SimuladoRunner({ simuladoId, questoes, onFinalizado, rotuloConti
         onChange={(e) => setResposta(e.target.value)}
         rows={4}
         className="field mt-4"
-        placeholder="sua resposta…"
+        placeholder="Sua resposta…"
       />
       {erro && <p className="mt-2 text-sm text-danger">{erro}</p>}
       <div className="mt-3 flex justify-between">

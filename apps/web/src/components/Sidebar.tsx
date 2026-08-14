@@ -212,7 +212,7 @@ export function Sidebar({ recolhida, onAlternar, mesa, drawer = false, onFechar 
                   className="flex items-center justify-between gap-2 rounded-[10px] px-2.5 py-1.5 text-[13px]
                              text-subtle transition-colors hover:bg-surface-hover hover:text-foreground"
                 >
-                  <span className="truncate">simulado · {formatarData(s.criado_em)}</span>
+                  <span className="truncate">Simulado · {formatarData(s.criado_em)}</span>
                   <span className="mono-num shrink-0 text-[12px]">{s.nota_pct ?? 0}%</span>
                 </Link>
               ))}

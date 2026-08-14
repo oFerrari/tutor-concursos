@@ -29,7 +29,7 @@ export default function PaginaMeta() {
         router.push("/login");
         return;
       }
-      setErro(e instanceof ErroApi ? e.message : "não deu pra conectar com a API");
+      setErro(e instanceof ErroApi ? e.message : "Não deu pra conectar com a API");
     }
     try {
       setEdital(await getEdital());
@@ -56,8 +56,8 @@ export default function PaginaMeta() {
   return (
     <div className="mx-auto max-w-2xl p-6 md:p-10">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">meta até a prova</h1>
-        <p className="mt-1 text-sm text-muted">dias restantes, cobertura e probabilidade de fechamento.</p>
+        <h1 className="text-2xl font-semibold tracking-tight">Meta até a prova</h1>
+        <p className="mt-1 text-sm text-muted">Dias restantes, cobertura e probabilidade de fechamento.</p>
       </div>
 
       {erro && <p className="mb-4 callout-danger">{erro}</p>}
@@ -70,15 +70,15 @@ export default function PaginaMeta() {
             <>
               <p>{meta.dias_restantes} dias restantes {meta.edital && <span className="text-muted">· {meta.edital}</span>}</p>
               <p className="mt-1 text-muted">
-                cobertura {meta.cobertura_pct}% · {meta.questoes_pendentes} questões pendentes ·{" "}
+                Cobertura {meta.cobertura_pct}% · {meta.questoes_pendentes} questões pendentes ·{" "}
                 {meta.questoes_respondidas} já respondidas
               </p>
               {meta.ritmo_necessario != null && (
-                <p className="mt-1 text-muted">ritmo necessário: {meta.ritmo_necessario} questões/dia</p>
+                <p className="mt-1 text-muted">Ritmo necessário: {meta.ritmo_necessario} questões/dia</p>
               )}
               {probOk && (
                 <p className="mt-3 font-medium">
-                  probabilidade de fechamento: <span className="text-accent">{prob.probabilidade_fechamento_pct}%</span>
+                  Probabilidade de fechamento: <span className="text-accent">{prob.probabilidade_fechamento_pct}%</span>
                   <span className="ml-2 font-normal text-muted">
                     (ritmo atual {prob.ritmo_atual_topicos_dia}, necessário{" "}
                     {prob.ritmo_necessario_topicos_dia ?? "—"} tópicos/dia)
@@ -92,13 +92,13 @@ export default function PaginaMeta() {
 
       {edital && edital.cobertura.length > 0 && (
         <div className="mt-6">
-          <h2 className="mb-2 text-sm font-medium text-muted">cobertura por disciplina — {edital.titulo}</h2>
+          <h2 className="mb-2 text-sm font-medium text-muted">Cobertura por disciplina — {edital.titulo}</h2>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line text-left text-muted">
-                <th className="py-1.5">disciplina</th>
-                <th className="py-1.5 text-right">tópicos</th>
-                <th className="py-1.5 text-right">cobertura</th>
+                <th className="py-1.5">Disciplina</th>
+                <th className="py-1.5 text-right">Tópicos</th>
+                <th className="py-1.5 text-right">Cobertura</th>
               </tr>
             </thead>
             <tbody>
@@ -120,7 +120,7 @@ export default function PaginaMeta() {
           vez de dizer o que está acontecendo. */}
       <div className="mt-8 border-t border-line pt-6">
         <h2 className="mb-2 text-sm font-medium text-muted">
-          {edital ? "trocar o edital desta mesa" : "esta mesa ainda não tem edital"}
+          {edital ? "Trocar o edital desta mesa" : "Esta mesa ainda não tem edital"}
         </h2>
         <p className="mb-3.5 text-[13px] text-muted">
           {edital
@@ -130,7 +130,7 @@ export default function PaginaMeta() {
         </p>
         <Link href="/onboarding" className="btn-primary inline-flex">
           <Upload className="h-4 w-4" />
-          {edital ? "subir outro edital" : "subir o PDF do edital"}
+          {edital ? "Subir outro edital" : "Subir o PDF do edital"}
         </Link>
       </div>
     </div>

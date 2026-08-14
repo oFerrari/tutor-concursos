@@ -31,21 +31,21 @@ export default function PaginaStats() {
           router.push("/login");
           return;
         }
-        setErro(e instanceof ErroApi ? e.message : "não deu pra conectar com a API");
+        setErro(e instanceof ErroApi ? e.message : "Não deu pra conectar com a API");
       });
   }, [router]);
 
   return (
     <div className="mx-auto max-w-2xl p-6 md:p-10">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">estatísticas</h1>
-        <p className="mt-1 text-sm text-muted">desempenho por disciplina — só o que você já respondeu.</p>
+        <h1 className="text-2xl font-semibold tracking-tight">Estatísticas</h1>
+        <p className="mt-1 text-sm text-muted">Desempenho por disciplina — só o que você já respondeu.</p>
       </div>
 
       {erro && <p className="callout-danger">{erro}</p>}
-      {!erro && !dados && <p className="text-sm text-muted">carregando…</p>}
+      {!erro && !dados && <p className="text-sm text-muted">Carregando…</p>}
       {dados && dados.length === 0 && (
-        <p className="text-muted">sem tentativas ainda — responda alguma questão na fila primeiro.</p>
+        <p className="text-muted">Sem tentativas ainda — responda alguma questão na fila primeiro.</p>
       )}
 
       {dados && dados.length > 0 && (
@@ -61,14 +61,14 @@ export default function PaginaStats() {
 
               <div className="space-y-2">
                 <div className="flex items-center gap-3">
-                  <span className="w-20 text-xs text-muted">acerto</span>
+                  <span className="w-20 text-xs text-muted">Acerto</span>
                   <Barra pct={d.pct_acerto} cor="bg-success" />
                   <span className="w-12 text-right text-xs tabular-nums">
                     {d.pct_acerto == null ? "—" : `${d.pct_acerto.toFixed(0)}%`}
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="w-20 text-xs text-muted">cobertura</span>
+                  <span className="w-20 text-xs text-muted">Cobertura</span>
                   <Barra pct={d.cobertura_pct} cor="bg-accent" />
                   <span className="w-12 text-right text-xs tabular-nums">{d.cobertura_pct.toFixed(0)}%</span>
                 </div>

@@ -32,7 +32,7 @@ export default function PaginaSimulado() {
     try {
       const r = await iniciarSimulado(n, minutos === "" ? undefined : minutos);
       if (r.questoes.length === 0) {
-        setErro("nenhuma questão no acervo ainda.");
+        setErro("Nenhuma questão no acervo ainda.");
         return;
       }
       setSessao({ id: r.simulado_id, questoes: r.questoes });
@@ -43,7 +43,7 @@ export default function PaginaSimulado() {
         router.push("/login");
         return;
       }
-      setErro(e instanceof ErroApi ? e.message : "não deu pra conectar com a API");
+      setErro(e instanceof ErroApi ? e.message : "Não deu pra conectar com a API");
     }
   }
 
@@ -53,7 +53,7 @@ export default function PaginaSimulado() {
         <SimuladoRunner
           simuladoId={sessao.id}
           questoes={sessao.questoes}
-          rotuloContinuar="novo simulado"
+          rotuloContinuar="Novo simulado"
           onFinalizado={() => {
             setFinalizado(true);
             setSessao(null);
@@ -67,13 +67,13 @@ export default function PaginaSimulado() {
   return (
     <div className="mx-auto max-w-2xl p-6 md:p-10">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">simulado</h1>
-        <p className="mt-1 text-sm text-muted">sem dica, sem correção durante a prova — gabarito só no final.</p>
+        <h1 className="text-2xl font-semibold tracking-tight">Simulado</h1>
+        <p className="mt-1 text-sm text-muted">Sem dica, sem correção durante a prova — gabarito só no final.</p>
       </div>
 
       <form onSubmit={comecar} className="card max-w-xs space-y-3">
         <div className="space-y-1">
-          <label className="text-sm text-muted">quantas questões</label>
+          <label className="text-sm text-muted">Quantas questões</label>
           <input
             type="number"
             min={1}
@@ -83,7 +83,7 @@ export default function PaginaSimulado() {
           />
         </div>
         <div className="space-y-1">
-          <label className="text-sm text-muted">meta de minutos (opcional)</label>
+          <label className="text-sm text-muted">Meta de minutos (opcional)</label>
           <input
             type="number"
             min={1}
@@ -100,7 +100,7 @@ export default function PaginaSimulado() {
 
       {historico && historico.length > 0 && (
         <div className="mt-10">
-          <h2 className="mb-2 text-sm font-medium text-muted">histórico</h2>
+          <h2 className="mb-2 text-sm font-medium text-muted">Histórico</h2>
           <ul className="space-y-1 text-sm">
             {historico.map((h) => (
               <li key={h.id} className="flex justify-between border-b border-line py-1.5">

@@ -85,7 +85,7 @@ export default function PaginaTutor() {
           router.push("/login");
           return;
         }
-        setErroQuestao(e instanceof ErroApi ? e.message : "não deu pra buscar a fila");
+        setErroQuestao(e instanceof ErroApi ? e.message : "Não deu pra buscar a fila");
         setQuestao(null);
       });
   }, [router]);
@@ -119,7 +119,7 @@ export default function PaginaTutor() {
         ...m,
         {
           autor: "tutor",
-          texto: err instanceof ErroApi ? err.message : "não deu pra conectar com a API",
+          texto: err instanceof ErroApi ? err.message : "Não deu pra conectar com a API",
           citadas: [],
           consultadas: [],
         },
@@ -220,8 +220,8 @@ export default function PaginaTutor() {
 
               {questao === null && (
                 <div className="callout-info !p-4 text-sm">
-                  {erroQuestao ?? "nenhuma questão pendente agora — sua fila está em dia."}{" "}
-                  <Link href="/fila" className="link">ver fila →</Link>
+                  {erroQuestao ?? "Nenhuma questão pendente agora — sua fila está em dia."}{" "}
+                  <Link href="/fila" className="link">Ver fila →</Link>
                 </div>
               )}
 

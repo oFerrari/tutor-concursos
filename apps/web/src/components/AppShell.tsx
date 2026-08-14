@@ -175,16 +175,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           )}
           <main className="relative z-[1] min-h-0 flex-1 overflow-y-auto">{children}</main>
 
-          {/* Saída do foco: o protótipo deixa a dica do atalho visível, e
-              não só o botão — quem entrou em foco sem querer precisa saber
-              como sair sem caçar o canto certo da tela. */}
+          {/* Saída do foco no ALTO E À DIREITA, onde o botão "Foco" estava
+              antes de o cabeçalho sumir: entrar e sair no mesmo canto é o que
+              faz o gesto ser reversível sem procurar. A dica do atalho fica
+              visível junto, e não só o botão — quem entrou sem querer precisa
+              saber como sair. */}
           {foco && (
             <button
               onClick={() => setFoco(false)}
-              className="chip fixed bottom-5 left-1/2 z-40 -translate-x-1/2 font-mono text-[12px]"
+              className="chip fixed right-5 top-4 z-40 font-mono text-[12px]"
             >
               <X className="h-3.5 w-3.5" />
-              sair do modo foco · esc
+              Sair do modo foco · esc
             </button>
           )}
         </section>

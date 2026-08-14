@@ -69,8 +69,8 @@ export default function PaginaCuradoria() {
       .catch((e) =>
         setErro(
           e instanceof ErroApi && e.status === 404
-            ? "esse rascunho expirou ou não existe — suba o PDF de novo"
-            : "não deu pra carregar o rascunho"
+            ? "Esse rascunho expirou ou não existe — suba o PDF de novo"
+            : "Não deu pra carregar o rascunho"
         )
       );
   }, [id, router, montar]);
@@ -93,7 +93,7 @@ export default function PaginaCuradoria() {
       });
       router.push("/meta");
     } catch (e) {
-      setErro(e instanceof ErroApi ? e.message : "não deu pra confirmar o edital");
+      setErro(e instanceof ErroApi ? e.message : "Não deu pra confirmar o edital");
       setSalvando(false);
     }
   }
@@ -108,7 +108,7 @@ export default function PaginaCuradoria() {
   if (!draft) {
     return (
       <div className="mx-auto max-w-2xl p-6 md:p-10">
-        <p className="text-sm text-muted">carregando o rascunho…</p>
+        <p className="text-sm text-muted">Carregando o rascunho…</p>
       </div>
     );
   }
@@ -122,7 +122,7 @@ export default function PaginaCuradoria() {
       <p className="rotulo mb-2">conferir antes de valer</p>
       <h1 className="text-2xl font-semibold tracking-tight">{draft.titulo}</h1>
       <p className="mt-1.5 text-sm text-muted">
-        {draft.data_prova ? `prova em ${draft.data_prova}` : "sem data de prova reconhecida"}
+        {draft.data_prova ? `Prova em ${draft.data_prova}` : "Sem data de prova reconhecida"}
         {" · "}
         {draft.origem === "parser"
           ? "lido pela estrutura do edital"
@@ -208,7 +208,7 @@ export default function PaginaCuradoria() {
             <input
               value={nova}
               onChange={(e) => setNova(e.target.value)}
-              placeholder="acrescentar disciplina que faltou"
+              placeholder="Acrescentar disciplina que faltou"
               className="field flex-1"
             />
             <button type="submit" disabled={!nova.trim()} className="btn-ghost shrink-0">
@@ -224,21 +224,21 @@ export default function PaginaCuradoria() {
         <div className="mt-8 border-t border-line pt-6">
           <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
             <input value={titulo} onChange={(e) => setTitulo(e.target.value)}
-                   placeholder="nome do edital" className="field md:col-span-3" />
+                   placeholder="Nome do edital" className="field md:col-span-3" />
             <input value={orgao} onChange={(e) => setOrgao(e.target.value)}
-                   placeholder="órgão (opcional)" className="field" />
+                   placeholder="Órgão (opcional)" className="field" />
             <input value={banca} onChange={(e) => setBanca(e.target.value)}
-                   placeholder="banca (opcional)" className="field" />
+                   placeholder="Banca (opcional)" className="field" />
           </div>
           <button
             onClick={confirmar}
             disabled={disciplinas.length === 0 || salvando}
             className="btn-primary mt-4"
           >
-            {salvando ? "gravando…" : "confirmar meu edital"}
+            {salvando ? "Gravando…" : "Confirmar meu edital"}
           </button>
           <p className="mt-2.5 text-[12px] text-subtle">
-            só agora isso vira edital da mesa e passa a contar na meta e na fila.
+            Só agora isso vira edital da mesa e passa a contar na meta e na fila.
           </p>
         </div>
       )}

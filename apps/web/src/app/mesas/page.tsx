@@ -36,7 +36,7 @@ import {
  * padrão da conta — e é ELA que decide isso, não esta tela.
  */
 function haQuantoTempo(iso: string | null): string {
-  if (!iso) return "ainda sem estudo aqui";
+  if (!iso) return "Ainda sem estudo aqui";
   const minutos = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
   if (minutos < 2) return "Último estudo agora há pouco";
   if (minutos < 60) return `Último estudo há ${minutos} min`;
@@ -91,7 +91,7 @@ function CartaoMesa({
               linha própria — porque aí a ausência de recorte é a informação. */}
           {!mesa.disciplinas && (
             <p className="mb-2 truncate text-[12px] text-subtle">
-              sem edital — mostra o acervo inteiro
+              Sem edital — mostra o acervo inteiro
             </p>
           )}
           <div className="mb-1.5 flex items-baseline justify-between gap-2.5">
@@ -157,7 +157,7 @@ export default function PaginaMesas() {
         router.push("/login");
         return;
       }
-      setErro(e instanceof ErroApi ? e.message : "não deu pra conectar com a API");
+      setErro(e instanceof ErroApi ? e.message : "Não deu pra conectar com a API");
     }
   }, [router]);
 
@@ -195,7 +195,7 @@ export default function PaginaMesas() {
       setMesaAtiva(nova.id);
       router.push("/meta");
     } catch (e) {
-      setErro(e instanceof ErroApi ? e.message : "não deu pra criar a mesa");
+      setErro(e instanceof ErroApi ? e.message : "Não deu pra criar a mesa");
       setSalvando(false);
     }
   }
@@ -216,7 +216,7 @@ export default function PaginaMesas() {
       }
       await carregar();
     } catch (e) {
-      setErro(e instanceof ErroApi ? e.message : "não deu pra apagar a mesa");
+      setErro(e instanceof ErroApi ? e.message : "Não deu pra apagar a mesa");
     }
   }
 
@@ -308,19 +308,19 @@ export default function PaginaMesas() {
               autoFocus
               value={nome}
               onChange={(e) => setNome(e.target.value)}
-              placeholder="nome da mesa (ex: PF Agente 2026)"
+              placeholder="Nome da mesa (ex.: PF Agente 2026)"
               className="field"
             />
             <input
               value={orgao}
               onChange={(e) => setOrgao(e.target.value)}
-              placeholder="órgão (opcional)"
+              placeholder="Órgão (opcional)"
               className="field"
             />
             <input
               value={banca}
               onChange={(e) => setBanca(e.target.value)}
-              placeholder="banca (opcional)"
+              placeholder="Banca (opcional)"
               className="field"
             />
             <div className="mt-auto flex gap-2">
@@ -353,7 +353,7 @@ export default function PaginaMesas() {
 
       {mesas !== null && mesas.length === 0 && !criando && (
         <p className="mt-5 callout-info">
-          <span className="font-semibold text-accent-text">primeira vez · </span>
+          <span className="font-semibold text-accent-text">Primeira vez · </span>
           você ainda não criou nenhuma mesa. Enquanto não criar, o app usa uma mesa padrão sem
           edital — ou seja, mostra o acervo inteiro.
         </p>

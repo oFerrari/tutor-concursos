@@ -23,21 +23,21 @@ export default function PaginaErros() {
           router.push("/login");
           return;
         }
-        setErro(e instanceof ErroApi ? e.message : "não deu pra conectar com a API");
+        setErro(e instanceof ErroApi ? e.message : "Não deu pra conectar com a API");
       });
   }, [router]);
 
   return (
     <div className="mx-auto max-w-3xl p-6 md:p-10">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold tracking-tight">caderno de erros</h1>
-        <p className="mt-1 text-sm text-muted">ordenado por reincidência — o que mais volta primeiro.</p>
+        <h1 className="text-3xl font-bold tracking-tight">Caderno de erros</h1>
+        <p className="mt-1 text-sm text-muted">Ordenado por reincidência — o que mais volta primeiro.</p>
       </div>
 
       {erro && <p className="callout-danger">{erro}</p>}
-      {!erro && !erros && <p className="text-sm text-muted">carregando…</p>}
+      {!erro && !erros && <p className="text-sm text-muted">Carregando…</p>}
       {erros && erros.length === 0 && (
-        <p className="text-muted">nenhuma reincidência ainda — bom sinal.</p>
+        <p className="text-muted">Nenhuma reincidência ainda — bom sinal.</p>
       )}
 
       {erros && erros.length > 0 && (

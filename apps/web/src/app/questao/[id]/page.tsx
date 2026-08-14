@@ -26,7 +26,7 @@ export default function PaginaResponder() {
           router.push("/login");
           return;
         }
-        setErroCarregar(e instanceof ErroApi ? e.message : "não deu pra carregar a questão");
+        setErroCarregar(e instanceof ErroApi ? e.message : "Não deu pra carregar a questão");
       });
   }, [questaoId, router]);
 
@@ -40,7 +40,7 @@ export default function PaginaResponder() {
   if (!questao) {
     return (
       <div className="mx-auto max-w-2xl p-6 md:p-10">
-        <p className="text-sm text-muted">carregando…</p>
+        <p className="text-sm text-muted">Carregando…</p>
       </div>
     );
   }
@@ -50,10 +50,10 @@ export default function PaginaResponder() {
       {/* href fixo, não router.back(): a origem daqui é sempre a fila, e
           o back() do navegador poderia devolver pra uma questão já
           respondida se a pessoa chegou navegando entre elas. */}
-      <Voltar href="/fila" rotulo="voltar pra fila" />
+      <Voltar href="/fila" rotulo="Voltar pra fila" />
       <DialogoQuestao
         questao={questao}
-        rotuloContinuar="voltar pra fila"
+        rotuloContinuar="Voltar pra fila"
         onFechado={() => router.push("/fila")}
         onSair={() => router.push("/fila")}
       />

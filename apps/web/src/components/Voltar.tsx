@@ -14,7 +14,7 @@ import { ArrowLeft } from "lucide-react";
  * ter vindo do onboarding ou do painel, e mandar pro lugar errado é pior
  * que devolver de onde veio.
  */
-export function Voltar({ href, rotulo = "voltar" }: { href?: string; rotulo?: string }) {
+export function Voltar({ href, rotulo = "Voltar" }: { href?: string; rotulo?: string }) {
   const router = useRouter();
   return (
     <button

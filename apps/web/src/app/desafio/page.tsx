@@ -38,7 +38,7 @@ export default function PaginaDesafio() {
           router.push("/login");
           return;
         }
-        setErro(e instanceof ErroApi ? e.message : "não deu pra conectar com a API");
+        setErro(e instanceof ErroApi ? e.message : "Não deu pra conectar com a API");
       });
   }, [router]);
 
@@ -52,7 +52,7 @@ export default function PaginaDesafio() {
         const r = await iniciarSimuladoComIds(plano.mini_simulado.map((q) => q.id));
         setSessaoSimulado({ id: r.simulado_id, questoes: r.questoes });
       } catch (e) {
-        setErro(e instanceof ErroApi ? e.message : "não deu pra iniciar o mini-simulado");
+        setErro(e instanceof ErroApi ? e.message : "Não deu pra iniciar o mini-simulado");
         setBloco("fim");
         return;
       }
@@ -92,7 +92,7 @@ export default function PaginaDesafio() {
   if (!plano) {
     return (
       <div className="mx-auto max-w-2xl p-6 md:p-10">
-        <p className="text-sm text-muted">carregando…</p>
+        <p className="text-sm text-muted">Carregando…</p>
       </div>
     );
   }
@@ -101,7 +101,7 @@ export default function PaginaDesafio() {
     if (plano.total_questoes === 0) {
       return (
         <div className="mx-auto max-w-2xl p-6 md:p-10">
-          <h1 className="mb-4 text-2xl font-semibold tracking-tight">desafio de hoje</h1>
+          <h1 className="mb-4 text-2xl font-semibold tracking-tight">Desafio de hoje</h1>
           <AvisoAcervo />
           <p className="mt-4 text-muted">
             nada pra compor um desafio ainda — responda algumas questões na fila primeiro.
@@ -112,7 +112,7 @@ export default function PaginaDesafio() {
     return (
       <div className="mx-auto max-w-2xl p-6 md:p-10">
         <Sugestao />
-        <h1 className="mb-4 text-2xl font-semibold tracking-tight">desafio de hoje</h1>
+        <h1 className="mb-4 text-2xl font-semibold tracking-tight">Desafio de hoje</h1>
         <div className="card space-y-1 text-sm">
           <p>{plano.reincidentes.length} pontos fracos</p>
           <p>{plano.novas.length} novas</p>
@@ -144,7 +144,7 @@ export default function PaginaDesafio() {
         <DialogoQuestao
           key={q.id}
           questao={q}
-          rotuloContinuar="próxima"
+          rotuloContinuar="Próxima"
           onFechado={() => proximaDoBloco(bloco)}
           onSair={sairDoDesafio}
         />
@@ -155,11 +155,11 @@ export default function PaginaDesafio() {
   if (bloco === "simulado" && sessaoSimulado) {
     return (
       <div className="mx-auto max-w-2xl p-6 md:p-10">
-        <p className="mb-4 text-xs font-medium uppercase tracking-wide text-muted">bloco 3 — mini-simulado</p>
+        <p className="mb-4 text-xs font-medium uppercase tracking-wide text-muted">Bloco 3 — mini-simulado</p>
         <SimuladoRunner
           simuladoId={sessaoSimulado.id}
           questoes={sessaoSimulado.questoes}
-          rotuloContinuar="concluir desafio"
+          rotuloContinuar="Concluir desafio"
           onFinalizado={() => setBloco("fim")}
         />
       </div>
@@ -169,7 +169,7 @@ export default function PaginaDesafio() {
   // fim
   return (
     <div className="mx-auto max-w-2xl p-6 md:p-10">
-      <h1 className="mb-4 text-2xl font-semibold tracking-tight">desafio concluído</h1>
+      <h1 className="mb-4 text-2xl font-semibold tracking-tight">Desafio concluído</h1>
       {erro && <p className="mb-4 callout-danger">{erro}</p>}
       <button onClick={() => router.push("/stats")} className="btn-primary">
         ver estatísticas

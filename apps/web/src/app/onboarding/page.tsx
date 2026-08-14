@@ -48,7 +48,7 @@ export default function PaginaOnboarding() {
       const d = await criarRascunho(arquivo, arquivo.name.replace(/\.pdf$/i, ""));
       router.push(`/edital/${d.id}`);
     } catch (e) {
-      setErro(e instanceof ErroApi ? e.message : "não deu pra ler o edital");
+      setErro(e instanceof ErroApi ? e.message : "Não deu pra ler o edital");
       setEnviando(false);
     }
   }
@@ -108,7 +108,7 @@ export default function PaginaOnboarding() {
           <Upload className="h-5 w-5" strokeWidth={2.2} />
         </span>
         <span className="mb-1.5 block text-[15.5px] font-medium">
-          {enviando ? "lendo o edital…" : "Arraste o PDF do edital aqui"}
+          {enviando ? "Lendo o edital…" : "Arraste o PDF do edital aqui"}
         </span>
         <span className="block text-[13.5px] text-muted">
           Extraio data da prova, banca, matérias, pesos e tópicos em segundos

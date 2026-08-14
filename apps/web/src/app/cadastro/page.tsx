@@ -31,7 +31,7 @@ export default function PaginaCadastro() {
     setErro(null);
 
     if (senha.length < 8) {
-      setErro("a senha precisa de pelo menos 8 caracteres");
+      setErro("A senha precisa de pelo menos 8 caracteres");
       return;
     }
     if (senha !== confirmarSenha) {
@@ -47,7 +47,7 @@ export default function PaginaCadastro() {
     } catch (e) {
       // ErroApi.message já vem do "detail" do FastAPI — mesma mensagem
       // que auth.py devolve pra e-mail duplicado ou senha curta.
-      setErro(e instanceof ErroApi ? e.message : "não deu pra conectar com a API");
+      setErro(e instanceof ErroApi ? e.message : "Não deu pra conectar com a API");
     } finally {
       setEnviando(false);
     }
@@ -118,7 +118,7 @@ export default function PaginaCadastro() {
                 value={senha}
                 onChange={(e) => setSenha(e.target.value)}
                 className="field"
-                placeholder="mínimo 8 caracteres"
+                placeholder="Mínimo 8 caracteres"
               />
             </div>
 
@@ -141,7 +141,7 @@ export default function PaginaCadastro() {
             {erro && <p className="callout-danger !p-3 text-[13px]">{erro}</p>}
 
             <button type="submit" disabled={enviando} className="btn-primary mt-1 w-full rounded-xl py-3.5 text-[14.5px]">
-              {enviando ? "criando conta…" : "Criar minha conta"}
+              {enviando ? "Criando conta…" : "Criar minha conta"}
             </button>
           </div>
 

@@ -57,7 +57,7 @@ export function BalaoQuestao({ tipo, questao, onFechado, onSair }: Props) {
         questao={questao}
         onFechado={onFechado}
         onSair={onSair}
-        rotuloContinuar="ok, entendi"
+        rotuloContinuar="Ok, entendi"
       />
     </div>
   );

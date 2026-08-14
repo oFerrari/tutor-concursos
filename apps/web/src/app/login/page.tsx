@@ -40,7 +40,7 @@ export default function PaginaLogin() {
     } catch (e) {
       // ErroApi.message já vem do "detail" do FastAPI — mesma mensagem
       // que auth.py devolve pra email/senha errados ou conta inexistente.
-      setErro(e instanceof ErroApi ? e.message : "não deu pra conectar com a API");
+      setErro(e instanceof ErroApi ? e.message : "Não deu pra conectar com a API");
     } finally {
       setEnviando(false);
     }
@@ -105,7 +105,7 @@ export default function PaginaLogin() {
                   Senha
                 </label>
                 {/* Visual só — sem rota de reset ainda, ver comentário no topo do arquivo. */}
-                <span className="cursor-not-allowed text-[12.5px] text-accent-text" title="ainda não implementado">
+                <span className="cursor-not-allowed text-[12.5px] text-accent-text" title="Ainda não implementado">
                   Esqueceu a senha?
                 </span>
               </div>
@@ -123,7 +123,7 @@ export default function PaginaLogin() {
             {erro && <p className="callout-danger !p-3 text-[13px]">{erro}</p>}
 
             <button type="submit" disabled={enviando} className="btn-primary mt-1 w-full rounded-xl py-3.5 text-[14.5px]">
-              {enviando ? "entrando…" : "Entrar na plataforma"}
+              {enviando ? "Entrando…" : "Entrar na plataforma"}
             </button>
           </div>
 

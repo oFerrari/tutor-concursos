@@ -37,7 +37,7 @@ export default function PaginaMateriais() {
       </p>
 
       <p className="callout-info mb-5">
-        <span className="font-semibold text-accent-text">vitrine · </span>
+        <span className="font-semibold text-accent-text">Vitrine · </span>
         a lista abaixo é exemplo do protótipo. O upload ainda não tem rota na API — hoje a ingestão de
         material roda pela CLI (<span className="font-mono text-[12.5px]">ingest.py</span>). Para o PDF do
         edital, que já tem rota, use <span className="font-mono text-[12.5px]">/onboarding</span>.
