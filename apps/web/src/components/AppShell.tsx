@@ -11,10 +11,12 @@ import {
   Desempenho,
   EditalAtual,
   ErroCaderno,
+  Mesa,
   Meta,
   getCarga,
   getEdital,
   getErros,
+  getMesaAtual,
   getMeta,
   getStats,
   getToken,
@@ -56,6 +58,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [railAberto, setRailAberto] = useState(false);
 
   const [carga, setCarga] = useState<Carga | null>(null);
+  const [mesa, setMesa] = useState<Mesa | null>(null);
   const [meta, setMeta] = useState<Meta | null>(null);
   const [edital, setEdital] = useState<EditalAtual | null>(null);
   const [desempenho, setDesempenho] = useState<Desempenho[] | null>(null);
@@ -99,6 +102,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     // conteúdo. Sem edital ingerido, /meta e /edital respondem erro — e a
     // resposta certa é o painel dizer "sem edital", não a página quebrar.
     getCarga().then(setCarga).catch(() => {});
+    // Uma requisição só pro nome da mesa, aqui — nav e rail leem a mesma
+    // resposta. Sem isso os dois pediriam a mesma coisa a cada rota, e
+    // poderiam divergir enquanto uma das duas ainda não voltou.
+    getMesaAtual().then(setMesa).catch(() => setMesa(null));
     getMeta().then(setMeta).catch(() => {});
     getEdital().then(setEdital).catch(() => setEdital(null));
     getStats().then(setDesempenho).catch(() => {});
@@ -138,11 +145,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* ------------------------------------------------------- nav */}
       {!foco && (
         <div className="hidden lg:block">
-          <Sidebar recolhida={recolhida} onAlternar={alternarSidebar} />
+          <Sidebar recolhida={recolhida} onAlternar={alternarSidebar} mesa={mesa} />
         </div>
       )}
       {!foco && menuAberto && (
-        <Sidebar recolhida={false} onAlternar={alternarSidebar} drawer onFechar={() => setMenuAberto(false)} />
+        <Sidebar
+          recolhida={false}
+          onAlternar={alternarSidebar}
+          mesa={mesa}
+          drawer
+          onFechar={() => setMenuAberto(false)}
+        />
       )}
 
       {/* -------------------------------------------------- conteúdo */}
@@ -178,6 +191,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* ---------------------------------------------------- rail */}
         {railVisivel && <RaioX
           meta={meta}
+          mesa={mesa}
           edital={edital}
           desempenho={desempenho}
           carga={carga}

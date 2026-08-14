@@ -296,7 +296,14 @@ chuta um id que ele existe e só não é dele), mesmo espírito de
 `simulado.pertence_a()`. Sem header, cai na mesa padrão da conta
 (`mesa.padrao`, a mais antiga, criada sob demanda como
 `auth.usuario_da_cli`) — é o que mantém a CLI e qualquer cliente que ainda
-não conhece mesas funcionando igual. Na CLI o equivalente é `--mesa NOME`,
+não conhece mesas funcionando igual. Essa regra de fallback tem UM dono: o
+servidor. `GET /mesa` devolve a mesa já resolvida pra requisição, e é o que
+a sidebar e o raio-x leem — o cliente nunca recalcula "sem header, usa a
+mais antiga", porque duas cópias da mesma regra divergem e o sintoma seria
+a nav afirmar um nome enquanto a fila responde por outra mesa. No frontend,
+o header sai de UM lugar (`chamar`/`chamarFormData` em `lib/api.ts`): se
+cada tela precisasse lembrar de mandá-lo, a primeira que esquecesse leria a
+mesa errada sem ninguém perceber. Na CLI o equivalente é `--mesa NOME`,
 e nome desconhecido é ERRO, não fallback calado pra padrão: receber a fila
 de outro concurso por causa de um typo é o tipo de falha silenciosa que
 `--norma` explícito em `reingest.py` já evita noutro lugar.
@@ -461,9 +468,11 @@ lembrasse de rodar.
 - Uma mesa não tem disciplinas próprias: elas saem do edital. Mesa criada e
   ainda sem PDF mostra o acervo inteiro (declarado, não silencioso — a CLI
   imprime "sem edital — acervo inteiro" no cabeçalho da sessão).
-- A tela `/mesas` do frontend continua VITRINE: a fase 2 entregou só o
-  backend. Ligar a tela (listar/criar/entrar + `X-Mesa-Id` em todo fetch de
-  `lib/api.ts`) é a próxima rodada.
+- A troca de mesa é por aba do navegador, não por dispositivo: a mesa ativa
+  vive em `localStorage` (`tutor_mesa`), do mesmo jeito que o token. Abrir
+  duas abas em mesas diferentes funciona (é o motivo de o header ser por
+  requisição), mas fechar o navegador e abrir noutra máquina começa da mesa
+  padrão.
 
 ## Aberto
 
@@ -483,9 +492,11 @@ lembrasse de rodar.
 - Simulado por banca (peso de incidência real, não amostra uniforme).
   Simulado genérico (`chat.py simulado`) e desafio diário (`chat.py desafio`)
   já existem.
-- Next.js consumindo `api.py` — API já existe e testada (auth, fila,
-  diálogo turno a turno, simulado, desafio, stats, edital), frontend ainda
-  não escrito. `scheduler`/`socratic` continuam funções puras por baixo.
+- Next.js consumindo `api.py` — ligado: auth, fila, diálogo turno a turno,
+  simulado, desafio, stats, edital e mesas leem a API de verdade.
+  `scheduler`/`socratic` continuam funções puras por baixo. O que ainda é
+  vitrine em `apps/web` está listado no cabeçalho de `src/mock/prototipo.ts`,
+  com a rota que falta anotada em cada bloco (materiais e onboarding).
 - Se a rotina exportar/importar do `sincronizar.py` cansar: Postgres hospedado
   (Neon, Supabase) com `DATABASE_URL` único resolve, ao custo de exigir rede.
 - **Precisão de `retrieval.py` MEDIDA** (`avaliar_retrieval.py`, agora 22

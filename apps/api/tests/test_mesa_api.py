@@ -64,6 +64,33 @@ def test_mesa_padrao_nasce_sob_demanda(client, usuario):
     assert mesas[0]["topicos"] == 0        # sem edital ainda
 
 
+def test_mesa_atual_resolve_a_mesma_regra_de_fallback(client, usuario):
+    """GET /mesa é a fonte única de "em qual mesa eu estou" — sem ele, o
+    cliente reimplementaria o fallback e a sidebar poderia mostrar um nome
+    enquanto a fila responde por outra mesa."""
+    primeira = _criar_mesa(client, usuario, "Primeira")
+    segunda = _criar_mesa(client, usuario, "Segunda")
+
+    sem_header = client.get("/mesa", headers=usuario["headers"]).json()
+    assert sem_header["id"] == primeira["id"]        # a mais antiga
+
+    com_header = client.get("/mesa", headers=_cab(usuario, segunda)).json()
+    assert com_header["id"] == segunda["id"]
+
+
+def test_listar_traz_cobertura_no_mesmo_criterio_do_painel(client, usuario, duas_disciplinas):
+    dentro, _ = duas_disciplinas
+    _criar_mesa(client, usuario, "Com edital", disciplina=dentro)
+
+    m = client.get("/mesas", headers=usuario["headers"]).json()[0]
+    assert m["topicos"] == 1
+    assert m["disciplinas"] == [dentro]
+    assert m["questoes"] > 0            # o universo é o acervo DA disciplina
+    assert m["dominadas"] == 0
+    assert m["cobertura_pct"] == 0.0
+    assert m["ultimo_estudo"] is None   # ninguém estudou nesta conta ainda
+
+
 def test_crud_da_mesa(client, usuario):
     m = _criar_mesa(client, usuario, "PF Agente")
     assert m["nome"] == "PF Agente"

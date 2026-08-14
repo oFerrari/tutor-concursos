@@ -106,9 +106,24 @@ def obter(usuario_id: int, mesa_id: int) -> dict | None:
 
 
 def listar(usuario_id: int) -> list[dict]:
-    """Cada mesa com o resumo do edital vigente — é o que a tela de mesas
-    mostra no cartão (banca, prova, quantos tópicos)."""
-    return db.query(
+    """
+    Cada mesa com o resumo do edital vigente MAIS o progresso dentro do
+    recorte dela — é o cartão inteiro da tela de mesas (banca, prova,
+    tópicos, barra de cobertura, "último estudo").
+
+    `cobertura_pct` usa a MESMA definição de `v_desempenho_disciplina` e de
+    `scheduler.meta()` (dominadas = caixa >= 3, sobre o acervo inteiro das
+    disciplinas da mesa), só que agregada. Ter duas definições de cobertura
+    convivendo é como a 008 quase nasceu errada; aqui o número do cartão e
+    o número do painel têm que ser o mesmo número.
+
+    N+1 consultas de propósito: cada mesa tem uma lista de disciplinas
+    diferente, então não há um GROUP BY único que sirva. Uma conta tem
+    unidades de mesas, não milhares — e a alternativa (materializar
+    cobertura numa coluna) criaria estado a invalidar toda vez que alguém
+    responde uma questão.
+    """
+    mesas = db.query(
         """SELECT m.id, m.nome, m.orgao, m.banca, m.criado_em,
                   e.id AS edital_id, e.titulo AS edital_titulo, e.data_prova,
                   COALESCE(e.topicos, 0) AS topicos
@@ -123,6 +138,32 @@ def listar(usuario_id: int) -> list[dict]:
             ORDER BY m.criado_em, m.id""",
         {"u": usuario_id},
     )
+    for m in mesas:
+        disc = disciplinas(m["id"])
+        m["disciplinas"] = disc
+        r = db.exec1(
+            f"""SELECT count(DISTINCT q.id) AS questoes,
+                       count(DISTINCT q.id) FILTER (WHERE p.caixa >= 3) AS dominadas
+                  FROM questao q
+                  LEFT JOIN progresso p ON p.questao_id = q.id AND p.usuario_id = %(u)s
+                 WHERE {filtro('q.disciplina')}""",
+            {"u": usuario_id, "disc": disc},
+        ) or {"questoes": 0, "dominadas": 0}
+        m["questoes"] = r["questoes"]
+        m["dominadas"] = r["dominadas"]
+        m["cobertura_pct"] = (round(100.0 * r["dominadas"] / r["questoes"], 1)
+                              if r["questoes"] else 0.0)
+        # "Último estudo" DENTRO do recorte: a conta pode ter estudado hoje
+        # noutra mesa, e dizer "há 2 horas" num concurso que você não abre
+        # há um mês seria a tela mentindo com dado verdadeiro.
+        ultimo = db.exec1(
+            f"""SELECT max(t.criada_em) AS quando
+                  FROM tentativa t JOIN questao q ON q.id = t.questao_id
+                 WHERE t.usuario_id = %(u)s AND {filtro('q.disciplina')}""",
+            {"u": usuario_id, "disc": disc},
+        )
+        m["ultimo_estudo"] = ultimo["quando"] if ultimo else None
+    return mesas
 
 
 def atualizar(usuario_id: int, mesa_id: int, nome: str | None = None,

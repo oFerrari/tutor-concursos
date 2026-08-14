@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { X } from "lucide-react";
-import { Carga, Desempenho, EditalAtual, ErroCaderno, Meta } from "@/lib/api";
-import { FLASHCARDS_NA_FILA, LIGA, MESA_ATUAL } from "@/mock/prototipo";
+import { Carga, Desempenho, EditalAtual, ErroCaderno, Mesa, Meta } from "@/lib/api";
+import { FLASHCARDS_NA_FILA, LIGA } from "@/mock/prototipo";
 
 /**
  * "Raio-X do aluno" — a terceira coluna do protótipo. Painel de contexto
@@ -33,6 +33,9 @@ function corDoPct(pct: number): string {
 
 type Props = {
   meta: Meta | null;
+  /** Mesa ativa — o nome dela é o subtítulo quando ainda não há edital
+   *  ingerido (antes vinha de MESA_ATUAL, que era decorativo). */
+  mesa: Mesa | null;
   edital: EditalAtual | null;
   desempenho: Desempenho[] | null;
   carga: Carga | null;
@@ -40,7 +43,7 @@ type Props = {
   onFechar: () => void;
 };
 
-export function RaioX({ meta, edital, desempenho, carga, erros, onFechar }: Props) {
+export function RaioX({ meta, mesa, edital, desempenho, carga, erros, onFechar }: Props) {
   const dataProva = formatarDataProva(edital?.data_prova);
   const comDado = (desempenho ?? []).filter((d) => d.pct_acerto != null);
   const ordenadas = [...comDado].sort((a, b) => (a.pct_acerto ?? 0) - (b.pct_acerto ?? 0));
@@ -70,11 +73,13 @@ export function RaioX({ meta, edital, desempenho, carga, erros, onFechar }: Prop
             <span className="text-[13.5px] text-muted">dias{dataProva ? ` · ${dataProva}` : ""}</span>
           </div>
         ) : (
-          <Link href="/onboarding" className="text-[13.5px] text-muted underline-offset-2 hover:text-foreground">
-            sem edital ingerido →
+          <Link href="/meta" className="text-[13.5px] text-muted underline-offset-2 hover:text-foreground">
+            sem edital nesta mesa →
           </Link>
         )}
-        <p className="mt-1.5 text-[12.5px] text-subtle">{edital?.titulo ?? MESA_ATUAL.cargo}</p>
+        <p className="mt-1.5 text-[12.5px] text-subtle">
+          {edital?.titulo ?? mesa?.nome ?? "—"}
+        </p>
 
         {meta && (
           <div className="mt-3.5">

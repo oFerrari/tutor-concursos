@@ -25,10 +25,10 @@
  *                             Não exige migração nova: `documento` já existe.
  *   - POST    /onboarding   → 3 respostas da entrevista (horas/nível/turno).
  *                             Exige coluna nova em `usuario` ou tabela `preferencia`.
- *   - GET/POST /mesas       → mesa/workspace. Exige migração de verdade
- *                             (tabela `mesa` + escopo em edital/progresso/
- *                             tentativa), porque hoje o edital pertence ao
- *                             usuário, não a uma mesa.
+ *
+ * JÁ SAÍRAM DAQUI (o plano funcionando):
+ *   - mesas → migração 010 + GET/POST /mesas. `MESA_ATUAL` e `MESAS_EXEMPLO`
+ *     foram apagados; a tela /mesas, a sidebar e o raio-x leem a API.
  * ============================================================================
  */
 
@@ -53,46 +53,6 @@ export const LIGA = { nome: "Ouro", posicao: "7º de 42" };
 export const TEMPO_MEDIO = { valor: "1m 48s", nota: "por questão" };
 export const ACERTO_NOTA = "+4 pts vs. mês anterior";
 export const FLASHCARDS_NA_FILA = 28;
-
-/** TODO(backend): mesa não existe no schema (ver cabeçalho). */
-export const MESA_ATUAL = { nome: "Polícia Federal 2026", cargo: "Analista Judiciário — TRF" };
-
-export type MesaExemplo = {
-  id: string;
-  nome: string;
-  banca: string;
-  pct: number;
-  topicos: string;
-  ultimo: string;
-};
-
-/** TODO(backend): trocar por `GET /mesas` quando a tabela `mesa` existir. */
-export const MESAS_EXEMPLO: MesaExemplo[] = [
-  {
-    id: "pf-2026",
-    nome: "Polícia Federal 2026 — Agente",
-    banca: "Cebraspe",
-    pct: 61,
-    topicos: "90 / 148 tópicos",
-    ultimo: "Último estudo há 2 horas",
-  },
-  {
-    id: "trf",
-    nome: "Analista Judiciário — TRF",
-    banca: "Cebraspe",
-    pct: 44,
-    topicos: "52 / 118 tópicos",
-    ultimo: "Último estudo há 3 dias",
-  },
-  {
-    id: "bb",
-    nome: "Banco do Brasil — Escriturário",
-    banca: "FGV",
-    pct: 78,
-    topicos: "71 / 91 tópicos",
-    ultimo: "Último estudo há 12 dias",
-  },
-];
 
 export type StatusMaterial = "ativo" | "processando" | "falha";
 

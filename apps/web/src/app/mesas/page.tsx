@@ -1,36 +1,208 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, LogOut, Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Check, ChevronDown, LogOut, Plus, Trash2 } from "lucide-react";
 import { Marca } from "@/components/Marca";
-import { Usuario, getMe, limparToken } from "@/lib/api";
-import { MESAS_EXEMPLO } from "@/mock/prototipo";
+import {
+  ErroApi,
+  MesaNaLista,
+  Usuario,
+  apagarMesa,
+  criarMesa,
+  getMe,
+  getMesaAtiva,
+  getMesas,
+  getToken,
+  limparMesaAtiva,
+  limparToken,
+  setMesaAtiva,
+} from "@/lib/api";
 
 /**
- * "Mesas de estudo" — o lobby do protótipo: cada mesa guarda seu próprio
- * edital, fila SM-2, caderno de erros e histórico.
+ * "Mesas de estudo" — o lobby: cada mesa é um concurso-alvo, com o edital
+ * dele, e RECORTA o que aparece no resto do app pelas disciplinas desse
+ * edital (migração 010).
  *
- * ⚠ TELA DE VITRINE. Os cartões vêm de `MESAS_EXEMPLO`, não do banco,
- * porque MESA NÃO EXISTE NO SCHEMA — hoje o edital pertence ao `usuario`
- * (migração 007 + 008), não a uma mesa, e `progresso`/`tentativa` também.
- * Fazer isso valer de verdade é uma migração 010 com escopo de mesa em
- * cinco tabelas, não uma tela.
+ * O que a mesa NÃO isola é o que você aprendeu: caixa SM-2, tentativas e
+ * caderno de erros são do ALUNO e atravessam as mesas — dominar o art. 312
+ * estudando pra uma vale na outra. Por isso a barra do cartão é a cobertura
+ * do SEU progresso dentro daquele recorte, não um progresso separado que
+ * começaria do zero em cada mesa.
  *
- * Por isso os cartões levam para `/` (o painel único que existe). Clicar
- * em "Analista TRF" e "Banco do Brasil" abre O MESMO progresso — é o que
- * o backend tem hoje, e é melhor a tela ser honesta sobre isso do que
- * fingir três contextos separados que ela não consegue manter.
+ * Entrar numa mesa = gravar o id em localStorage; `lib/api.ts` passa a
+ * mandar `X-Mesa-Id` em toda chamada. Sem mesa escolhida, a API cai na
+ * padrão da conta — e é ELA que decide isso, não esta tela.
  */
+function haQuantoTempo(iso: string | null): string {
+  if (!iso) return "ainda sem estudo aqui";
+  const minutos = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (minutos < 2) return "Último estudo agora há pouco";
+  if (minutos < 60) return `Último estudo há ${minutos} min`;
+  const horas = Math.floor(minutos / 60);
+  if (horas < 24) return `Último estudo há ${horas}h`;
+  const dias = Math.floor(horas / 24);
+  return `Último estudo há ${dias} ${dias === 1 ? "dia" : "dias"}`;
+}
+
+function CartaoMesa({
+  mesa,
+  ativa,
+  onEntrar,
+  onApagar,
+}: {
+  mesa: MesaNaLista;
+  ativa: boolean;
+  onEntrar: () => void;
+  onApagar: () => void;
+}) {
+  const cor = mesa.cobertura_pct >= 75 ? "var(--success)" : "var(--accent)";
+  return (
+    <div className="relative">
+      <button
+        onClick={onEntrar}
+        className={`card-link flex w-full flex-col gap-3.5 !text-left ${
+          ativa ? "!border-accent" : ""
+        }`}
+      >
+        <div>
+          <p className="rotulo mb-2 flex items-center gap-1.5">
+            {ativa && <Check className="h-3 w-3 text-accent-text" strokeWidth={3} />}
+            {mesa.banca || mesa.orgao || (ativa ? "mesa atual" : "sem banca")}
+          </p>
+          <p className="text-base font-semibold leading-snug">{mesa.nome}</p>
+          {/* Mesa sem edital não recorta nada — dizer isso no cartão evita a
+              pessoa achar que a mesa "não está funcionando" quando ela vê o
+              acervo inteiro do outro lado. */}
+          <p className="mt-1 text-[12px] text-subtle">
+            {mesa.disciplinas
+              ? mesa.disciplinas.join(" · ")
+              : "sem edital — mostra o acervo inteiro"}
+          </p>
+        </div>
+
+        <div className="mt-auto w-full">
+          <div className="mb-1.5 flex items-baseline justify-between gap-2.5">
+            <span className="font-mono text-[11.5px] text-subtle">
+              {mesa.topicos > 0
+                ? `${mesa.topicos} tópicos · ${mesa.dominadas}/${mesa.questoes} questões`
+                : `${mesa.dominadas}/${mesa.questoes} questões dominadas`}
+            </span>
+            <span className="mono-num text-[12.5px]" style={{ color: cor }}>
+              {mesa.cobertura_pct}%
+            </span>
+          </div>
+          <div className="barra">
+            <div
+              className="barra-fill"
+              style={{ width: `${mesa.cobertura_pct}%`, background: cor }}
+            />
+          </div>
+          <p className="mt-2.5 text-[12px] text-subtle">{haQuantoTempo(mesa.ultimo_estudo)}</p>
+        </div>
+      </button>
+
+      {/* Fora do <button> de propósito: botão dentro de botão não é HTML
+          válido e o clique de apagar acabaria entrando na mesa. */}
+      <button
+        onClick={onApagar}
+        aria-label={`apagar a mesa ${mesa.nome}`}
+        className="absolute right-3 top-3 rounded-lg p-1.5 text-subtle transition-colors hover:bg-surface-hover hover:text-danger"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
 export default function PaginaMesas() {
+  const router = useRouter();
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [menuAberto, setMenuAberto] = useState(false);
 
+  const [mesas, setMesas] = useState<MesaNaLista[] | null>(null);
+  const [ativa, setAtiva] = useState<number | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const [criando, setCriando] = useState(false);
+  const [nome, setNome] = useState("");
+  const [orgao, setOrgao] = useState("");
+  const [banca, setBanca] = useState("");
+  const [salvando, setSalvando] = useState(false);
+
+  const carregar = useCallback(async () => {
+    try {
+      setMesas(await getMesas());
+      setErro(null);
+    } catch (e) {
+      if (e instanceof ErroApi && e.status === 401) {
+        limparToken();
+        router.push("/login");
+        return;
+      }
+      setErro(e instanceof ErroApi ? e.message : "não deu pra conectar com a API");
+    }
+  }, [router]);
+
   useEffect(() => {
-    getMe()
-      .then(setUsuario)
-      .catch(() => {});
-  }, []);
+    if (!getToken()) {
+      router.push("/login");
+      return;
+    }
+    // localStorage só existe no cliente — ler aqui, não no corpo do
+    // componente, senão o HTML do servidor e o do browser divergem.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setAtiva(getMesaAtiva());
+    carregar();
+    getMe().then(setUsuario).catch(() => {});
+  }, [router, carregar]);
+
+  function entrar(id: number) {
+    setMesaAtiva(id);
+    router.push("/");
+  }
+
+  async function aoCriar(e: React.FormEvent) {
+    e.preventDefault();
+    if (!nome.trim() || salvando) return;
+    setSalvando(true);
+    setErro(null);
+    try {
+      const nova = await criarMesa(nome.trim(), orgao || undefined, banca || undefined);
+      setNome("");
+      setOrgao("");
+      setBanca("");
+      setCriando(false);
+      // Entra direto na mesa recém-criada: quem acabou de criar quer
+      // estudar nela, e o próximo passo (subir o edital) é na tela dela.
+      setMesaAtiva(nova.id);
+      router.push("/meta");
+    } catch (e) {
+      setErro(e instanceof ErroApi ? e.message : "não deu pra criar a mesa");
+      setSalvando(false);
+    }
+  }
+
+  async function aoApagar(mesa: MesaNaLista) {
+    const ok = window.confirm(
+      `Apagar a mesa "${mesa.nome}"?\n\nO edital dela vai junto. Seu progresso ` +
+        `(caixas, tentativas, caderno de erros) NÃO é apagado — ele é seu, não da mesa.`
+    );
+    if (!ok) return;
+    try {
+      await apagarMesa(mesa.id);
+      if (getMesaAtiva() === mesa.id) {
+        // Sem isso, toda chamada seguinte mandaria o header de uma mesa
+        // que não existe mais e voltaria 404.
+        limparMesaAtiva();
+        setAtiva(null);
+      }
+      await carregar();
+    } catch (e) {
+      setErro(e instanceof ErroApi ? e.message : "não deu pra apagar a mesa");
+    }
+  }
 
   const inicial = (usuario?.email?.[0] ?? "?").toUpperCase();
 
@@ -77,7 +249,7 @@ export default function PaginaMesas() {
                 <button
                   onClick={() => {
                     limparToken();
-                    window.location.href = "/login";
+                    router.push("/login");
                   }}
                   className="flex w-full items-center gap-2.5 rounded-[9px] px-3 py-2.5 text-[13px] text-danger transition-colors hover:bg-surface-hover"
                 >
@@ -94,62 +266,82 @@ export default function PaginaMesas() {
         Bem-vindo de volta. Qual é a <span className="text-accent-text">missão de hoje</span>?
       </h1>
       <p className="mb-7 mt-2 text-[15px] text-muted">
-        Cada mesa guarda seu próprio edital, fila SM-2, caderno de erros e histórico.
+        Cada mesa guarda o edital do seu concurso e recorta a fila, o painel e os simulados pelas
+        disciplinas dele. O que você já aprendeu vale em todas elas.
       </p>
 
-      {/* Aviso no lugar de esconder: a tela mostra exemplo, e diz que é. */}
-      <p className="callout-info mb-5">
-        <span className="font-semibold text-accent-text">vitrine · </span>
-        as mesas abaixo são exemplo do protótipo. O backend ainda guarda um edital por conta, então
-        qualquer uma delas abre o mesmo progresso.
-      </p>
+      {erro && <p className="callout-danger mb-5">{erro}</p>}
 
       <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2 xl:grid-cols-3">
-        {MESAS_EXEMPLO.map((m) => (
-          <Link key={m.id} href="/" className="card-link flex flex-col gap-3.5">
-            <div>
-              <p className="rotulo mb-2">{m.banca}</p>
-              <p className="text-base font-semibold leading-snug">{m.nome}</p>
-            </div>
-            <div className="mt-auto">
-              <div className="mb-1.5 flex items-baseline justify-between gap-2.5">
-                <span className="font-mono text-[11.5px] text-subtle">{m.topicos}</span>
-                <span
-                  className="mono-num text-[12.5px]"
-                  style={{ color: m.pct >= 75 ? "var(--success)" : "var(--accent-text)" }}
-                >
-                  {m.pct}%
-                </span>
-              </div>
-              <div className="barra">
-                <div
-                  className="barra-fill"
-                  style={{
-                    width: `${m.pct}%`,
-                    background: m.pct >= 75 ? "var(--success)" : "var(--accent)",
-                  }}
-                />
-              </div>
-              <p className="mt-2.5 text-[12px] text-subtle">{m.ultimo}</p>
-            </div>
-          </Link>
+        {mesas?.map((m) => (
+          <CartaoMesa
+            key={m.id}
+            mesa={m}
+            ativa={ativa === m.id}
+            onEntrar={() => entrar(m.id)}
+            onApagar={() => aoApagar(m)}
+          />
         ))}
 
-        <Link
-          href="/onboarding"
-          className="drop flex min-h-[176px] flex-col items-start justify-center gap-3 !text-left"
-        >
-          <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-accent-soft text-accent-text">
-            <Plus className="h-[18px] w-[18px]" strokeWidth={2.4} />
-          </span>
-          <span>
-            <span className="mb-1.5 block text-[15.5px] font-semibold">Criar nova mesa</span>
-            <span className="block text-[13px] leading-relaxed text-muted">
-              Arraste o PDF do seu edital aqui e a IA configura tudo sozinha.
+        {criando ? (
+          <form
+            onSubmit={aoCriar}
+            className="flex min-h-[176px] flex-col gap-2.5 rounded-[14px] border border-line-strong bg-surface p-4"
+          >
+            <input
+              autoFocus
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
+              placeholder="nome da mesa (ex: PF Agente 2026)"
+              className="field"
+            />
+            <input
+              value={orgao}
+              onChange={(e) => setOrgao(e.target.value)}
+              placeholder="órgão (opcional)"
+              className="field"
+            />
+            <input
+              value={banca}
+              onChange={(e) => setBanca(e.target.value)}
+              placeholder="banca (opcional)"
+              className="field"
+            />
+            <div className="mt-auto flex gap-2">
+              <button type="submit" disabled={!nome.trim() || salvando} className="btn-primary">
+                {salvando ? "criando…" : "criar mesa"}
+              </button>
+              <button type="button" onClick={() => setCriando(false)} className="btn-ghost">
+                cancelar
+              </button>
+            </div>
+          </form>
+        ) : (
+          <button
+            onClick={() => setCriando(true)}
+            className="drop flex min-h-[176px] flex-col items-start justify-center gap-3 !text-left"
+          >
+            <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-accent-soft text-accent-text">
+              <Plus className="h-[18px] w-[18px]" strokeWidth={2.4} />
             </span>
-          </span>
-        </Link>
+            <span>
+              <span className="mb-1.5 block text-[15.5px] font-semibold">Criar nova mesa</span>
+              <span className="block text-[13px] leading-relaxed text-muted">
+                Dê um nome ao concurso. Em seguida você sobe o PDF do edital, e é ele que define
+                quais disciplinas essa mesa mostra.
+              </span>
+            </span>
+          </button>
+        )}
       </div>
+
+      {mesas !== null && mesas.length === 0 && !criando && (
+        <p className="mt-5 callout-info">
+          <span className="font-semibold text-accent-text">primeira vez · </span>
+          você ainda não criou nenhuma mesa. Enquanto não criar, o app usa uma mesa padrão sem
+          edital — ou seja, mostra o acervo inteiro.
+        </p>
+      )}
     </div>
   );
 }

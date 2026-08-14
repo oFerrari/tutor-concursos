@@ -128,6 +128,18 @@ class MesaBody(BaseModel):
     banca: str | None = None
 
 
+@app.get("/mesa")
+def rota_mesa_atual(m: dict = Depends(mesa_atual)):
+    """
+    Qual mesa ESTA requisição está usando, já resolvida. Existe pra o
+    cliente não precisar reimplementar a regra de fallback ("sem header =
+    mesa mais antiga da conta"): duas cópias da mesma regra divergem, e
+    divergir aqui significaria a sidebar dizer um nome enquanto a fila
+    responde por outra mesa.
+    """
+    return m
+
+
 @app.get("/mesas")
 def rota_listar_mesas(uid: int = Depends(usuario_atual)):
     return mesa.listar(uid)

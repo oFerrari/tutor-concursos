@@ -8,10 +8,21 @@
  * -> fila) e suficiente pra uso pessoal local. Não é a escolha certa se
  * isto for exposto na internet — SIMPLIFICAÇÃO CONHECIDA, não decisão
  * final (o candidato certo depois é cookie httpOnly + rota de servidor).
+ *
+ * MESA ATIVA (migração 010): a API decide o recorte pelo header
+ * `X-Mesa-Id`, por requisição — não há mesa ativa guardada no servidor.
+ * Aqui ela vive em localStorage e é injetada em `chamar`/`chamarFormData`,
+ * num lugar só: se cada tela lembrasse de mandar o header, a primeira que
+ * esquecesse leria outra mesa sem ninguém perceber.
+ *
+ * Sem mesa escolhida, o header não vai e a API cai na mesa padrão da conta
+ * — o cliente NÃO reimplementa essa regra de fallback (é o que `GET /mesa`
+ * existe pra responder).
  */
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const CHAVE_TOKEN = "tutor_token";
+const CHAVE_MESA = "tutor_mesa";
 
 export class ErroApi extends Error {
   status: number;
@@ -32,6 +43,43 @@ export function setToken(token: string): void {
 
 export function limparToken(): void {
   window.localStorage.removeItem(CHAVE_TOKEN);
+  // Sair da conta limpa a mesa junto: a mesa é de um usuário, e deixar o id
+  // pendurado faria o próximo login mandar o header de uma mesa que não é
+  // dele — o que a API responderia com 404 em toda tela.
+  window.localStorage.removeItem(CHAVE_MESA);
+}
+
+export function getMesaAtiva(): number | null {
+  if (typeof window === "undefined") return null;
+  const bruto = window.localStorage.getItem(CHAVE_MESA);
+  const n = bruto ? Number(bruto) : NaN;
+  return Number.isInteger(n) ? n : null;
+}
+
+export function setMesaAtiva(id: number): void {
+  window.localStorage.setItem(CHAVE_MESA, String(id));
+}
+
+export function limparMesaAtiva(): void {
+  window.localStorage.removeItem(CHAVE_MESA);
+}
+
+function cabecalhoMesa(): Record<string, string> {
+  const id = getMesaAtiva();
+  return id === null ? {} : { "X-Mesa-Id": String(id) };
+}
+
+/**
+ * 404 "mesa não encontrada" significa que o id guardado aqui não existe
+ * mais (apagada noutra aba, ou banco recriado). Esquecer a escolha faz a
+ * próxima chamada cair na mesa padrão em vez de repetir o mesmo 404 pra
+ * sempre — mas o erro SOBE assim mesmo: quem chamou precisa saber que esta
+ * resposta não veio, e a tela de mesas é quem mostra a lista de verdade.
+ */
+function tratarMesaSumida(status: number, detalhe: string): void {
+  if (status === 404 && detalhe === "mesa não encontrada" && getMesaAtiva() !== null) {
+    limparMesaAtiva();
+  }
 }
 
 async function chamar<T>(caminho: string, opcoes: RequestInit = {}): Promise<T> {
@@ -41,6 +89,7 @@ async function chamar<T>(caminho: string, opcoes: RequestInit = {}): Promise<T> 
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...cabecalhoMesa(),
       ...opcoes.headers,
     },
   });
@@ -48,7 +97,9 @@ async function chamar<T>(caminho: string, opcoes: RequestInit = {}): Promise<T> 
   if (!resposta.ok) {
     // /auth/* devolve {"detail": "..."}; o resto das rotas idem (HTTPException do FastAPI).
     const corpo = await resposta.json().catch(() => ({}));
-    throw new ErroApi(resposta.status, corpo.detail ?? `erro ${resposta.status}`);
+    const detalhe = corpo.detail ?? `erro ${resposta.status}`;
+    tratarMesaSumida(resposta.status, detalhe);
+    throw new ErroApi(resposta.status, detalhe);
   }
   return resposta.json() as Promise<T>;
 }
@@ -58,12 +109,17 @@ async function chamarFormData<T>(caminho: string, form: FormData): Promise<T> {
   const token = getToken();
   const resposta = await fetch(`${API_URL}${caminho}`, {
     method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...cabecalhoMesa(),
+    },
     body: form,
   });
   if (!resposta.ok) {
     const corpo = await resposta.json().catch(() => ({}));
-    throw new ErroApi(resposta.status, corpo.detail ?? `erro ${resposta.status}`);
+    const detalhe = corpo.detail ?? `erro ${resposta.status}`;
+    tratarMesaSumida(resposta.status, detalhe);
+    throw new ErroApi(resposta.status, detalhe);
   }
   return resposta.json() as Promise<T>;
 }
@@ -91,6 +147,56 @@ export function registrar(email: string, senha: string): Promise<RespostaAuth> {
  *  coluna `nome`, o campo aparece aqui e a derivação some. */
 export function getMe(): Promise<Usuario> {
   return chamar<Usuario>("/me");
+}
+
+// ---------------------------------------------------------------------- mesas
+/**
+ * Uma mesa é um concurso-alvo: guarda o edital e RECORTA o que aparece
+ * (fila, painel, caderno, simulado) pelas disciplinas dele. O que ela NÃO
+ * guarda é progresso — a caixa SM-2 é do aluno e atravessa as mesas
+ * (migração 010). Por isso `cobertura_pct` aqui é a mesma definição do
+ * painel, só que restrita às disciplinas desta mesa.
+ */
+export type Mesa = {
+  id: number;
+  nome: string;
+  orgao: string | null;
+  banca: string | null;
+  criado_em: string;
+  // null = mesa ainda sem edital → não filtra nada, mostra o acervo inteiro.
+  disciplinas: string[] | null;
+};
+
+export type MesaNaLista = Mesa & {
+  edital_id: number | null;
+  edital_titulo: string | null;
+  data_prova: string | null;
+  topicos: number;
+  questoes: number;
+  dominadas: number;
+  cobertura_pct: number;
+  ultimo_estudo: string | null;
+};
+
+export function getMesas(): Promise<MesaNaLista[]> {
+  return chamar<MesaNaLista[]>("/mesas");
+}
+
+/** Em qual mesa a API está me atendendo agora — com o fallback já
+ *  resolvido lá, pra este cliente não ter uma segunda cópia da regra. */
+export function getMesaAtual(): Promise<Mesa> {
+  return chamar<Mesa>("/mesa");
+}
+
+export function criarMesa(nome: string, orgao?: string, banca?: string): Promise<Mesa> {
+  return chamar<Mesa>("/mesas", {
+    method: "POST",
+    body: JSON.stringify({ nome, orgao, banca }),
+  });
+}
+
+export function apagarMesa(id: number): Promise<{ ok: boolean }> {
+  return chamar(`/mesas/${id}`, { method: "DELETE" });
 }
 
 // ----------------------------------------------------------------------- fila

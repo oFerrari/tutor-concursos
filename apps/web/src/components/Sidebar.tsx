@@ -23,8 +23,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Marca, MarcaIcone } from "@/components/Marca";
-import { HistoricoSimulado, Usuario, getMe, getSimulados, limparToken } from "@/lib/api";
-import { MESA_ATUAL } from "@/mock/prototipo";
+import { HistoricoSimulado, Mesa, Usuario, getMe, getSimulados, limparToken } from "@/lib/api";
 
 // Ordem e rótulos do protótipo. "Fila do dia" não existe lá — mas existe
 // como rota real e funcionando aqui, e tirar do menu uma tela que funciona
@@ -77,6 +76,11 @@ function ItemNav({
 type Props = {
   recolhida: boolean;
   onAlternar: () => void;
+  /** Mesa em que a API está atendendo — resolvida uma vez no AppShell
+   *  (GET /mesa), não aqui: quem decide o fallback de "sem header, usa a
+   *  padrão" é o servidor, e uma segunda cópia dessa regra no cliente
+   *  faria a nav afirmar um nome enquanto a fila responde por outra mesa. */
+  mesa: Mesa | null;
   /** Drawer = sobreposta em tela estreita; coluna = fixa no grid. */
   drawer?: boolean;
   onFechar?: () => void;
@@ -92,7 +96,7 @@ const LARGURA_ABERTA = "w-[258px]";
  * Em tela estreita ela vira drawer (`drawer`), controlado pelo botão de
  * menu do cabeçalho.
  */
-export function Sidebar({ recolhida, onAlternar, drawer = false, onFechar }: Props) {
+export function Sidebar({ recolhida, onAlternar, mesa, drawer = false, onFechar }: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const [recentes, setRecentes] = useState<HistoricoSimulado[] | null>(null);
@@ -168,8 +172,10 @@ export function Sidebar({ recolhida, onAlternar, drawer = false, onFechar }: Pro
         ))}
 
         {/* ------------------------------------------- mesa de estudo */}
-        {/* Vitrine: mesa não existe no schema (ver mock/prototipo.ts). O
-            seletor leva pro lobby, que é onde a decisão viveria. */}
+        {/* O seletor leva pro lobby, que é onde se troca de mesa. O
+            subtítulo diz se ela recorta alguma coisa: mesa sem edital
+            mostra o acervo inteiro, e é melhor a nav dizer isso do que a
+            pessoa estranhar Direito Penal num concurso que não cobra. */}
         {aberta && (
           <Link
             href="/mesas"
@@ -181,7 +187,14 @@ export function Sidebar({ recolhida, onAlternar, drawer = false, onFechar }: Pro
                 <span className="h-1.5 w-1.5 rounded-full bg-accent" />
                 mesa de estudo
               </span>
-              <span className="mt-0.5 block truncate text-[13.5px]">{MESA_ATUAL.nome}</span>
+              <span className="mt-0.5 block truncate text-[13.5px]">
+                {mesa?.nome ?? "—"}
+              </span>
+              {mesa && !mesa.disciplinas && (
+                <span className="mt-0.5 block truncate text-[11.5px] text-subtle">
+                  sem edital · acervo inteiro
+                </span>
+              )}
             </span>
             <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-subtle" />
           </Link>
