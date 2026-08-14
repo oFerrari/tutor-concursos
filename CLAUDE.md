@@ -440,6 +440,55 @@ lembrasse de rodar.
   chamada rendeu progresso" são coisas diferentes, e só a segunda deveria
   resetar o contador de desistência.
 
+**Extração de edital: a quebra de linha É o dado, e `_normalizar()` a
+destruía antes de qualquer regex rodar.** Achado com um edital REAL
+(Dataprev 001/2026, banca FGV) subido pela tela: o painel mostrou 362
+tópicos em 4 disciplinas — `Plataforma Básica` (257), `Iof` (100), `Ecf`
+(3), `Gestão De Servidores` (2). Nenhuma das quatro é disciplina daquele
+concurso. Três defeitos compostos, cada um invisível sozinho:
+
+1. **Cabeçalho sem numeração não era procurado.** `RE_DISCIPLINA` exigia
+   "N. DISCIPLINA:" (padrão PC-PR, o único edital que existia quando o
+   módulo nasceu). A FGV escreve "LÍNGUA PORTUGUESA:" sem número — ou
+   seja, NENHUMA disciplina real era encontrada.
+2. **O que entrou no lugar veio de acidente.** Sem âncora de início de
+   linha (o `_normalizar()` já tinha colapsado toda quebra em espaço),
+   "…Framework version **1.1.** PLATAFORMA BÁSICA:" fez o `1.` de um
+   número de VERSÃO virar número de disciplina, e "3. ECF:" / "12. IOF:"
+   — itens no meio de um parágrafo de Contabilidade Tributária — viraram
+   disciplinas. Começar a linha é o único sinal que separa cabeçalho de
+   item no meio de frase, e era exatamente o sinal jogado fora.
+3. **Sem recorte, as REGRAS do edital viraram matéria.** Inscrição, prazos
+   e recursos são centenas de itens numerados ("4.5.1", "10.13.6"); é daí
+   que saíram os 257 tópicos de "Plataforma Básica".
+
+Corrigido: `limpar_paginacao()` -> `recortar_conteudo_programatico()` ->
+cabeçalhos NO TEXTO CRU -> normalizar só o corpo de cada bloco -> contar
+folhas. Medido contra `tests/fixtures/edital_fgv_dataprev.txt` (trecho real
+do PDF, com as quebras de linha como o pypdf entrega): 14 disciplinas
+reais, 98 tópicos, zero fantasma.
+
+**O passo que quase passou batido foi a mobília de página.** O PDF abre
+cada página com "DATAPREV | CONCURSO PÚBLICO 2026" e o número da página
+numa linha só dela. Disciplina que calha de começar no topo de uma página
+fica precedida por um número solto — e a regra nova de "linha que começa
+depois de número pendurado é continuação de frase" a descartava. Efeito
+medido: **3 disciplinas somem e os tópicos delas migram pra disciplina
+anterior**, com o total continuando plausível. É o pior formato de erro,
+porque nenhuma contagem denuncia. Só apareceu porque o fixture foi
+ATUALIZADO pra incluir a mobília depois que a primeira versão do conserto
+já estava "passando" — fixture limpo demais mente tanto quanto métrica
+errada (mesma lição de `diagnostico.py` auditar estrutura e não conteúdo).
+
+**Nome do edital: o arquivo TEMPORÁRIO do servidor vazou pro banco.**
+`POST /edital` grava o upload num `NamedTemporaryFile` e passava esse
+caminho pra `edital.ingerir()`, cujo fallback de título é o nome do
+arquivo — então o edital virou "tmpcmrpqinr" no banco e na tela. O
+fallback certo na borda HTTP é `UploadFile.filename` (o nome que o usuário
+enviou); o `stem` do caminho só faz sentido na CLI, onde o caminho é um
+arquivo de verdade. Classe de erro a procurar em qualquer rota que grave
+upload: caminho interno do servidor não é dado do usuário.
+
 ## Limitações conhecidas
 
 - Multiusuário desde a migração 008 — acervo compartilhado, progresso pessoal
@@ -483,8 +532,14 @@ lembrasse de rodar.
 - Vínculo questão→tópico individual (hoje `edital.cobertura()` estima por
   disciplina inteira, não por tópico — ver aproximação (2) documentada
   acima). Exigiria marcar cada questão gerada com o tópico de origem.
-- Separação por cargo no parsing de edital (hoje disciplinas de nomes
-  iguais entre cargos se somam — ver aproximação (1) documentada acima).
+- **Separação por cargo no parsing de edital — subiu de "detalhe" pra
+  problema real com o edital da Dataprev: 13 perfis** (Desenvolvimento de
+  Software, Advocacia, Contabilidade, Engenharia...), cada um com conteúdo
+  específico próprio, todos somados na mesma mesa. Quem vai prestar UM
+  perfil recebe um plano com o conteúdo dos outros doze junto. O Módulo I
+  (Português/Inglês/RLM) é comum e está certo; o Módulo II é que deveria
+  ser filtrado. Exigiria coluna `cargo` em `topico` (o parser já reconhece
+  o marcador "PERFIL N:") e a pessoa escolhendo o perfil na ingestão.
 - Disciplina da mesa definida à mão, sem edital (hoje só o PDF cria o
   recorte). Faria sentido pra quem estuda pra um concurso ainda sem edital
   publicado — que é metade do tempo de preparação de verdade.

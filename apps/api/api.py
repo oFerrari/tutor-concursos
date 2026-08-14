@@ -425,6 +425,13 @@ def rota_perguntar(body: PerguntaBody, uid: int = Depends(usuario_atual),
 
 
 # --------------------------------------------------------------------- edital
+def _titulo_do_upload(arquivo: UploadFile) -> str | None:
+    """"Edital DATAPREV.pdf" -> "Edital DATAPREV". `None` (nome ausente ou
+    só espaço) deixa `edital.ingerir()` seguir com o fallback dele."""
+    nome = Path(arquivo.filename or "").stem.strip()
+    return nome or None
+
+
 @app.post("/edital")
 def rota_ingerir_edital(arquivo: UploadFile = File(...), titulo: str | None = Form(None),
                         orgao: str | None = Form(None), banca: str | None = Form(None),
@@ -438,7 +445,13 @@ def rota_ingerir_edital(arquivo: UploadFile = File(...), titulo: str | None = Fo
         tmp.write(arquivo.file.read())
         caminho = Path(tmp.name)
     try:
-        return edital.ingerir(m["id"], caminho, titulo=titulo, orgao=orgao, banca=banca)
+        # SEM `titulo`, `edital.ingerir()` cai no nome do arquivo — e por
+        # este caminho o arquivo é o TEMPORÁRIO, então o edital ia pro banco
+        # chamado "tmpcmrpqinr" e era isso que a tela mostrava. O fallback
+        # certo aqui é o nome que o usuário enviou; o `stem` de `ingerir()`
+        # só faz sentido pra CLI, onde o caminho é um arquivo de verdade.
+        return edital.ingerir(m["id"], caminho, titulo=titulo or _titulo_do_upload(arquivo),
+                              orgao=orgao, banca=banca)
     finally:
         caminho.unlink(missing_ok=True)
 

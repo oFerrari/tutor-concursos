@@ -3,22 +3,37 @@ Edital — extrai data da prova e conteúdo programático de um PDF de edital,
 para `scheduler.meta()` usar dado real em vez de exigir digitar a data
 na mão toda vez.
 
-MELHOR ESFORÇO, NÃO CONTRATO. Layout de edital varia por banca (FGV,
-Cebraspe, FCC, ...) — o que segue funciona para o padrão mais comum
-(conteúdo programático como "N. DISCIPLINA:" seguido de subitens numerados
-"N.N", "N.N.N"), não para todos. Por isso `ingerir()` devolve os
-candidatos a data com pontuação, não só "a resposta" — mesmo espírito de
+MELHOR ESFORÇO, NÃO CONTRATO. Layout de edital varia por banca — o que
+segue foi medido contra dois padrões reais: disciplina numerada
+("1. DIREITO PENAL:", padrão PC-PR) e disciplina sem numeração nenhuma
+("LÍNGUA PORTUGUESA:", padrão FGV/Dataprev). Por isso `ingerir()` devolve
+os candidatos a data com pontuação, não só "a resposta" — mesmo espírito de
 `diagnostico.py`: reportar para o operador conferir, não decidir calado.
 
-DUAS APROXIMAÇÕES DECLARADAS, não escondidas:
+O PIPELINE, e cada etapa existe por um defeito medido (ver o comentário de
+cada uma): limpar mobília de página -> recortar o conteúdo programático ->
+achar cabeçalhos NO TEXTO CRU (a quebra de linha é o sinal) -> normalizar
+só o corpo de cada bloco -> contar as folhas numeradas.
 
-1. Sem separação por CARGO. Concurso com mais de um cargo (comum) repete
-   disciplinas com conteúdo próprio por cargo — "DIREITO CONSTITUCIONAL"
-   do Delegado e do Agente, por exemplo. Este módulo não distingue: os
-   tópicos de nome de disciplina igual se somam num grupo só. Infla um
-   pouco a contagem, não perde tópico.
+TRÊS APROXIMAÇÕES DECLARADAS, não escondidas:
 
-2. "Cobertura por tópico" é estimada por DISCIPLINA, não por tópico
+1. Sem separação por CARGO, e no edital da Dataprev isso deixou de ser
+   detalhe: são TREZE perfis (Desenvolvimento de Software, Advocacia,
+   Contabilidade, Engenharia...), cada um com seu conteúdo específico, e
+   todos entram na mesma mesa. Quem vai prestar UM perfil recebe um plano
+   de estudo com o conteúdo dos outros doze junto. O Módulo I
+   (Português/Inglês/RLM) é comum a todos e esse está certo; o Módulo II
+   deveria ser filtrado pelo perfil escolhido, e não é. Exigiria coluna
+   `cargo` em `topico` e a pessoa dizendo qual perfil vai prestar — está
+   em "Aberto" no CLAUDE.md.
+
+2. Só FOLHA da árvore numerada vira tópico ("4" seguido de "4.1" é pai, e
+   não conta). É o que db/007_edital.sql já dizia — "não modela hierarquia
+   porque nada hoje precisa navegar a árvore, só contar folhas" — mas que
+   a primeira implementação não fazia, contando pai e filho e inflando o
+   denominador pela ALTURA da árvore.
+
+3. "Cobertura por tópico" é estimada por DISCIPLINA, não por tópico
    individual. Não há vínculo direto questão→tópico no schema (exigiria
    marcar cada questão gerada com o tópico de origem). A aproximação:
    cobertura_pct da disciplina inteira (já existente em
@@ -27,12 +42,13 @@ DUAS APROXIMAÇÕES DECLARADAS, não escondidas:
    estimativa sem construir o vínculo fino agora.
 """
 import re
+from collections import Counter
 from datetime import date
 from pathlib import Path
 
 from . import db, mesa as mesa_mod
 
-VERSAO = "edital-v3"
+VERSAO = "edital-v4"
 
 MESES = {"janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5,
          "junho": 6, "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10,
@@ -43,15 +59,63 @@ MESES = {"janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5,
 RE_DATA_EVENTO = re.compile(
     r"\bdia\s+(\d{1,2})\s+de\s+(" + "|".join(MESES) + r")\s+de\s+(20\d{2})", re.I)
 
-# "1. DIREITO PENAL:" — número, ponto, título em caixa alta, dois pontos.
-# SEM âncora de início de linha: _normalizar() já colapsou toda quebra de
-# linha em espaço antes desta regex rodar, então "^|\n" nunca bate a não
-# ser bem no início do texto — o padrão numérico+caixa-alta já é
-# suficientemente distintivo sem precisar de posição.
-RE_DISCIPLINA = re.compile(r"\b(\d{1,2})\.\s+([A-ZÀ-Ü][A-ZÀ-Ü \-/]{2,60}):")
+# CABEÇALHO DE DISCIPLINA — nome em CAIXA ALTA seguido de ":", ANCORADO NO
+# INÍCIO DA LINHA, com numeração opcional.
+#
+# A âncora de início de linha é a correção mais importante deste módulo, e
+# custou um edital inteiro extraído errado pra ficar óbvia. A versão
+# anterior rodava sobre o texto já normalizado (toda quebra de linha virada
+# em espaço) e exigia "N. NOME:". Resultado no edital da FGV/Dataprev, cujos
+# cabeçalhos NÃO são numerados ("LÍNGUA PORTUGUESA:"):
+#
+#   - nenhuma disciplina real foi encontrada;
+#   - "PLATAFORMA BÁSICA" entrou porque a frase anterior terminava em
+#     "...Framework version 1.1." — o "1." de um número de VERSÃO virou o
+#     número da disciplina;
+#   - "ECF" e "IOF" entraram porque "3. ECF:" e "12. IOF:" são itens no MEIO
+#     de um parágrafo de Contabilidade Tributária.
+#
+# Começar a linha é o único sinal que separa cabeçalho de item numerado no
+# meio de frase, e era exatamente o sinal que `_normalizar()` destruía antes
+# da regex rodar. Por isso a detecção de cabeçalho acontece sobre o texto
+# CRU, e só o corpo de cada bloco é normalizado depois.
+RE_DISCIPLINA = re.compile(
+    r"^[ \t]*(?:\d{1,2}[.)]\s+)?([A-ZÀ-Ü][A-ZÀ-Ü0-9 \t\-/&(),]{2,70}?)[ \t]*:",
+    re.MULTILINE)
 
-# "1.1", "1.1.1" etc. seguido de texto iniciando em maiúscula.
-RE_SUBITEM = re.compile(r"\b(\d+(?:\.\d+){1,3})\s+(?=[A-ZÀ-Ü])")
+# "PERFIL 3: DESENVOLVIMENTO DE SOFTWARE" — marcador de CARGO, não de
+# disciplina. Vira disciplina mesmo assim porque há perfis (o 1, por
+# exemplo) cujo conteúdo é uma lista numerada direta, sem subcabeçalho: sem
+# isso os tópicos dele cairiam na disciplina anterior, que é pior que um
+# nome de disciplina largo demais. Perfis COM subcabeçalhos ganham um bloco
+# vazio aqui, que morre sozinho por não ter subitem.
+RE_PERFIL = re.compile(
+    r"^[ \t]*PERFIL\s+\d{1,2}\s*[:\-–—]\s*(.+?)[ \t]*:?[ \t]*$",
+    re.MULTILINE | re.IGNORECASE)
+
+# Linhas que são ESTRUTURA do documento, não matéria de estudo.
+RE_ESTRUTURA = re.compile(r"^(M[OÓ]DULO|ANEXO|CARGO|PERFIL)\b", re.IGNORECASE)
+
+# O conteúdo programático costuma viver num anexo próprio. Recortar antes de
+# procurar disciplina evita que o CORPO do edital (regras de inscrição, que
+# são centenas de itens numerados "4.5.1", "10.13.6") entre como tópico de
+# estudo — foi assim que uma disciplina fantasma acumulou 257 "tópicos".
+RE_INICIO_CONTEUDO = re.compile(r"\bCONTE[ÚU]DO\s+PROGRAM[ÁA]TICO\b", re.IGNORECASE)
+RE_ANEXO = re.compile(r"^[ \t]*ANEXO\s+[IVXLC]+\b", re.MULTILINE | re.IGNORECASE)
+
+# "1", "1.1", "1.1.1" etc. seguido de texto iniciando em maiúscula.
+#
+# UM NÍVEL TAMBÉM CONTA ({0,3}, não {1,3}). Exigir dois níveis fazia
+# disciplina inteira DESAPARECER quando o edital numera plano ("REDES DE
+# COMPUTADORES: 1 Conceitos... 2 Elementos..." — nenhum "N.N", nenhum
+# tópico, disciplina some da lista). Sumir é pior que contar de menos: uma
+# disciplina ausente some também do filtro da mesa, e aí a fila inteira
+# muda sem ninguém entender por quê.
+#
+# A exigência de maiúscula depois do número é o que segura o falso
+# positivo: "Lei nº 12.527/2011", "Server 2019 e 2022", "ISO 27001:2022" e
+# "R$ 110,00" não casam porque o que vem depois não é início de item.
+RE_SUBITEM = re.compile(r"\b(\d+(?:\.\d+){0,3})\s+(?=[A-ZÀ-Ü])")
 
 
 def _normalizar(texto: str) -> str:
@@ -92,26 +156,117 @@ def candidatos_data_prova(texto: str, janela: int = 250) -> list[dict]:
     return candidatos
 
 
+RE_SO_NUMERO = re.compile(r"^\s*\d{1,4}\s*$")
+
+
+def limpar_paginacao(texto: str) -> str:
+    """
+    Tira número de página solto e cabeçalho/rodapé repetido em toda página.
+
+    NÃO é cosmético — é o que decide se uma disciplina existe. O PDF entrega
+    cada página começando por "DATAPREV | CONCURSO PÚBLICO 2026" e o número
+    da página numa linha só dela. Uma disciplina que calha de abrir no topo
+    de uma página fica precedida por essa linha numérica, e
+    `_continuacao_de_paragrafo()` a descarta achando que é frase cortada no
+    meio. Medido no edital da Dataprev: com a mobília, TRÊS disciplinas
+    reais somem e os tópicos delas migram pra disciplina anterior — o pior
+    tipo de erro, porque o total continua parecendo certo.
+
+    Rodapé é detectado por repetição (linha curta que se repete muitas
+    vezes), não por conteúdo: o texto do rodapé muda a cada banca. O limite
+    de tamanho e o "não termina em dois-pontos" protegem cabeçalho de
+    disciplina que se repete entre perfis ("BANCO DE DADOS: 1 Modelagem...")
+    de ser confundido com rodapé.
+    """
+    linhas = texto.splitlines()
+    repetidas = Counter(l.strip() for l in linhas if l.strip())
+    mobilia = {t for t, n in repetidas.items()
+               if n >= 4 and len(t) <= 60 and not t.endswith(":")}
+    return "\n".join(l for l in linhas
+                     if not RE_SO_NUMERO.match(l) and l.strip() not in mobilia)
+
+
+def recortar_conteudo_programatico(texto: str) -> tuple[str, bool]:
+    """
+    Devolve (trecho, achou). Sem o marcador, devolve o texto inteiro e
+    `False` — cabe a quem chamou avisar que a extração rodou sobre o edital
+    todo, que é bem mais ruidoso. Reportar, não decidir calado.
+    """
+    m = RE_INICIO_CONTEUDO.search(texto)
+    if not m:
+        return texto, False
+    seguinte = RE_ANEXO.search(texto, m.end())
+    return texto[m.end():seguinte.start() if seguinte else len(texto)], True
+
+
+def _continuacao_de_paragrafo(texto: str, inicio: int) -> bool:
+    """
+    Início de linha NÃO garante cabeçalho: o PDF quebra linha no meio da
+    frase, e uma linha pode começar com uma palavra em caixa alta seguida
+    de ":" sem ser título nenhum. Caso real: "...2.3 Formas de pagamento;
+    2.4 / LALUR: forma de escrituração fiscal" — "LALUR:" abre a linha, mas
+    é continuação do item 2.4 da linha anterior.
+
+    O sinal é o que vem ANTES: parágrafo encerrado termina em pontuação
+    ("...formalidade."); frase cortada no meio termina pendurada — em
+    número, vírgula ou ponto e vírgula, como o "2.4" acima.
+    """
+    anterior = texto[:inicio].rstrip()
+    return bool(anterior) and anterior[-1] in "0123456789,;–-"
+
+
+def _cabecalhos(texto: str) -> list[tuple[int, int, str]]:
+    """(início, fim, nome) de cada cabeçalho, em ordem de posição."""
+    marcas = [(m.start(), m.end(), m.group(1)) for m in RE_PERFIL.finditer(texto)]
+    for m in RE_DISCIPLINA.finditer(texto):
+        if RE_ESTRUTURA.match(m.group(1).strip()):
+            continue
+        if _continuacao_de_paragrafo(texto, m.start()):
+            continue
+        marcas.append((m.start(), m.end(), m.group(1)))
+    marcas.sort()
+    # A linha do PERFIL casa nas duas regexes; fica a primeira (a do perfil,
+    # que captura o nome do cargo em vez do literal "PERFIL N").
+    limpo: list[tuple[int, int, str]] = []
+    for marca in marcas:
+        if limpo and marca[0] < limpo[-1][1]:
+            continue
+        limpo.append(marca)
+    return limpo
+
+
 def extrair_topicos(texto: str) -> list[dict]:
     """
     [{"disciplina": ..., "ordem": N, "texto": "1.1.1 Princípios..."}]
 
-    Funciona para o padrão "N. DISCIPLINA:" + subitens "N.N"/"N.N.N".
-    Ver limitações (1) e (2) no docstring do módulo.
+    Cabeçalho de disciplina é detectado no texto CRU (ver RE_DISCIPLINA — a
+    quebra de linha é o sinal); só o corpo de cada bloco é normalizado, que
+    é onde a quebra de linha atrapalha. Ver limitações (1) e (2) no
+    docstring do módulo.
     """
-    flat = _normalizar(texto)
-    marcas = list(RE_DISCIPLINA.finditer(flat))
+    corpo, _ = recortar_conteudo_programatico(limpar_paginacao(texto))
+    marcas = _cabecalhos(corpo)
     topicos = []
-    for i, m in enumerate(marcas):
-        disciplina = re.sub(r"\s+", " ", m.group(2)).strip().title()
-        fim = marcas[i + 1].start() if i + 1 < len(marcas) else min(len(flat), m.end() + 8000)
-        bloco = flat[m.end():fim]
+    for i, (_, fim, bruto) in enumerate(marcas):
+        disciplina = re.sub(r"\s+", " ", bruto).strip(" :").title()
+        # O teto no último bloco é rede de segurança pra quando o recorte do
+        # conteúdo programático não encontrou marcador: sem ele, a última
+        # disciplina engoliria o resto do documento inteiro.
+        prox = marcas[i + 1][0] if i + 1 < len(marcas) else min(len(corpo), fim + 8000)
+        bloco = _normalizar(corpo[fim:prox])
         subitens = list(RE_SUBITEM.finditer(bloco))
         for j, s in enumerate(subitens):
             fim_s = subitens[j + 1].start() if j + 1 < len(subitens) else len(bloco)
-            corpo = bloco[s.start():fim_s].strip()
-            if corpo:
-                topicos.append({"disciplina": disciplina, "ordem": len(topicos), "texto": corpo})
+            # Só FOLHA vira tópico: "4" seguido de "4.1" é o pai do próximo,
+            # e contar os dois inflaria a mesma matéria duas vezes — o
+            # denominador de "quantos tópicos existem" tem que ser o que se
+            # estuda, não a árvore inteira.
+            if j + 1 < len(subitens) and subitens[j + 1].group(1).startswith(s.group(1) + "."):
+                continue
+            texto_topico = bloco[s.start():fim_s].strip()
+            if texto_topico:
+                topicos.append({"disciplina": disciplina, "ordem": len(topicos),
+                                "texto": texto_topico})
     return topicos
 
 
