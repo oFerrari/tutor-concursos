@@ -13,7 +13,7 @@ Sem isso, modelo pequeno erra a sintaxe e a sessão de estudo morre no meio.
 """
 from . import llm, retrieval
 
-VERSAO = "socratic-v23"
+VERSAO = "socratic-v24"
 
 # ------------------------------------------------------------------ schemas
 # Subconjunto OpenAPI aceito pelo Gemini. propertyOrdering importa: o modelo
@@ -139,7 +139,7 @@ def avaliar(enunciado: str, gabarito: str, resposta: str, nivel: int,
     }
 
 
-def _resumo_desempenho(usuario_id: int) -> str | None:
+def _resumo_desempenho(usuario_id: int, disciplinas: list[str] | None = None) -> str | None:
     """
     Texto curto e pronto pra virar contexto de prompt — o modelo só LÊ este
     resumo, nunca soma nada sozinho. Import local (não no topo do módulo):
@@ -147,7 +147,7 @@ def _resumo_desempenho(usuario_id: int) -> str | None:
     `avaliar()`/`gerar_questoes()`, que não tocam nisso.
     """
     from . import scheduler
-    dados = scheduler.desempenho(usuario_id)
+    dados = scheduler.desempenho(usuario_id, disciplinas)
     if not dados:
         return None
     linhas = [
@@ -156,14 +156,15 @@ def _resumo_desempenho(usuario_id: int) -> str | None:
         f"{d['cobertura_pct'] or 0}% de cobertura"
         for d in dados
     ]
-    erros = scheduler.caderno_erros(usuario_id, limite=5)
+    erros = scheduler.caderno_erros(usuario_id, limite=5, disciplinas=disciplinas)
     if erros:
         linhas.append("Temas que mais reincidem em erro: " +
                       ", ".join(f"{e['tema']} ({e['vezes']}x)" for e in erros))
     return "\n".join(linhas)
 
 
-def explicar(pergunta: str, usuario_id: int | None = None) -> dict:
+def explicar(pergunta: str, usuario_id: int | None = None,
+             disciplinas: list[str] | None = None) -> dict:
     """
     Modo livre: aluno pergunta, tutor responde ancorado no acervo E no
     próprio desempenho real (quando usuario_id vem preenchido).
@@ -173,10 +174,17 @@ def explicar(pergunta: str, usuario_id: int | None = None) -> dict:
     quem pergunta, só sobre o texto de lei. Duas fontes de contexto, uma
     resposta: o modelo escolhe qual usar (ou as duas), mas o resumo de
     desempenho já vem pronto do banco — ele nunca soma nada sozinho, só lê.
+
+    `disciplinas` recorta só a SEGUNDA fonte (o desempenho): "como estou
+    indo?" numa mesa deve responder sobre aquele concurso. A busca no
+    acervo continua sobre o material inteiro de propósito — o aluno pode
+    perguntar de qualquer coisa, e cortar o RAG pela disciplina da mesa
+    faria a resposta ser "não encontrei" para uma pergunta que o acervo
+    responde perfeitamente.
     """
     chunks = retrieval.buscar(pergunta, n=6)
     contexto_material = retrieval.formatar_contexto(chunks) if chunks else None
-    contexto_desempenho = _resumo_desempenho(usuario_id) if usuario_id else None
+    contexto_desempenho = _resumo_desempenho(usuario_id, disciplinas) if usuario_id else None
 
     if not contexto_material and not contexto_desempenho:
         return {"resposta": "Não encontrei isso no material, e ainda não tenho nenhum "

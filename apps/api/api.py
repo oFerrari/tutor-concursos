@@ -15,21 +15,31 @@ AUTENTICAÇÃO: Bearer token (JWT, `core/auth.py`). Toda rota que não é
 `/auth/*` exige `Authorization: Bearer <token>` e resolve `usuario_id` a
 partir dele — nunca aceita usuario_id vindo do corpo da requisição, porque
 isso deixaria qualquer cliente alegar ser outra pessoa só mudando um campo.
+
+MESA (migração 010): o cliente diz em qual mesa está pelo header
+`X-Mesa-Id`, por requisição — não há "mesa ativa" guardada no servidor. A
+escolha é deliberada: estado de sessão no servidor faz duas abas abertas em
+mesas diferentes brigarem pela mesma variável, e o aluno com dois editais
+abertos ao mesmo tempo é o caso de uso normal, não a exceção. O header
+identifica, o `usuario_id` do token AUTORIZA: `mesa.obter()` filtra por
+usuario_id, então pedir a mesa de outra pessoa dá 404, não os dados dela.
+Sem header, cai na mesa padrão da conta (`mesa.padrao`) — é o que mantém a
+CLI e qualquer cliente que ainda não conhece mesas funcionando igual.
 """
 import tempfile
 from datetime import date
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
-from core import auth, desafio, edital, questoes, ritmo, scheduler, simulado, socratic
+from core import auth, desafio, edital, mesa, questoes, ritmo, scheduler, simulado, socratic
 from core.config import CORS_ORIGINS
 from core.llm import ErroLLM
 
-VERSAO = "api-v1"
+VERSAO = "api-v2"
 
 app = FastAPI(title="Tutor de concursos — API", version=VERSAO)
 
@@ -88,6 +98,86 @@ def usuario_atual(cred: HTTPAuthorizationCredentials | None = Depends(_security)
         raise HTTPException(401, str(e))
 
 
+def mesa_atual(x_mesa_id: str | None = Header(default=None),
+               uid: int = Depends(usuario_atual)) -> dict:
+    """
+    A mesa desta requisição, com as disciplinas dela já resolvidas — as
+    funções de `core/` recebem a lista pronta, não o mesa_id, pra não
+    repetir a mesma consulta em cada uma dentro de um request só.
+
+    Header ausente = mesa padrão da conta. Header com id de outra pessoa
+    (ou inexistente) = 404, nunca os dados dela: `mesa.obter()` filtra por
+    usuario_id, mesmo espírito de `simulado.pertence_a()`.
+    """
+    if x_mesa_id is None or not x_mesa_id.strip():
+        return mesa.contexto(uid)
+    try:
+        mesa_id = int(x_mesa_id)
+    except ValueError:
+        raise HTTPException(422, "X-Mesa-Id precisa ser um número inteiro")
+    ctx = mesa.contexto(uid, mesa_id)
+    if not ctx:
+        raise HTTPException(404, "mesa não encontrada")
+    return ctx
+
+
+# ---------------------------------------------------------------------- mesas
+class MesaBody(BaseModel):
+    nome: str
+    orgao: str | None = None
+    banca: str | None = None
+
+
+@app.get("/mesas")
+def rota_listar_mesas(uid: int = Depends(usuario_atual)):
+    return mesa.listar(uid)
+
+
+@app.post("/mesas")
+def rota_criar_mesa(body: MesaBody, uid: int = Depends(usuario_atual)):
+    try:
+        return mesa.criar(uid, body.nome, body.orgao, body.banca)
+    except mesa.ErroMesa as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get("/mesas/{mid}")
+def rota_obter_mesa(mid: int, uid: int = Depends(usuario_atual)):
+    """Inclui `disciplinas` — é o recorte que esta mesa aplica, e ver isso
+    explícito é o que impede a tela de prometer um filtro que não existe
+    (mesa sem edital devolve null e mostra o acervo inteiro)."""
+    ctx = mesa.contexto(uid, mid)
+    if not ctx:
+        raise HTTPException(404, "mesa não encontrada")
+    return ctx
+
+
+class AtualizarMesaBody(BaseModel):
+    nome: str | None = None
+    orgao: str | None = None
+    banca: str | None = None
+
+
+@app.patch("/mesas/{mid}")
+def rota_atualizar_mesa(mid: int, body: AtualizarMesaBody, uid: int = Depends(usuario_atual)):
+    try:
+        m = mesa.atualizar(uid, mid, body.nome, body.orgao, body.banca)
+    except mesa.ErroMesa as e:
+        raise HTTPException(400, str(e))
+    if not m:
+        raise HTTPException(404, "mesa não encontrada")
+    return m
+
+
+@app.delete("/mesas/{mid}")
+def rota_apagar_mesa(mid: int, uid: int = Depends(usuario_atual)):
+    """Apaga a mesa e o edital dela. NÃO apaga progresso, tentativas nem
+    caderno de erros — esses são do aluno (ver core/mesa.py:apagar)."""
+    if not mesa.apagar(uid, mid):
+        raise HTTPException(404, "mesa não encontrada")
+    return {"ok": True}
+
+
 @app.get("/me")
 def rota_me(uid: int = Depends(usuario_atual)):
     u = auth.obter(uid)
@@ -138,18 +228,18 @@ def rota_apagar_me(body: ApagarContaBody, uid: int = Depends(usuario_atual)):
 
 # ----------------------------------------------------------------- fila/estudo
 @app.get("/fila")
-def rota_fila(uid: int = Depends(usuario_atual)):
-    return scheduler.fila(uid)
+def rota_fila(uid: int = Depends(usuario_atual), m: dict = Depends(mesa_atual)):
+    return scheduler.fila(uid, disciplinas=m["disciplinas"])
 
 
 @app.get("/carga")
-def rota_carga(uid: int = Depends(usuario_atual)):
-    return scheduler.carga_hoje(uid)
+def rota_carga(uid: int = Depends(usuario_atual), m: dict = Depends(mesa_atual)):
+    return scheduler.carga_hoje(uid, m["disciplinas"])
 
 
 @app.get("/sugestao")
-def rota_sugestao(uid: int = Depends(usuario_atual)):
-    return {"sugestao": ritmo.sugestao(uid)}
+def rota_sugestao(uid: int = Depends(usuario_atual), m: dict = Depends(mesa_atual)):
+    return {"sugestao": ritmo.sugestao(uid, m["disciplinas"])}
 
 
 @app.get("/questoes/{qid}")
@@ -214,8 +304,8 @@ def rota_registrar_tentativa(qid: int, body: RegistrarBody, uid: int = Depends(u
 # -------------------------------------------------------------------- desafio
 @app.get("/desafio")
 def rota_desafio(n_reincidentes: int = 3, n_novas: int = 5, n_simulado: int = 5,
-                 uid: int = Depends(usuario_atual)):
-    return desafio.montar(uid, n_reincidentes, n_novas, n_simulado)
+                 uid: int = Depends(usuario_atual), m: dict = Depends(mesa_atual)):
+    return desafio.montar(uid, n_reincidentes, n_novas, n_simulado, m["disciplinas"])
 
 
 # ------------------------------------------------------------------- simulado
@@ -230,15 +320,19 @@ class IniciarSimuladoBody(BaseModel):
 
 
 @app.post("/simulados")
-def rota_iniciar_simulado(body: IniciarSimuladoBody, uid: int = Depends(usuario_atual)):
+def rota_iniciar_simulado(body: IniciarSimuladoBody, uid: int = Depends(usuario_atual),
+                          m: dict = Depends(mesa_atual)):
     if body.questao_ids:
+        # Lista pronta vem do /desafio, que JÁ montou dentro do recorte da
+        # mesa — refiltrar aqui só arriscaria descartar em silêncio o que
+        # aquele bloco escolheu de propósito.
         mapa = questoes.obter_varias(body.questao_ids)
         qs = [mapa[i] for i in body.questao_ids if i in mapa]
     else:
-        qs = simulado.selecionar(body.n, body.disciplina)
+        qs = simulado.selecionar(body.n, body.disciplina, m["disciplinas"])
     if not qs:
         raise HTTPException(404, "nenhuma questão no acervo (ou disciplina inexistente)")
-    sid = simulado.iniciar(uid, len(qs), body.minutos)
+    sid = simulado.iniciar(uid, len(qs), body.minutos, m["id"])
     return {"simulado_id": sid, "questoes": qs}
 
 
@@ -283,24 +377,25 @@ def rota_responder_simulado(sid: int, body: RespostasSimuladoBody, uid: int = De
 
 
 @app.get("/simulados")
-def rota_historico_simulados(uid: int = Depends(usuario_atual)):
-    return simulado.historico(uid)
+def rota_historico_simulados(uid: int = Depends(usuario_atual), m: dict = Depends(mesa_atual)):
+    return simulado.historico(uid, mesa_id=m["id"])
 
 
 # --------------------------------------------------------------------- stats
 @app.get("/stats")
-def rota_stats(uid: int = Depends(usuario_atual)):
-    return scheduler.desempenho(uid)
+def rota_stats(uid: int = Depends(usuario_atual), m: dict = Depends(mesa_atual)):
+    return scheduler.desempenho(uid, m["disciplinas"])
 
 
 @app.get("/erros")
-def rota_erros(uid: int = Depends(usuario_atual)):
-    return scheduler.caderno_erros(uid)
+def rota_erros(uid: int = Depends(usuario_atual), m: dict = Depends(mesa_atual)):
+    return scheduler.caderno_erros(uid, disciplinas=m["disciplinas"])
 
 
 @app.get("/meta")
-def rota_meta(data: date | None = None, uid: int = Depends(usuario_atual)):
-    return scheduler.meta(uid, data)
+def rota_meta(data: date | None = None, uid: int = Depends(usuario_atual),
+              m: dict = Depends(mesa_atual)):
+    return scheduler.meta(uid, data, m["id"], m["disciplinas"])
 
 
 # ------------------------------------------------------------------ perguntar
@@ -309,9 +404,10 @@ class PerguntaBody(BaseModel):
 
 
 @app.post("/perguntar")
-def rota_perguntar(body: PerguntaBody, uid: int = Depends(usuario_atual)):
+def rota_perguntar(body: PerguntaBody, uid: int = Depends(usuario_atual),
+                   m: dict = Depends(mesa_atual)):
     try:
-        return socratic.explicar(body.pergunta, uid)
+        return socratic.explicar(body.pergunta, uid, m["disciplinas"])
     except ErroLLM as e:
         raise HTTPException(503, f"LLM indisponível: {e}")
 
@@ -320,21 +416,24 @@ def rota_perguntar(body: PerguntaBody, uid: int = Depends(usuario_atual)):
 @app.post("/edital")
 def rota_ingerir_edital(arquivo: UploadFile = File(...), titulo: str | None = Form(None),
                         orgao: str | None = Form(None), banca: str | None = Form(None),
-                        uid: int = Depends(usuario_atual)):
+                        m: dict = Depends(mesa_atual)):
+    """O edital entra NA MESA do header (migração 010) — é ele que define
+    quais disciplinas ela passa a mostrar, então subir o PDF é o que
+    transforma uma mesa recém-criada num recorte de verdade."""
     # edital.ingerir() lê de um caminho em disco (PdfReader) — salva o
     # upload num temporário e apaga depois, sem deixar PDF de aluno no disco.
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
         tmp.write(arquivo.file.read())
         caminho = Path(tmp.name)
     try:
-        return edital.ingerir(uid, caminho, titulo=titulo, orgao=orgao, banca=banca)
+        return edital.ingerir(m["id"], caminho, titulo=titulo, orgao=orgao, banca=banca)
     finally:
         caminho.unlink(missing_ok=True)
 
 
 @app.get("/edital")
-def rota_edital_atual(uid: int = Depends(usuario_atual)):
-    ed = edital.mais_recente(uid)
+def rota_edital_atual(uid: int = Depends(usuario_atual), m: dict = Depends(mesa_atual)):
+    ed = edital.mais_recente(m["id"])
     if not ed:
         raise HTTPException(404, "nenhum edital ingerido ainda")
     return {**ed, "cobertura": edital.cobertura(ed["id"], uid)}

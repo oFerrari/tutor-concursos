@@ -20,10 +20,10 @@ Estimativa de tempo vem do histórico real DESTE usuário
 levou `v_desempenho_disciplina` a existir: medir, não estimar às cegas.
 Sem histórico ainda (usuário novo), cai num default documentado abaixo.
 """
-from . import db
+from . import db, mesa
 from .scheduler import CAMPOS_Q
 
-VERSAO = "desafio-v2"
+VERSAO = "desafio-v3"
 
 # Sem tentativa nenhuma DESTE usuário ainda não há média para calcular. 90s é
 # chute conservador para uma resposta dissertativa curta — melhor superestimar
@@ -32,6 +32,9 @@ SEGUNDOS_PADRAO = 90
 
 
 def tempo_medio_segundos(usuario_id: int) -> float:
+    """Sem filtro de mesa, de propósito: é a velocidade de resposta da
+    PESSOA (o número que vira "~25 min estimados"), não uma característica
+    do concurso — mesmo critério de `scheduler.ofensiva_dias`."""
     r = db.exec1(
         "SELECT avg(segundos)::float8 AS media FROM tentativa "
         "WHERE usuario_id = %(u)s AND segundos IS NOT NULL",
@@ -40,7 +43,8 @@ def tempo_medio_segundos(usuario_id: int) -> float:
     return r["media"] if r and r["media"] else float(SEGUNDOS_PADRAO)
 
 
-def _novas(usuario_id: int, limite: int, excluir: set[int]) -> list[dict]:
+def _novas(usuario_id: int, limite: int, excluir: set[int],
+           disciplinas: list[str] | None = None) -> list[dict]:
     if limite <= 0:
         return []
     return db.query(
@@ -49,12 +53,14 @@ def _novas(usuario_id: int, limite: int, excluir: set[int]) -> list[dict]:
             WHERE NOT EXISTS (SELECT 1 FROM progresso p
                               WHERE p.usuario_id = %(u)s AND p.questao_id = q.id)
               AND q.id <> ALL(%(ex)s)
+              AND {mesa.filtro('q.disciplina')}
             ORDER BY q.id LIMIT %(l)s""",
-        {"u": usuario_id, "l": limite, "ex": list(excluir) or [-1]},
+        {"u": usuario_id, "l": limite, "ex": list(excluir) or [-1], "disc": disciplinas},
     )
 
 
-def _reincidentes(usuario_id: int, limite: int) -> list[dict]:
+def _reincidentes(usuario_id: int, limite: int,
+                  disciplinas: list[str] | None = None) -> list[dict]:
     if limite <= 0:
         return []
     # erro_caderno TAMBÉM tem colunas disciplina/tema (é a cópia resumida,
@@ -65,44 +71,50 @@ def _reincidentes(usuario_id: int, limite: int) -> list[dict]:
             FROM questao q
             JOIN erro_caderno e ON e.questao_id = q.id AND e.usuario_id = %(u)s
             JOIN progresso p ON p.questao_id = q.id AND p.usuario_id = %(u)s
+            WHERE {mesa.filtro('q.disciplina')}
             ORDER BY e.vezes DESC, e.ultima DESC LIMIT %(l)s""",
-        {"u": usuario_id, "l": limite},
+        {"u": usuario_id, "l": limite, "disc": disciplinas},
     )
 
 
-def _mini_simulado(limite: int, excluir: set[int]) -> list[dict]:
+def _mini_simulado(limite: int, excluir: set[int],
+                   disciplinas: list[str] | None = None) -> list[dict]:
     """
     Amostra ALEATÓRIA sobre o acervo compartilhado todo (mesmo espírito de
     simulado.selecionar: é a prova real que não escolhe o que cai) — por
     isso NÃO recebe usuario_id, só exclui o que já entrou nos outros dois
-    blocos. Busca um pouco mais que o pedido porque parte pode colidir com
-    o que já entrou em reincidentes/novas — pedir 2x cobre isso sem
-    precisar de retry em loop para acervos pequenos.
+    blocos. Recebe `disciplinas` porque "a prova não escolhe o que cai"
+    vale DENTRO do edital: sortear Direito Penal num concurso que não cobra
+    Penal não é imprevisibilidade, é ruído. Busca um pouco mais que o
+    pedido porque parte pode colidir com o que já entrou em
+    reincidentes/novas — pedir 2x cobre isso sem precisar de retry em loop
+    para acervos pequenos.
     """
     if limite <= 0:
         return []
     candidatos = db.query(
         f"""SELECT {CAMPOS_Q}
             FROM questao q
-            WHERE q.id <> ALL(%(ex)s)
+            WHERE q.id <> ALL(%(ex)s) AND {mesa.filtro('q.disciplina')}
             ORDER BY random() LIMIT %(l)s""",
-        {"l": limite * 2, "ex": list(excluir) or [-1]},
+        {"l": limite * 2, "ex": list(excluir) or [-1], "disc": disciplinas},
     )
     return candidatos[:limite]
 
 
 def montar(usuario_id: int, n_reincidentes: int = 3, n_novas: int = 5,
-           n_simulado: int = 5) -> dict:
+           n_simulado: int = 5, disciplinas: list[str] | None = None) -> dict:
     """Monta o desafio do dia. Cada bloco pode vir menor (ou vazio) que o
     pedido se o acervo não tiver material suficiente — não é erro, é reflexo
-    honesto do que existe."""
-    reincidentes = _reincidentes(usuario_id, n_reincidentes)
+    honesto do que existe (e com mesa, "o que existe" já é o recorte do
+    edital dela)."""
+    reincidentes = _reincidentes(usuario_id, n_reincidentes, disciplinas)
     usados = {q["id"] for q in reincidentes}
 
-    novas = _novas(usuario_id, n_novas, usados)
+    novas = _novas(usuario_id, n_novas, usados, disciplinas)
     usados |= {q["id"] for q in novas}
 
-    mini_simulado = _mini_simulado(n_simulado, usados)
+    mini_simulado = _mini_simulado(n_simulado, usados, disciplinas)
 
     total = len(reincidentes) + len(novas) + len(mini_simulado)
     return {

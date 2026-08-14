@@ -30,9 +30,9 @@ import re
 from datetime import date
 from pathlib import Path
 
-from . import db
+from . import db, mesa as mesa_mod
 
-VERSAO = "edital-v2"
+VERSAO = "edital-v3"
 
 MESES = {"janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5,
          "junho": 6, "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10,
@@ -116,11 +116,12 @@ def extrair_topicos(texto: str) -> list[dict]:
 
 
 # --------------------------------------------------------------- borda (db)
-def ingerir(usuario_id: int, caminho, titulo: str | None = None, orgao: str | None = None,
+def ingerir(mesa_id: int, caminho, titulo: str | None = None, orgao: str | None = None,
             banca: str | None = None) -> dict:
-    """Cada usuário tem seu próprio edital — dois concurseiros estudando o
-    mesmo acervo compartilhado podem visar provas diferentes, em datas
-    diferentes."""
+    """O edital pertence à MESA, não ao usuário (migração 010) — a mesma
+    pessoa pode visar dois concursos ao mesmo tempo, cada um com sua data e
+    seu conteúdo programático, e é o edital de cada mesa que define quais
+    disciplinas aquela mesa mostra (ver core/mesa.py)."""
     from pypdf import PdfReader
     caminho = Path(caminho)
     reader = PdfReader(str(caminho))
@@ -131,9 +132,9 @@ def ingerir(usuario_id: int, caminho, titulo: str | None = None, orgao: str | No
     topicos = extrair_topicos(texto)
 
     eid = db.exec1(
-        """INSERT INTO edital (usuario_id, titulo, orgao, banca, data_prova, arquivo)
-           VALUES (%(u)s, %(t)s, %(o)s, %(b)s, %(d)s, %(a)s) RETURNING id""",
-        {"u": usuario_id, "t": titulo or caminho.stem, "o": orgao, "b": banca,
+        """INSERT INTO edital (mesa_id, titulo, orgao, banca, data_prova, arquivo)
+           VALUES (%(m)s, %(t)s, %(o)s, %(b)s, %(d)s, %(a)s) RETURNING id""",
+        {"m": mesa_id, "t": titulo or caminho.stem, "o": orgao, "b": banca,
          "d": data_prova, "a": str(caminho)},
     )["id"]
     for t in topicos:
@@ -152,11 +153,14 @@ def ingerir(usuario_id: int, caminho, titulo: str | None = None, orgao: str | No
     }
 
 
-def mais_recente(usuario_id: int) -> dict | None:
+def mais_recente(mesa_id: int) -> dict | None:
+    """O mais recente da MESA. Reingerir um edital corrigido substitui o
+    anterior aqui e em `mesa.disciplinas()` — as duas coisas leem o mesmo
+    "último", senão a meta usaria uma data e o filtro de disciplina outra."""
     return db.exec1(
-        "SELECT id, titulo, data_prova FROM edital WHERE usuario_id = %(u)s "
-        "ORDER BY criado_em DESC LIMIT 1",
-        {"u": usuario_id},
+        "SELECT id, titulo, orgao, banca, data_prova FROM edital WHERE mesa_id = %(m)s "
+        "ORDER BY criado_em DESC, id DESC LIMIT 1",
+        {"m": mesa_id},
     )
 
 
@@ -193,7 +197,8 @@ def cobertura(edital_id: int, usuario_id: int) -> list[dict]:
     return resultado
 
 
-def probabilidade_fechamento(edital_id: int, usuario_id: int, data_prova: date | None = None) -> dict:
+def probabilidade_fechamento(edital_id: int, usuario_id: int, data_prova: date | None = None,
+                             disciplinas: list[str] | None = None) -> dict:
     """
     APROXIMAÇÃO por extrapolação linear de ritmo — não é um modelo
     estatístico (não modela variância nem esquecimento; mesma limitação já
@@ -217,8 +222,15 @@ def probabilidade_fechamento(edital_id: int, usuario_id: int, data_prova: date |
     topicos_pendentes = sum(c["topicos_pendentes_estimado"] for c in cob)
     topicos_cobertos = topicos_totais - topicos_pendentes
 
-    primeira = db.exec1("SELECT min(criada_em)::date AS d FROM tentativa WHERE usuario_id = %(u)s",
-                        {"u": usuario_id})
+    # `dias_estudando` escopado nas disciplinas DESTA mesa, não na conta
+    # inteira: uma mesa aberta hoje, numa conta que estuda há 6 meses,
+    # espalharia a cobertura recém-começada sobre 180 dias e reportaria um
+    # ritmo perto de zero — número errado com cara de medida.
+    primeira = db.exec1(
+        f"""SELECT min(t.criada_em)::date AS d
+              FROM tentativa t JOIN questao q ON q.id = t.questao_id
+             WHERE t.usuario_id = %(u)s AND {mesa_mod.filtro('q.disciplina')}""",
+        {"u": usuario_id, "disc": disciplinas})
     dias_estudando = max((date.today() - primeira["d"]).days, 1) if primeira and primeira["d"] else 0
 
     ritmo_atual = topicos_cobertos / dias_estudando if dias_estudando else 0.0

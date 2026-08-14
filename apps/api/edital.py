@@ -3,16 +3,23 @@
 Ingere um PDF de edital: extrai data da prova e conteúdo programático.
 
     python edital.py corpus/edital.pdf --orgao "PC-PR" --banca FGV
+    python edital.py corpus/edital.pdf --mesa "PF Agente"   # cria a mesa se não existir
 
 Imprime os candidatos a data (não só "a resposta") e a contagem de tópicos
 por disciplina — confira antes de rodar `chat.py meta`, mesmo espírito de
 `diagnostico.py`: melhor esforço reportado, não decisão calada.
+
+O edital entra numa MESA (migração 010), e é ele que define quais
+disciplinas aquela mesa passa a mostrar. Sem `--mesa`, vai pra mesa padrão
+da conta. Aqui `--mesa` CRIA a mesa se o nome não existir — ao contrário do
+`chat.py`, onde nome desconhecido é erro: lá você está pedindo pra estudar
+algo que já deveria existir, aqui você está montando o alvo agora.
 """
 import argparse
 import sys
 from pathlib import Path
 
-from core import auth, edital
+from core import auth, edital, mesa as mesa_mod
 from core.config import CLI_USUARIO_EMAIL
 
 
@@ -22,6 +29,7 @@ def main() -> int:
     ap.add_argument("--titulo")
     ap.add_argument("--orgao")
     ap.add_argument("--banca")
+    ap.add_argument("--mesa", help="nome da mesa de estudo (criada se não existir)")
     a = ap.parse_args()
 
     if not a.arquivo.exists():
@@ -29,8 +37,15 @@ def main() -> int:
         return 1
 
     usuario_id = auth.usuario_da_cli(CLI_USUARIO_EMAIL)
-    r = edital.ingerir(usuario_id, a.arquivo, titulo=a.titulo, orgao=a.orgao, banca=a.banca)
+    if a.mesa:
+        m = next((x for x in mesa_mod.listar(usuario_id)
+                  if x["nome"].lower() == a.mesa.lower()), None)
+        m = m or mesa_mod.criar(usuario_id, a.mesa, orgao=a.orgao, banca=a.banca)
+    else:
+        m = mesa_mod.padrao(usuario_id)
+    r = edital.ingerir(m["id"], a.arquivo, titulo=a.titulo, orgao=a.orgao, banca=a.banca)
 
+    print(f"mesa: {m['nome']} (id {m['id']})")
     print(f"edital_id={r['edital_id']}")
     print(f"\ndata da prova escolhida: {r['data_prova']}")
     if len(r["candidatos_data"]) > 1:

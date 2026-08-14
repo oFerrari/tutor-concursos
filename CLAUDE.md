@@ -51,6 +51,7 @@ db/006_tipo_historico.sql  documento.tipo aceita 'historico' (material com múlt
 db/007_edital.sql          tabelas edital e topico
 db/008_usuario.sql         usuario, progresso (caixa/prox_revisao saem de questao), usuario_id em tudo pessoal
 db/009_cascade_usuario.sql ON DELETE CASCADE consistente em toda FK pra usuario
+db/010_mesa.sql            mesa de estudo: edital passa a ser da mesa, simulado ganha etiqueta
 db/schema.dbml             schema documentado (DBML) — visualização, não fonte de verdade
 core/chunking.py           lei -> chunks por artigo (função pura)
 core/embeddings.py         e5 local, prefixos query:/passage:, cache
@@ -59,6 +60,7 @@ core/llm.py                interface LLM + Gemini + Ollama, retry
 core/socratic.py           avaliação e geração de questões (schemas JSON)
 core/questoes.py           lookup simples do banco de questões (compartilhado, sem usuario_id)
 core/auth.py               hash de senha (bcrypt), token de sessão (JWT), usuário fixo da CLI
+core/mesa.py               mesa de estudo (o concurso-alvo) e o predicado de recorte por disciplina
 core/scheduler_regras.py   regras de promoção — FUNÇÕES PURAS
 core/scheduler.py          fila, registro, caderno de erros, meta — tudo por usuario_id
 core/simulado.py           prova sob condição de exame: sem dica, corrige no final
@@ -243,6 +245,62 @@ senha por essa rota — ela nunca teria como chegar autenticada ali sem
 senha alguma; ganhar login via API pra essa conta seria um fluxo
 diferente (tipo reset), fora de escopo por ora.
 
+**Mesa de estudo é FILTRO, não silo (migração 010).** Uma mesa é um
+concurso-alvo: guarda o edital, a banca e o órgão. O que ela NÃO guarda é
+progresso — `progresso`, `tentativa` e `erro_caderno` continuam escopados
+por `usuario_id` e não ganharam `mesa_id`. A memória SM-2 é do ALUNO, não
+do concurso: quem dominou o art. 312 estudando pra PC-PR sabe o art. 312 na
+mesa da PF, e duplicar a caixa por mesa faria a mesma pessoa reestudar do
+zero o que já sabe — o oposto do que repetição espaçada existe pra fazer.
+O concurseiro real reaproveita Português/Constitucional entre editais o
+tempo todo. O argumento decisivo contra o isolamento total foi outro,
+porém: `questao` é acervo compartilhado e GLOBAL (migração 008), então sem
+filtro por disciplina toda mesa mostraria o acervo inteiro de qualquer
+jeito. Isolar por mesa seria esse mesmo filtro MAIS a duplicação do estado
+de aprendizado; o filtro sozinho entrega o mesmo produto sem a duplicação.
+
+As disciplinas da mesa não são coluna: saem de `topico.disciplina` do
+edital MAIS RECENTE dela (mesmo "último" que `edital.mais_recente()` usa
+pra meta — senão a data viria de um edital e o filtro de outro). Mesa sem
+edital devolve `None` e NÃO filtra nada, que é exatamente o comportamento
+anterior à 010. O predicado vive num lugar só (`core/mesa.filtro`) porque
+"o que esta mesa cobre" precisa dar a mesma resposta na fila, no stats e no
+simulado. Ele casa nos DOIS sentidos (`ILIKE` de cada lado) porque o nome
+vem do edital por heurística de PDF ("Noções De Direito Administrativo") e
+precisa bater com o do acervo, digitado na ingestão ("Direito
+Administrativo").
+
+Três números NÃO respeitam a mesa, de propósito, e é a mesma pergunta em
+cada caso ("isso é do aluno ou do concurso?"): `ofensiva_dias` (hábito —
+recortar quebraria a sequência de quem estudou nos dois dias em mesas
+diferentes, punindo quem estudou mais), `tempo_medio_segundos` (velocidade
+de resposta da pessoa) e a busca RAG de `socratic.explicar` (o aluno pode
+perguntar de qualquer coisa; cortar o acervo pela mesa daria "não
+encontrei" pra pergunta que o material responde). Só o resumo de
+DESEMPENHO dentro do `explicar` é recortado.
+
+Políticas de FK diferentes de propósito: `edital -> mesa` é CASCADE (o
+edital É o conteúdo da mesa), `simulado -> mesa` é SET NULL (a prova já
+feita é histórico de desempenho da pessoa, só etiquetado com a mesa —
+apagar a mesa não deve sumir com ela). `edital.usuario_id` SAIU: o edital
+pertence à mesa e a mesa ao usuário; manter as duas colunas seria
+denormalização com risco de divergir.
+
+**A mesa vem no header `X-Mesa-Id`, por requisição — não há "mesa ativa"
+no servidor.** Estado de sessão no servidor faz duas abas abertas em mesas
+diferentes brigarem pela mesma variável, e o aluno com dois editais abertos
+ao mesmo tempo é o caso de uso normal, não a exceção. O header IDENTIFICA,
+o `usuario_id` do token AUTORIZA: `mesa.obter()` filtra por usuario_id,
+então pedir a mesa de outra pessoa dá 404 (não 403 — não confirma pra quem
+chuta um id que ele existe e só não é dele), mesmo espírito de
+`simulado.pertence_a()`. Sem header, cai na mesa padrão da conta
+(`mesa.padrao`, a mais antiga, criada sob demanda como
+`auth.usuario_da_cli`) — é o que mantém a CLI e qualquer cliente que ainda
+não conhece mesas funcionando igual. Na CLI o equivalente é `--mesa NOME`,
+e nome desconhecido é ERRO, não fallback calado pra padrão: receber a fila
+de outro concurso por causa de um typo é o tipo de falha silenciosa que
+`--norma` explícito em `reingest.py` já evita noutro lugar.
+
 **`ON DELETE CASCADE` consistente em toda FK pra `usuario` (migração 009).**
 A 008 só deu CASCADE em `progresso`; as outras (`tentativa`, `erro_caderno`,
 `simulado`, `edital`) ficaram RESTRICT por padrão do Postgres — inconsistência
@@ -392,6 +450,20 @@ lembrasse de rodar.
 - `sincronizar.py` não exporta `simulado`/`tentativa.simulado_id`: histórico
   de provas não viaja entre máquinas (o progresso em si — caixa,
   prox_revisao — viaja, porque isso vem da tentativa comum).
+- `sincronizar.py` também NÃO exporta `mesa`/`edital`/`topico` (migração
+  010): a outra máquina precisa rodar `python edital.py ... --mesa "..."` de
+  novo pra recriar o recorte. O progresso continua viajando inteiro, porque
+  é do usuário e não da mesa — que é justamente o que a decisão da 010
+  torna verdade. Exportar mesa exigiria resolver identidade de mesa entre
+  bancos (o id é sequencial e muda), o mesmo problema que `(norma, artigo)`
+  resolve pros chunks; o nome da mesa serviria de chave natural, mas não
+  vale construir isso antes de existir uma segunda máquina com mesas.
+- Uma mesa não tem disciplinas próprias: elas saem do edital. Mesa criada e
+  ainda sem PDF mostra o acervo inteiro (declarado, não silencioso — a CLI
+  imprime "sem edital — acervo inteiro" no cabeçalho da sessão).
+- A tela `/mesas` do frontend continua VITRINE: a fase 2 entregou só o
+  backend. Ligar a tela (listar/criar/entrar + `X-Mesa-Id` em todo fetch de
+  `lib/api.ts`) é a próxima rodada.
 
 ## Aberto
 
@@ -404,6 +476,9 @@ lembrasse de rodar.
   acima). Exigiria marcar cada questão gerada com o tópico de origem.
 - Separação por cargo no parsing de edital (hoje disciplinas de nomes
   iguais entre cargos se somam — ver aproximação (1) documentada acima).
+- Disciplina da mesa definida à mão, sem edital (hoje só o PDF cria o
+  recorte). Faria sentido pra quem estuda pra um concurso ainda sem edital
+  publicado — que é metade do tempo de preparação de verdade.
 - Provas anteriores da banca: gabarito oficial + peso de incidência real.
 - Simulado por banca (peso de incidência real, não amostra uniforme).
   Simulado genérico (`chat.py simulado`) e desafio diário (`chat.py desafio`)
@@ -552,12 +627,17 @@ lembrasse de rodar.
   `json.dumps`) até alguém tentar de verdade.
 - Ao sair de uma máquina: `python sincronizar.py exportar` antes do commit/push,
   sempre — senão a próxima exportação (de qualquer lado) sobrescreve progresso.
-- Testar qualquer coisa que grave em `tentativa`/`progresso`/`simulado`/`edital`
+- Testar qualquer coisa que grave em `tentativa`/`progresso`/`simulado`/`edital`/`mesa`
   contra um usuário DESCARTÁVEL (`auth.usuario_da_cli("teste-x@local")`),
   nunca contra a conta real (`CLI_USUARIO_EMAIL`). Apagar com
   `DELETE FROM usuario WHERE email = '...'` — o `ON DELETE CASCADE` da
-  migração 009 limpa tentativa/progresso/erro_caderno/simulado/edital(+topico)
-  de uma vez, sem lógica de limpeza escrita na mão (ver Armadilhas de método).
+  migração 009 limpa tentativa/progresso/erro_caderno/simulado e a cadeia
+  mesa→edital→topico (010) de uma vez, sem lógica de limpeza escrita na mão
+  (ver Armadilhas de método).
+- `pytest` cobre isso: `tests/test_mesa_api.py` tem um teste
+  (`test_caderno_de_erros_atravessa_mesas`) que existe pra QUEBRAR se
+  alguém escopar `progresso`/`erro_caderno` por mesa um dia. A decisão da
+  010 não está só escrita — está executável.
 
 ## Comandos
 
@@ -573,9 +653,11 @@ python ingest.py corpus/livro-emendas.pdf --disciplina "Direito Constitucional" 
 python corpus/html_para_texto.py corpus/Arquivo.html corpus/norma.txt --cortar-em "MARCADOR"  # converte HTML do Planalto pra .txt antes de ingerir
 python avaliar_retrieval.py         # depois de qualquer ingestão nova ou mudança em retrieval.py
 python edital.py corpus/edital.pdf --orgao "PC-PR" --banca FGV   # data da prova + conteúdo programático
+python edital.py corpus/edital.pdf --mesa "PC-PR Investigador"   # cria a mesa se não existir
 python gerar.py --cobertura 3
 python gerar.py 3 --secao "FUNCIONARIO PUBLICO" --por-lote 3 --max 12
 python chat.py estudar
+python chat.py estudar --mesa "PF Agente"   # recorta pelas disciplinas do edital daquela mesa
 python chat.py desafio             # meta do dia: pontos fracos + novas + mini-simulado
 python chat.py simulado 20 60      # 20 questões, meta de 60 min
 python chat.py simulados
@@ -595,6 +677,12 @@ uvicorn api:app --reload --port 8000
 curl -s -X POST localhost:8000/auth/registrar -H 'content-type: application/json' \
      -d '{"email":"voce@exemplo.com","senha":"pelomenos8chars"}'
 curl -s localhost:8000/fila -H "Authorization: Bearer $TOKEN"
+
+# mesas (migração 010): o header escolhe o recorte; sem header, mesa padrão
+curl -s -X POST localhost:8000/mesas -H "Authorization: Bearer $TOKEN" \
+     -H 'content-type: application/json' -d '{"nome":"PF Agente","banca":"Cebraspe"}'
+curl -s localhost:8000/mesas -H "Authorization: Bearer $TOKEN"
+curl -s localhost:8000/fila  -H "Authorization: Bearer $TOKEN" -H "X-Mesa-Id: 3"
 ```
 
 
