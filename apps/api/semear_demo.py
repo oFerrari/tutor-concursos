@@ -4,9 +4,16 @@ Semeia uma CONTA DESCARTÁVEL com 3 mesas e 15 dias de estudo simulado, pra
 conferir se os números do cartão de mesa (e do painel) ficam coerentes com
 uso real — não só nas pontas 0% e 100% que o pytest trava.
 
-NÃO toca na conta real: cria `demo-15dias@local` e apaga tudo no --limpar
+NÃO toca na conta real: o padrão é `demo-15dias@local`, e `--limpar` apaga
 (ON DELETE CASCADE da migração 009 leva tentativa/progresso/erro_caderno e
-a cadeia mesa→edital→tópico).
+a cadeia mesa→edital→tópico). `--email` aponta pra outra conta de teste
+quando o objetivo é OLHAR o resultado na tela, com um login que já existe.
+
+Semear numa conta existente ACRESCENTA — não apaga o que já está lá. Uma
+conta de teste normalmente tem edital ingerido e rascunhos de curadoria, e
+destruir isso pra montar uma demonstração seria trocar dado real por dado
+inventado sem ninguém pedir. Nome de mesa repetido faz `mesa.criar` levantar
+erro, então rodar duas vezes falha alto em vez de duplicar calado.
 
 A regra de promoção é a de PRODUÇÃO (core/scheduler_regras), e a escolha do
 dia é a mesma de duas etapas da fila (revisão vencida primeiro, novas com o
@@ -15,8 +22,9 @@ porque ela pergunta CURRENT_DATE ao Postgres — pra simular dias passados o
 relógio precisa ser uma variável, então a seleção roda aqui com `dia` e só
 o resultado é gravado, com `criada_em` retroagido.
 
-    python semear_demo.py            # cria e semeia
-    python semear_demo.py --limpar   # apaga a conta de demonstração
+    python semear_demo.py                              # cria e semeia
+    python semear_demo.py --email voce@teste --senha 12345678
+    python semear_demo.py --limpar                     # apaga a conta padrão
 """
 import argparse
 import random
@@ -53,16 +61,30 @@ MESAS = [
 AGENDA = [0, 0, 1, None, 0, 0, 1, 0, None, 1, 0, 0, 1, None, 0]
 
 
-def limpar():
-    n = db.query("DELETE FROM usuario WHERE email = %(e)s RETURNING id", {"e": EMAIL})
-    print(f"apagado: {len(n)} usuário(s)")
+def limpar(email: str):
+    n = db.query("DELETE FROM usuario WHERE email = %(e)s RETURNING id", {"e": email})
+    print(f"apagado: {len(n)} usuário(s) ({email})")
 
 
-def semear(semente: int):
-    limpar()
-    u = auth.registrar(EMAIL, SENHA)
-    uid = u["id"]
-    print(f"conta {EMAIL} (id {uid}) — senha {SENHA}\n")
+def _conta(email: str, senha: str) -> int:
+    """
+    Cria a conta, ou reaproveita a que já existe garantindo a senha pedida —
+    o ponto de semear numa conta nomeada é conseguir ENTRAR nela pela tela, e
+    uma senha que não é a informada transformaria isso em suporte.
+    """
+    existente = db.exec1("SELECT id FROM usuario WHERE email = %(e)s", {"e": email})
+    if not existente:
+        return auth.registrar(email, senha)["id"]
+    db.query("UPDATE usuario SET senha_hash = %(h)s WHERE id = %(i)s",
+             {"h": auth.hash_senha(senha), "i": existente["id"]})
+    print(f"conta {email} já existia (id {existente['id']}) — semeando por cima, "
+          f"senha redefinida; nada do que estava lá foi apagado")
+    return existente["id"]
+
+
+def semear(email: str, senha: str, semente: int):
+    uid = _conta(email, senha)
+    print(f"conta {email} (id {uid}) — senha {senha}\n")
 
     hoje = date.today()
     ids = []
@@ -188,7 +210,9 @@ def relatorio(uid: int):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
+    ap.add_argument("--email", default=EMAIL)
+    ap.add_argument("--senha", default=SENHA)
     ap.add_argument("--limpar", action="store_true")
     ap.add_argument("--semente", type=int, default=7)
     a = ap.parse_args()
-    limpar() if a.limpar else semear(a.semente)
+    limpar(a.email) if a.limpar else semear(a.email, a.senha, a.semente)
