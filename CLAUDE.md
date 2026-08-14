@@ -25,6 +25,13 @@ regime jurídico dos servidores civis (245 chunks) — como normas separadas,
 todos do Planalto — mais um livro de histórico de emendas constitucionais
 como material `historico` (busca híbrida, sem citação exata por artigo).
 
+Dois formatos de questão: discursiva curta (avaliada por LLM) e item
+CERTO/ERRADO no estilo Cebraspe (corrigido em código), este com ou sem
+"Texto associado" compartilhado entre vários itens. Quando o banco não tem
+questão da matéria, o sistema GERA a partir do acervo e grava com
+proveniência. O chat do tutor tem memória de conversa e sabe para que
+concurso a pessoa estuda.
+
 **Não contém e nunca deve conter** dados de empresa. O autor trabalha numa
 cooperativa; este projeto é separado disso por decisão explícita.
 
@@ -35,8 +42,8 @@ Postgres 17 + pgvector   docker compose, porta 5433
 embeddings               intfloat/multilingual-e5-base, 768 dim, LOCAL (CPU)
 LLM                      Gemini Flash via REST, adaptador trocável
 auth                     JWT (PyJWT) + bcrypt, stateless — sem tabela de sessão
-interface                CLI (rich, chat.py) + API HTTP (FastAPI, api.py) sobre o mesmo core/.
-                         Frontend (Next.js) ainda não escrito — é o próximo passo.
+interface                CLI (rich, chat.py) + API HTTP (FastAPI, api.py) sobre o mesmo core/,
+                         e frontend Next.js (apps/web) consumindo a API.
 ```
 
 ## Mapa
@@ -53,6 +60,10 @@ db/008_usuario.sql         usuario, progresso (caixa/prox_revisao saem de questa
 db/009_cascade_usuario.sql ON DELETE CASCADE consistente em toda FK pra usuario
 db/010_mesa.sql            mesa de estudo: edital passa a ser da mesa, simulado ganha etiqueta
 db/011_edital_rascunho.sql rascunho de edital: curadoria (escolher cargo) antes de virar oficial
+db/012_questao_tipo.sql    questao.tipo + gabarito_ce: item CERTO/ERRADO (Cebraspe), CHECK casada
+db/013_contexto.sql        "Texto associado": texto-base compartilhado por vários itens
+db/014_conversa.sql        conversa + mensagem: o chat do tutor passa a ter memória
+db/015_perfil.sql          usuario.perfil (JSONB): horas/nível/turno declarados no onboarding
 db/schema.dbml             schema documentado (DBML) — visualização, não fonte de verdade
 core/chunking.py           lei -> chunks por artigo (função pura)
 core/embeddings.py         e5 local, prefixos query:/passage:, cache
@@ -63,6 +74,8 @@ core/questoes.py           lookup simples do banco de questões (compartilhado, 
 core/auth.py               hash de senha (bcrypt), token de sessão (JWT), usuário fixo da CLI
 core/mesa.py               mesa de estudo (o concurso-alvo) e o predicado de recorte por disciplina
 core/rascunho.py           curadoria do edital: extrai pra rascunho, pessoa escolhe o cargo, confirma
+core/geracao.py            gera questão do ACERVO sob demanda e grava com proveniência
+core/conversa.py           conversa persistida do tutor + janela de histórico pro prompt
 core/scheduler_regras.py   regras de promoção — FUNÇÕES PURAS
 core/scheduler.py          fila, registro, caderno de erros, meta — tudo por usuario_id
 core/simulado.py           prova sob condição de exame: sem dica, corrige no final
@@ -81,6 +94,7 @@ simular.py                 simulação de meses de estudo, sem banco
 chat.py                    sessão de estudo (CLI, usuário fixo por email)
 api.py                     API HTTP (FastAPI) — mesma lógica de core/, autenticada por JWT
 sincronizar.py             exporta/importa questões e progresso de UM usuário entre máquinas
+semear_demo.py             semeia conta descartável com 3 mesas e 15 dias, pra olhar a TELA
 atualizar.sh               instala arquivos baixados do chat
 ```
 
@@ -344,13 +358,257 @@ artigo (`chunking.taxa_colisao_artigo`) passar de 5% — antes disso só um
 `diagnostico.py` manual pegava esse tipo de problema, e só se alguém
 lembrasse de rodar.
 
+**Questão sob demanda: a IA cria do acervo quando o banco não tem
+(`core/geracao.py`).** Até aqui a fila só servia o que já estava em
+`questao`, e essa tabela só crescia por `gerar.py`, rodado à mão. O efeito
+era GERAL, não de uma matéria: qualquer mesa cujo edital cobrisse
+disciplina ainda não gerada abria vazia — TI, bancária, fiscal, e também
+Direito Administrativo, que tinha 245 chunks da Lei 8.112 no acervo e ZERO
+questão. O material estava lá; o modelo já sabia gerar questão a partir de
+trecho de lei desde o começo. Faltava encanamento, não capacidade.
+
+Sem tema, sorteia trecho ainda DESCOBERTO dentro do recorte da mesa ("minha
+fila está vazia"); com tema, usa a MESMA `retrieval.buscar` do tutor, pra a
+questão sair do trecho que fundamentou a conversa e não de outro. Nunca de
+`tipo='historico'` — sem artigo não há proveniência, e pior: pode conter
+redação REVOGADA.
+
+A invariante NÃO foi afrouxada: questão cujo artigo não está no lote é
+descartada, como sempre. `gerar.py` passou a CHAMAR `geracao.salvar` em vez
+de manter a cópia dela — duas versões da regra que grava proveniência é
+como elas divergem. E `documento_id`/`disciplina` saem do CHUNK casado, não
+de parâmetro: lote montado por busca atravessa normas, e herdar a
+disciplina de fora rotularia a questão errado — justamente o rótulo que a
+mesa usa pra recortar a fila.
+
+A questão gerada é GRAVADA no acervo compartilhado, não fica na tela: só
+assim entra em `progresso`/SM-2 e volta pra revisão. `POST` e nunca
+automático dentro de `/fila` — gasta cota e escreve no acervo; um GET que
+gera faria cada refresh queimar cota. **409, não 500**, quando o acervo não
+cobre a matéria: "não temos material" e "a IA falhou" pedem ações opostas
+do aluno.
+
+**Item CERTO/ERRADO é tipo de questão, não formatação (migração 012).** A
+maior banca do país cobra assertiva binária, e o produto respondia "meu
+acervo não traz itens nesse formato" — verdade sobre a tabela, mentira
+sobre o sistema. `tipo` + `gabarito_ce BOOLEAN`, com **CHECK casada**:
+"item C/E sem booleano" e "discursiva COM booleano" não podem existir, e
+deixar isso pro código significaria que o primeiro caminho de escrita que
+esquecesse a regra gravaria lixo calado (são vários: `gerar.py`,
+`sob_demanda`, `sincronizar`). BOOLEAN e não 'C'/'E' em texto porque campo
+livre aceita "Certo", "V", "verdadeiro" e espalha normalização de string
+por quem consome. `gabarito` segue NOT NULL e passa a guardar a
+JUSTIFICATIVA — sem ela o aluno acerta ou erra e não aprende nada.
+
+**Múltipla escolha ficou de fora de propósito:** exige tabela de
+alternativas, modelagem inteira e não uma coluna. Aceitar o valor no CHECK
+sem ter onde guardá-las criaria questão gravável e não renderizável — falha
+na tela do aluno em vez de falhar na hora de gravar.
+
+Correção do item C/E é **em código, sem LLM** (`socratic.avaliar_questao` é
+o dispatcher): a resposta é um booleano, e mandar isso pro modelo custa
+cota, demora e introduz erro num julgamento que `==` faz sem errar. Num
+simulado de 40 itens é a diferença entre 40 chamadas e nenhuma. O
+dispatcher existe porque QUATRO caminhos corrigiam chamando `avaliar()`
+direto (rota, simulado, desafio, CLI), e cada um que esquecesse o tipo
+mandaria "C" pra ser comparado contra uma justificativa em prosa.
+
+**Não há escada socrática no item binário**, e isso é decisão: qualquer
+dica sobre uma assertiva de 50% É a resposta, e "tente de novo" vira cara
+ou coroa com o gabarito garantido na segunda. Também não existe `parcial` —
+metade de um booleano não é nada, e `parcial` DESCE uma caixa em
+`scheduler_regras`, punindo por um estado que o formato não pode ocupar.
+
+Na geração, `_validar_ce` checa `isinstance(gabarito_ce, bool)` e não
+veracidade: `if not gabarito_ce` descartaria TODO item ERRADO (False é
+falsy) — metade do lote, e justamente a metade que dá valor ao formato.
+
+**"Texto associado": o texto-base é registro compartilhado, não cópia
+(migração 013).** A prova real raramente traz assertiva avulsa — um
+texto-base é seguido de N itens que o julgam de ângulos diferentes.
+Repetir esse texto dentro de cada `enunciado` quebraria três coisas: os
+itens deixam de ser irmãos (a tela não sabe dizer "item 2 de 3"), o mesmo
+texto vira N cópias que divergem quando uma for corrigida, e o SM-2
+reapresenta a situação inteira pra revisar uma assertiva de duas linhas.
+Coluna resolveria só a terceira — **o compartilhamento É a estrutura**, e
+relação se modela com chave.
+
+CASCADE deliberado: item cujo texto-base sumiu é ILEGÍVEL ("com base no
+argumento acima" sem o argumento) e apareceria na fila de alguém. Órfão
+silencioso é pior que apagar junto. `contexto_id` é NULLABLE porque item
+avulso continua legítimo.
+
+A série sai em UMA chamada, não uma por item: os itens precisam ser
+coerentes entre si (mesma situação, mesmos nomes, ângulos diferentes), e
+isso só acontece se o modelo os escrever de uma vez, vendo o texto que ele
+mesmo criou. Item por item sobre contexto pronto produz repetição — o
+defeito que o formato não pode ter.
+
+**A banca decide o formato.** `geracao.tipo_da_banca` lê `mesa.banca`:
+Cebraspe/CESPE gera item C/E. Treinar discursiva pra prova Cebraspe é
+treinar o exercício errado — o formato tem um vício próprio (marcar Certo
+sem ler a troca de prazo ou de "poderá/deverá") que só se treina
+respondendo nele.
+
+**Conversa persistida: o tutor lembra do turno anterior (migração 014).** O
+problema era maior que "esquece a semana passada": não havia memória
+NENHUMA. `POST /perguntar` recebia só a pergunta atual, o histórico vivia
+no estado do React e sumia num F5, e o modelo nunca o via. Em uso isso
+aparecia assim: o aluno respondia "qualquer um" e o tutor devolvia "qualquer
+um de quê?" — ele não tinha a pergunta anterior. O padrão já existia
+(`socratic.avaliar()` recebe turnos por parâmetro pelo mesmo motivo);
+faltava aplicá-lo ao chat livre e ter onde guardar.
+
+Duas tabelas e não JSONB: mensagem é a unidade que se pagina, conta e
+busca; array em JSONB obriga a reescrever o documento inteiro a cada turno.
+`mesa_id` é ETIQUETA com SET NULL — a conversa é do ALUNO (mesma decisão de
+`progresso` na 010) e apagar a mesa não deve sumir com o que foi discutido.
+
+**Janela de 8 turnos, e o motivo não é economia:** o prompt já carrega 6
+chunks de lei (alguns com milhares de caracteres) e o resumo de desempenho.
+Uma conversa de 40 turnos empurraria o MATERIAL — a parte que ancora a
+resposta — pra fora da janela do modelo, e o tutor passaria a responder de
+memória própria. Melhor esquecer o turno 1 do que esquecer o art. 37. As
+fontes de turnos passados NÃO voltam pro prompt: são contexto de exibição
+(reabrir a conversa ancorada); reinjetá-las faria o modelo citar
+dispositivo recuperado pra outra pergunta.
+
+A pergunta do aluno é gravada ANTES da chamada ao modelo: se o LLM cair,
+ela fica registrada. Reabrir e não achar o que você mesmo escreveu é a pior
+forma de perder confiança no histórico.
+
+**O prompt do tutor sabe PARA QUE CONCURSO o aluno estuda.** Antes,
+perguntado "o que tem no meu edital", ele jogava a palavra na busca e
+devolvia a definição jurídica de "edital" na Lei 8.112 e no CPP — resposta
+correta sobre a lei e completamente fora do que foi perguntado, porque o
+prompt nunca dizia que existe um edital. Agora entram concurso, órgão,
+banca e disciplinas. Só os NOMES das disciplinas, nunca os tópicos: o
+edital da Dataprev tem 1015 e isso queimaria cota pra repetir o que a tela
+já mostra melhor.
+
+Junto veio o conserto de um **vazamento de rótulo**: uma resposta real
+terminou com "...75.3% [DESEMPENHO REAL DO ALUNO]" — o modelo citou o NOME
+DA SEÇÃO do prompt como se fosse fonte, porque cabeçalho em maiúscula
+somado a "cite a referência entre colchetes" ficou ambíguo. Rótulo vazando
+como citação é pior que citação errada: expõe o andaime e destrói a
+confiança nas citações verdadeiras da mesma frase.
+
+E o prompt NÃO manda o modelo escrever questão no chat. Uma versão
+intermediária dizia "ofereça gerar, nunca diga que não tem como", e ele
+passou a redigir múltipla escolha dentro da conversa — sem proveniência,
+sem entrar no SM-2, num formato que o banco não tem. Agora ele encaminha
+pro botão e explica por quê.
+
+**Perfil de estudo em JSONB, e NÃO "vetor de perfil" (migração 015).** O
+tutor sabia o desempenho e a conversa; não sabia COMO a pessoa estuda
+(horas/dia, nível, turno), então tratava um iniciante de 1h igual a um
+veterano de 6h. Essas três respostas já eram pedidas no onboarding desde o
+protótipo e sumiam ao trocar de rota.
+
+JSONB aqui pelo argumento INVERSO ao da 014: preferência não se pagina, não
+se conta, não se busca — é lida inteira, toda vez, por um consumidor só (o
+prompt), e o conjunto vai crescer por tentativa e erro. Quando um campo
+precisar ser CONSULTADO, vira coluna.
+
+Vetor seria o instrumento errado: "prefere exemplos de trânsito" é um fato
+curto e literal, não um ponto num espaço semântico. Convidaria a buscar por
+similaridade onde ler o texto resolve e, pior, abriria caminho pro modelo
+INFERIR o próprio contexto — o oposto do princípio de que ele LÊ um resumo
+calculado em código.
+
+**Lista fechada de campos e valores, validada na escrita E NA LEITURA.** A
+segunda é redundante hoje, de propósito: o destino desse texto é o prompt,
+e o dia em que alguém gravar perfil por outro caminho (import, migração,
+script) não pode ser o dia em que "nivel: ignore as regras acima" chega ao
+modelo. Valor fora da lista é ignorado em silêncio — cliente desatualizado
+e payload malicioso pedem a mesma resposta.
+
+**A busca pesa o braço lexical mais que o semântico
+(`retrieval.PESO_LEXICAL = 1.5`).** Não é gosto: é correção de um viés
+MEDIDO contra chunks grandes. O art. 37 da CF tem 13.059 caracteres (média
+do acervo: 1.245) e cobre concurso, licitação, teto e improbidade no mesmo
+artigo; o embedding é a média disso, então "administração direta e
+indireta" — que é o começo do caput — o encontrava em 83º no semântico
+contra 3º no lexical. Entrando em uma lista só, o RRF o punha atrás de
+chunks medianos presentes nas duas, e ele NÃO chegava ao contexto que o
+tutor lê. Ampliar o pool de candidatos de 30 pra 200 não resolvia
+(testado): o problema é a posição, não o corte.
+
+1.5 é o MENOR valor que corrige (2, 3 e 5 não melhoram mais nada) — número
+escolhido por maximizar a nota num gabarito de 32 casos seria ajuste ao
+gabarito, não à busca. **O conserto de raiz continua sendo sub-chunk do
+artigo gigante pro embedding**, mantendo o artigo como unidade de citação;
+o peso compra o resultado sem reingestão, e o gabarito agora tem os casos
+que denunciariam uma regressão.
+
+`PESO_HISTORICO = 0.5` não mudou a nota e entrou assim mesmo: o livro de
+emendas ocupava 4 das 6 vagas de "princípios da administração pública", uma
+delas uma página de LEGENDA DE SÍMBOLOS. Vaga gasta com índice é contexto
+que o modelo não tem pra responder — melhora que a métrica não vê.
+
+**Orçamento de tempo no desafio: o "só tenho 20 minutos hoje".**
+`desafio.orcamento_blocos` é FUNÇÃO PURA e o que ela codifica é uma decisão
+de produto — a ORDEM do corte. Reincidentes ficam (é o que a pessoa erra de
+novo e de novo, o que mais rende por minuto); novas vêm depois (material
+inédito é o mais caro cognitivamente, sai antes numa sessão curta);
+**mini-simulado cai primeiro e CAI INTEIRO** — simulado de 2 questões não é
+simulado, e medida sobre amostra pequena é ruído, a mesma lição que já vale
+em `ritmo_regras`. Cortar até virar enfeite é pior que cortar de vez.
+
+O número de questões sai da velocidade REAL da pessoa
+(`avg(tentativa.segundos)`), então 20 minutos de quem responde em 30s rende
+mais que de quem responde em 120s. Prometer "10 questões em 20 minutos" pra
+todo mundo seria número fixo onde existe medida.
+
+**A intervenção proativa passou a INTERROMPER, não só sugerir.** As três
+regras originais descrevem TENDÊNCIA (disciplina fraca há semanas, tema que
+reincide) e cabem num aviso passivo. `sugestao_erros_seguidos` descreve o
+estado de AGORA: três erros consecutivos é alguém batendo a cabeça neste
+minuto, e continuar só produz mais erro e mais caixa zerada. O custo de não
+interromper é assimétrico — um aviso ignorado custa uma linha de tela; dez
+minutos errando em sequência custam a sessão.
+
+Ela devolve DICT e não string, ao contrário das outras: interromper sem
+oferecer pra onde ir é só atrapalhar, então vem com uma PERGUNTA PRONTA pro
+tutor. Pedir pro aluno formular "o que estou errando?" no momento em que
+ele acabou de errar três vezes é exigir energia justamente de quem já está
+sem ela. O tema entra no texto só quando os três erros são do MESMO ponto:
+"errou 3 seguidas" é observação, "errou 3 seguidas de peculato" é
+diagnóstico. `parcial` conta como erro — tratá-lo como acerto faria a
+interrupção nunca disparar pra quem erra "quase acertando", que é
+exatamente quem mais precisa parar. E ela NUNCA bloqueia: "continuar mesmo
+assim" fica ao lado, porque tutor que impede o aluno de estudar é pior que
+tutor calado.
+
+**Onde o aprendizado é MEDIDO, e onde não é.** Vale ter isto explícito
+porque é fácil supor errado: fila, `/questao/[id]`, desafio, simulado e a
+questão embutida no /tutor passam TODOS por `scheduler.registrar` — logo
+alimentam `tentativa`, `progresso` (SM-2), `erro_caderno`, desempenho,
+ofensiva, tempo médio e a intervenção proativa. Medido com conta
+descartável: um simulado de 4 questões subiu tentativa 0->4, progresso
+0->4, caderno 0->4, ofensiva 0->1, tempo médio 90s (default) -> 40s (real),
+e disparou a interrupção por erros seguidos.
+
+O **chat livre NÃO registra nada disso** — e não deveria: conversar não é
+responder questão, e contar conversa como tentativa inflaria acerto e
+ofensiva sem ninguém ter sido avaliado. Ele é CONSUMIDOR dos insights
+(`_resumo_desempenho` entra no prompt), não produtor. A única coisa que ele
+grava é a própria conversa (014).
+
 ## Invariantes (violação = bug)
 
 - Todo `Art.` do arquivo vira um chunk. `diagnostico.py` verifica.
 - Toda linha aceita como rubrica é atribuída a algum chunk.
 - `questao.fonte_chunks` aponta para o artigo real de onde a questão saiu.
   Se o modelo cita artigo fora do lote, a questão é DESCARTADA — cobertura
-  que mente é pior que cobertura inexistente.
+  que mente é pior que cobertura inexistente. Vale IGUAL na geração sob
+  demanda (`core/geracao.py`), que reusa a mesma `salvar()`: gerar no meio
+  de uma sessão não é motivo pra afrouxar a regra.
+- Item `certo_errado` tem `gabarito_ce` não-nulo e `resposta_livre` tem
+  `gabarito_ce` nulo. Não é convenção — é CHECK no banco (012).
+- Questão com `contexto_id` tem `ordem_no_contexto`, e vice-versa (CHECK, 013).
+- Item C/E nunca recebe veredito `parcial`: metade de um booleano não é nada,
+  e `parcial` desce uma caixa.
 - Erro de transporte não escapa de `core/llm.py` como exceção httpx.
 
 ## Armadilhas do corpus (Planalto)
@@ -572,6 +830,24 @@ upload: caminho interno do servidor não é dado do usuário.
 - JWT sem revogação: token vazado vale até expirar (uma semana, `core/auth.py`).
   Aceitável pra uso pessoal/pequeno grupo; revisar se isso crescer.
 - PDF escaneado exige OCR antes (`ocrmypdf`).
+- Múltipla escolha não existe: só `resposta_livre` e `certo_errado` (012).
+  Alternativas exigem tabela própria (texto, ordem, qual é a correta), não
+  uma coluna — por isso o valor nem é aceito no CHECK, em vez de virar
+  questão gravável e não renderizável.
+- Questão gerada sob demanda custa cota de LLM a cada clique. Não há
+  pré-geração em background nem teto por usuário; a camada gratuita do
+  Gemini tem cota diária baixa, então gerar em série esgota o dia.
+- `conversa` não é exportada por `sincronizar.py` (como `mesa`/`edital`):
+  trocar de máquina começa o histórico do zero.
+- O histórico enviado ao modelo é de 8 turnos. Conversa longa "esquece" o
+  começo — é escolha (ver Decisões), não defeito, mas é limite real.
+- `usuario.perfil` só tem os três campos do onboarding e ninguém os
+  atualiza depois. Não há releitura do comportamento real ("perde foco
+  depois de 40 min" continua sendo hipótese de produto, não dado).
+- A interrupção por erros seguidos lê as tentativas mais recentes do BANCO,
+  não da sessão em curso: num simulado (que corrige tudo no fim) ela só
+  pode disparar depois da prova inteira, nunca no meio dela. É consequência
+  do design do simulado, não bug.
 - Camada gratuita do Gemini: cota diária baixa e prompts podem ser usados
   para treinamento. Não sirva conteúdo sensível por esse caminho.
 - Artigo revogado pode herdar a nota do artigo seguinte (cosmético).
@@ -600,6 +876,29 @@ upload: caminho interno do servidor não é dado do usuário.
 
 ## Aberto
 
+- **Múltipla escolha** (FGV, Vunesp): exige tabela de alternativas. O
+  dispatcher do front (`<QuestaoInterativa>`) já tem onde encaixar o
+  terceiro ramo; falta o schema.
+- **Pré-geração em background.** Hoje gerar questão custa 3-5s no clique, o
+  que quebra o foco. Um worker que olhasse o SM-2 e pré-gerasse o que vence
+  amanhã resolveria — mas precisa nascer com TETO e prioridade (mesa ativa
+  de quem estudou nos últimos N dias), senão esgota a cota gratuita antes
+  do meio-dia.
+- **Áudio (sabatina por voz).** É o único item da visão que não aproveita
+  nada do que existe: STT+TTS por minuto é a maior conta e o maior risco de
+  latência. Último da fila de propósito.
+- **Sub-chunk dos artigos gigantes pro embedding**, mantendo o artigo como
+  unidade de citação. É o conserto de RAIZ do viés que `PESO_LEXICAL`
+  compra sem reingestão (ver Decisões). Só 70 chunks passam de 4.000
+  caracteres e 11 passam de 8.000 — trabalho contido.
+- **Provas anteriores da banca** (gabarito oficial + incidência real).
+  Ligado ao item C/E: hoje geramos itens no ESTILO Cebraspe; ingerir provas
+  reais daria o peso de incidência que `simulado` amostra uniformemente
+  hoje. Exigiria metadados que `questao` não tem (ano, órgão, cargo).
+- **Perfil que se atualiza sozinho.** `usuario.perfil` (015) só guarda o
+  que a pessoa declarou. Derivar do comportamento real ("responde melhor de
+  manhã", "cai o rendimento depois de 40 min") é possível com
+  `tentativa.criada_em`/`segundos` e não foi feito.
 - Simulador com esquecimento (acerto cai conforme o atraso da revisão).
 - `parcial` desce uma caixa — decisão a revisitar com uso real.
 - Questões que cobram dois pontos ("conduta E pena") — prompt já corrigido,
@@ -749,6 +1048,16 @@ upload: caminho interno do servidor não é dado do usuário.
 - Antes de mexer em chunking: `python diagnostico.py corpus/cp.txt --norma CP`
   (segundos, sem banco). Só depois `reingest.py`.
 - Antes de mudar regra de agendamento: `python simular.py`.
+- Antes de mexer no PROMPT do tutor (`socratic.explicar`): rode uma pergunta
+  real e LEIA a resposta. Duas regressões nasceram de prompt que parecia
+  certo — o rótulo de seção citado como fonte
+  (`[DESEMPENHO REAL DO ALUNO]`) e o modelo escrevendo questão de múltipla
+  escolha dentro do chat. Nenhuma das duas aparece em teste automatizado,
+  porque o texto continua sendo uma resposta válida.
+- Pra conferir a TELA com dado plausível (não só o terminal):
+  `python semear_demo.py --email conta@teste --senha 12345678`. `simular.py`
+  responde se a REGRA se sustenta; ele não toca no banco, então não diz se
+  a tela fica coerente.
 - Antes de mexer em `retrieval.py`/`embeddings.py` ou reingerir: `python avaliar_retrieval.py`
   (precisa de banco com o CP ingerido; roda em segundos, sem custo de LLM).
 - Nunca `DELETE FROM documento` para reprocessar: use `reingest.py`.
@@ -778,7 +1087,13 @@ upload: caminho interno do servidor não é dado do usuário.
 - `pytest` cobre isso: `tests/test_mesa_api.py` tem um teste
   (`test_caderno_de_erros_atravessa_mesas`) que existe pra QUEBRAR se
   alguém escopar `progresso`/`erro_caderno` por mesa um dia. A decisão da
-  010 não está só escrita — está executável.
+  010 não está só escrita — está executável. O mesmo vale pra
+  `test_geracao.py` (proveniência e os CHECKs da 012/013),
+  `test_conversa.py` (histórico chegando ao prompt) e `test_perfil.py`
+  (perfil inválido nunca chegando ao prompt).
+- **Migração numerada nova exige aplicar na mão** (ver a armadilha do
+  `docker-entrypoint-initdb.d` logo abaixo). Da 012 à 015 todas foram
+  aplicadas assim; num banco recriado do zero elas entram sozinhas.
 
 ## Comandos
 
@@ -813,11 +1128,35 @@ python sincronizar.py exportar && git add -A && git commit -m "progresso" && git
 # ao chegar na outra (ingira o material antes, se ainda não ingeriu)
 git pull && python sincronizar.py importar
 
-# API (pra Next.js consumir depois; hoje só testada via TestClient/curl)
+# API (o apps/web consome de verdade; curl abaixo pra testar sem o front)
 uvicorn api:app --reload --port 8000
 curl -s -X POST localhost:8000/auth/registrar -H 'content-type: application/json' \
      -d '{"email":"voce@exemplo.com","senha":"pelomenos8chars"}'
 curl -s localhost:8000/fila -H "Authorization: Bearer $TOKEN"
+
+# questão sob demanda: cria do ACERVO quando o banco não tem (custa cota)
+curl -s -X POST localhost:8000/questoes/gerar -H "Authorization: Bearer $TOKEN" \
+     -H 'content-type: application/json' -d '{"quantidade":3}'
+# com tema (o assunto da conversa) e formato explícito
+curl -s -X POST localhost:8000/questoes/gerar -H "Authorization: Bearer $TOKEN" \
+     -H 'content-type: application/json' \
+     -d '{"tema":"acumulação de cargos","tipo":"certo_errado","quantidade":3}'
+
+# desafio com orçamento de tempo ("só tenho 20 minutos hoje")
+curl -s "localhost:8000/desafio?minutos=20" -H "Authorization: Bearer $TOKEN"
+
+# conversa do tutor (014): sem conversa_id, o servidor abre uma e devolve o id
+curl -s -X POST localhost:8000/perguntar -H "Authorization: Bearer $TOKEN" \
+     -H 'content-type: application/json' -d '{"pergunta":"art. 312"}'
+curl -s localhost:8000/conversas -H "Authorization: Bearer $TOKEN"
+
+# perfil de estudo (015) — faz merge, não substitui
+curl -s -X PUT localhost:8000/me/perfil -H "Authorization: Bearer $TOKEN" \
+     -H 'content-type: application/json' -d '{"horas":"2h","nivel":"Intermediário"}'
+
+# olhar a TELA com dado plausível: 3 mesas e 15 dias numa conta descartável
+python semear_demo.py --email voce@teste --senha 12345678
+python semear_demo.py --limpar --email voce@teste
 
 # mesas (migração 010): o header escolhe o recorte; sem header, mesa padrão
 curl -s -X POST localhost:8000/mesas -H "Authorization: Bearer $TOKEN" \
