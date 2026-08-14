@@ -256,7 +256,20 @@ def rota_carga(uid: int = Depends(usuario_atual), m: dict = Depends(mesa_atual))
 
 @app.get("/sugestao")
 def rota_sugestao(uid: int = Depends(usuario_atual), m: dict = Depends(mesa_atual)):
-    return {"sugestao": ritmo.sugestao(uid, m["disciplinas"])}
+    """
+    Dois produtos diferentes na mesma chamada, de propósito — quem responde
+    uma questão precisa dos dois e não deve pagar dois round-trips:
+
+      `sugestao`   — aviso PASSIVO, o banner da fila. Tendência (disciplina
+                     fraca, tema que reincide), lida quando o aluno quiser.
+      `intervencao` — o pedido de PARAR. Estado de agora (3 erros seguidos),
+                     e vem com uma pergunta pronta pro tutor: interromper
+                     sem oferecer pra onde ir é só atrapalhar.
+    """
+    return {
+        "sugestao": ritmo.sugestao(uid, m["disciplinas"]),
+        "intervencao": ritmo.intervencao(uid, m["disciplinas"]),
+    }
 
 
 @app.get("/questoes/{qid}")

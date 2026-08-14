@@ -7,10 +7,11 @@ acertos (elogio/estímulo, o menos urgente dos três). Ver `priorizar()` em
 ritmo_regras.py para o porquê de nunca mostrar mais de uma por vez.
 """
 from . import db, mesa, scheduler
-from .ritmo_regras import (JANELA_SEQUENCIA, priorizar, sugestao_disciplina_fraca,
+from .ritmo_regras import (ERROS_SEGUIDOS, JANELA_SEQUENCIA, priorizar,
+                            sugestao_disciplina_fraca, sugestao_erros_seguidos,
                             sugestao_reincidencia, sugestao_sequencia)
 
-VERSAO = "ritmo-v3"
+VERSAO = "ritmo-v4"
 
 
 def _ultimos_vereditos(usuario_id: int, limite: int = JANELA_SEQUENCIA,
@@ -27,6 +28,36 @@ def _ultimos_vereditos(usuario_id: int, limite: int = JANELA_SEQUENCIA,
         {"u": usuario_id, "l": limite, "disc": disciplinas},
     )
     return [(r["veredito"], r["dicas_usadas"]) for r in rows]
+
+
+def _ultimas_tentativas(usuario_id: int, limite: int = ERROS_SEGUIDOS,
+                        disciplinas: list[str] | None = None) -> list[dict]:
+    """Como `_ultimos_vereditos`, mas trazendo TEMA e DISCIPLINA junto — a
+    interrupção precisa saber sobre o QUE foram os erros pra ter o que
+    perguntar ao tutor. "Errou 3 seguidas" é observação; "errou 3 seguidas
+    de peculato" é diagnóstico."""
+    return db.query(
+        f"""SELECT t.veredito, q.tema, q.disciplina
+              FROM tentativa t JOIN questao q ON q.id = t.questao_id
+             WHERE t.usuario_id = %(u)s AND {mesa.filtro('q.disciplina')}
+             ORDER BY t.criada_em DESC, t.id DESC LIMIT %(l)s""",
+        {"u": usuario_id, "l": limite, "disc": disciplinas},
+    )
+
+
+def intervencao(usuario_id: int, disciplinas: list[str] | None = None) -> dict | None:
+    """
+    A regra que manda PARAR — separada de `sugestao()` porque o produto que
+    ela gera é outro: `sugestao` devolve texto pra um aviso passivo na tela,
+    `intervencao` devolve texto MAIS uma pergunta pronta pro tutor, porque
+    interromper sem oferecer para onde ir é só atrapalhar.
+
+    Continua sendo REGRA e não o LLM julgando (mesma decisão do módulo): "os
+    últimos 3 vereditos foram erro" é um limiar sobre número, e perguntar
+    isso ao modelo a cada questão custaria cota e mudaria de sessão pra
+    sessão sem ninguém pedir.
+    """
+    return sugestao_erros_seguidos(_ultimas_tentativas(usuario_id, disciplinas=disciplinas))
 
 
 def sugestao(usuario_id: int, disciplinas: list[str] | None = None) -> str | None:

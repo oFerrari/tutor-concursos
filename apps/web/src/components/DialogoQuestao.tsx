@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { TextoAssociado } from "@/components/TextoAssociado";
 import { Avaliacao, ErroApi, Questao, Turno, avaliar, registrarTentativa } from "@/lib/api";
 import { decorridos } from "@/lib/tempo";
+import { Intervencao } from "@/components/Intervencao";
 
 // Mesmas constantes de chat.py — MAX_DICAS/MAX_TENTATIVAS são regra de
 // produto, não capricho de UI, então ficam iguais dos dois lados.
@@ -169,6 +170,7 @@ export function DialogoQuestao({ questao, onFechado, onSair, rotuloContinuar = "
         <button onClick={continuar} className="btn-primary mt-4">
           {viaSair ? "sair" : rotuloContinuar}
         </button>
+        <Intervencao />
       </div>
     );
   }

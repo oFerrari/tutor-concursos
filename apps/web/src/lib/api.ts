@@ -414,7 +414,15 @@ export function getDesafio(minutos?: number): Promise<PlanoDesafio> {
 }
 
 // -------------------------------------------------------------- intervenção
-export function getSugestao(): Promise<{ sugestao: string | null }> {
+/** `sugestao` = aviso passivo (tendência). `intervencao` = o pedido de
+ *  PARAR agora, com uma pergunta pronta pro tutor — interromper sem
+ *  oferecer pra onde ir é só atrapalhar. */
+export type Intervencao = { motivo: string; texto: string; pergunta: string };
+
+export function getSugestao(): Promise<{
+  sugestao: string | null;
+  intervencao: Intervencao | null;
+}> {
   return chamar("/sugestao");
 }
 

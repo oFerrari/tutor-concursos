@@ -5,6 +5,7 @@ import { Check, X } from "lucide-react";
 import { Avaliacao, ErroApi, Questao, avaliar, registrarTentativa } from "@/lib/api";
 import { ResultadoQuestao } from "@/components/DialogoQuestao";
 import { TextoAssociado } from "@/components/TextoAssociado";
+import { Intervencao } from "@/components/Intervencao";
 
 /**
  * Item CERTO/ERRADO — o formato do Cebraspe (migração 012).
@@ -144,6 +145,7 @@ export function ItemCertoErrado({
           <button onClick={() => onFechado(resultado)} className="btn-primary mt-4">
             {rotuloContinuar}
           </button>
+          <Intervencao />
         </div>
       )}
     </div>
