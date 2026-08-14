@@ -44,9 +44,11 @@ def selecionar(n: int = N_PADRAO, disciplina: str | None = None,
     Penal devolve vazio, e isso é a resposta certa, não um bug.
     """
     return db.query(
-        f"""SELECT id, disciplina, tema, enunciado, gabarito, tipo, gabarito_ce
+        f"""SELECT q.id, q.disciplina, q.tema, q.enunciado, q.gabarito, q.tipo,
+                   q.gabarito_ce, q.contexto_id, q.ordem_no_contexto, x.texto AS contexto
            FROM questao q
-           WHERE (%(d)s::text IS NULL OR disciplina = %(d)s)
+           LEFT JOIN contexto x ON x.id = q.contexto_id
+           WHERE (%(d)s::text IS NULL OR q.disciplina = %(d)s)
              AND {mesa.filtro('q.disciplina')}
            ORDER BY random()
            LIMIT %(n)s""",

@@ -53,8 +53,13 @@ NOVAS_POR_DIA = None
 # Sem caixa/prox_revisao — esses dois vêm de `progresso`, escopados por
 # usuário, e cada consulta abaixo decide como juntar (revisão sempre tem
 # progresso; inédita nunca tem; desafio.py reaproveita esta mesma constante).
+# O texto-base do item C/E entra por JOIN aqui também (013): a fila
+# entrega a questão pronta pra responder, e assertiva sem o "Texto
+# associado" não é respondível.
 CAMPOS_Q = ("q.id, q.disciplina, q.tema, q.enunciado, q.gabarito, q.dicas, "
-            "q.tipo, q.gabarito_ce")
+            "q.tipo, q.gabarito_ce, q.contexto_id, q.ordem_no_contexto, "
+            "x.texto AS contexto")
+JOIN_CTX = "LEFT JOIN contexto x ON x.id = q.contexto_id"
 
 
 def fila(usuario_id: int, teto: int = TETO_DIARIO, novas: int | None = NOVAS_POR_DIA,
@@ -80,6 +85,7 @@ def fila(usuario_id: int, teto: int = TETO_DIARIO, novas: int | None = NOVAS_POR
     revisoes = db.query(
         f"""SELECT {CAMPOS_Q}, p.caixa, p.prox_revisao
             FROM progresso p JOIN questao q ON q.id = p.questao_id
+            {JOIN_CTX}
             WHERE p.usuario_id = %(u)s AND p.prox_revisao <= CURRENT_DATE
               AND {mesa.filtro('q.disciplina')}
             ORDER BY p.prox_revisao ASC, p.caixa ASC
@@ -91,7 +97,7 @@ def fila(usuario_id: int, teto: int = TETO_DIARIO, novas: int | None = NOVAS_POR
         return revisoes
     inéditas = db.query(
         f"""SELECT {CAMPOS_Q}, 0 AS caixa, CURRENT_DATE AS prox_revisao
-            FROM questao q
+            FROM questao q {JOIN_CTX}
             WHERE NOT EXISTS (SELECT 1 FROM progresso p
                               WHERE p.usuario_id = %(u)s AND p.questao_id = q.id)
               AND {mesa.filtro('q.disciplina')}

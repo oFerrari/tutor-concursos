@@ -286,3 +286,90 @@ def test_item_ce_gerado_entra_na_fila_e_corrige_sem_llm(client, usuario, llm_fal
 
     db.query("DELETE FROM questao WHERE id = ANY(%(ids)s)",
              {"ids": [q["id"] for q in geradas]})
+
+
+# ------------------------------------------ texto associado / série (013)
+def _serie_falsa(fake, n_itens=3):
+    """Duplê que devolve UMA série: texto-base + N itens sobre o artigo que
+    veio no material (mesmo motivo do duplê de item avulso)."""
+    def gerar(prompt, sistema="", json_mode=False, max_tokens=1200, schema=None):
+        art = re.findall(r"\[[^\]]*?art\. ([^\]]+)\]", prompt)[0]
+        return json.dumps({
+            "artigo": art,
+            "contexto": "Carlos, servidor estável, foi inabilitado no estágio probatório.",
+            "itens": [{"tema": f"t{i}", "enunciado": f"assertiva {i}",
+                       "gabarito_ce": i % 2 == 0, "justificativa": "porque a lei diz"}
+                      for i in range(n_itens)],
+        })
+    fake.gerar = gerar
+    return fake
+
+
+def test_serie_grava_texto_base_uma_vez_e_itens_ordenados(client, usuario, llm_falso):
+    """O ponto da 013: o texto-base é UM registro compartilhado, não uma
+    cópia dentro de cada enunciado — é o que permite dizer "item 2 de 3" e o
+    que impede as cópias divergirem quando uma for corrigida."""
+    _serie_falsa(llm_falso, 3)
+    disc = db.exec1("SELECT disciplina FROM documento WHERE tipo <> 'historico' LIMIT 1")["disciplina"]
+    m = client.post("/mesas", json={"nome": "Mesa série", "banca": "Cebraspe"},
+                    headers=usuario["headers"]).json()
+    eid = db.exec1("INSERT INTO edital (mesa_id, titulo) VALUES (%(m)s,'e') RETURNING id",
+                   {"m": m["id"]})["id"]
+    db.query("INSERT INTO topico (edital_id, disciplina, ordem, texto) "
+             "VALUES (%(e)s, %(d)s, 1, 'x')", {"e": eid, "d": disc})
+    cab = {**usuario["headers"], "X-Mesa-Id": str(m["id"])}
+
+    r = client.post("/questoes/gerar", json={"quantidade": 3}, headers=cab).json()
+    geradas = r["questoes"]
+    assert len(geradas) == 3
+    assert r["contexto"].startswith("Carlos")
+
+    ctx_ids = {q["contexto_id"] for q in geradas}
+    assert len(ctx_ids) == 1 and None not in ctx_ids   # UM texto-base pros três
+    assert [q["ordem_no_contexto"] for q in geradas] == [1, 2, 3]
+
+    # A fila entrega o texto-base JUNTO: assertiva sem ele é ilegível.
+    fila = client.get("/fila", headers=cab).json()
+    na_fila = next(q for q in fila if q["id"] == geradas[0]["id"])
+    assert na_fila["contexto"] == r["contexto"]
+
+    db.query("DELETE FROM contexto WHERE id = %(i)s", {"i": ctx_ids.pop()})
+
+
+def test_apagar_contexto_leva_os_itens_junto(usuario, llm_falso):
+    """CASCADE deliberado: item cujo texto-base sumiu é ILEGÍVEL ("com base
+    no argumento acima" sem o argumento), e apareceria na fila de alguém.
+    Órfão silencioso é pior que apagar junto."""
+    _serie_falsa(llm_falso, 2)
+    disc = db.exec1("SELECT disciplina FROM documento WHERE tipo <> 'historico' LIMIT 1")["disciplina"]
+    r = geracao.sob_demanda([disc], quantidade=2, tipo="certo_errado")
+    ids = [q["id"] for q in r["questoes"]]
+    ctx = r["questoes"][0]["contexto_id"]
+    assert len(ids) == 2
+
+    db.query("DELETE FROM contexto WHERE id = %(i)s", {"i": ctx})
+    assert db.exec1("SELECT count(*) n FROM questao WHERE id = ANY(%(ids)s)",
+                    {"ids": ids})["n"] == 0
+
+
+def test_ordem_sem_contexto_e_recusada_pelo_banco(usuario):
+    """A CHECK da 013: `ordem_no_contexto` sem `contexto_id` seria uma
+    posição numa série que não existe."""
+    import psycopg
+    with pytest.raises(psycopg.errors.CheckViolation):
+        db.query("INSERT INTO questao (disciplina, tema, enunciado, gabarito, ordem_no_contexto) "
+                 "VALUES ('x','x','x','x', 2)")
+
+
+def test_um_item_so_nao_vira_serie(usuario, llm_falso):
+    """Pedir UM item não justifica inventar uma situação hipotética pra ele
+    sozinho — o Cebraspe cobra item avulso também, e é o formato mais barato
+    de gerar."""
+    _modelo_que_responde_sobre_o_lote(llm_falso)
+    disc = db.exec1("SELECT disciplina FROM documento WHERE tipo <> 'historico' LIMIT 1")["disciplina"]
+    chamadas_antes = len(llm_falso.chamadas)
+    r = geracao.sob_demanda([disc], quantidade=1, tipo="certo_errado")
+    assert "contexto" not in r
+    db.query("DELETE FROM questao WHERE id = ANY(%(ids)s)",
+             {"ids": [q["id"] for q in r["questoes"]]})
+    del chamadas_antes

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Check, X } from "lucide-react";
 import { Avaliacao, ErroApi, Questao, avaliar, registrarTentativa } from "@/lib/api";
 import { ResultadoQuestao } from "@/components/DialogoQuestao";
+import { TextoAssociado } from "@/components/TextoAssociado";
 
 /**
  * Item CERTO/ERRADO — o formato do Cebraspe (migração 012).
@@ -87,6 +88,8 @@ export function ItemCertoErrado({
           )}
         </div>
       </div>
+
+      <TextoAssociado texto={questao.contexto} ordem={questao.ordem_no_contexto} />
 
       {/* "Julgue o item" é a instrução literal da prova. Sem ela, uma
           assertiva solta parece um enunciado truncado. */}

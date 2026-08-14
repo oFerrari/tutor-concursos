@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { TextoAssociado } from "@/components/TextoAssociado";
 import { Avaliacao, ErroApi, Questao, Turno, avaliar, registrarTentativa } from "@/lib/api";
 import { decorridos } from "@/lib/tempo";
 
@@ -190,6 +191,11 @@ export function DialogoQuestao({ questao, onFechado, onSair, rotuloContinuar = "
           )}
         </div>
       </div>
+
+      {/* Discursiva também pode ter texto-base: nada na 013 amarra contexto
+          a item C/E, e uma questão aberta sobre uma situação hipotética é
+          formato legítimo de outras bancas. */}
+      <TextoAssociado texto={questao.contexto} ordem={questao.ordem_no_contexto} />
 
       <div className="card">
         <p className="text-base font-medium leading-relaxed">{questao.enunciado}</p>

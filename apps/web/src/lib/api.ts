@@ -222,6 +222,16 @@ export type Questao = {
   tipo: TipoQuestao;
   /** Só no item C/E; `null` na discursiva (CHECK no banco garante). */
   gabarito_ce: boolean | null;
+  /** "Texto associado" do Cebraspe (migração 013): o texto-base que VÁRIOS
+   *  itens julgam. `null` = item avulso, que se basta. Vem junto da questão
+   *  por JOIN, nunca numa segunda chamada — assertiva sem o texto-base é
+   *  ilegível ("com base no argumento acima"), e buscar separado criaria um
+   *  instante em que a tela tem a pergunta e não tem o enunciado. */
+  contexto: string | null;
+  contexto_id: number | null;
+  /** Posição dentro da série ("item 2"). A ordem importa: itens do Cebraspe
+   *  encadeiam raciocínio sobre o mesmo caso. */
+  ordem_no_contexto: number | null;
   caixa: number;
   prox_revisao: string;
 };
@@ -317,6 +327,9 @@ export type QuestaoSimulado = {
   gabarito: string;
   tipo: TipoQuestao;
   gabarito_ce: boolean | null;
+  contexto: string | null;
+  contexto_id: number | null;
+  ordem_no_contexto: number | null;
 };
 
 export function iniciarSimulado(

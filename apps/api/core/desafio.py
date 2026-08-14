@@ -21,7 +21,7 @@ levou `v_desempenho_disciplina` a existir: medir, não estimar às cegas.
 Sem histórico ainda (usuário novo), cai num default documentado abaixo.
 """
 from . import db, mesa
-from .scheduler import CAMPOS_Q
+from .scheduler import CAMPOS_Q, JOIN_CTX
 
 VERSAO = "desafio-v3"
 
@@ -49,7 +49,7 @@ def _novas(usuario_id: int, limite: int, excluir: set[int],
         return []
     return db.query(
         f"""SELECT {CAMPOS_Q}, 0 AS caixa, CURRENT_DATE AS prox_revisao
-            FROM questao q
+            FROM questao q {JOIN_CTX}
             WHERE NOT EXISTS (SELECT 1 FROM progresso p
                               WHERE p.usuario_id = %(u)s AND p.questao_id = q.id)
               AND q.id <> ALL(%(ex)s)
@@ -68,7 +68,7 @@ def _reincidentes(usuario_id: int, limite: int,
     # AmbiguousColumn contra as do erro_caderno.
     return db.query(
         f"""SELECT {CAMPOS_Q}, p.caixa, p.prox_revisao
-            FROM questao q
+            FROM questao q {JOIN_CTX}
             JOIN erro_caderno e ON e.questao_id = q.id AND e.usuario_id = %(u)s
             JOIN progresso p ON p.questao_id = q.id AND p.usuario_id = %(u)s
             WHERE {mesa.filtro('q.disciplina')}
@@ -94,7 +94,7 @@ def _mini_simulado(limite: int, excluir: set[int],
         return []
     candidatos = db.query(
         f"""SELECT {CAMPOS_Q}
-            FROM questao q
+            FROM questao q {JOIN_CTX}
             WHERE q.id <> ALL(%(ex)s) AND {mesa.filtro('q.disciplina')}
             ORDER BY random() LIMIT %(l)s""",
         {"l": limite * 2, "ex": list(excluir) or [-1], "disc": disciplinas},

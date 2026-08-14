@@ -10,6 +10,7 @@ import {
   responderSimulado,
 } from "@/lib/api";
 import { decorridos } from "@/lib/tempo";
+import { TextoAssociado } from "@/components/TextoAssociado";
 
 export type RelatorioSimulado = {
   resultado: ResultadoSimulado;
@@ -171,6 +172,7 @@ export function SimuladoRunner({ simuladoId, questoes, onFinalizado, rotuloConti
           finalizar agora
         </button>
       </div>
+      <TextoAssociado texto={q.contexto} ordem={q.ordem_no_contexto} />
       <div className="card">
         <p className="text-base font-medium leading-relaxed">{q.enunciado}</p>
       </div>

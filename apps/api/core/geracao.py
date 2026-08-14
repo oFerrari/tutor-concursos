@@ -42,7 +42,7 @@ import re
 
 from . import db, llm, mesa, retrieval, socratic
 
-VERSAO = "geracao-v2"
+VERSAO = "geracao-v3"
 
 MIN_TEXTO = 140          # abaixo disso é stub, revogado ou remissão
 MAX_POR_VEZ = 5          # teto por chamada: cota de LLM é o recurso escasso
@@ -193,8 +193,48 @@ def tipo_da_banca(banca: str | None) -> str:
     return "certo_errado" if any(x in b for x in BANCAS_CERTO_ERRADO) else "resposta_livre"
 
 
+def salvar_serie(serie: dict, lote: list[dict]) -> tuple[list[dict], list[str]]:
+    """
+    Grava o texto-base e os itens que o julgam (migração 013).
+
+    A proveniência é checada ANTES de criar o contexto: se o artigo que o
+    modelo diz ter usado não está no lote, nada é gravado. Criar o contexto
+    primeiro e descobrir depois deixaria um texto-base órfão no banco — sem
+    item que o referencie, invisível, e contando como material que não é.
+    """
+    por_artigo = {_norm_artigo(c["artigo"]): c for c in lote if c["artigo"]}
+    chunk = por_artigo.get(_norm_artigo(serie.get("artigo")))
+    if chunk is None:
+        return [], [f"artigo {serie.get('artigo')!r} não está no lote enviado"]
+
+    ctx = db.exec1(
+        """INSERT INTO contexto (documento_id, disciplina, texto, fonte_chunks)
+           VALUES (%(d)s, %(disc)s, %(t)s, %(f)s) RETURNING id""",
+        {"d": chunk["documento_id"], "disc": chunk["disciplina"],
+         "t": serie["contexto"], "f": [chunk["id"]]},
+    )
+    salvas = []
+    for item in serie["itens"]:
+        nova = db.exec1(
+            """INSERT INTO questao (documento_id, disciplina, tema, enunciado, gabarito,
+                                    dicas, fonte_chunks, tipo, gabarito_ce,
+                                    contexto_id, ordem_no_contexto)
+               VALUES (%(d)s, %(disc)s, %(t)s, %(e)s, %(g)s, '[]'::jsonb, %(f)s,
+                       'certo_errado', %(ce)s, %(ctx)s, %(ord)s)
+               RETURNING id, disciplina, tema, enunciado, gabarito, dicas, tipo,
+                         gabarito_ce, contexto_id, ordem_no_contexto""",
+            {"d": chunk["documento_id"], "disc": chunk["disciplina"], "t": item["tema"],
+             "e": item["enunciado"], "g": item["gabarito"], "f": [chunk["id"]],
+             "ce": item["gabarito_ce"], "ctx": ctx["id"], "ord": item["ordem_no_contexto"]},
+        )
+        nova["contexto"] = serie["contexto"]
+        salvas.append(nova)
+    return salvas, []
+
+
 def sob_demanda(disciplinas: list[str] | None = None, tema: str | None = None,
-                quantidade: int = 3, tipo: str = "resposta_livre") -> dict:
+                quantidade: int = 3, tipo: str = "resposta_livre",
+                com_contexto: bool | None = None) -> dict:
     """
     Gera até `quantidade` questões e grava as que têm proveniência.
 
@@ -219,10 +259,24 @@ def sob_demanda(disciplinas: list[str] | None = None, tema: str | None = None,
         )
 
     lote = _lote_por_ids(ids)
-    try:
-        questoes = socratic.gerar_questoes(lote, len(lote), tipo)
-    except llm.ErroLLM:
-        raise
+
+    # SÉRIE (texto-base + itens) é o padrão do item C/E quando se pede mais
+    # de um: é a forma real da prova. Item avulso continua existindo — o
+    # Cebraspe cobra os dois —, e pedir UM item só não justifica inventar
+    # uma situação hipotética pra ele sozinho.
+    if com_contexto is None:
+        com_contexto = tipo == "certo_errado" and quantidade > 1
+    if com_contexto:
+        serie = socratic.gerar_serie_ce(lote[:1], quantidade)
+        if serie:
+            salvas, descartes = salvar_serie(serie, lote)
+            return {"questoes": salvas, "descartadas": len(descartes),
+                    "motivos": descartes, "contexto": serie["contexto"],
+                    "fontes": [f"{lote[0]['norma'] or lote[0]['titulo']} art. {lote[0]['artigo']}"]}
+        # Série não saiu: cai pro item avulso em vez de devolver vazio. O
+        # aluno pediu questão, não pediu formato.
+
+    questoes = socratic.gerar_questoes(lote, len(lote), tipo)
     salvas, descartes = salvar(questoes, lote)
     return {
         "questoes": salvas,

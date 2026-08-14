@@ -13,7 +13,7 @@ Sem isso, modelo pequeno erra a sintaxe e a sessão de estudo morre no meio.
 """
 from . import llm, retrieval
 
-VERSAO = "socratic-v26"
+VERSAO = "socratic-v27"
 
 # ------------------------------------------------------------------ schemas
 # Subconjunto OpenAPI aceito pelo Gemini. propertyOrdering importa: o modelo
@@ -461,3 +461,75 @@ def _validar_ce(itens) -> list[dict]:
             "dicas": [],
         })
     return validas
+
+# Série Cebraspe: um texto-base e N itens que o julgam. É a forma real da
+# prova, não um enfeite — ver db/013_contexto.sql.
+ESQUEMA_SERIE_CE = {
+    "type": "OBJECT",
+    "properties": {
+        "artigo": {"type": "STRING"},
+        "contexto": {"type": "STRING"},
+        "itens": {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "tema": {"type": "STRING"},
+                    "enunciado": {"type": "STRING"},
+                    "gabarito_ce": {"type": "BOOLEAN"},
+                    "justificativa": {"type": "STRING"},
+                },
+                "required": ["tema", "enunciado", "gabarito_ce", "justificativa"],
+                "propertyOrdering": ["tema", "enunciado", "gabarito_ce", "justificativa"],
+            },
+        },
+    },
+    "required": ["artigo", "contexto", "itens"],
+    "propertyOrdering": ["artigo", "contexto", "itens"],
+}
+
+SISTEMA_SERIE_CE = SISTEMA_GERADOR_CE + """
+
+FORMATO DESTA TAREFA — TEXTO-BASE + ITENS (o "Texto associado" da prova):
+- Escreva UM texto-base curto a partir do material e VÁRIOS itens que o julgam.
+- O texto-base é uma SITUAÇÃO HIPOTÉTICA concreta (pessoas, cargos, prazos, fatos) construída \
+sobre o dispositivo, não a repetição da lei. É o que o Cebraspe faz: a lei fica implícita e o \
+candidato precisa aplicá-la ao caso.
+  RUIM:  "O art. 15 estabelece que o prazo para entrar em exercício é de quinze dias."
+  BOM:   "Pedro foi empossado no cargo de analista em 3 de março e entrou em exercício em 25 \
+de março, sem apresentar justificativa."
+- O texto-base NÃO afirma nem nega nada que os itens vão julgar: ele descreve. Quem afirma são \
+os itens.
+- Cada item se sustenta lendo o texto-base — nunca escreva "conforme o item anterior".
+- Os itens cobram ÂNGULOS DIFERENTES do mesmo caso, não a mesma coisa reescrita."""
+
+
+def gerar_serie_ce(chunks: list[dict], n_itens: int = 3) -> dict | None:
+    """
+    Gera UM texto-base e `n_itens` itens C/E que o julgam.
+
+    Chamada única, não uma por item, de propósito: os itens precisam ser
+    coerentes ENTRE SI (mesma situação, mesmos nomes, ângulos diferentes) e
+    isso só é possível se o modelo os escrever de uma vez, vendo o texto que
+    ele mesmo acabou de criar. Gerar item por item sobre um contexto pronto
+    produziria repetição, que é exatamente o que o formato não deve ter.
+
+    Devolve `None` quando o modelo não entregou contexto + pelo menos um
+    item válido — quem chama trata como "não rendeu", igual ao lote vazio de
+    `gerar_questoes`, em vez de gravar série capenga.
+    """
+    contexto = retrieval.formatar_contexto(chunks)
+    d = llm.obter().gerar_json(
+        f"Gere um texto-base e {n_itens} itens CERTO/ERRADO sobre ele, a partir do "
+        f"material.\n\nMATERIAL:\n{contexto}",
+        SISTEMA_SERIE_CE, max_tokens=4096, schema=ESQUEMA_SERIE_CE)
+    if not isinstance(d, dict) or not (d.get("contexto") or "").strip():
+        return None
+    itens = _validar_ce(d.get("itens"))
+    if not itens:
+        return None
+    artigo = _artigo_limpo(d)
+    for i, item in enumerate(itens, 1):
+        item["artigo"] = artigo
+        item["ordem_no_contexto"] = i
+    return {"artigo": artigo, "contexto": d["contexto"].strip(), "itens": itens}
