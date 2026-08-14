@@ -162,3 +162,47 @@ def test_limpar_paginacao_tira_rodape_repetido_e_numero_solto():
     assert "LÍNGUA PORTUGUESA" in limpo
     # cabeçalho de disciplina que se repete entre perfis NÃO é rodapé
     assert "SEGURANÇA DA INFORMAÇÃO" in limpo
+
+
+# ------------------------------------------------------ layout do AOCP
+# Edital SAEB 02/2026 (PC-BA). Mesma estrutura de conteúdo programático,
+# duas diferenças que zeravam a extração inteira:
+#   - item numerado com PONTO ("1. Compreensão", não "1 Compreensão");
+#   - o anexo se chama "CONTEÚDOS PROGRAMÁTICOS" (plural) e o edital cita
+#     esse nome VÁRIAS vezes antes de chegar nele.
+AOCP = (Path(__file__).parent / "fixtures" / "edital_aocp_pcba.txt").read_text(encoding="utf-8")
+
+
+def test_aocp_le_o_edital_que_antes_voltava_zero():
+    topicos = extrair_topicos(AOCP)
+    assert len(topicos) > 50, "edital inteiro devolvia 0 tópicos"
+    assert {"Língua Portuguesa", "Raciocínio Lógico", "Informática", "Medicina Legal",
+            "Direito Penal", "Direito Processual Penal", "Noções De Contabilidade",
+            "Estatística"} <= _disciplinas(AOCP)
+
+
+def test_aocp_item_com_ponto_conta_como_topico():
+    """"1. Compreensão e interpretação de texto" é item; o `\\s+` da versão
+    anterior batia no ponto e não casava com NADA neste edital."""
+    portugues = [t for t in extrair_topicos(AOCP) if t["disciplina"] == "Língua Portuguesa"]
+    assert len(portugues) == 10                       # itens 1 a 10, todos folha
+    assert portugues[0]["texto"].startswith("1. Compreensão e interpretação de texto")
+
+
+def test_recorte_pega_o_anexo_e_nao_a_referencia_cruzada():
+    """O edital cita "Anexo I - Conteúdos Programáticos" logo no item 1.8 e
+    de novo em 7.1.2, 7.2.9.1 e 16.14. Pegar a PRIMEIRA menção recortava um
+    pedaço das regras de inscrição, e o anexo real nunca era lido."""
+    corpo, achou = recortar_conteudo_programatico(AOCP)
+    assert achou
+    assert "LÍNGUA PORTUGUESA" in corpo
+    assert "devolução da importância paga" not in corpo    # regras de inscrição
+    assert "instaurar e presidir inquéritos" not in corpo  # Anexo II
+
+
+def test_numero_no_fim_de_frase_nao_vira_topico():
+    """"...Brasil de 1988 (Artigos 1º...)" e "de 1988. A Constituição" têm a
+    FORMA de um item (número, ponto, espaço, maiúscula). O que os separa é
+    abrir oração ou não — sem essa âncora, "1988" viraria tópico."""
+    textos = [t["texto"] for t in extrair_topicos(AOCP)]
+    assert not [t for t in textos if t.startswith("1988")]

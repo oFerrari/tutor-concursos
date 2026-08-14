@@ -39,9 +39,14 @@ export default function PaginaOnboarding() {
 
   async function enviarEdital(arquivo: File) {
     setErro(null);
+    // Limpa o resultado ANTES de subir o próximo: sem isso o painel do
+    // edital anterior fica na tela durante o upload novo, e quando os dois
+    // dão o mesmo número a tela parece congelada (foi o que pareceu
+    // "precisar de F5" ao trocar de edital).
+    setResultado(null);
     setEnviando(true);
     try {
-      setResultado(await ingerirEdital(arquivo));
+      setResultado(await ingerirEdital(arquivo, arquivo.name.replace(/\.pdf$/i, "")));
     } catch (e) {
       setErro(e instanceof ErroApi ? e.message : "não deu pra enviar o edital");
     } finally {
@@ -79,6 +84,11 @@ export default function PaginaOnboarding() {
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0];
+          // Zerar o value é o que permite escolher o MESMO arquivo de novo:
+          // `change` só dispara quando o valor MUDA, então reenviar o mesmo
+          // PDF (depois de um erro, ou pra conferir) não fazia nada — a tela
+          // ficava parada até um F5. Tem que ser antes do await.
+          e.target.value = "";
           if (f) enviarEdital(f);
         }}
       />

@@ -4,9 +4,10 @@ para `scheduler.meta()` usar dado real em vez de exigir digitar a data
 na mão toda vez.
 
 MELHOR ESFORÇO, NÃO CONTRATO. Layout de edital varia por banca — o que
-segue foi medido contra dois padrões reais: disciplina numerada
-("1. DIREITO PENAL:", padrão PC-PR) e disciplina sem numeração nenhuma
-("LÍNGUA PORTUGUESA:", padrão FGV/Dataprev). Por isso `ingerir()` devolve
+segue foi medido contra três padrões reais, cada um com um fixture em
+`tests/fixtures/`: disciplina numerada ("1. DIREITO PENAL:", PC-PR),
+disciplina sem numeração ("LÍNGUA PORTUGUESA:", FGV/Dataprev) e item com
+ponto ("1. Compreensão", AOCP/PC-BA). Por isso `ingerir()` devolve
 os candidatos a data com pontuação, não só "a resposta" — mesmo espírito de
 `diagnostico.py`: reportar para o operador conferir, não decidir calado.
 
@@ -48,7 +49,7 @@ from pathlib import Path
 
 from . import db, mesa as mesa_mod
 
-VERSAO = "edital-v4"
+VERSAO = "edital-v5"
 
 MESES = {"janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5,
          "junho": 6, "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10,
@@ -100,22 +101,32 @@ RE_ESTRUTURA = re.compile(r"^(M[OÓ]DULO|ANEXO|CARGO|PERFIL)\b", re.IGNORECASE)
 # procurar disciplina evita que o CORPO do edital (regras de inscrição, que
 # são centenas de itens numerados "4.5.1", "10.13.6") entre como tópico de
 # estudo — foi assim que uma disciplina fantasma acumulou 257 "tópicos".
-RE_INICIO_CONTEUDO = re.compile(r"\bCONTE[ÚU]DO\s+PROGRAM[ÁA]TICO\b", re.IGNORECASE)
+# Singular E plural: a FGV escreve "ANEXO I – CONTEÚDO PROGRAMÁTICO", o
+# AOCP escreve "ANEXO I – DOS CONTEÚDOS PROGRAMÁTICOS".
+RE_INICIO_CONTEUDO = re.compile(r"\bCONTE[ÚU]DOS?\s+PROGRAM[ÁA]TICOS?\b", re.IGNORECASE)
 RE_ANEXO = re.compile(r"^[ \t]*ANEXO\s+[IVXLC]+\b", re.MULTILINE | re.IGNORECASE)
 
-# "1", "1.1", "1.1.1" etc. seguido de texto iniciando em maiúscula.
+# "1", "1.", "1.1", "1.1.1" etc. seguido de texto iniciando em maiúscula.
 #
-# UM NÍVEL TAMBÉM CONTA ({0,3}, não {1,3}). Exigir dois níveis fazia
-# disciplina inteira DESAPARECER quando o edital numera plano ("REDES DE
-# COMPUTADORES: 1 Conceitos... 2 Elementos..." — nenhum "N.N", nenhum
-# tópico, disciplina some da lista). Sumir é pior que contar de menos: uma
-# disciplina ausente some também do filtro da mesa, e aí a fila inteira
-# muda sem ninguém entender por quê.
+# TRÊS EXIGÊNCIAS, cada uma de um edital real que quebrou:
 #
-# A exigência de maiúscula depois do número é o que segura o falso
-# positivo: "Lei nº 12.527/2011", "Server 2019 e 2022", "ISO 27001:2022" e
-# "R$ 110,00" não casam porque o que vem depois não é início de item.
-RE_SUBITEM = re.compile(r"\b(\d+(?:\.\d+){0,3})\s+(?=[A-ZÀ-Ü])")
+# 1. UM NÍVEL TAMBÉM CONTA ({0,3}, não {1,3}). Exigir dois níveis fazia
+#    disciplina inteira DESAPARECER quando o edital numera plano ("REDES DE
+#    COMPUTADORES: 1 Conceitos... 2 Elementos..." — nenhum "N.N", nenhum
+#    tópico, disciplina some da lista). Sumir é pior que contar de menos.
+#
+# 2. O PONTO DEPOIS DO NÚMERO É OPCIONAL (`\.?`). A FGV escreve "1
+#    Compreensão"; o AOCP escreve "1. Compreensão". Sem isso o edital
+#    inteiro da PC-BA devolvia ZERO tópico — o `\s+` batia no ponto e
+#    falhava em todo item do documento.
+#
+# 3. O NÚMERO PRECISA ABRIR UMA ORAÇÃO: início do bloco, ou logo depois de
+#    pontuação. É o que separa item de número solto no meio de frase.
+#    Sem essa âncora, "...Constituição de 1988. A Constituição do Estado"
+#    viraria um tópico chamado "1988", porque tem número, ponto, espaço e
+#    maiúscula — exatamente a forma de um item.
+RE_SUBITEM = re.compile(
+    r"(?:^|(?<=[.,;:)\]]\s))(\d+(?:\.\d+){0,3})\.?\s+(?=[A-ZÀ-Ü])")
 
 
 def _normalizar(texto: str) -> str:
@@ -191,12 +202,22 @@ def recortar_conteudo_programatico(texto: str) -> tuple[str, bool]:
     Devolve (trecho, achou). Sem o marcador, devolve o texto inteiro e
     `False` — cabe a quem chamou avisar que a extração rodou sobre o edital
     todo, que é bem mais ruidoso. Reportar, não decidir calado.
+
+    A ÚLTIMA menção, não a primeira. O edital cita o próprio anexo várias
+    vezes antes de chegar nele ("Integram o presente Edital: Anexo I -
+    Conteúdos Programáticos", "conforme conteúdo programático constante do
+    Anexo I", "salvo se listadas nos conteúdos programáticos..."). Pegar a
+    primeira recortava um pedaço das REGRAS de inscrição e o anexo de
+    verdade nunca era lido — foi assim que o edital da PC-BA devolveu zero
+    tópico. Referência cruzada vem antes; o anexo em si é o último.
     """
-    m = RE_INICIO_CONTEUDO.search(texto)
-    if not m:
+    ultima = None
+    for m in RE_INICIO_CONTEUDO.finditer(texto):
+        ultima = m
+    if not ultima:
         return texto, False
-    seguinte = RE_ANEXO.search(texto, m.end())
-    return texto[m.end():seguinte.start() if seguinte else len(texto)], True
+    seguinte = RE_ANEXO.search(texto, ultima.end())
+    return texto[ultima.end():seguinte.start() if seguinte else len(texto)], True
 
 
 def _continuacao_de_paragrafo(texto: str, inicio: int) -> bool:
@@ -253,7 +274,10 @@ def extrair_topicos(texto: str) -> list[dict]:
         # conteúdo programático não encontrou marcador: sem ele, a última
         # disciplina engoliria o resto do documento inteiro.
         prox = marcas[i + 1][0] if i + 1 < len(marcas) else min(len(corpo), fim + 8000)
-        bloco = _normalizar(corpo[fim:prox])
+        # lstrip: o primeiro item do bloco precisa encostar no início da
+        # string pra RE_SUBITEM aceitá-lo pela alternativa `^` (ele é o
+        # único que não vem depois de pontuação — vem depois do cabeçalho).
+        bloco = _normalizar(corpo[fim:prox]).lstrip()
         subitens = list(RE_SUBITEM.finditer(bloco))
         for j, s in enumerate(subitens):
             fim_s = subitens[j + 1].start() if j + 1 < len(subitens) else len(bloco)

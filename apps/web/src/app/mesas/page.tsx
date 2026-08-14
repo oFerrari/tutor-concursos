@@ -99,7 +99,17 @@ function CartaoMesa({
               style={{ width: `${mesa.cobertura_pct}%`, background: cor }}
             />
           </div>
-          <p className="mt-2.5 text-[12px] text-subtle">{haQuantoTempo(mesa.ultimo_estudo)}</p>
+          {/* "0/0 questões" sem explicação parece defeito. O acervo é
+              compartilhado e cobre as áreas que já foram ingeridas: uma
+              mesa de TI ou bancária num acervo só de Direito bate zero, e
+              isso é a verdade, não um bug — mas tem que estar escrito. */}
+          {mesa.disciplinas && mesa.questoes === 0 ? (
+            <p className="mt-2.5 text-[12px] text-warning">
+              o acervo ainda não tem questões dessas disciplinas
+            </p>
+          ) : (
+            <p className="mt-2.5 text-[12px] text-subtle">{haQuantoTempo(mesa.ultimo_estudo)}</p>
+          )}
         </div>
       </button>
 

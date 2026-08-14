@@ -480,6 +480,42 @@ ATUALIZADO pra incluir a mobília depois que a primeira versão do conserto
 já estava "passando" — fixture limpo demais mente tanto quanto métrica
 errada (mesma lição de `diagnostico.py` auditar estrutura e não conteúdo).
 
+**Segundo edital real, segunda rodada de zeros: o AOCP (PC-BA) devolveu 0
+tópicos em 0 disciplinas.** Duas causas independentes, nenhuma delas
+visível no edital anterior:
+
+1. **O ponto depois do número.** A FGV escreve "1 Compreensão"; o AOCP
+   escreve "1. Compreensão". `RE_SUBITEM` exigia `\s+` logo após o número,
+   batia no ponto e falhava em TODO item do documento. Um caractere.
+2. **O edital cita o próprio anexo antes de chegar nele.** "Integram o
+   presente Edital: Anexo I - Conteúdos Programáticos", "conforme conteúdo
+   programático constante do Anexo I", "salvo se listadas nos conteúdos
+   programáticos..." — o recorte pegava a PRIMEIRA menção e cortava um
+   pedaço das regras de inscrição; o anexo de verdade nunca era lido.
+   Regra nova: a ÚLTIMA menção. Referência cruzada vem antes, o anexo é o
+   último. (E o marcador precisou aceitar plural: a FGV escreve "CONTEÚDO
+   PROGRAMÁTICO", o AOCP escreve "CONTEÚDOS PROGRAMÁTICOS".)
+
+Aceitar "N." como item abriu um falso positivo novo, resolvido junto:
+"...Brasil de 1988. A Constituição do Estado" tem a FORMA exata de um item
+(número, ponto, espaço, maiúscula). O que separa os dois é **abrir
+oração** — item vem no começo do bloco ou depois de pontuação; "1988" vem
+depois de "de ". Sem essa âncora, o ano viraria tópico.
+
+Resultado medido: PC-BA passou de 0 para 86 tópicos em 13 disciplinas
+reais, e o edital da FGV continuou correto (14 disciplinas). Conferido
+ponta a ponta contra o acervo: a mesa da PC-BA casa 18 questões de Direito
+Penal. Lição de método: **cada edital novo é um caso de teste novo** —
+dois bastaram pra achar cinco defeitos distintos, e nenhum deles aparecia
+no outro. Fixture antes de regex.
+
+**O produto NÃO é só para Direito.** O filtro da mesa é por NOME de
+disciplina e funciona igual pra TI, bancária, fiscal ou policial — o que
+limita é só o que já foi ingerido no acervo. Uma mesa de TI num acervo de
+Direito bate zero questão, e isso é verdade, não defeito; mas a tela agora
+DIZ ("o acervo ainda não tem questões dessas disciplinas") em vez de
+mostrar "0/0" calado, que parece bug.
+
 **Nome do edital: o arquivo TEMPORÁRIO do servidor vazou pro banco.**
 `POST /edital` grava o upload num `NamedTemporaryFile` e passava esse
 caminho pra `edital.ingerir()`, cujo fallback de título é o nome do
