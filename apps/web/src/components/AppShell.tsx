@@ -25,7 +25,7 @@ const CHAVE_RECOLHIDA = "tutor_sidebar_recolhida";
 // Telas de entrada — sem casca nenhuma. No protótipo elas são o "lobby":
 // tela cheia, sem nav, sem cabeçalho, sem rail, porque ainda não há sessão
 // de estudo pra navegar.
-const SEM_CASCA = new Set(["/login", "/mesas", "/onboarding"]);
+const SEM_CASCA = new Set(["/login", "/cadastro", "/mesas", "/onboarding"]);
 
 // O rail só faz sentido onde há contexto pra ele comentar. No protótipo é
 // exatamente isto: panorama e tutor. Numa tela de responder questão ele
@@ -151,6 +151,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="brilho-topo" />
           {!foco && (
             <Header
+              carga={carga}
               railAberto={railAberto}
               railDisponivel={railDisponivel}
               onAlternarRail={() => setRailAberto((r) => !r)}

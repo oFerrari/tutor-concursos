@@ -4,42 +4,49 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Marca } from "@/components/Marca";
-import { ErroApi, login, setToken } from "@/lib/api";
+import { ErroApi, registrar, setToken } from "@/lib/api";
 
 /**
- * Tela dividida do protótipo: marca + promessa à esquerda, formulário à
- * direita. Abaixo de `lg` o painel da marca some — em coluna estreita ele
- * empurraria o formulário pra baixo da dobra, que é o oposto do que uma
- * tela de acesso precisa fazer.
+ * Mesmo esqueleto visual de /login (marca + formulário) — a tela existia
+ * há tempos no cliente de API (`registrar()`, POST /auth/registrar) sem
+ * NENHUMA tela chamando ela; só dava pra criar conta via curl. Essa é a
+ * lacuna #1 do diagnóstico (ver "Do protótipo ao sistema").
  *
- * O protótipo tem ainda "Continuar com Google". NÃO ESTÁ AQUI de
- * propósito: o `api.py` só expõe `/auth/login` e `/auth/registrar`
- * (e-mail + senha, JWT), sem OAuth. Volta no dia em que existir.
- *
- * "Esqueceu a senha?" está aqui só como link visual (pedido explícito,
- * decisão registrada) — `api.py`/`core/auth.py` ainda NÃO têm rota de
- * reset de senha, então o clique não faz nada. Antes disso o argumento
- * era o oposto (link morto derruba confiança na tela); implementar de
- * verdade (token por e-mail + página de reset) segue em aberto.
+ * Validação de senha (mín. 8 caracteres) é só feedback antecipado — quem
+ * decide de verdade é `core/auth.registrar()`; se a regra mudar lá, o
+ * pior que acontece aqui é a mensagem de erro do servidor aparecer sem o
+ * aviso local ter pego antes. Duplicidade de e-mail também é resolvida
+ * 100% pelo servidor (ErroAuth -> 400), não checada aqui.
  */
-export default function PaginaLogin() {
+export default function PaginaCadastro() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
+  const [confirmarSenha, setConfirmarSenha] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
   async function aoEnviar(e: React.FormEvent) {
     e.preventDefault();
     setErro(null);
+
+    if (senha.length < 8) {
+      setErro("a senha precisa de pelo menos 8 caracteres");
+      return;
+    }
+    if (senha !== confirmarSenha) {
+      setErro("As senhas não coincidem");
+      return;
+    }
+
     setEnviando(true);
     try {
-      const { token } = await login(email, senha);
+      const { token } = await registrar(email, senha);
       setToken(token);
-      router.push("/");
+      router.push("/onboarding");
     } catch (e) {
       // ErroApi.message já vem do "detail" do FastAPI — mesma mensagem
-      // que auth.py devolve pra email/senha errados ou conta inexistente.
+      // que auth.py devolve pra e-mail duplicado ou senha curta.
       setErro(e instanceof ErroApi ? e.message : "não deu pra conectar com a API");
     } finally {
       setEnviando(false);
@@ -80,8 +87,8 @@ export default function PaginaLogin() {
             <Marca />
           </div>
 
-          <h2 className="text-[23px] tracking-[-0.3px]">Acesse sua conta</h2>
-          <p className="mt-1.5 text-sm text-muted">Bem-vindo de volta, futuro aprovado.</p>
+          <h2 className="text-[23px] tracking-[-0.3px]">Crie sua mesa de estudo</h2>
+          <p className="mt-1.5 text-sm text-muted">Leva menos de um minuto.</p>
 
           <div className="mt-6 flex flex-col gap-3.5">
             <div>
@@ -100,21 +107,32 @@ export default function PaginaLogin() {
             </div>
 
             <div>
-              <div className="mb-1.5 flex items-center justify-between">
-                <label htmlFor="senha" className="block text-[12.5px] text-muted">
-                  Senha
-                </label>
-                {/* Visual só — sem rota de reset ainda, ver comentário no topo do arquivo. */}
-                <span className="cursor-not-allowed text-[12.5px] text-accent-text" title="ainda não implementado">
-                  Esqueceu a senha?
-                </span>
-              </div>
+              <label htmlFor="senha" className="mb-1.5 block text-[12.5px] text-muted">
+                Senha
+              </label>
               <input
                 id="senha"
                 type="password"
                 required
+                minLength={8}
                 value={senha}
                 onChange={(e) => setSenha(e.target.value)}
+                className="field"
+                placeholder="mínimo 8 caracteres"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="confirmar-senha" className="mb-1.5 block text-[12.5px] text-muted">
+                Confirmar senha
+              </label>
+              <input
+                id="confirmar-senha"
+                type="password"
+                required
+                minLength={8}
+                value={confirmarSenha}
+                onChange={(e) => setConfirmarSenha(e.target.value)}
                 className="field"
                 placeholder="••••••••"
               />
@@ -123,14 +141,14 @@ export default function PaginaLogin() {
             {erro && <p className="callout-danger !p-3 text-[13px]">{erro}</p>}
 
             <button type="submit" disabled={enviando} className="btn-primary mt-1 w-full rounded-xl py-3.5 text-[14.5px]">
-              {enviando ? "entrando…" : "Entrar na plataforma"}
+              {enviando ? "criando conta…" : "Criar minha conta"}
             </button>
           </div>
 
           <p className="mt-6 text-center text-[13.5px] text-muted">
-            Ainda não tem uma conta?{" "}
-            <Link href="/cadastro" className="text-accent-text">
-              Crie sua mesa de estudo.
+            Já tem uma conta?{" "}
+            <Link href="/login" className="text-accent-text">
+              Entrar na plataforma.
             </Link>
           </p>
         </form>

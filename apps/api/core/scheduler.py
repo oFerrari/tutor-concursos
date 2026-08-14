@@ -23,7 +23,7 @@ from . import db
 from .scheduler_regras import (INTERVALOS, conta_como_erro, dias_ate_revisao,
                                orcamento_novas, proxima_caixa)
 
-VERSAO = "scheduler-v21"
+VERSAO = "scheduler-v22"
 
 # TETO_DIARIO: quantas questões por dia. NOVAS_POR_DIA=None significa "todo o
 # orçamento que sobrar depois das revisões" — cota fixa perdeu em todos os
@@ -85,8 +85,50 @@ def fila(usuario_id: int, teto: int = TETO_DIARIO, novas: int | None = NOVAS_POR
     return revisoes + inéditas
 
 
+def ofensiva_dias(usuario_id: int) -> int:
+    """
+    Sequência de dias seguidos com pelo menos uma tentativa registrada,
+    contando pra trás a partir de HOJE ou ONTEM — se ainda não estudou hoje
+    mas estudou ontem, a sequência continua "viva" até o fim do dia de hoje
+    (senão ela cairia a zero todo dia de manhã, antes da pessoa ter chance
+    de estudar). Um buraco de 2+ dias sem tentativa zera a sequência.
+
+    Calculado em Python sobre as datas distintas (não em SQL) porque a
+    lógica é sequencial — mais simples de ler que window function pra
+    quem for mexer aqui depois, e o volume por usuário (dezenas de dias,
+    não milhões de linhas) não justifica a diferença de performance.
+    """
+    linhas = db.query(
+        "SELECT DISTINCT criada_em::date AS dia FROM tentativa "
+        "WHERE usuario_id = %(u)s ORDER BY dia DESC",
+        {"u": usuario_id},
+    )
+    dias = [l["dia"] for l in linhas]
+    if not dias:
+        return 0
+    if dias[0] < date.today() - timedelta(days=1):
+        return 0  # último estudo foi anteontem ou antes — sequência morta
+    sequencia = 1
+    for i in range(1, len(dias)):
+        if dias[i] == dias[i - 1] - timedelta(days=1):
+            sequencia += 1
+        else:
+            break
+    return sequencia
+
+
 def carga_hoje(usuario_id: int) -> dict:
-    """Quanto venceu vs quanto cabe no teto — para o usuário ver a dívida."""
+    """Quanto venceu vs quanto cabe no teto — para o usuário ver a dívida.
+
+    tempo_medio_segundos e ofensiva_dias entraram aqui (em vez de endpoint
+    próprio) porque GET /carga já é a chamada não-bloqueante que o painel
+    faz a cada carregamento — não vale outro round-trip só pra 2 números
+    que o painel exibe ao lado do resto desta mesma dívida diária.
+    """
+    from . import desafio  # import local: mesmo motivo do import de edital
+                            # em meta() — desafio.py importa CAMPOS_Q daqui,
+                            # import no topo do arquivo criaria ciclo.
+
     r = db.exec1(
         "SELECT count(*) FILTER (WHERE prox_revisao <= CURRENT_DATE) AS revisoes "
         "FROM progresso WHERE usuario_id = %(u)s",
@@ -100,6 +142,8 @@ def carga_hoje(usuario_id: int) -> dict:
     )["n"]
     r["teto"] = TETO_DIARIO
     r["atraso"] = max(0, r["revisoes"] - TETO_DIARIO)
+    r["tempo_medio_segundos"] = round(desafio.tempo_medio_segundos(usuario_id))
+    r["ofensiva_dias"] = ofensiva_dias(usuario_id)
     return r
 
 

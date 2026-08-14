@@ -4,7 +4,13 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowUp } from "lucide-react";
-import { OFENSIVA, TEMPO_MEDIO } from "@/mock/prototipo";
+/** "Xm Ys" (ou só "Ys" abaixo de 1 min) — mesmo formato que o mock usava,
+ *  agora sobre carga.tempo_medio_segundos real (scheduler.carga_hoje()). */
+function formatarTempoMedio(segundos: number): string {
+  const s = Math.round(segundos);
+  if (s < 60) return `${s}s`;
+  return `${Math.floor(s / 60)}m ${s % 60}s`;
+}
 import {
   Carga,
   Desempenho,
@@ -117,9 +123,10 @@ export default function PaginaPanorama() {
 
   const nome = primeiroNome(usuario?.email);
 
-  // Os quatro KPIs do protótipo, na mesma ordem. Dois são medidos (acerto
-  // geral, revisões hoje) e dois são vitrine (ofensiva, tempo médio) —
-  // ver `mock/prototipo.ts` pro que falta no backend em cada um.
+  // Os quatro KPIs do protótipo, na mesma ordem — os 4 agora medidos.
+  // "ofensiva" e "tempo médio" vinham de mock/prototipo.ts; hoje saem de
+  // scheduler.carga_hoje() (ofensiva_dias, tempo_medio_segundos), que já
+  // é uma chamada que o painel faz de qualquer forma (getCarga()).
   const kpis = [
     {
       rotulo: "acerto geral",
@@ -129,8 +136,8 @@ export default function PaginaPanorama() {
     },
     {
       rotulo: "ofensiva",
-      valor: `${OFENSIVA.dias} dias`,
-      nota: `recorde: ${OFENSIVA.recorde} dias`,
+      valor: `${carga.ofensiva_dias} ${carga.ofensiva_dias === 1 ? "dia" : "dias"}`,
+      nota: carga.ofensiva_dias > 0 ? "sequência ativa" : "estude hoje pra começar",
       cor: "var(--foreground)",
     },
     {
@@ -141,8 +148,8 @@ export default function PaginaPanorama() {
     },
     {
       rotulo: "tempo médio",
-      valor: TEMPO_MEDIO.valor,
-      nota: TEMPO_MEDIO.nota,
+      valor: formatarTempoMedio(carga.tempo_medio_segundos),
+      nota: "por questão",
       cor: "var(--foreground)",
     },
   ];
@@ -217,7 +224,13 @@ export default function PaginaPanorama() {
         <div className="flex flex-col gap-3">
           <section className="rounded-2xl border border-line bg-surface px-5 py-[18px]">
             <p className="rotulo mb-3">edital fechado</p>
-            {meta ? (
+            {/* GET /meta responde 200 mesmo sem edital nenhum ingerido (só
+                com dias_restantes: null e um aviso) — checar `meta` sozinho
+                nunca cai no branch de baixo, então quem pulou o onboarding
+                ficava sem NENHUM link de volta nesta seção (só um texto
+                pequeno, sem ação). O sinal certo de "tem edital" é
+                dias_restantes, mesmo padrão já usado em RaioX.tsx. */}
+            {meta && meta.dias_restantes != null ? (
               <>
                 <div className="mb-2 flex items-baseline justify-between">
                   <span className="text-[25px] font-semibold tabular-nums">

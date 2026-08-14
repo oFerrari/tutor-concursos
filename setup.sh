@@ -73,6 +73,12 @@ tudo pronto. Faltam 2 terminais:
 
 Depois: http://localhost:3000
 
+  terminal 3 (opcional — testar o front publicado na Vercel contra esta API):
+    ./subir-vercel.sh
+    (sobe banco+API+túnel cloudflared sozinho e imprime a URL pública —
+    cole em NEXT_PUBLIC_API_URL nas env vars do projeto na Vercel e faça
+    redeploy. URL muda a cada reinício do túnel; ver subir-vercel.sh.)
+
 Antes de sair desta máquina, sempre:
   cd apps/api && python sincronizar.py exportar && cd ../.. && git add -A && git commit -m progresso && git push
 EOF

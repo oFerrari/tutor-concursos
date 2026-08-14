@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { X } from "lucide-react";
 import { Carga, Desempenho, EditalAtual, ErroCaderno, Meta } from "@/lib/api";
-import { FLASHCARDS_NA_FILA, LIGA, MESA_ATUAL, OFENSIVA } from "@/mock/prototipo";
+import { FLASHCARDS_NA_FILA, LIGA, MESA_ATUAL } from "@/mock/prototipo";
 
 /**
  * "Raio-X do aluno" — a terceira coluna do protótipo. Painel de contexto
@@ -11,11 +11,12 @@ import { FLASHCARDS_NA_FILA, LIGA, MESA_ATUAL, OFENSIVA } from "@/mock/prototipo
  * sempre às mesmas perguntas (quanto falta, onde estou fraco, quanto a
  * memória está devendo).
  *
- * Meta, maestria e carga vêm de endpoint real (`/meta`, `/edital`,
- * `/stats`, `/carga`, `/erros`). Ofensiva, liga e "flashcards na fila" são
+ * Meta, maestria, carga e ofensiva vêm de endpoint real (`/meta`,
+ * `/edital`, `/stats`, `/carga`, `/erros`) — ofensiva saiu do mock nesta
+ * revisão (era OFENSIVA.dias; agora é `carga.ofensiva_dias`, calculado em
+ * `scheduler.ofensiva_dias()`). Liga e "flashcards na fila" continuam
  * vitrine — estão em `mock/prototipo.ts`, com o que falta no backend
- * anotado lá. Não misture: se um dia esses três ganharem rota, o import do
- * mock some e nada mais muda aqui.
+ * anotado lá.
  */
 
 function formatarDataProva(iso: string | null | undefined): string | null {
@@ -99,8 +100,10 @@ export function RaioX({ meta, edital, desempenho, carga, erros, onFechar }: Prop
       <div className="grid grid-cols-2 gap-2.5">
         <div className="painel">
           <p className="rotulo mb-1.5">ofensiva</p>
-          <p className="text-xl font-semibold">🔥 {OFENSIVA.dias}</p>
-          <p className="mt-0.5 text-[11.5px] text-subtle">recorde {OFENSIVA.recorde}</p>
+          <p className="text-xl font-semibold">🔥 {carga?.ofensiva_dias ?? 0}</p>
+          <p className="mt-0.5 text-[11.5px] text-subtle">
+            {carga?.ofensiva_dias ? "dias seguidos" : "estude hoje pra começar"}
+          </p>
         </div>
         <div className="painel">
           <p className="rotulo mb-1.5">liga</p>

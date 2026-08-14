@@ -109,7 +109,16 @@ export function getFila(): Promise<Questao[]> {
   return chamar<Questao[]>("/fila");
 }
 
-export type Carga = { revisoes: number; ineditas: number; teto: number; atraso: number };
+export type Carga = {
+  revisoes: number;
+  ineditas: number;
+  teto: number;
+  atraso: number;
+  // Antes eram os 2 KPIs mock do painel (OFENSIVA/TEMPO_MEDIO de
+  // mock/prototipo.ts) — agora vêm de scheduler.carga_hoje() de verdade.
+  tempo_medio_segundos: number;
+  ofensiva_dias: number;
+};
 
 export function getCarga(): Promise<Carga> {
   return chamar<Carga>("/carga");
