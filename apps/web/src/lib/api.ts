@@ -395,6 +395,24 @@ export function perguntar(pergunta: string): Promise<{ resposta: string; fontes:
   });
 }
 
+/** Questão criada na hora a partir do acervo, quando o banco não tem o que
+ *  servir. `descartadas` é o número de questões que o modelo devolveu e o
+ *  backend recusou por proveniência — mostrar isso é o oposto de esconder
+ *  que a IA erra. */
+export type QuestoesGeradas = {
+  questoes: Omit<Questao, "caixa" | "prox_revisao">[];
+  descartadas: number;
+  motivos: string[];
+  fontes: string[];
+};
+
+export function gerarQuestoes(tema?: string, quantidade = 3): Promise<QuestoesGeradas> {
+  return chamar<QuestoesGeradas>("/questoes/gerar", {
+    method: "POST",
+    body: JSON.stringify({ tema, quantidade }),
+  });
+}
+
 // ------------------------------------------------------------ meta / edital
 export type Probabilidade =
   | { erro: string }

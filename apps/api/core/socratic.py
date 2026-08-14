@@ -13,7 +13,7 @@ Sem isso, modelo pequeno erra a sintaxe e a sessão de estudo morre no meio.
 """
 from . import llm, retrieval
 
-VERSAO = "socratic-v24"
+VERSAO = "socratic-v25"
 
 # ------------------------------------------------------------------ schemas
 # Subconjunto OpenAPI aceito pelo Gemini. propertyOrdering importa: o modelo
@@ -163,8 +163,37 @@ def _resumo_desempenho(usuario_id: int, disciplinas: list[str] | None = None) ->
     return "\n".join(linhas)
 
 
+def _resumo_mesa(mesa_: dict | None) -> str | None:
+    """
+    Quem é o aluno NESTA sessão: o concurso, a banca, e as matérias que o
+    edital dele cobra.
+
+    Faltava, e o efeito era grosseiro: perguntado "o que tem no meu edital",
+    o tutor não tinha como saber que existe um edital — jogava a palavra na
+    busca e devolvia a definição jurídica de "edital" na Lei 8.112 e no CPP
+    (o documento que publica um concurso, a citação por edital no processo).
+    Resposta correta sobre a lei, e completamente fora do que foi perguntado.
+
+    Só os NOMES das disciplinas entram, nunca a lista de tópicos: o edital da
+    Dataprev tem 1015 tópicos, e despejar isso em todo prompt queima cota pra
+    repetir o que a tela de edital já mostra melhor.
+    """
+    if not mesa_ or not mesa_.get("nome"):
+        return None
+    linhas = [f"Concurso-alvo: {mesa_['nome']}"]
+    if mesa_.get("orgao"):
+        linhas.append(f"Órgão: {mesa_['orgao']}")
+    if mesa_.get("banca"):
+        linhas.append(f"Banca: {mesa_['banca']}")
+    disc = mesa_.get("disciplinas")
+    linhas.append("Disciplinas do edital: " + (", ".join(disc) if disc else
+                  "nenhum edital cadastrado nesta mesa ainda"))
+    return "\n".join(linhas)
+
+
 def explicar(pergunta: str, usuario_id: int | None = None,
-             disciplinas: list[str] | None = None) -> dict:
+             disciplinas: list[str] | None = None,
+             mesa_: dict | None = None) -> dict:
     """
     Modo livre: aluno pergunta, tutor responde ancorado no acervo E no
     próprio desempenho real (quando usuario_id vem preenchido).
@@ -185,28 +214,49 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     chunks = retrieval.buscar(pergunta, n=6)
     contexto_material = retrieval.formatar_contexto(chunks) if chunks else None
     contexto_desempenho = _resumo_desempenho(usuario_id, disciplinas) if usuario_id else None
+    contexto_mesa = _resumo_mesa(mesa_)
 
     if not contexto_material and not contexto_desempenho:
         return {"resposta": "Não encontrei isso no material, e ainda não tenho nenhum "
                             "desempenho seu registrado.", "fontes": []}
 
+    # Os rótulos de seção usam "###" e nome comum, não MAIÚSCULA seca. O
+    # formato anterior ("DESEMPENHO REAL DO ALUNO (dados do banco):") somado
+    # à instrução "cite a referência entre colchetes" fez o modelo tratar o
+    # NOME DA SEÇÃO como se fosse uma fonte citável: uma resposta real
+    # terminou com "...está em 75.3% [DESEMPENHO REAL DO ALUNO]". Rótulo de
+    # prompt vazando como citação é pior que citação errada — expõe o
+    # andaime e destrói a confiança nas citações verdadeiras da mesma frase.
     partes = []
+    if contexto_mesa:
+        partes.append(f"### Contexto do aluno\n{contexto_mesa}")
     if contexto_material:
-        partes.append(f"MATERIAL (lei seca do acervo):\n{contexto_material}")
+        partes.append(f"### Trechos de lei recuperados\n{contexto_material}")
     if contexto_desempenho:
-        partes.append(f"DESEMPENHO REAL DO ALUNO (dados do banco):\n{contexto_desempenho}")
-    partes.append(f"PERGUNTA DO ALUNO: {pergunta}")
+        partes.append(f"### Números deste aluno no banco\n{contexto_desempenho}")
+    partes.append(f"### Pergunta do aluno\n{pergunta}")
 
     sistema = (
-        "Você é professor de concursos, conversando naturalmente com o aluno. Você pode "
-        "receber até duas fontes de contexto: MATERIAL (lei seca do acervo) e DESEMPENHO REAL "
-        "DO ALUNO (dados do banco). Escolha a fonte certa pra pergunta: se for sobre o conteúdo "
-        "da lei, use o MATERIAL e cite a referência entre colchetes que acompanha cada trecho; "
-        "se for sobre o progresso ou desempenho do aluno, use o DESEMPENHO e NUNCA invente um "
-        "número que não esteja ali. Se a pergunta pedir as duas coisas, combine as duas fontes. "
-        "Se nenhuma fonte cobrir a pergunta, diga isso em vez de completar com conhecimento "
-        "próprio. Português brasileiro, tom direto. Termine com uma pergunta ou sugestão que "
-        "ajude o aluno a seguir estudando."
+        "Você é professor de concursos conversando com um aluno específico, cujo concurso-alvo, "
+        "banca e disciplinas do edital estão no contexto. Use isso: fale da matéria como ela cai "
+        "NA PROVA DELE, não como tema genérico. "
+        "Se o aluno perguntar o que o edital dele cobra, responda com as disciplinas listadas no "
+        "contexto — NUNCA explique o que a palavra 'edital' significa juridicamente, não é isso "
+        "que ele está perguntando. "
+        "Ao falar de conteúdo, use os trechos de lei recuperados e cite entre colchetes SOMENTE "
+        "as referências que acompanham cada trecho (ex.: [CF, art. 37]). Nunca cite o nome de uma "
+        "seção deste prompt como se fosse fonte. Se os trechos não cobrirem a pergunta, diga isso "
+        "em vez de completar com conhecimento próprio. "
+        "Uma matéria de prova pode morar em mais de uma norma — organização da administração "
+        "pública, por exemplo, está na Constituição e no estatuto dos servidores ao mesmo tempo. "
+        "Use o trecho que responde, venha da norma que vier, e diga a que matéria ele pertence "
+        "na prova do aluno. "
+        "Os números do aluno servem pra responder 'como estou indo' e pra escolher o que sugerir "
+        "no fim; NÃO os repita em toda resposta, e NUNCA invente um número que não esteja ali. "
+        "Se o aluno pedir questão, exercício ou simulado, ofereça gerar — o app cria questões a "
+        "partir dos trechos de lei do acervo, então nunca diga que não tem como. "
+        "Português brasileiro, tom direto. Termine com uma pergunta ou sugestão que ajude o aluno "
+        "a seguir estudando."
     )
     resposta = llm.obter().gerar("\n\n".join(partes), sistema, max_tokens=1500)
     return {"resposta": resposta, "fontes": chunks}

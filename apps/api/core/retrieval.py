@@ -23,8 +23,50 @@ import re
 from . import db
 from .embeddings import embed_consulta
 
-VERSAO = "retrieval-v2"
+VERSAO = "retrieval-v3"
 RRF_K = 60  # constante de amortecimento padrão do RRF
+
+# Material `historico` (livro de emendas: "Redação Anterior", múltiplas
+# versões do mesmo artigo) vale MENOS que lei vigente na fusão. Não é
+# exclusão — ele foi ingerido justamente pra estar disponível, e continua
+# ganhando quando é de fato a melhor resposta (pergunta sobre evolução de
+# um dispositivo). É desempate: ele entra por janela de parágrafo, não por
+# artigo, então gera muito mais candidatos parecidos que uma lei — e sem
+# peso ele tomava 4 das 6 vagas de "princípios da administração pública",
+# uma delas uma página de LEGENDA DE SÍMBOLOS. Vaga gasta com índice é
+# contexto que o modelo não tem pra responder.
+#
+# 0.5 medido contra o gabarito de avaliar_retrieval.py: em 0.7 ainda
+# sobravam 2 chunks de histórico no top-6; em 0.5 zeram, e nenhum caso que
+# passava deixou de passar. HONESTIDADE: isto NÃO conserta o art. 37 da CF
+# (ver o docstring de avaliar_retrieval.py) — aquilo é diluição de chunk
+# gigante, problema diferente. Aqui só se ganha qualidade do contexto.
+PESO_HISTORICO = 0.5
+
+# O braço LEXICAL pesa mais que o semântico na fusão. Não é preferência de
+# gosto: é correção de um viés medido contra chunks GRANDES.
+#
+# O art. 37 da CF tem 13.059 caracteres (média do acervo: 1.245) e cobre
+# concurso público, licitação, teto remuneratório e improbidade no mesmo
+# artigo. O embedding é a média disso tudo, então "administração direta e
+# indireta" — que é literalmente o começo do caput — o encontrava em 83º
+# lugar no semântico, contra 3º no lexical. Entrando em uma lista só, o RRF
+# o punha atrás de chunks medianos presentes nas duas, e ele NÃO chegava ao
+# contexto que o tutor lê. Ampliar o pool de candidatos de 30 pra 200 não
+# resolvia (testado): o problema é a posição, não o corte.
+#
+# Casar frase exata é justamente o que o braço lexical faz bem e o vetor
+# médio faz mal em texto longo. 1.5 é o MENOR valor que corrige, medido
+# contra o gabarito de avaliar_retrieval.py: top-6 de 28/32 pra 30/32, sem
+# nenhum caso deixando de passar. Valores maiores (2, 3, 5) não melhoram
+# mais nada — sinal de que 1.5 já basta e o resto seria ajuste fino a um
+# gabarito de 32 casos, que é pouco pra isso.
+#
+# O conserto de RAIZ continua sendo sub-chunk do artigo gigante pro
+# embedding (mantendo o artigo como unidade de citação); isto aqui compra
+# o resultado sem reingestão, e o gabarito agora tem os casos que
+# denunciariam uma regressão.
+PESO_LEXICAL = 1.5
 
 RE_CITACAO = re.compile(r"(?i)\bart(?:igo)?s?\.?\s*(\d+[\-\wºo]*)")
 GENERICOS = {"art", "arts", "artigo", "artigos", "paragrafo", "parágrafo",
@@ -50,8 +92,9 @@ lex AS (
     LIMIT %(k)s
 )
 SELECT {CAMPOS},
-       COALESCE(1.0 / (%(rrf)s + sem.pos), 0) +
-       COALESCE(1.0 / (%(rrf)s + lex.pos), 0) AS score
+       (COALESCE(1.0 / (%(rrf)s + sem.pos), 0) +
+        COALESCE(%(peso_lexical)s / (%(rrf)s + lex.pos), 0))
+       * CASE WHEN d.tipo = 'historico' THEN %(peso_historico)s ELSE 1 END AS score
 FROM chunk c
 JOIN documento d ON d.id = c.documento_id
 LEFT JOIN sem ON sem.id = c.id
@@ -150,6 +193,8 @@ def hibrida(pergunta: str, n: int = 6, k: int = 40) -> list[dict]:
         "k": k,
         "n": n,
         "rrf": RRF_K,
+        "peso_historico": PESO_HISTORICO,
+        "peso_lexical": PESO_LEXICAL,
     })
 
 

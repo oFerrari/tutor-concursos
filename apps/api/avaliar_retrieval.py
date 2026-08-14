@@ -39,29 +39,37 @@ MEDIDA DE 14/08/2026, acervo de 2433 chunks (CP, CF, ADCT, livro de emendas,
 CPP, Lei 8.112) — a linha de base contra a qual comparar qualquer mexida em
 retrieval.py/embeddings.py:
 
-    top1  21/32 (66%)      top6  28/32 (88%)
+    top1  21/32 (66%)      top6  30/32 (94%)
     dispositivo    top1 5/6    top6 6/6
     rubrica        top1 4/4    top6 4/4
     hibrida        top1 7/12   top6 10/12
-    administrativo top1 5/10   top6 8/10
+    administrativo top1 5/10   top6 10/10
 
-O número global CAIU de 91% (20/22) para 88% (28/32) ao acrescentar estes 10
-casos, e isso é a métrica ficando honesta, não a busca piorando: os dois
-zeros da categoria nova já falhavam antes — só não havia caso que os
-apontasse. Métrica que só mede o que já funciona não arbitra nada (mesma
-lição de "Medir ausência não é medir defeito" no CLAUDE.md).
+COMO ESTE NÚMERO SE MOVEU, na ordem em que aconteceu:
 
-Os quatro top6 perdidos, com o diagnóstico de cada um:
-  · CP 312 (peculato) e CP 140 (injúria) — concorrência de conteúdo com a
-    Lei 8.112 e o CPP, já documentada no CLAUDE.md.
-  · CF 37 em "administração direta e indireta" e "princípios da administração
-    pública" — DOIS efeitos somados. (1) O art. 37 tem 13.059 caracteres
-    contra 1.245 de média: fica 3º no ranking lexical e 83º no semântico,
-    porque o embedding médio de um texto que cobre concurso, licitação, teto
-    e improbidade dilui o assunto do caput. Ampliar o pool de candidatos de
-    30 para 200 NÃO resolve (testado). (2) O livro de emendas (`tipo =
-    'historico'`, chunk por janela) ocupou 4 das 6 vagas em "princípios da
-    administração pública" — uma delas uma página de legenda de símbolos.
+  91% (20/22)  antes dos casos de administrativo existirem.
+  88% (28/32)  ao acrescentá-los. A busca não piorou — a MÉTRICA ficou
+               honesta: os dois zeros novos já falhavam, só não havia caso
+               que os apontasse. Métrica que só mede o que já funciona não
+               arbitra nada ("medir ausência não é medir defeito").
+  88% (28/32)  depois de PESO_HISTORICO = 0.5. Zero mudança no número, e
+               ainda assim valeu: o livro de emendas deixou de ocupar 4 das
+               6 vagas de "princípios da administração pública" (uma delas
+               uma página de legenda de símbolos). Contexto melhor com a
+               mesma pontuação — por isso a métrica sozinha não decide tudo.
+  94% (30/32)  depois de PESO_LEXICAL = 1.5. Os DOIS casos do art. 37 da CF
+               passaram a entrar no top-6. Ver o comentário em retrieval.py:
+               chunk de 13k caracteres dilui o embedding, o braço lexical
+               casa a frase exata, e pesá-lo mais corrige o viés na fusão.
+
+Os dois top6 que continuam perdidos são CP 312 (peculato) e CP 140 (injúria)
+— concorrência de conteúdo com a Lei 8.112 e o CPP, já documentada no
+CLAUDE.md e não endereçada aqui.
+
+CUIDADO AO AJUSTAR PESO CONTRA ESTE GABARITO: são 32 casos. 1.5 foi
+escolhido por ser o MENOR valor que corrige (2, 3 e 5 não melhoram nada
+além dele); número escolhido por maximizar a nota num gabarito pequeno é
+ajuste ao gabarito, não à busca.
 """
 from core import retrieval
 

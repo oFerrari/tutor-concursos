@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { AvisoAcervo } from "@/components/AvisoAcervo";
+import { GerarQuestoes } from "@/components/GerarQuestoes";
 import { useRouter } from "next/navigation";
 import { Sugestao } from "@/components/Sugestao";
 import { Carga, ErroApi, Questao, getCarga, getFila, getToken, limparToken } from "@/lib/api";
@@ -13,11 +14,10 @@ export default function PaginaFila() {
   const [carga, setCarga] = useState<Carga | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!getToken()) {
-      router.push("/login");
-      return;
-    }
+  // Em `useCallback` porque quem gera questão precisa recarregar a fila
+  // depois: sem isso a questão recém-criada só apareceria num F5, e o botão
+  // pareceria não ter feito nada.
+  const carregar = useCallback(() => {
     Promise.all([getFila(), getCarga()])
       .then(([f, c]) => {
         setQuestoes(f);
@@ -33,6 +33,14 @@ export default function PaginaFila() {
         setErro(e instanceof ErroApi ? e.message : "Não deu pra conectar com a API");
       });
   }, [router]);
+
+  useEffect(() => {
+    if (!getToken()) {
+      router.push("/login");
+      return;
+    }
+    carregar();
+  }, [router, carregar]);
 
   if (erro) {
     return (
@@ -65,6 +73,16 @@ export default function PaginaFila() {
         <>
           <AvisoAcervo />
           <p className="mt-4 text-muted">Nada pendente hoje.</p>
+          {/* Fila vazia tem duas causas opostas: você já estudou tudo hoje,
+              ou nunca houve questão dessas disciplinas. Nos dois casos há o
+              que oferecer — o acervo pode ter lei ainda não cobrada. Quem
+              decide gastar cota é o aluno, clicando. */}
+          <div className="mt-5">
+            <GerarQuestoes
+              rotulo="Criar questões desta mesa a partir do material"
+              onPronto={carregar}
+            />
+          </div>
         </>
       ) : (
         <ul className="space-y-3">

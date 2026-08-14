@@ -35,12 +35,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
-from core import (auth, desafio, edital, mesa, questoes, rascunho, ritmo, scheduler,
-                  simulado, socratic)
+from core import (auth, desafio, edital, geracao, mesa, questoes, rascunho, ritmo,
+                  scheduler, simulado, socratic)
 from core.config import CORS_ORIGINS
 from core.llm import ErroLLM
 
-VERSAO = "api-v2"
+VERSAO = "api-v3"
 
 app = FastAPI(title="Tutor de concursos — API", version=VERSAO)
 
@@ -424,7 +424,37 @@ class PerguntaBody(BaseModel):
 def rota_perguntar(body: PerguntaBody, uid: int = Depends(usuario_atual),
                    m: dict = Depends(mesa_atual)):
     try:
-        return socratic.explicar(body.pergunta, uid, m["disciplinas"])
+        return socratic.explicar(body.pergunta, uid, m["disciplinas"], m)
+    except ErroLLM as e:
+        raise HTTPException(503, f"LLM indisponível: {e}")
+
+
+class GerarQuestaoBody(BaseModel):
+    tema: str | None = None
+    quantidade: int = 3
+
+
+@app.post("/questoes/gerar")
+def rota_gerar_questoes(body: GerarQuestaoBody, uid: int = Depends(usuario_atual),
+                        m: dict = Depends(mesa_atual)):
+    """
+    Cria questão A PARTIR DO ACERVO quando o banco não tem o que servir.
+
+    POST, não GET, e nunca automático dentro de `/fila`: gasta cota de LLM e
+    ESCREVE no acervo compartilhado. Efeito desses dois só acontece quando
+    alguém pede — um GET que gera questão faria cada refresh da fila queimar
+    cota, e é o tipo de custo que aparece na fatura antes de aparecer na tela.
+
+    `tema` ausente = "minha fila está vazia, me dá o que estudar desta mesa";
+    com `tema` = "quero questão disto que a gente acabou de conversar".
+    """
+    try:
+        return geracao.sob_demanda(m["disciplinas"], body.tema, body.quantidade)
+    except geracao.SemMaterial as e:
+        # 409, não 500: o pedido é válido e o sistema está são — o acervo é
+        # que não tem material dessa matéria. A tela precisa distinguir isso
+        # de "a IA falhou" pra dizer a coisa certa ao aluno.
+        raise HTTPException(409, str(e))
     except ErroLLM as e:
         raise HTTPException(503, f"LLM indisponível: {e}")
 

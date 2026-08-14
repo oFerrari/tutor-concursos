@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ArrowUp } from "lucide-react";
 import { MarcaGlifo } from "@/components/Marca";
 import { BalaoQuestao } from "@/components/BalaoQuestao";
+import { GerarQuestoes } from "@/components/GerarQuestoes";
 import { ResultadoQuestao } from "@/components/DialogoQuestao";
 import { ErroApi, Fonte, Questao, getFila, getToken, limparToken, perguntar } from "@/lib/api";
 import { ABERTURA_TUTOR, FLASHCARD_EXEMPLO, ROTA_DO_DIA } from "@/mock/prototipo";
@@ -68,6 +69,12 @@ export default function PaginaTutor() {
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
   const [pensando, setPensando] = useState(false);
   const fim = useRef<HTMLDivElement>(null);
+
+  // Última fala do aluno: o assunto corrente da conversa. Serve de tema pra
+  // geração de questão — a busca precisa de um texto pra escolher o artigo,
+  // e o que o aluno perguntou descreve melhor o que ele quer treinar do que
+  // a resposta longa do tutor.
+  const ultimoAssunto = [...mensagens].reverse().find((m) => m.autor === "usuario")?.texto;
 
   // Mesma guarda de toda outra tela autenticada (/fila, /stats, /questao/[id]
   // etc.) — o /tutor tinha ficado de fora dela, sozinho, antes desta rota
@@ -308,6 +315,23 @@ export default function PaginaTutor() {
 
           {pensando && (
             <p className="rotulo animate-[pxPulse_1.4s_ease-in-out_infinite] pl-[42px]">consultando o acervo</p>
+          )}
+
+          {/* Treinar o que acabou de ser explicado, sem trocar de tela. O
+              tema é a última pergunta DO ALUNO — é o que ele está estudando
+              agora, e é com ele que a busca escolhe de qual artigo cobrar.
+              Antes, pedir questão no chat recebia "meu acervo não traz itens
+              prontos": verdade sobre a tabela `questao`, e mentira sobre o
+              que o sistema consegue fazer com a lei que já tem. */}
+          {ultimoAssunto && !pensando && (
+            <div className="mt-2 pl-[42px]">
+              <GerarQuestoes
+                tema={ultimoAssunto}
+                quantidade={2}
+                rotulo="Quero questões sobre isto"
+                onPronto={() => router.push("/fila")}
+              />
+            </div>
           )}
 
           <div ref={fim} />

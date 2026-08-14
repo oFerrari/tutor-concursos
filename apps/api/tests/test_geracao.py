@@ -1,0 +1,170 @@
+"""
+Geração de questão sob demanda a partir do acervo.
+
+O que estes testes travam NÃO é a qualidade da questão (isso é do modelo e
+não se testa com asserção) — é a PROVENIÊNCIA e o recorte:
+
+  · questão cujo artigo não veio no lote é descartada, nunca gravada;
+  · `documento_id`/`disciplina` saem do chunk casado, não de um parâmetro,
+    porque um lote montado por busca atravessa normas;
+  · material `historico` nunca vira fonte (não tem artigo, e pode conter
+    redação revogada);
+  · questão gerada entra na fila SM-2 como qualquer outra — se ficasse só
+    na tela, não voltaria pra revisão, ou seja, não seria estudo espaçado.
+
+O LLM é falso (fixture `llm_falso`): a chamada real custa cota e devolve
+texto diferente a cada vez, o que testaria o modelo, não o encanamento.
+"""
+import json
+import re
+
+import pytest
+
+from core import db, geracao
+
+VERSAO = "test-geracao-v1"
+
+
+def _chunk_real(norma: str = "L8112"):
+    c = db.exec1(
+        """SELECT c.id, c.documento_id, c.artigo, c.texto, c.norma, d.disciplina, d.titulo
+             FROM chunk c JOIN documento d ON d.id = c.documento_id
+            WHERE c.norma = %(n)s AND c.artigo IS NOT NULL
+              AND length(c.texto) >= 140 LIMIT 1""",
+        {"n": norma},
+    )
+    if not c:
+        pytest.skip(f"acervo sem chunks de {norma}")
+    return c
+
+
+def _questao_do_modelo(artigo: str) -> dict:
+    return {"artigo": artigo, "tema": "Tema de teste",
+            "enunciado": "Enunciado de teste?", "gabarito": "Gabarito de teste.",
+            "dicas": ["d1", "d2", "d3"]}
+
+
+def _modelo_que_responde_sobre_o_lote(fake):
+    """
+    Duplê que LÊ o material recebido e devolve uma questão por artigo dele.
+
+    Um retorno fixo não serviria: `sob_demanda` sorteia os trechos, então o
+    teste não sabe de antemão quais artigos virão — e um `artigo` fixo cairia
+    sempre no descarte por proveniência, testando o descarte em vez do
+    caminho feliz. Aqui o duplê imita o único comportamento do modelo real do
+    qual a gravação depende: devolver o artigo QUE ESTAVA no material.
+    """
+    def gerar(prompt, sistema="", json_mode=False, max_tokens=1200, schema=None):
+        arts = re.findall(r"\[[^\]]*?art\. ([^\]]+)\]", prompt)
+        return json.dumps([_questao_do_modelo(a) for a in dict.fromkeys(arts)])
+    fake.gerar = gerar
+    return fake
+
+
+def test_salvar_grava_com_a_disciplina_do_chunk_casado(usuario):
+    """A disciplina vem do CHUNK, não de fora: é ela que a mesa usa depois
+    pra recortar a fila, e herdar a de um documento escolhido por quem chamou
+    rotularia a questão errado."""
+    c = _chunk_real()
+    salvas, descartes = geracao.salvar([_questao_do_modelo(c["artigo"])], [c])
+    assert descartes == []
+    assert len(salvas) == 1
+    assert salvas[0]["disciplina"] == c["disciplina"]
+    gravada = db.exec1(
+        "SELECT documento_id, fonte_chunks FROM questao WHERE id = %(i)s", {"i": salvas[0]["id"]})
+    assert gravada["documento_id"] == c["documento_id"]
+    assert gravada["fonte_chunks"] == [c["id"]]
+    db.query("DELETE FROM questao WHERE id = %(i)s", {"i": salvas[0]["id"]})
+
+
+def test_questao_de_artigo_fora_do_lote_e_descartada(usuario):
+    """A invariante do projeto: cobertura que mente é pior que cobertura
+    inexistente. Gerar no meio de uma sessão não afrouxa isso."""
+    c = _chunk_real()
+    antes = db.exec1("SELECT count(*) n FROM questao")["n"]
+    salvas, descartes = geracao.salvar([_questao_do_modelo("999999")], [c])
+    assert salvas == []
+    assert len(descartes) == 1 and "999999" in descartes[0]
+    assert db.exec1("SELECT count(*) n FROM questao")["n"] == antes
+
+
+def test_ordinal_nao_faz_a_questao_certa_ser_descartada(usuario):
+    """LC 95/1998: o banco guarda "8o"/"5º", o modelo às vezes devolve "8".
+    Sem normalizar, a questão CERTA seria jogada fora por proveniência."""
+    c = db.exec1(
+        """SELECT c.id, c.documento_id, c.artigo, d.disciplina FROM chunk c
+             JOIN documento d ON d.id = c.documento_id
+            WHERE c.artigo ~ '^[0-9]+[ºo]$' LIMIT 1""")
+    if not c:
+        pytest.skip("acervo sem artigo com ordinal")
+    sem_ordinal = c["artigo"][:-1]
+    salvas, descartes = geracao.salvar([_questao_do_modelo(sem_ordinal)], [c])
+    assert descartes == [] and len(salvas) == 1
+    db.query("DELETE FROM questao WHERE id = %(i)s", {"i": salvas[0]["id"]})
+
+
+def test_sob_demanda_enche_a_fila_de_uma_mesa_vazia(client, usuario, llm_falso):
+    """O cenário que motivou o módulo: mesa cujo edital cobre uma disciplina
+    que TEM material no acervo e ZERO questão. Antes disso, fila vazia pra
+    sempre — o material estava lá e ninguém o transformava em pergunta."""
+    _modelo_que_responde_sobre_o_lote(llm_falso)
+    disc = db.exec1(
+        """SELECT d.disciplina FROM documento d
+            WHERE NOT EXISTS (SELECT 1 FROM questao q WHERE q.documento_id = d.id)
+            LIMIT 1""")
+    if not disc:
+        pytest.skip("todo documento do acervo já tem questão")
+    d = disc["disciplina"]
+
+    m = client.post("/mesas", json={"nome": "Mesa vazia"}, headers=usuario["headers"]).json()
+    eid = db.exec1("INSERT INTO edital (mesa_id, titulo) VALUES (%(m)s,'e') RETURNING id",
+                   {"m": m["id"]})["id"]
+    db.query("INSERT INTO topico (edital_id, disciplina, ordem, texto) "
+             "VALUES (%(e)s, %(d)s, 1, 'x')", {"e": eid, "d": d})
+    cab = {**usuario["headers"], "X-Mesa-Id": str(m["id"])}
+
+    antes = client.get("/fila", headers=cab).json()
+
+    r = client.post("/questoes/gerar", json={"quantidade": 2}, headers=cab)
+    assert r.status_code == 200, r.text
+    geradas = r.json()["questoes"]
+    assert geradas, r.json()
+
+    # O ponto: a questão gerada entra na FILA — está no acervo, não na tela.
+    depois = client.get("/fila", headers=cab).json()
+    assert len(depois) > len(antes)
+    assert set(q["id"] for q in geradas) <= set(q["id"] for q in depois)
+
+    db.query("DELETE FROM questao WHERE id = ANY(%(ids)s)",
+             {"ids": [q["id"] for q in geradas]})
+
+
+def test_sem_material_devolve_409_e_nao_500(client, usuario):
+    """"O acervo não cobre isso" é resposta válida do sistema são, não erro.
+    A tela precisa distinguir de "a IA falhou": as duas pedem ação oposta
+    do aluno (ingerir material × tentar de novo)."""
+    m = client.post("/mesas", json={"nome": "Mesa sem acervo"},
+                    headers=usuario["headers"]).json()
+    eid = db.exec1("INSERT INTO edital (mesa_id, titulo) VALUES (%(m)s,'e') RETURNING id",
+                   {"m": m["id"]})["id"]
+    db.query("INSERT INTO topico (edital_id, disciplina, ordem, texto) "
+             "VALUES (%(e)s, 'Matemática Financeira', 1, 'x')", {"e": eid})
+
+    r = client.post("/questoes/gerar", json={"quantidade": 1},
+                    headers={**usuario["headers"], "X-Mesa-Id": str(m["id"])})
+    assert r.status_code == 409, r.text
+    assert "acervo" in r.json()["detail"]
+
+
+def test_material_historico_nunca_vira_fonte(usuario, llm_falso):
+    """Chunk de `historico` não tem (norma, artigo) e pode conter redação
+    REVOGADA — questão gerada dali cobraria lei que não vale mais."""
+    tem = db.exec1("SELECT 1 x FROM documento WHERE tipo = 'historico' LIMIT 1")
+    if not tem:
+        pytest.skip("acervo sem material histórico")
+    disc = db.exec1("SELECT disciplina FROM documento WHERE tipo = 'historico' LIMIT 1")["disciplina"]
+    ids = geracao._por_disciplina([disc], 5)
+    tipos = db.query(
+        """SELECT DISTINCT d.tipo FROM chunk c JOIN documento d ON d.id = c.documento_id
+            WHERE c.id = ANY(%(ids)s)""", {"ids": ids})
+    assert all(t["tipo"] != "historico" for t in tipos)
