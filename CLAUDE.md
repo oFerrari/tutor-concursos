@@ -620,6 +620,42 @@ busca entra SEMPRE (quando a busca é precisa — "art. 312", "concussão" —
 ele É o assunto) e a novidade só ordena as vagas restantes, dentro de um
 pool ainda relevante.
 
+**Mesa sem edital tem TRÊS estados, não dois (migração 017).** Relatado em
+uso: mesa recém-criada aparecia no lobby com "4 / 54 questões · 7%" e a
+legenda "sem edital — mostra o acervo inteiro". O número é verdadeiro e
+está no lugar errado — é o progresso da PESSOA no acervo todo, exibido num
+cartão que promete o progresso DAQUELA mesa. Gaveta nova que já nasce
+cheia.
+
+**A correção NÃO foi "sem edital, escopo vazio".** Foi a primeira proposta
+e ela quebra mais do que conserta: `mesa.filtro` com lista vazia não casa
+nada, então fila, desafio, simulado, stats e meta ficam TODOS vazios — a
+mesa vira inútil até alguém subir um PDF, e quem ainda não tem edital
+publicado (metade do tempo de preparação de verdade) simplesmente não
+conseguiria estudar. Trocar "número confuso" por "produto morto" não é
+conserto. O problema também não era o filtro: era o CARTÃO afirmando ser
+progresso de mesa um número que é do aluno, e isso se resolve na tela.
+
+O que faltava era o estado "esta mesa TEM alvo, e não veio de PDF". Agora
+`mesa.disciplinas()` tem três respostas, e `origem_alvo` diz qual é:
+
+  · `edital`  — veio do PDF. TEM PRECEDÊNCIA sobre o manual: é o documento
+                oficial e é dele que `scheduler.meta` tira a data da prova.
+                Deixar o manual sobrepor faria o recorte vir de um lugar e
+                o prazo de outro — o defeito que a 010 evitou ao fazer
+                disciplina e data saírem do MESMO "último edital".
+  · `manual`  — o aluno escolheu as matérias na mão, do que EXISTE no
+                acervo. Nome livre viraria filtro que nunca casa nada, e o
+                sintoma seria fila vazia sem explicação: o aluno acharia
+                que o app quebrou, não que escolheu matéria inexistente.
+  · `nenhum`  — ninguém declarou nada. Segue sem filtrar (a mesa é
+                utilizável no dia 1), mas o cartão esconde barra e
+                percentual e diz o que FAZER: anexar o edital, ou escolher
+                as matérias no lápis.
+
+`TEXT[]` e não tabela: lista curta, lida inteira, escrita inteira, nunca
+consultada por item — o oposto de `topico`, que se conta e se agrupa.
+
 **Onde o aprendizado é MEDIDO, e onde não é.** Vale ter isto explícito
 porque é fácil supor errado: fila, `/questao/[id]`, desafio, simulado e a
 questão embutida no /tutor passam TODOS por `scheduler.registrar` — logo
@@ -911,9 +947,12 @@ upload: caminho interno do servidor não é dado do usuário.
   bancos (o id é sequencial e muda), o mesmo problema que `(norma, artigo)`
   resolve pros chunks; o nome da mesa serviria de chave natural, mas não
   vale construir isso antes de existir uma segunda máquina com mesas.
-- Uma mesa não tem disciplinas próprias: elas saem do edital. Mesa criada e
-  ainda sem PDF mostra o acervo inteiro (declarado, não silencioso — a CLI
-  imprime "sem edital — acervo inteiro" no cabeçalho da sessão).
+- Mesa sem alvo declarado (nem edital nem escolha manual) mostra o acervo
+  inteiro — declarado, não silencioso: a CLI imprime "sem edital — acervo
+  inteiro" e o cartão do lobby esconde a barra e pede o edital (017).
+- O alvo manual não SOMA ao edital: quando o PDF existe, ele vence inteiro.
+  Corrigir uma disciplina que o extrator errou se faz na curadoria (011),
+  não pelo alvo manual.
 - A troca de mesa é por aba do navegador, não por dispositivo: a mesa ativa
   vive em `localStorage` (`tutor_mesa`), do mesmo jeito que o token. Abrir
   duas abas em mesas diferentes funciona (é o motivo de o header ser por
@@ -960,9 +999,6 @@ upload: caminho interno do servidor não é dado do usuário.
   (Português/Inglês/RLM) é comum e está certo; o Módulo II é que deveria
   ser filtrado. Exigiria coluna `cargo` em `topico` (o parser já reconhece
   o marcador "PERFIL N:") e a pessoa escolhendo o perfil na ingestão.
-- Disciplina da mesa definida à mão, sem edital (hoje só o PDF cria o
-  recorte). Faria sentido pra quem estuda pra um concurso ainda sem edital
-  publicado — que é metade do tempo de preparação de verdade.
 - Provas anteriores da banca: gabarito oficial + peso de incidência real.
 - Simulado por banca (peso de incidência real, não amostra uniforme).
   Simulado genérico (`chat.py simulado`) e desafio diário (`chat.py desafio`)

@@ -320,3 +320,92 @@ def test_simulado_sobrevive_a_mesa_apagada(client, usuario):
     linha = db.exec1("SELECT usuario_id, mesa_id FROM simulado WHERE id = %(s)s", {"s": sid})
     assert linha is not None and linha["mesa_id"] is None
     assert linha["usuario_id"] == usuario["id"]
+
+
+# ------------------------------- alvo declarado à mão, sem edital (017)
+def test_mesa_nova_nao_tem_alvo_e_ainda_assim_e_utilizavel(client, usuario):
+    """
+    O relato que originou a 017: mesa recém-criada aparecia com "4/54
+    questões · 7%" — número verdadeiro no lugar errado (é o progresso da
+    PESSOA no acervo inteiro, num cartão que promete o da MESA).
+
+    A correção NÃO foi zerar o escopo: `origem_alvo` diz "nenhum" pro
+    cartão esconder a barra, e o filtro segue aberto pra mesa não nascer
+    inútil. Escopo vazio deixaria fila, desafio, simulado e stats vazios.
+    """
+    m = _criar_mesa(client, usuario, "Sem alvo")
+    ctx = client.get("/mesa", headers=_cab(usuario, m)).json()
+    assert ctx["origem_alvo"] == "nenhum"
+    assert ctx["disciplinas"] is None
+
+    # utilizável: a fila continua servindo o acervo
+    assert len(client.get("/fila", headers=_cab(usuario, m)).json()) > 0
+
+
+def test_alvo_manual_recorta_como_o_edital(client, usuario, duas_disciplinas):
+    """Quem estuda pra concurso cujo edital ainda não saiu (metade do tempo
+    de preparação) passa a poder recortar a mesa mesmo assim."""
+    dentro, fora = duas_disciplinas
+    m = _criar_mesa(client, usuario, "Alvo manual")
+    cab = _cab(usuario, m)
+
+    r = client.patch(f"/mesas/{m['id']}", json={"disciplinas": [dentro]},
+                     headers=usuario["headers"])
+    assert r.status_code == 200
+
+    ctx = client.get("/mesa", headers=cab).json()
+    assert ctx["origem_alvo"] == "manual"
+    assert ctx["disciplinas"] == [dentro]
+
+    fila = client.get("/fila", headers=cab).json()
+    assert fila and all(q["disciplina"] == dentro for q in fila)
+    assert not any(q["disciplina"] == fora for q in fila)
+
+
+def test_edital_tem_precedencia_sobre_o_manual(client, usuario, duas_disciplinas):
+    """O PDF é o documento oficial, e é dele que a meta tira a data da
+    prova. Deixar o manual sobrepor faria o recorte vir de um lugar e o
+    prazo de outro — o defeito que a 010 evitou."""
+    manual, doPdf = duas_disciplinas
+    m = _criar_mesa(client, usuario, "Os dois", disciplina=doPdf)
+    client.patch(f"/mesas/{m['id']}", json={"disciplinas": [manual]},
+                 headers=usuario["headers"])
+
+    ctx = client.get("/mesa", headers=_cab(usuario, m)).json()
+    assert ctx["origem_alvo"] == "edital"
+    assert ctx["disciplinas"] == [doPdf]
+
+
+def test_disciplina_inexistente_no_acervo_e_recusada(client, usuario):
+    """Nome livre viraria filtro que nunca casa nada, e o sintoma seria fila
+    vazia sem explicação — o aluno acharia que o app quebrou."""
+    m = _criar_mesa(client, usuario, "Alvo inválido")
+    r = client.patch(f"/mesas/{m['id']}",
+                     json={"disciplinas": ["Direito Intergaláctico"]},
+                     headers=usuario["headers"]).json()
+    assert r["disciplinas_manuais"] == []
+    assert client.get("/mesa", headers=_cab(usuario, m)).json()["origem_alvo"] == "nenhum"
+
+
+def test_lista_vazia_limpa_o_alvo(client, usuario, duas_disciplinas):
+    """`[]` tira o alvo (volta ao acervo inteiro); ausente preserva."""
+    dentro, _ = duas_disciplinas
+    m = _criar_mesa(client, usuario, "Limpar alvo")
+    client.patch(f"/mesas/{m['id']}", json={"disciplinas": [dentro]},
+                 headers=usuario["headers"])
+
+    client.patch(f"/mesas/{m['id']}", json={"nome": "Só o nome"},
+                 headers=usuario["headers"])
+    assert client.get("/mesa", headers=_cab(usuario, m)).json()["disciplinas"] == [dentro]
+
+    client.patch(f"/mesas/{m['id']}", json={"disciplinas": []},
+                 headers=usuario["headers"])
+    assert client.get("/mesa", headers=_cab(usuario, m)).json()["disciplinas"] is None
+
+
+def test_disciplinas_do_acervo_saem_do_acervo(client, usuario):
+    """Lista fixa mentiria num acervo que cresce (ou que está vazio)."""
+    r = client.get("/disciplinas", headers=usuario["headers"]).json()["disciplinas"]
+    reais = [x["disciplina"] for x in db.query(
+        "SELECT DISTINCT disciplina FROM documento ORDER BY 1")]
+    assert r == reais

@@ -19,11 +19,12 @@ degradação graciosa, não defeito.
 """
 from . import db
 
-VERSAO = "mesa-v2"
+VERSAO = "mesa-v3"
 
 NOME_PADRAO = "Mesa principal"
 
-CAMPOS = "id, usuario_id, nome, orgao, banca, criado_em"
+CAMPOS = ("id, usuario_id, nome, orgao, banca, criado_em, "
+          "disciplinas_manuais")
 
 
 class ErroMesa(Exception):
@@ -79,7 +80,27 @@ def contar_questoes(disciplinas_: list[str] | None) -> int:
 
 
 def disciplinas(mesa_id: int | None) -> list[str] | None:
-    """Disciplinas do edital mais recente da mesa. `None` = sem filtro."""
+    """
+    O alvo desta mesa. Três respostas possíveis, e as três dizem coisas
+    diferentes (migração 017):
+
+      lista do EDITAL — veio do PDF. Tem PRECEDÊNCIA sobre o manual: é o
+                        documento oficial, e é dele que `scheduler.meta`
+                        tira a data da prova. Deixar o manual sobrepor faria
+                        o recorte vir de um lugar e o prazo de outro — o
+                        mesmo defeito que a 010 evitou ao fazer disciplina e
+                        data saírem do MESMO "último edital".
+      lista MANUAL    — o aluno declarou o alvo na mão, porque o edital
+                        ainda não saiu. Metade do tempo de preparação de
+                        verdade é assim.
+      None            — ninguém declarou nada. NÃO filtra, de propósito:
+                        escopo vazio deixaria fila, desafio, simulado e
+                        stats todos vazios, e a mesa inútil no dia 1.
+
+    O cartão do lobby distingue os três — sem alvo ele não mostra barra nem
+    percentual, porque o número ali seria o progresso do ALUNO no acervo
+    inteiro exibido como se fosse progresso DA MESA.
+    """
     if mesa_id is None:
         return None
     linhas = db.query(
@@ -91,7 +112,33 @@ def disciplinas(mesa_id: int | None) -> list[str] | None:
             ORDER BY 1""",
         {"m": mesa_id},
     )
-    return [l["disciplina"] for l in linhas] or None
+    do_edital = [l["disciplina"] for l in linhas]
+    if do_edital:
+        return do_edital
+
+    r = db.exec1("SELECT disciplinas_manuais FROM mesa WHERE id = %(m)s", {"m": mesa_id})
+    return sorted(r["disciplinas_manuais"]) if r and r["disciplinas_manuais"] else None
+
+
+def origem_do_alvo(mesa_id: int) -> str:
+    """"edital" | "manual" | "nenhum" — a tela precisa dizer DE ONDE veio o
+    recorte, senão "5 disciplinas" parece a mesma coisa nos dois casos e o
+    aluno não sabe se ainda falta subir o PDF."""
+    tem_edital = db.exec1(
+        "SELECT 1 x FROM topico t JOIN edital e ON e.id = t.edital_id "
+        "WHERE e.mesa_id = %(m)s LIMIT 1", {"m": mesa_id})
+    if tem_edital:
+        return "edital"
+    r = db.exec1("SELECT disciplinas_manuais FROM mesa WHERE id = %(m)s", {"m": mesa_id})
+    return "manual" if (r and r["disciplinas_manuais"]) else "nenhum"
+
+
+def disciplinas_do_acervo() -> list[str]:
+    """O que existe pra escolher. Sai do ACERVO, não de lista fixa: uma mesa
+    de TI num banco só de Direito precisa ver que não há o que escolher, em
+    vez de escolher "Informática" e receber fila vazia sem explicação."""
+    return [r["disciplina"] for r in db.query(
+        "SELECT DISTINCT disciplina FROM documento ORDER BY 1")]
 
 
 # ------------------------------------------------------------------- CRUD
@@ -181,6 +228,7 @@ def listar(usuario_id: int) -> list[dict]:
     for m in mesas:
         disc = disciplinas(m["id"])
         m["disciplinas"] = disc
+        m["origem_alvo"] = origem_do_alvo(m["id"])
         r = db.exec1(
             f"""SELECT count(DISTINCT q.id) AS questoes,
                        count(DISTINCT q.id) FILTER (WHERE p.caixa >= 3) AS dominadas
@@ -210,7 +258,8 @@ def listar(usuario_id: int) -> list[dict]:
 
 
 def atualizar(usuario_id: int, mesa_id: int, nome: str | None = None,
-              orgao: str | None = None, banca: str | None = None) -> dict | None:
+              orgao: str | None = None, banca: str | None = None,
+              disciplinas_manuais: list[str] | None = None) -> dict | None:
     atual = obter(usuario_id, mesa_id)
     if not atual:
         return None
@@ -222,12 +271,22 @@ def atualizar(usuario_id: int, mesa_id: int, nome: str | None = None,
         )
         if colide:
             raise ErroMesa(f"você já tem uma mesa chamada \"{novo_nome}\"")
+    # Só disciplinas que EXISTEM no acervo entram. Nome livre viraria filtro
+    # que nunca casa nada, e o sintoma seria fila vazia sem explicação — o
+    # aluno acharia que o app quebrou, não que escolheu matéria inexistente.
+    # `None` preserva o que está lá; `[]` limpa (é como se tira o alvo).
+    if disciplinas_manuais is not None:
+        validas = set(disciplinas_do_acervo())
+        disciplinas_manuais = sorted({d for d in disciplinas_manuais if d in validas})
+
     return db.exec1(
         f"""UPDATE mesa SET nome = %(n)s,
                             orgao = COALESCE(%(o)s, orgao),
-                            banca = COALESCE(%(b)s, banca)
+                            banca = COALESCE(%(b)s, banca),
+                            disciplinas_manuais = COALESCE(%(dm)s, disciplinas_manuais)
              WHERE id = %(id)s AND usuario_id = %(u)s RETURNING {CAMPOS}""",
-        {"id": mesa_id, "u": usuario_id, "n": novo_nome, "o": orgao, "b": banca},
+        {"id": mesa_id, "u": usuario_id, "n": novo_nome, "o": orgao, "b": banca,
+         "dm": disciplinas_manuais},
     )
 
 
@@ -268,4 +327,5 @@ def contexto(usuario_id: int, mesa_id: int | None = None) -> dict:
     m = obter(usuario_id, mesa_id) if mesa_id is not None else padrao(usuario_id)
     if not m:
         return {}
-    return {**m, "disciplinas": disciplinas(m["id"])}
+    return {**m, "disciplinas": disciplinas(m["id"]),
+            "origem_alvo": origem_do_alvo(m["id"])}

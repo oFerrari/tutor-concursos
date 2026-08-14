@@ -173,8 +173,13 @@ export type Mesa = {
   orgao: string | null;
   banca: string | null;
   criado_em: string;
-  // null = mesa ainda sem edital → não filtra nada, mostra o acervo inteiro.
+  // null = ninguém declarou alvo ainda → não filtra nada (ver 017).
   disciplinas: string[] | null;
+  /** DE ONDE veio o recorte. Sem isso "5 disciplinas" parece a mesma coisa
+   *  vindo do PDF ou escolhido à mão, e o aluno não sabe se ainda falta
+   *  subir o edital. */
+  origem_alvo: "edital" | "manual" | "nenhum";
+  disciplinas_manuais: string[];
 };
 
 export type MesaNaLista = Mesa & {
@@ -192,6 +197,13 @@ export type MesaNaLista = Mesa & {
   cobertura_topicos_pct: number;
   ultimo_estudo: string | null;
 };
+
+/** O que existe no acervo pra escolher como alvo. Sai do acervo e não de
+ *  lista fixa: uma mesa de TI num banco só de Direito precisa VER que não
+ *  há o que escolher. */
+export function getDisciplinasDoAcervo(): Promise<{ disciplinas: string[] }> {
+  return chamar("/disciplinas");
+}
 
 export function getMesas(): Promise<MesaNaLista[]> {
   return chamar<MesaNaLista[]>("/mesas");
@@ -214,7 +226,13 @@ export function criarMesa(nome: string, orgao?: string, banca?: string): Promise
 
 export function atualizarMesa(
   id: number,
-  campos: { nome?: string; orgao?: string | null; banca?: string | null }
+  campos: {
+    nome?: string;
+    orgao?: string | null;
+    banca?: string | null;
+    /** Alvo declarado à mão, pra mesa sem edital publicado. `[]` limpa. */
+    disciplinas?: string[];
+  }
 ): Promise<Mesa> {
   return chamar<Mesa>(`/mesas/${id}`, {
     method: "PATCH",

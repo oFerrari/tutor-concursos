@@ -145,6 +145,15 @@ def rota_mesa_atual(m: dict = Depends(mesa_atual)):
     return {**m, "questoes": mesa.contar_questoes(m["disciplinas"])}
 
 
+@app.get("/disciplinas")
+def rota_disciplinas_do_acervo(uid: int = Depends(usuario_atual)):
+    """O que existe pra escolher como alvo de uma mesa sem edital. Sai do
+    ACERVO e não de lista fixa: uma mesa de TI num banco só de Direito
+    precisa VER que não há o que escolher, em vez de escolher e receber fila
+    vazia sem explicação."""
+    return {"disciplinas": mesa.disciplinas_do_acervo()}
+
+
 @app.get("/mesas")
 def rota_listar_mesas(uid: int = Depends(usuario_atual)):
     return mesa.listar(uid)
@@ -171,6 +180,9 @@ def rota_obter_mesa(mid: int, uid: int = Depends(usuario_atual)):
 
 class AtualizarMesaBody(BaseModel):
     nome: str | None = None
+    # `None` preserva; `[]` limpa o alvo. Só entram disciplinas que existem
+    # no acervo (validação em core/mesa.atualizar).
+    disciplinas: list[str] | None = None
     orgao: str | None = None
     banca: str | None = None
 
@@ -178,7 +190,8 @@ class AtualizarMesaBody(BaseModel):
 @app.patch("/mesas/{mid}")
 def rota_atualizar_mesa(mid: int, body: AtualizarMesaBody, uid: int = Depends(usuario_atual)):
     try:
-        m = mesa.atualizar(uid, mid, body.nome, body.orgao, body.banca)
+        m = mesa.atualizar(uid, mid, body.nome, body.orgao, body.banca,
+                           body.disciplinas)
     except mesa.ErroMesa as e:
         raise HTTPException(400, str(e))
     if not m:
