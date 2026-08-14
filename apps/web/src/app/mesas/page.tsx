@@ -62,32 +62,42 @@ function CartaoMesa({
     <div className="relative">
       <button
         onClick={onEntrar}
-        className={`card-link flex w-full flex-col gap-3.5 !text-left ${
+        className={`card-link flex min-h-[168px] w-full flex-col gap-3.5 !text-left ${
           ativa ? "!border-accent" : ""
         }`}
       >
-        <div>
+        <div className="min-w-0">
           <p className="rotulo mb-2 flex items-center gap-1.5">
-            {ativa && <Check className="h-3 w-3 text-accent-text" strokeWidth={3} />}
-            {mesa.banca || mesa.orgao || (ativa ? "mesa atual" : "sem banca")}
+            {ativa && <Check className="h-3 w-3 shrink-0 text-accent-text" strokeWidth={3} />}
+            <span className="truncate">
+              {mesa.banca || mesa.orgao || (ativa ? "mesa atual" : "sem banca")}
+            </span>
           </p>
           <p className="text-base font-semibold leading-snug">{mesa.nome}</p>
-          {/* Mesa sem edital não recorta nada — dizer isso no cartão evita a
-              pessoa achar que a mesa "não está funcionando" quando ela vê o
-              acervo inteiro do outro lado. */}
-          <p className="mt-1 text-[12px] text-subtle">
-            {mesa.disciplinas
-              ? mesa.disciplinas.join(" · ")
-              : "sem edital — mostra o acervo inteiro"}
-          </p>
         </div>
 
         <div className="mt-auto w-full">
+          {/* CONTAGEM, não a lista. Despejar as disciplinas aqui fazia um
+              cartão de 13 linhas ao lado de um de 3 — a grade perdia o
+              alinhamento e o número, que é o que se compara entre mesas,
+              sumia no meio do texto. A lista inteira fica no `title` (hover)
+              e na tela do edital, onde ela é o assunto. */}
+          <p
+            className="mb-2 truncate text-[12px] text-subtle"
+            title={mesa.disciplinas?.join(" · ")}
+          >
+            {mesa.disciplinas
+              ? `${mesa.disciplinas.length} disciplinas · ${mesa.topicos} tópicos`
+              : "sem edital — mostra o acervo inteiro"}
+          </p>
           <div className="mb-1.5 flex items-baseline justify-between gap-2.5">
+            {/* QUESTÕES, não tópicos: a barra mede o que o sistema
+                realmente acompanha (caixa >= 3 por questão). Escrever
+                "x / y tópicos" sugeriria um controle por tópico que não
+                existe — a cobertura por tópico é estimada por disciplina
+                inteira (aproximação declarada em core/edital.py). */}
             <span className="font-mono text-[11.5px] text-subtle">
-              {mesa.topicos > 0
-                ? `${mesa.topicos} tópicos · ${mesa.dominadas}/${mesa.questoes} questões`
-                : `${mesa.dominadas}/${mesa.questoes} questões dominadas`}
+              {mesa.dominadas} / {mesa.questoes} questões
             </span>
             <span className="mono-num text-[12.5px]" style={{ color: cor }}>
               {mesa.cobertura_pct}%
@@ -99,10 +109,6 @@ function CartaoMesa({
               style={{ width: `${mesa.cobertura_pct}%`, background: cor }}
             />
           </div>
-          {/* Sem alarme aqui: listar o edital vale por si só — dá pra subir
-              um PDF só pra ver quais matérias o concurso cobra, sem ter
-              acervo nenhum. O vazio só atrapalha na hora de RESOLVER
-              questão, e é lá que ele é explicado (<AvisoAcervo />). */}
           <p className="mt-2.5 text-[12px] text-subtle">{haQuantoTempo(mesa.ultimo_estudo)}</p>
         </div>
       </button>
@@ -290,7 +296,7 @@ export default function PaginaMesas() {
         {criando ? (
           <form
             onSubmit={aoCriar}
-            className="flex min-h-[176px] flex-col gap-2.5 rounded-[14px] border border-line-strong bg-surface p-4"
+            className="flex min-h-[168px] flex-col gap-2.5 rounded-[14px] border border-line-strong bg-surface p-4"
           >
             <input
               autoFocus
@@ -323,7 +329,7 @@ export default function PaginaMesas() {
         ) : (
           <button
             onClick={() => setCriando(true)}
-            className="drop flex min-h-[176px] flex-col items-start justify-center gap-3 !text-left"
+            className="drop flex min-h-[168px] flex-col items-start justify-center gap-3 !text-left"
           >
             <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-accent-soft text-accent-text">
               <Plus className="h-[18px] w-[18px]" strokeWidth={2.4} />
