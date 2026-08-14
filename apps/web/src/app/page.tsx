@@ -4,13 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowUp } from "lucide-react";
-/** "Xm Ys" (ou só "Ys" abaixo de 1 min) — mesmo formato que o mock usava,
- *  agora sobre carga.tempo_medio_segundos real (scheduler.carga_hoje()). */
-function formatarTempoMedio(segundos: number): string {
-  const s = Math.round(segundos);
-  if (s < 60) return `${s}s`;
-  return `${Math.floor(s / 60)}m ${s % 60}s`;
-}
+import { Kpis } from "@/components/Kpis";
 import {
   Carga,
   Desempenho,
@@ -117,42 +111,7 @@ export default function PaginaPanorama() {
   const ordenadas = [...comDado].sort((a, b) => (a.pct_acerto ?? 0) - (b.pct_acerto ?? 0));
   const pior = ordenadas[0] ?? null;
 
-  const tentativas = desempenho.reduce((s, d) => s + d.tentativas, 0);
-  const acertos = desempenho.reduce((s, d) => s + d.acertos, 0);
-  const acertoGeral = tentativas > 0 ? (acertos / tentativas) * 100 : null;
-
   const nome = primeiroNome(usuario?.email);
-
-  // Os quatro KPIs do protótipo, na mesma ordem — os 4 agora medidos.
-  // "ofensiva" e "tempo médio" vinham de mock/prototipo.ts; hoje saem de
-  // scheduler.carga_hoje() (ofensiva_dias, tempo_medio_segundos), que já
-  // é uma chamada que o painel faz de qualquer forma (getCarga()).
-  const kpis = [
-    {
-      rotulo: "acerto geral",
-      valor: acertoGeral == null ? "—" : `${acertoGeral.toFixed(0)}%`,
-      nota: tentativas > 0 ? `${acertos} de ${tentativas} tentativas` : "sem tentativa ainda",
-      cor: "var(--foreground)",
-    },
-    {
-      rotulo: "ofensiva",
-      valor: `${carga.ofensiva_dias} ${carga.ofensiva_dias === 1 ? "dia" : "dias"}`,
-      nota: carga.ofensiva_dias > 0 ? "sequência ativa" : "estude hoje pra começar",
-      cor: "var(--foreground)",
-    },
-    {
-      rotulo: "revisões hoje",
-      valor: String(carga.revisoes),
-      nota: carga.atraso > 0 ? `${carga.atraso} em atraso` : "fila SM-2 em dia",
-      cor: carga.revisoes > 0 ? "var(--accent-text)" : "var(--foreground)",
-    },
-    {
-      rotulo: "tempo médio",
-      valor: formatarTempoMedio(carga.tempo_medio_segundos),
-      nota: "por questão",
-      cor: "var(--foreground)",
-    },
-  ];
 
   return (
     <div className="mx-auto w-full max-w-[1000px] px-6 pb-10 pt-6">
@@ -172,17 +131,10 @@ export default function PaginaPanorama() {
         )}
       </h1>
 
-      {/* --------------------------------------------------------- KPIs */}
-      <div className="mb-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {kpis.map((k) => (
-          <div key={k.rotulo} className="rounded-[14px] border border-line bg-surface px-[18px] py-4">
-            <p className="rotulo mb-2">{k.rotulo}</p>
-            <p className="text-[25px] font-semibold tabular-nums" style={{ color: k.cor }}>
-              {k.valor}
-            </p>
-            <p className="mt-0.5 text-[12.5px] text-muted">{k.nota}</p>
-          </div>
-        ))}
+      {/* KPIs: mesma faixa da tela de desempenho, do mesmo componente —
+          dois cálculos do "acerto geral" divergiriam entre as duas telas. */}
+      <div className="mb-3">
+        <Kpis carga={carga} desempenho={desempenho} />
       </div>
 
       {/* ------------------------------------------------------- split */}
