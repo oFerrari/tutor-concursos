@@ -35,12 +35,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
-from core import (auth, desafio, edital, geracao, mesa, questoes, rascunho, ritmo,
-                  scheduler, simulado, socratic)
+from core import (auth, conversa, desafio, edital, geracao, mesa, questoes, rascunho,
+                  ritmo, scheduler, simulado, socratic)
 from core.config import CORS_ORIGINS
 from core.llm import ErroLLM
 
-VERSAO = "api-v4"
+VERSAO = "api-v5"
 
 app = FastAPI(title="Tutor de concursos — API", version=VERSAO)
 
@@ -419,15 +419,69 @@ def rota_meta(data: date | None = None, uid: int = Depends(usuario_atual),
 # ------------------------------------------------------------------ perguntar
 class PerguntaBody(BaseModel):
     pergunta: str
+    # None = comece uma conversa nova. O cliente não precisa de uma chamada
+    # extra só pra existir antes de perguntar.
+    conversa_id: int | None = None
 
 
 @app.post("/perguntar")
 def rota_perguntar(body: PerguntaBody, uid: int = Depends(usuario_atual),
                    m: dict = Depends(mesa_atual)):
+    """
+    Um turno do chat livre, agora COM MEMÓRIA (migração 014).
+
+    Sem `conversa_id` o servidor abre uma conversa e devolve o id — o
+    cliente não precisa de uma chamada a mais só pra existir, e o fluxo
+    normal (abrir o tutor e digitar) não deve custar dois round-trips.
+
+    A gravação acontece nos DOIS lados do turno: a pergunta antes de chamar
+    o modelo, a resposta depois. Se o LLM cair no meio, a pergunta do aluno
+    fica registrada — reabrir a conversa e não encontrar o que você mesmo
+    escreveu é a pior forma de perder confiança no histórico.
+    """
+    if body.conversa_id is None:
+        conv = conversa.criar(uid, m["id"], body.pergunta)
+    else:
+        conv = conversa.obter(uid, body.conversa_id)
+        if not conv:
+            raise HTTPException(404, "conversa não encontrada")
+
+    historico = conversa.historico_para_prompt(conv["id"])
+    conversa.gravar(conv["id"], "aluno", body.pergunta)
     try:
-        return socratic.explicar(body.pergunta, uid, m["disciplinas"], m)
+        r = socratic.explicar(body.pergunta, uid, m["disciplinas"], m, historico)
     except ErroLLM as e:
         raise HTTPException(503, f"LLM indisponível: {e}")
+
+    fontes = [{"id": f["id"], "titulo": f["titulo"], "norma": f.get("norma"),
+               "artigo": f.get("artigo")} for f in r["fontes"]]
+    conversa.gravar(conv["id"], "tutor", r["resposta"], fontes)
+    return {**r, "conversa_id": conv["id"], "titulo": conv["titulo"]}
+
+
+# ------------------------------------------------------------------ conversas
+@app.get("/conversas")
+def rota_listar_conversas(uid: int = Depends(usuario_atual)):
+    """Sem recorte por mesa, de propósito: a conversa é do ALUNO (mesma
+    decisão de `progresso` na 010). Esconder o que ele discutiu porque
+    trocou de concurso seria perder material que continua valendo."""
+    return conversa.listar(uid)
+
+
+@app.get("/conversas/{cid}")
+def rota_obter_conversa(cid: int, uid: int = Depends(usuario_atual)):
+    conv = conversa.obter(uid, cid)
+    if not conv:
+        raise HTTPException(404, "conversa não encontrada")
+    return {**conv, "mensagens": conversa.mensagens(cid)}
+
+
+@app.delete("/conversas/{cid}")
+def rota_apagar_conversa(cid: int, uid: int = Depends(usuario_atual)):
+    if not conversa.apagar(uid, cid):
+        raise HTTPException(404, "conversa não encontrada")
+    return {"ok": True}
+
 
 
 class GerarQuestaoBody(BaseModel):

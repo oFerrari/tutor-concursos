@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   BarChart3,
   Book,
@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { Marca, MarcaIcone } from "@/components/Marca";
 import { MenuConta } from "@/components/MenuConta";
-import { HistoricoSimulado, Mesa, Usuario, getMe, getSimulados } from "@/lib/api";
+import { ConversaNaLista, Mesa, Usuario, getConversas, getMe } from "@/lib/api";
 
 // Ordem e rótulos do protótipo. "Fila do dia" não existe lá — mas existe
 // como rota real e funcionando aqui, e tirar do menu uma tela que funciona
@@ -40,9 +40,6 @@ const ITENS = [
   { href: "/materiais", label: "Meus materiais", Icone: FolderOpen },
 ];
 
-function formatarData(iso: string): string {
-  return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
-}
 
 function nomeDoEmail(email: string | undefined): string {
   if (!email) return "conta";
@@ -98,16 +95,19 @@ const LARGURA_ABERTA = "w-[258px]";
  */
 export function Sidebar({ recolhida, onAlternar, mesa, drawer = false, onFechar }: Props) {
   const pathname = usePathname();
-  const [recentes, setRecentes] = useState<HistoricoSimulado[] | null>(null);
+  const router = useRouter();
+  const [recentes, setRecentes] = useState<ConversaNaLista[] | null>(null);
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [espiando, setEspiando] = useState(false);
 
   useEffect(() => {
-    // "Recentes" mostra simulados de verdade (têm data, são sessão
-    // discreta) — não fingimos histórico de conversa tipo Claude, porque
-    // o diálogo da fila não é persistido como sessão própria.
-    getSimulados()
-      .then((s) => setRecentes(s.slice(0, 5)))
+    // "Recentes" agora são CONVERSAS de verdade (migração 014). Antes
+    // mostrava simulados no lugar, porque o diálogo não era persistido —
+    // um rótulo dizendo uma coisa e listando outra. Ordenadas por
+    // atividade: conversa retomada ontem importa mais que uma aberta há um
+    // mês e abandonada.
+    getConversas()
+      .then((c) => setRecentes(c.slice(0, 6)))
       .catch(() => setRecentes([]));
     getMe()
       .then(setUsuario)
@@ -141,15 +141,30 @@ export function Sidebar({ recolhida, onAlternar, mesa, drawer = false, onFechar 
       </div>
 
       {/* ------------------------------------------------ ação primária */}
-      <Link
-        href="/tutor"
-        onClick={onFechar}
+      {/* Não é `<Link href="/tutor">`: estando JÁ no /tutor, o Next não
+          remonta a rota pra ela mesma, e a conversa carregada continuaria
+          na tela — "nova conversa" que não abre nada. Com conversa
+          persistida (014) isso deixou de ser detalhe.
+
+          O evento existe porque não há estado compartilhado no app (nem
+          store, nem contexto): a sidebar precisa avisar uma página irmã, e
+          um CustomEvent é o canal mais simples que não inventa
+          infraestrutura pra um sinal só. */}
+      <button
+        onClick={() => {
+          onFechar?.();
+          if (pathname === "/tutor") {
+            window.dispatchEvent(new CustomEvent("tutor:nova"));
+          } else {
+            router.push("/tutor");
+          }
+        }}
         className={aberta ? "btn-bloco" : "btn-bloco px-0"}
         aria-label="nova conversa com o tutor"
       >
         <Plus className="h-4 w-4 shrink-0" strokeWidth={2.6} />
         {aberta && <span>Nova conversa</span>}
-      </Link>
+      </button>
 
       {/* ----------------------------------------------------- navegação */}
       <nav className="flex-1 space-y-0.5 overflow-y-auto">
@@ -198,16 +213,17 @@ export function Sidebar({ recolhida, onAlternar, mesa, drawer = false, onFechar 
           <div className="pt-5">
             <p className="rotulo px-2.5 pb-2">recentes</p>
             <div className="space-y-0.5">
-              {recentes.map((s) => (
+              {recentes.map((c) => (
                 <Link
-                  key={s.id}
-                  href="/simulado"
+                  key={c.id}
+                  href={`/tutor?c=${c.id}`}
                   onClick={onFechar}
+                  title={c.mesa_nome ? `conversa na mesa ${c.mesa_nome}` : undefined}
                   className="flex items-center justify-between gap-2 rounded-[10px] px-2.5 py-1.5 text-[13px]
                              text-subtle transition-colors hover:bg-surface-hover hover:text-foreground"
                 >
-                  <span className="truncate">Simulado · {formatarData(s.criado_em)}</span>
-                  <span className="mono-num shrink-0 text-[12px]">{s.nota_pct ?? 0}%</span>
+                  <span className="truncate">{c.titulo}</span>
+                  <span className="mono-num shrink-0 text-[11.5px] opacity-70">{c.mensagens}</span>
                 </Link>
               ))}
             </div>

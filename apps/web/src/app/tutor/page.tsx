@@ -8,7 +8,16 @@ import { MarcaGlifo } from "@/components/Marca";
 import { BalaoQuestao } from "@/components/BalaoQuestao";
 import { GerarQuestoes } from "@/components/GerarQuestoes";
 import { ResultadoQuestao } from "@/components/DialogoQuestao";
-import { ErroApi, Fonte, Questao, getFila, getToken, limparToken, perguntar } from "@/lib/api";
+import {
+  ErroApi,
+  Fonte,
+  Questao,
+  getConversa,
+  getFila,
+  getToken,
+  limparToken,
+  perguntar,
+} from "@/lib/api";
 import { ABERTURA_TUTOR, FLASHCARD_EXEMPLO, ROTA_DO_DIA } from "@/mock/prototipo";
 
 /**
@@ -67,6 +76,10 @@ export default function PaginaTutor() {
 
   const [pergunta, setPergunta] = useState("");
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
+  // O id da conversa em curso. `null` = ainda não existe; a primeira
+  // pergunta abre uma no servidor e devolve o id, então não há chamada
+  // extra só pra criar (migração 014).
+  const [conversaId, setConversaId] = useState<number | null>(null);
   const [pensando, setPensando] = useState(false);
   const fim = useRef<HTMLDivElement>(null);
 
@@ -102,7 +115,11 @@ export default function PaginaTutor() {
     setMensagens((m) => [...m, { autor: "usuario", texto }]);
     setPensando(true);
     try {
-      const r = await perguntar(texto);
+      const r = await perguntar(texto, conversaId ?? undefined);
+      // Guardar o id é o que faz o SEGUNDO turno ter memória do
+      // primeiro: sem ele cada pergunta abriria conversa nova e o
+      // histórico não voltaria pro modelo.
+      setConversaId(r.conversa_id);
       // Só o que o modelo de fato citou no texto vira "citado" — o resto do
       // que a busca híbrida recuperou (mas o modelo não usou) vira
       // "consultado". Listar tudo igual como "fonte" mascarava essa
@@ -135,19 +152,64 @@ export default function PaginaTutor() {
       setPensando(false);
       requestAnimationFrame(() => fim.current?.scrollIntoView({ behavior: "smooth" }));
     }
-  }, [router]);
+  }, [router, conversaId]);
 
-  // O composer do panorama manda pra cá com `?q=`. Lido de
-  // `window.location` num efeito, e não com `useSearchParams`, porque o
-  // hook obrigaria envolver a página inteira num <Suspense> só pra ler um
-  // parâmetro opcional que só existe quando alguém veio do painel.
+  // Dois parâmetros, lidos de `window.location` num efeito e não com
+  // `useSearchParams` — o hook obrigaria envolver a página inteira num
+  // <Suspense> só pra ler algo opcional.
+  //
+  //   ?q=  o composer do panorama manda a pergunta pra cá
+  //   ?c=  a sidebar reabre uma conversa antiga (migração 014)
   useEffect(() => {
-    const q = new URLSearchParams(window.location.search).get("q");
+    const params = new URLSearchParams(window.location.search);
+    const q = params.get("q");
+    const c = Number(params.get("c"));
+
+    if (Number.isInteger(c) && c > 0) {
+      window.history.replaceState(null, "", "/tutor");
+      getConversa(c)
+        .then((conv) => {
+          setConversaId(conv.id);
+          // O que foi gravado volta como veio: as fontes de cada turno
+          // ficaram salvas justamente pra reabrir a conversa ancorada. Sem
+          // isso o aluno leria uma resposta que citava a lei e voltaria a
+          // ela sem as citações — pior que não ter citação nenhuma.
+          setMensagens(
+            conv.mensagens.map((m) =>
+              m.autor === "aluno"
+                ? { autor: "usuario" as const, texto: m.texto }
+                : {
+                    autor: "tutor" as const,
+                    texto: m.texto,
+                    citadas: m.fontes.filter((f) => m.texto.includes(marca(f))).map(referencia),
+                    consultadas: m.fontes
+                      .filter((f) => !m.texto.includes(marca(f)))
+                      .map(referencia),
+                  }
+            )
+          );
+        })
+        .catch(() => {});
+      return;
+    }
+
     if (q) {
       window.history.replaceState(null, "", "/tutor");
       perguntarAoTutor(q.trim());
     }
   }, [perguntarAoTutor]);
+
+  // "Nova conversa" (sidebar) zera a tela sem trocar de rota. Ver o
+  // comentário no botão: o Next não remonta /tutor pra ele mesmo.
+  useEffect(() => {
+    function nova() {
+      setConversaId(null);
+      setMensagens([]);
+      setPergunta("");
+    }
+    window.addEventListener("tutor:nova", nova);
+    return () => window.removeEventListener("tutor:nova", nova);
+  }, []);
 
   function enviar(e: React.FormEvent) {
     e.preventDefault();

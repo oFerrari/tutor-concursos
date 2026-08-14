@@ -13,7 +13,7 @@ Sem isso, modelo pequeno erra a sintaxe e a sessão de estudo morre no meio.
 """
 from . import llm, retrieval
 
-VERSAO = "socratic-v27"
+VERSAO = "socratic-v29"
 
 # ------------------------------------------------------------------ schemas
 # Subconjunto OpenAPI aceito pelo Gemini. propertyOrdering importa: o modelo
@@ -303,7 +303,8 @@ def _resumo_mesa(mesa_: dict | None) -> str | None:
 
 def explicar(pergunta: str, usuario_id: int | None = None,
              disciplinas: list[str] | None = None,
-             mesa_: dict | None = None) -> dict:
+             mesa_: dict | None = None,
+             historico: list[dict] | None = None) -> dict:
     """
     Modo livre: aluno pergunta, tutor responde ancorado no acervo E no
     próprio desempenho real (quando usuario_id vem preenchido).
@@ -344,6 +345,15 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         partes.append(f"### Trechos de lei recuperados\n{contexto_material}")
     if contexto_desempenho:
         partes.append(f"### Números deste aluno no banco\n{contexto_desempenho}")
+    if historico:
+        # A CONVERSA ATÉ AQUI, e não só a pergunta solta. Sem isso o aluno
+        # que responde "qualquer um" a uma pergunta do tutor recebe de volta
+        # "qualquer um de quê?" — aconteceu em uso real. Vem ANTES da
+        # pergunta atual porque é o que a contextualiza.
+        turnos = "\n".join(
+            f"{'Aluno' if m['autor'] == 'aluno' else 'Você'}: {m['texto']}"
+            for m in historico)
+        partes.append(f"### Conversa até aqui\n{turnos}")
     partes.append(f"### Pergunta do aluno\n{pergunta}")
 
     sistema = (
@@ -363,8 +373,15 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         "na prova do aluno. "
         "Os números do aluno servem pra responder 'como estou indo' e pra escolher o que sugerir "
         "no fim; NÃO os repita em toda resposta, e NUNCA invente um número que não esteja ali. "
-        "Se o aluno pedir questão, exercício ou simulado, ofereça gerar — o app cria questões a "
-        "partir dos trechos de lei do acervo, então nunca diga que não tem como. "
+        "Se o aluno pedir questão, exercício ou simulado: NÃO escreva a questão na resposta. "
+        "Diga que dá pra gerar e mande ele usar o botão \"Quero questões sobre isto\", logo "
+        "abaixo. O app monta a questão a partir dos trechos de lei do acervo, confere de qual "
+        "artigo ela saiu e a grava na fila de revisão — questão escrita solta no chat não passa "
+        "por nenhuma dessas três coisas e some quando a conversa rola. Nunca diga que não tem "
+        "como gerar. "
+        "Quando houver conversa anterior, CONTINUE dela: se o aluno responder de forma curta "
+        "('qualquer um', 'esse mesmo', 'sim'), entenda que ele está respondendo à SUA última "
+        "pergunta e siga daí, em vez de pedir que ele reformule. Não repita explicação já dada. "
         "Português brasileiro, tom direto. Termine com uma pergunta ou sugestão que ajude o aluno "
         "a seguir estudando."
     )

@@ -422,11 +422,48 @@ export type Fonte = {
   rubrica?: string;
 };
 
-export function perguntar(pergunta: string): Promise<{ resposta: string; fontes: Fonte[] }> {
+/** Um turno do chat. Sem `conversaId`, o servidor abre uma conversa e
+ *  devolve o id — o cliente não paga uma chamada a mais só pra existir. */
+export function perguntar(
+  pergunta: string,
+  conversaId?: number
+): Promise<{ resposta: string; fontes: Fonte[]; conversa_id: number; titulo: string }> {
   return chamar("/perguntar", {
     method: "POST",
-    body: JSON.stringify({ pergunta }),
+    body: JSON.stringify({ pergunta, conversa_id: conversaId }),
   });
+}
+
+// ------------------------------------------------------------------ conversas
+export type ConversaNaLista = {
+  id: number;
+  titulo: string;
+  mesa_id: number | null;
+  mesa_nome: string | null;
+  mensagens: number;
+  atualizada_em: string;
+};
+
+export type MensagemSalva = {
+  id: number;
+  autor: "aluno" | "tutor";
+  texto: string;
+  fontes: Fonte[];
+  criada_em: string;
+};
+
+export function getConversas(): Promise<ConversaNaLista[]> {
+  return chamar<ConversaNaLista[]>("/conversas");
+}
+
+export function getConversa(
+  id: number
+): Promise<ConversaNaLista & { mensagens: MensagemSalva[] }> {
+  return chamar(`/conversas/${id}`);
+}
+
+export function apagarConversa(id: number): Promise<{ ok: boolean }> {
+  return chamar(`/conversas/${id}`, { method: "DELETE" });
 }
 
 /** Questão criada na hora a partir do acervo, quando o banco não tem o que
