@@ -9,9 +9,9 @@ turno), e nenhum módulo existente já tinha essa consulta simples pronta.
 """
 from . import db
 
-VERSAO = "questoes-v1"
+VERSAO = "questoes-v2"
 
-CAMPOS = "id, disciplina, tema, enunciado, gabarito, dicas"
+CAMPOS = "id, disciplina, tema, enunciado, gabarito, dicas, tipo, gabarito_ce"
 
 
 def obter(questao_id: int) -> dict | None:

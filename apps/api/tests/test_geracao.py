@@ -168,3 +168,121 @@ def test_material_historico_nunca_vira_fonte(usuario, llm_falso):
         """SELECT DISTINCT d.tipo FROM chunk c JOIN documento d ON d.id = c.documento_id
             WHERE c.id = ANY(%(ids)s)""", {"ids": ids})
     assert all(t["tipo"] != "historico" for t in tipos)
+
+
+# ---------------------------------------------------- item CERTO/ERRADO (012)
+def test_gabarito_ce_falso_nao_e_descartado_como_ausente(usuario):
+    """
+    O bug clássico deste formato: `if not q["gabarito_ce"]` descartaria TODO
+    item cujo gabarito é ERRADO, porque False é falsy em Python — metade do
+    lote, e justamente a metade que dá valor ao formato Cebraspe. A
+    validação checa `isinstance(..., bool)`.
+    """
+    from core import socratic
+    itens = [
+        {"artigo": "1", "tema": "t", "enunciado": "assertiva certa",
+         "gabarito_ce": True, "justificativa": "porque sim"},
+        {"artigo": "2", "tema": "t", "enunciado": "assertiva errada",
+         "gabarito_ce": False, "justificativa": "porque não"},
+        {"artigo": "3", "tema": "t", "enunciado": "sem gabarito booleano",
+         "gabarito_ce": "Certo", "justificativa": "string no lugar do bool"},
+    ]
+    validas = socratic._validar_ce(itens)
+    assert [v["gabarito_ce"] for v in validas] == [True, False]
+    assert all(v["tipo"] == "certo_errado" and v["dicas"] == [] for v in validas)
+    # A justificativa vira `gabarito` — a coluna é NOT NULL nos dois tipos.
+    assert validas[1]["gabarito"] == "porque não"
+
+
+def test_correcao_de_item_ce_nao_chama_o_llm(usuario, llm_falso):
+    """Booleano se compara com `==`. Mandar isso pro modelo custaria cota e
+    introduziria erro num julgamento que não pode errar."""
+    from core import socratic
+    q = {"tipo": "certo_errado", "gabarito_ce": True,
+         "enunciado": "assertiva", "gabarito": "justificativa"}
+
+    assert socratic.avaliar_questao(q, "C")["veredito"] == "correta"
+    assert socratic.avaliar_questao(q, "certo")["veredito"] == "correta"
+    assert socratic.avaliar_questao(q, "E")["veredito"] == "incorreta"
+    assert socratic.avaliar_questao(q, "")["veredito"] == "incorreta"
+    # Ilegível é erro, nunca acerto por acidente de parsing.
+    assert socratic.avaliar_questao(q, "talvez")["veredito"] == "incorreta"
+    assert llm_falso.chamadas == []
+
+
+def test_item_ce_nunca_recebe_veredito_parcial(usuario):
+    """Metade de um booleano não é nada — e `parcial` DESCE uma caixa em
+    scheduler_regras, então um item C/E que caísse ali seria punido por um
+    estado que ele não pode ocupar."""
+    from core import socratic
+    q = {"tipo": "certo_errado", "gabarito_ce": False,
+         "enunciado": "a", "gabarito": "b"}
+    for resposta in ("C", "E", "", "meio certo", "V", "0"):
+        assert socratic.avaliar_questao(q, resposta)["veredito"] in ("correta", "incorreta")
+
+
+def test_banco_recusa_tipo_e_gabarito_incoerentes(usuario):
+    """
+    A CHECK casada da 012 é o coração da migração: "item C/E sem booleano" e
+    "discursiva COM booleano" não podem existir. Deixar isso pro código
+    significaria que o primeiro caminho de escrita que esquecesse a regra
+    gravaria lixo calado — e são vários (gerar.py, sob_demanda, sincronizar).
+    """
+    import psycopg
+    base = ("INSERT INTO questao (disciplina, tema, enunciado, gabarito, tipo, gabarito_ce) "
+            "VALUES ('x','x','x','x', %(t)s, %(ce)s)")
+    for tipo, ce in [("certo_errado", None), ("resposta_livre", True)]:
+        with pytest.raises(psycopg.errors.CheckViolation):
+            db.query(base, {"t": tipo, "ce": ce})
+    with pytest.raises(psycopg.errors.CheckViolation):
+        db.query(base, {"t": "multipla_escolha", "ce": None})
+
+
+def test_tipo_da_banca(usuario):
+    """A banca decide o formato, e a mesa já sabe qual é. Banca desconhecida
+    cai em discursiva — o comportamento anterior à 012."""
+    assert geracao.tipo_da_banca("Cebraspe") == "certo_errado"
+    assert geracao.tipo_da_banca("CESPE/UnB") == "certo_errado"
+    assert geracao.tipo_da_banca("FGV") == "resposta_livre"
+    assert geracao.tipo_da_banca(None) == "resposta_livre"
+
+
+def test_item_ce_gerado_entra_na_fila_e_corrige_sem_llm(client, usuario, llm_falso):
+    """Fim a fim: gera item C/E, ele aparece na fila com o tipo, e responder
+    pela rota devolve veredito binário sem tocar no modelo."""
+    def gerar(prompt, sistema="", json_mode=False, max_tokens=1200, schema=None):
+        arts = re.findall(r"\[[^\]]*?art\. ([^\]]+)\]", prompt)
+        return json.dumps([{"artigo": a, "tema": "t", "enunciado": "assertiva",
+                            "gabarito_ce": i % 2 == 0, "justificativa": "porque a lei diz"}
+                           for i, a in enumerate(dict.fromkeys(arts))])
+    llm_falso.gerar = gerar
+
+    disc = db.exec1("SELECT disciplina FROM documento WHERE tipo <> 'historico' LIMIT 1")["disciplina"]
+    m = client.post("/mesas", json={"nome": "Mesa CE", "banca": "Cebraspe"},
+                    headers=usuario["headers"]).json()
+    eid = db.exec1("INSERT INTO edital (mesa_id, titulo) VALUES (%(m)s,'e') RETURNING id",
+                   {"m": m["id"]})["id"]
+    db.query("INSERT INTO topico (edital_id, disciplina, ordem, texto) "
+             "VALUES (%(e)s, %(d)s, 1, 'x')", {"e": eid, "d": disc})
+    cab = {**usuario["headers"], "X-Mesa-Id": str(m["id"])}
+
+    # Sem `tipo` no corpo: o servidor decide pela banca da mesa.
+    r = client.post("/questoes/gerar", json={"quantidade": 2}, headers=cab)
+    assert r.status_code == 200, r.text
+    geradas = r.json()["questoes"]
+    assert geradas and all(q["tipo"] == "certo_errado" for q in geradas)
+
+    fila = client.get("/fila", headers=cab).json()
+    na_fila = next(q for q in fila if q["id"] == geradas[0]["id"])
+    assert na_fila["tipo"] == "certo_errado"
+    assert isinstance(na_fila["gabarito_ce"], bool)
+
+    certa = "C" if na_fila["gabarito_ce"] else "E"
+    av = client.post(f"/questoes/{na_fila['id']}/avaliar",
+                     json={"resposta": certa, "nivel": 0, "historico": []},
+                     headers=usuario["headers"]).json()
+    assert av["veredito"] == "correta"
+    assert llm_falso.chamadas == []   # nenhuma chamada na CORREÇÃO
+
+    db.query("DELETE FROM questao WHERE id = ANY(%(ids)s)",
+             {"ids": [q["id"] for q in geradas]})

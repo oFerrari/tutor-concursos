@@ -30,7 +30,7 @@ from . import db, mesa
 from .scheduler_regras import (INTERVALOS, conta_como_erro, dias_ate_revisao,
                                orcamento_novas, proxima_caixa)
 
-VERSAO = "scheduler-v23"
+VERSAO = "scheduler-v24"
 
 # TETO_DIARIO: quantas questões por dia. NOVAS_POR_DIA=None significa "todo o
 # orçamento que sobrar depois das revisões" — cota fixa perdeu em todos os
@@ -53,7 +53,8 @@ NOVAS_POR_DIA = None
 # Sem caixa/prox_revisao — esses dois vêm de `progresso`, escopados por
 # usuário, e cada consulta abaixo decide como juntar (revisão sempre tem
 # progresso; inédita nunca tem; desafio.py reaproveita esta mesma constante).
-CAMPOS_Q = "q.id, q.disciplina, q.tema, q.enunciado, q.gabarito, q.dicas"
+CAMPOS_Q = ("q.id, q.disciplina, q.tema, q.enunciado, q.gabarito, q.dicas, "
+            "q.tipo, q.gabarito_ce")
 
 
 def fila(usuario_id: int, teto: int = TETO_DIARIO, novas: int | None = NOVAS_POR_DIA,

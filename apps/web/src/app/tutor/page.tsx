@@ -233,7 +233,7 @@ export default function PaginaTutor() {
               )}
 
               {questao && !resultado && (
-                <BalaoQuestao tipo="resposta_livre" questao={questao} onFechado={setResultado} />
+                <BalaoQuestao tipo={questao.tipo} questao={questao} onFechado={setResultado} />
               )}
 
               {questao && resultado && (

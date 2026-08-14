@@ -57,11 +57,18 @@ export function SimuladoRunner({ simuladoId, questoes, onFinalizado, rotuloConti
     inicioQuestao.current = Date.now();
   }, [indice]);
 
-  function proxima(pular: boolean) {
+  /** `escolha` só vem no item C/E, onde o clique JÁ é a resposta e não há
+   *  campo de texto pra ler — passar pelo `resposta` do estado obrigaria a
+   *  um setState antes de avançar, e o React ainda não teria aplicado. */
+  function proxima(pular: boolean, escolha?: "C" | "E") {
     const segundos = decorridos(inicioQuestao.current);
     const novasRespostas = [
       ...respostas,
-      { questao_id: questoes[indice].id, resposta: pular ? "" : resposta, segundos },
+      {
+        questao_id: questoes[indice].id,
+        resposta: pular ? "" : (escolha ?? resposta),
+        segundos,
+      },
     ];
     setRespostas(novasRespostas);
     setResposta("");
@@ -167,22 +174,54 @@ export function SimuladoRunner({ simuladoId, questoes, onFinalizado, rotuloConti
       <div className="card">
         <p className="text-base font-medium leading-relaxed">{q.enunciado}</p>
       </div>
-      <textarea
-        value={resposta}
-        onChange={(e) => setResposta(e.target.value)}
-        rows={4}
-        className="field mt-4"
-        placeholder="Sua resposta…"
-      />
-      {erro && <p className="mt-2 text-sm text-danger">{erro}</p>}
-      <div className="mt-3 flex justify-between">
-        <button onClick={() => proxima(true)} className="link">
-          pular
-        </button>
-        <button onClick={() => proxima(false)} disabled={!resposta.trim()} className="btn-primary">
-          {indice + 1 < questoes.length ? "próxima" : "finalizar"}
-        </button>
-      </div>
+      {/* Item C/E: dois botões, e marcar JÁ AVANÇA. Numa prova Cebraspe de
+          40 itens, exigir "marque e depois clique em próxima" dobra os
+          cliques sem decidir nada — a escolha já é a resposta inteira. A
+          correção continua no fim, como em qualquer simulado: o que muda é
+          o formato de responder, não a regra de não corrigir durante. */}
+      {q.tipo === "certo_errado" ? (
+        <>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <button
+              onClick={() => proxima(false, "C")}
+              className="rounded-xl border border-line-strong bg-surface py-3.5 text-[15px] font-medium transition-colors hover:border-success hover:bg-surface-hover"
+            >
+              Certo
+            </button>
+            <button
+              onClick={() => proxima(false, "E")}
+              className="rounded-xl border border-line-strong bg-surface py-3.5 text-[15px] font-medium transition-colors hover:border-accent hover:bg-surface-hover"
+            >
+              Errado
+            </button>
+          </div>
+          {erro && <p className="mt-2 text-sm text-danger">{erro}</p>}
+          <div className="mt-3">
+            <button onClick={() => proxima(true)} className="link">
+              pular
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <textarea
+            value={resposta}
+            onChange={(e) => setResposta(e.target.value)}
+            rows={4}
+            className="field mt-4"
+            placeholder="Sua resposta…"
+          />
+          {erro && <p className="mt-2 text-sm text-danger">{erro}</p>}
+          <div className="mt-3 flex justify-between">
+            <button onClick={() => proxima(true)} className="link">
+              pular
+            </button>
+            <button onClick={() => proxima(false)} disabled={!resposta.trim()} className="btn-primary">
+              {indice + 1 < questoes.length ? "próxima" : "finalizar"}
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

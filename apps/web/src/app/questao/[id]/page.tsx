@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { DialogoQuestao } from "@/components/DialogoQuestao";
+import { QuestaoInterativa } from "@/components/QuestaoInterativa";
 import { Voltar } from "@/components/Voltar";
 import { ErroApi, Questao, getQuestao, getToken } from "@/lib/api";
 
@@ -51,7 +51,7 @@ export default function PaginaResponder() {
           o back() do navegador poderia devolver pra uma questão já
           respondida se a pessoa chegou navegando entre elas. */}
       <Voltar href="/fila" rotulo="Voltar pra fila" />
-      <DialogoQuestao
+      <QuestaoInterativa
         questao={questao}
         rotuloContinuar="Voltar pra fila"
         onFechado={() => router.push("/fila")}

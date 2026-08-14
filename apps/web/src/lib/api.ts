@@ -207,13 +207,21 @@ export function apagarMesa(id: number): Promise<{ ok: boolean }> {
 }
 
 // ----------------------------------------------------------------------- fila
+export type TipoQuestao = "resposta_livre" | "certo_errado";
+
 export type Questao = {
   id: number;
   disciplina: string;
   tema: string;
   enunciado: string;
+  /** Discursiva: o gabarito. Item C/E: a JUSTIFICATIVA (por que está certo
+   *  ou errado) — a coluna é NOT NULL nos dois tipos, com papéis diferentes
+   *  (migração 012). */
   gabarito: string;
   dicas: string[];
+  tipo: TipoQuestao;
+  /** Só no item C/E; `null` na discursiva (CHECK no banco garante). */
+  gabarito_ce: boolean | null;
   caixa: number;
   prox_revisao: string;
 };
@@ -305,7 +313,10 @@ export type QuestaoSimulado = {
   disciplina: string;
   tema: string;
   enunciado: string;
+  /** Discursiva: gabarito. Item C/E: justificativa (migração 012). */
   gabarito: string;
+  tipo: TipoQuestao;
+  gabarito_ce: boolean | null;
 };
 
 export function iniciarSimulado(
@@ -406,10 +417,16 @@ export type QuestoesGeradas = {
   fontes: string[];
 };
 
-export function gerarQuestoes(tema?: string, quantidade = 3): Promise<QuestoesGeradas> {
+export function gerarQuestoes(
+  tema?: string,
+  quantidade = 3,
+  /** Omitido = o servidor decide pela banca da mesa (Cebraspe -> item
+   *  C/E). A regra de "qual formato treinar" tem um dono só, e é ele. */
+  tipo?: TipoQuestao
+): Promise<QuestoesGeradas> {
   return chamar<QuestoesGeradas>("/questoes/gerar", {
     method: "POST",
-    body: JSON.stringify({ tema, quantidade }),
+    body: JSON.stringify({ tema, quantidade, tipo }),
   });
 }
 

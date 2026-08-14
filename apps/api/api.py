@@ -40,7 +40,7 @@ from core import (auth, desafio, edital, geracao, mesa, questoes, rascunho, ritm
 from core.config import CORS_ORIGINS
 from core.llm import ErroLLM
 
-VERSAO = "api-v3"
+VERSAO = "api-v4"
 
 app = FastAPI(title="Tutor de concursos — API", version=VERSAO)
 
@@ -292,8 +292,9 @@ def rota_avaliar(qid: int, body: AvaliarBody, uid: int = Depends(usuario_atual))
     if not q:
         raise HTTPException(404, "questão não encontrada")
     try:
-        return socratic.avaliar(q["enunciado"], q["gabarito"], body.resposta, body.nivel,
-                                body.historico)
+        # Dispatcher, não `avaliar()` direto: item C/E é corrigido em código.
+        # Mandá-lo pro LLM compararia "C" contra uma justificativa em prosa.
+        return socratic.avaliar_questao(q, body.resposta, body.nivel, body.historico)
     except ErroLLM as e:
         raise HTTPException(503, f"LLM indisponível: {e}")
 
@@ -432,6 +433,9 @@ def rota_perguntar(body: PerguntaBody, uid: int = Depends(usuario_atual),
 class GerarQuestaoBody(BaseModel):
     tema: str | None = None
     quantidade: int = 3
+    # None = decidir pela banca da mesa (Cebraspe -> item C/E). Explícito
+    # vence, pra quem quer treinar o outro formato de propósito.
+    tipo: str | None = None
 
 
 @app.post("/questoes/gerar")
@@ -449,7 +453,8 @@ def rota_gerar_questoes(body: GerarQuestaoBody, uid: int = Depends(usuario_atual
     com `tema` = "quero questão disto que a gente acabou de conversar".
     """
     try:
-        return geracao.sob_demanda(m["disciplinas"], body.tema, body.quantidade)
+        tipo = body.tipo or geracao.tipo_da_banca(m.get("banca"))
+        return geracao.sob_demanda(m["disciplinas"], body.tema, body.quantidade, tipo)
     except geracao.SemMaterial as e:
         # 409, não 500: o pedido é válido e o sistema está são — o acervo é
         # que não tem material dessa matéria. A tela precisa distinguir isso

@@ -29,7 +29,7 @@ o que importa (caixa, prox_revisao) já viaja pela tentativa comum.
 """
 from . import db, mesa, socratic
 
-VERSAO = "simulado-v4"
+VERSAO = "simulado-v3"
 
 N_PADRAO = 20
 
@@ -44,7 +44,7 @@ def selecionar(n: int = N_PADRAO, disciplina: str | None = None,
     Penal devolve vazio, e isso é a resposta certa, não um bug.
     """
     return db.query(
-        f"""SELECT id, disciplina, tema, enunciado, gabarito
+        f"""SELECT id, disciplina, tema, enunciado, gabarito, tipo, gabarito_ce
            FROM questao q
            WHERE (%(d)s::text IS NULL OR disciplina = %(d)s)
              AND {mesa.filtro('q.disciplina')}
@@ -94,7 +94,9 @@ def corrigir(questao: dict, resposta: str) -> dict:
     if not resposta.strip():
         return {"veredito": "incorreta", "comentario": "(em branco)",
                 "pergunta": "", "conceito_faltante": ""}
-    return socratic.avaliar(questao["enunciado"], questao["gabarito"], resposta, nivel=0)
+    # Dispatcher: item C/E vira comparação booleana, sem LLM — numa prova
+    # de 40 itens Cebraspe isso é a diferença entre 40 chamadas e nenhuma.
+    return socratic.avaliar_questao(questao, resposta, nivel=0)
 
 
 def finalizar(simulado_id: int, usuario_id: int, segundos_total: int) -> dict:

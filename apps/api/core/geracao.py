@@ -42,7 +42,7 @@ import re
 
 from . import db, llm, mesa, retrieval, socratic
 
-VERSAO = "geracao-v1"
+VERSAO = "geracao-v2"
 
 MIN_TEXTO = 140          # abaixo disso é stub, revogado ou remissão
 MAX_POR_VEZ = 5          # teto por chamada: cota de LLM é o recurso escasso
@@ -101,12 +101,18 @@ def salvar(questoes: list[dict], lote: list[dict]) -> tuple[list[dict], list[str
             continue
         nova = db.exec1(
             """INSERT INTO questao (documento_id, disciplina, tema, enunciado,
-                                    gabarito, dicas, fonte_chunks)
-               VALUES (%(d)s, %(disc)s, %(t)s, %(e)s, %(g)s, %(dic)s, %(f)s)
-               RETURNING id, disciplina, tema, enunciado, gabarito, dicas""",
+                                    gabarito, dicas, fonte_chunks, tipo, gabarito_ce)
+               VALUES (%(d)s, %(disc)s, %(t)s, %(e)s, %(g)s, %(dic)s, %(f)s,
+                       %(tipo)s, %(ce)s)
+               RETURNING id, disciplina, tema, enunciado, gabarito, dicas,
+                         tipo, gabarito_ce""",
             {"d": chunk["documento_id"], "disc": chunk["disciplina"], "t": q["tema"],
              "e": q["enunciado"], "g": q["gabarito"], "dic": json.dumps(q["dicas"]),
-             "f": [chunk["id"]]},
+             "f": [chunk["id"]],
+             # `.get` com default preserva o contrato antigo: quem chamar
+             # `salvar` com dicionário sem `tipo` (código anterior à 012)
+             # continua gravando discursiva, não quebra nem grava NULL.
+             "tipo": q.get("tipo", "resposta_livre"), "ce": q.get("gabarito_ce")},
         )
         salvas.append(nova)
     return salvas, descartes
@@ -167,8 +173,28 @@ def _por_tema(tema: str, limite: int) -> list[int]:
     return [r["id"] for r in ordenados[:limite]]
 
 
+BANCAS_CERTO_ERRADO = ("cebraspe", "cespe", "unb")
+
+
+def tipo_da_banca(banca: str | None) -> str:
+    """
+    A banca decide o FORMATO do item, e a mesa já sabe qual é.
+
+    Não é firula: treinar discursiva pra uma prova Cebraspe é treinar o
+    exercício errado. O item C/E tem um vício próprio (marcar Certo sem ler
+    a alteração de prazo ou de "poderá/deverá"), e só se treina esse vício
+    respondendo nesse formato.
+
+    Função pura e separada pra poder ser testada sem banco e pra o padrão
+    ficar visível — banca desconhecida cai em discursiva, que é o
+    comportamento de antes da 012.
+    """
+    b = (banca or "").strip().lower()
+    return "certo_errado" if any(x in b for x in BANCAS_CERTO_ERRADO) else "resposta_livre"
+
+
 def sob_demanda(disciplinas: list[str] | None = None, tema: str | None = None,
-                quantidade: int = 3) -> dict:
+                quantidade: int = 3, tipo: str = "resposta_livre") -> dict:
     """
     Gera até `quantidade` questões e grava as que têm proveniência.
 
@@ -194,7 +220,7 @@ def sob_demanda(disciplinas: list[str] | None = None, tema: str | None = None,
 
     lote = _lote_por_ids(ids)
     try:
-        questoes = socratic.gerar_questoes(lote, len(lote))
+        questoes = socratic.gerar_questoes(lote, len(lote), tipo)
     except llm.ErroLLM:
         raise
     salvas, descartes = salvar(questoes, lote)

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AvisoAcervo } from "@/components/AvisoAcervo";
-import { DialogoQuestao } from "@/components/DialogoQuestao";
+import { QuestaoInterativa } from "@/components/QuestaoInterativa";
 import { SimuladoRunner } from "@/components/SimuladoRunner";
 import { Sugestao } from "@/components/Sugestao";
 import { ErroApi, PlanoDesafio, getDesafio, getToken, iniciarSimuladoComIds, limparToken } from "@/lib/api";
@@ -13,7 +13,7 @@ type Bloco = "plano" | "reincidentes" | "novas" | "simulado" | "fim";
 /**
  * Composição, não módulo novo — mesmo espírito de core/desafio.py: este
  * componente só decide QUAL bloco mostrar agora; quem resolve de verdade é
- * <DialogoQuestao> (blocos 1 e 2) e <SimuladoRunner> (bloco 3), os mesmos
+ * <QuestaoInterativa> (blocos 1 e 2) e <SimuladoRunner> (bloco 3), os mesmos
  * componentes que /questao/[id] e /simulado já usam.
  */
 export default function PaginaDesafio() {
@@ -141,7 +141,7 @@ export default function PaginaDesafio() {
             questão 2 abria já na tela de resultado da questão 1, e clicar
             "próxima" pulava o bloco inteiro sem registrar tentativa
             nenhuma. Encontrado ao conferir o cronômetro, não em produção. */}
-        <DialogoQuestao
+        <QuestaoInterativa
           key={q.id}
           questao={q}
           rotuloContinuar="Próxima"

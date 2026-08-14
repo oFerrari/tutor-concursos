@@ -13,7 +13,7 @@ Sem isso, modelo pequeno erra a sintaxe e a sessão de estudo morre no meio.
 """
 from . import llm, retrieval
 
-VERSAO = "socratic-v25"
+VERSAO = "socratic-v26"
 
 # ------------------------------------------------------------------ schemas
 # Subconjunto OpenAPI aceito pelo Gemini. propertyOrdering importa: o modelo
@@ -85,6 +85,49 @@ completo: a primeira reorienta o olhar, a segunda restringe o campo, a terceira 
 como aparece no material: "312", "121-A", "8º". Nunca invente número, nunca escreva "Art.".
 - Uma questão por artigo. Se pedirem 3 questões, use 3 artigos diferentes do material."""
 
+ESQUEMA_QUESTOES_CE = {
+    "type": "ARRAY",
+    "items": {
+        "type": "OBJECT",
+        "properties": {
+            "artigo": {"type": "STRING"},
+            "tema": {"type": "STRING"},
+            "enunciado": {"type": "STRING"},
+            "gabarito_ce": {"type": "BOOLEAN"},
+            "justificativa": {"type": "STRING"},
+        },
+        "required": ["artigo", "tema", "enunciado", "gabarito_ce", "justificativa"],
+        "propertyOrdering": ["artigo", "tema", "enunciado", "gabarito_ce", "justificativa"],
+    },
+}
+
+SISTEMA_GERADOR_CE = """Você elabora itens de prova no formato CERTO/ERRADO do Cebraspe \
+(CESPE), a partir de um material de lei fornecido.
+
+O formato:
+- O item é uma ASSERTIVA afirmativa, nunca uma pergunta. Não escreva "?" nem "assinale".
+- O aluno julga se a assertiva está certa ou errada. Não existe meio-termo.
+- Uma assertiva cobra UM ponto verificável no material. Não junte dois com "e".
+
+Regras:
+- Use exclusivamente o conteúdo do material. Não invente dispositivo, número ou prazo.
+- APROXIMADAMENTE METADE dos itens deve ser ERRADO. Um lote todo CERTO ensina o aluno a \
+marcar Certo sem ler, que é o vício que o formato Cebraspe pune.
+- Item ERRADO se faz por UMA alteração específica e verificável no texto da lei — nunca por \
+absurdo óbvio nem por assertiva vaga. Alterações que o Cebraspe usa de verdade:
+  · trocar o prazo ou o número ("trinta dias" -> "sessenta dias");
+  · trocar faculdade por dever ("poderá" -> "deverá") e vice-versa;
+  · inverter a competência ou o sujeito (quem pratica, quem julga, quem autoriza);
+  · ampliar ou restringir a hipótese ("em qualquer caso" onde a lei traz exceção);
+  · afirmar como regra o que a lei traz como exceção.
+- A `justificativa` diz POR QUE, apontando o dispositivo, e no item ERRADO diz o que a lei \
+realmente estabelece. É o que o aluno lê depois de responder: sem ela, ele acerta ou erra e \
+não aprende nada.
+- Enunciado com no máximo 3 frases. Justificativa com no máximo 3 frases.
+- O campo `artigo` recebe SÓ o número do dispositivo de onde o item saiu, como aparece no \
+material: "312", "121-A", "8º". Nunca invente número, nunca escreva "Art.".
+- Um item por artigo. Se pedirem 3 itens, use 3 artigos diferentes do material."""
+
 LOTE_GERACAO = 3   # questões por chamada; lotes grandes estouram o limite de tokens
 
 
@@ -137,6 +180,73 @@ def avaliar(enunciado: str, gabarito: str, resposta: str, nivel: int,
         # a política de revelação é nossa, não do modelo
         "revelar_gabarito": veredito == "correta" or nivel >= 2,
     }
+
+
+CERTO = {"c", "certo", "certa", "v", "verdadeiro", "true", "1"}
+ERRADO = {"e", "errado", "errada", "f", "falso", "false", "0"}
+
+
+def avaliar_certo_errado(gabarito_ce: bool, resposta: str) -> dict:
+    """
+    Corrige item Cebraspe SEM chamar o modelo. Mesma forma de retorno de
+    `avaliar()`, pra quem consome não precisar de dois caminhos.
+
+    POR QUE NÃO PASSA PELO LLM: a resposta é um booleano. Mandar "o aluno
+    respondeu Certo, o gabarito é Certo, ele acertou?" pra um modelo custa
+    cota, demora, e introduz chance de erro num julgamento que `==` faz sem
+    erro nenhum. É a mesma família de decisão de "retenção do gabarito é
+    imposta em código": o que dá pra decidir com regra, decide-se com regra.
+
+    POR QUE NÃO HÁ DIÁLOGO SOCRÁTICO NEM DICA AQUI: a escada socrática
+    (pista → pergunta-guia → gabarito) existe pra conduzir alguém que está
+    construindo uma resposta. Num item binário não há o que conduzir —
+    qualquer dica sobre uma assertiva de 50% de chance É a resposta, e
+    "tente de novo" vira cara ou coroa com o gabarito garantido na segunda.
+    Por isso o veredito sai fechado e a justificativa aparece na hora: o
+    aprendizado do item C/E está em LER POR QUE, não em tentar de novo.
+
+    Não existe `parcial`: metade de um booleano não é nada. Isso importa
+    além da estética — `scheduler_regras.proxima_caixa` desce uma caixa no
+    parcial, e um item C/E que caísse ali estaria sendo punido por um
+    estado que ele não pode ocupar.
+    """
+    escolha = (resposta or "").strip().lower()
+    if escolha in CERTO:
+        marcou = True
+    elif escolha in ERRADO:
+        marcou = False
+    else:
+        # Em branco/ilegível é erro por definição, igual a `simulado.corrigir`
+        # — e nunca acerto por acidente de parsing.
+        return {"veredito": "incorreta", "comentario": "(sem resposta)",
+                "pergunta": "", "conceito_faltante": "", "revelar_gabarito": True}
+
+    acertou = marcou == gabarito_ce
+    esperado = "CERTO" if gabarito_ce else "ERRADO"
+    return {
+        "veredito": "correta" if acertou else "incorreta",
+        "comentario": f"O item está {esperado}." if not acertou else f"Isso: {esperado}.",
+        "pergunta": "",
+        "conceito_faltante": "",
+        "revelar_gabarito": True,
+    }
+
+
+def avaliar_questao(questao: dict, resposta: str, nivel: int = 0,
+                    historico: list[dict] | None = None) -> dict:
+    """
+    O ÚNICO lugar que decide como uma questão é corrigida, pelo seu tipo.
+
+    Existe porque os caminhos de correção são quatro (rota de avaliação,
+    simulado, desafio, CLI) e todos chamavam `avaliar()` direto. Cada um que
+    esquecesse de olhar o tipo mandaria um item C/E pro julgamento por LLM,
+    que compararia "C" contra uma justificativa em prosa e devolveria
+    qualquer coisa — errado, caro e silencioso. Um dispatcher, quatro
+    chamadores; mesmo princípio de `mesa.filtro` viver num lugar só.
+    """
+    if questao.get("tipo") == "certo_errado":
+        return avaliar_certo_errado(questao["gabarito_ce"], resposta)
+    return avaliar(questao["enunciado"], questao["gabarito"], resposta, nivel, historico)
 
 
 def _resumo_desempenho(usuario_id: int, disciplinas: list[str] | None = None) -> str | None:
@@ -262,8 +372,17 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     return {"resposta": resposta, "fontes": chunks}
 
 
-def gerar_questoes(chunks: list[dict], quantidade: int = 5) -> list[dict]:
-    """Gera em lotes pequenos: uma chamada pedindo 10 questões estoura tokens."""
+def gerar_questoes(chunks: list[dict], quantidade: int = 5,
+                   tipo: str = "resposta_livre") -> list[dict]:
+    """
+    Gera em lotes pequenos: uma chamada pedindo 10 questões estoura tokens.
+
+    `tipo` troca prompt, schema e validação — o resto do laço (deduplicar
+    tema, parar quando o modelo trava, cortar no pedido) é idêntico nos dois
+    formatos, e duplicar a função pra trocar duas constantes faria as
+    correções futuras do laço valerem só pra metade.
+    """
+    ce = tipo == "certo_errado"
     contexto = retrieval.formatar_contexto(chunks)
     modelo = llm.obter()
     coletadas: list[dict] = []
@@ -271,22 +390,29 @@ def gerar_questoes(chunks: list[dict], quantidade: int = 5) -> list[dict]:
 
     while restante > 0:
         pedido = min(LOTE_GERACAO, restante)
-        prompt = (f"Gere {pedido} questões a partir do material.\n\n"
+        rotulo = "itens CERTO/ERRADO" if ce else "questões"
+        prompt = (f"Gere {pedido} {rotulo} a partir do material.\n\n"
                   f"MATERIAL:\n{contexto}")
         if coletadas:
             temas = ", ".join(q["tema"] for q in coletadas)
             prompt += f"\n\nNÃO repita estes temas já cobrados: {temas}"
-        itens = modelo.gerar_json(prompt, SISTEMA_GERADOR,
-                                  max_tokens=4096, schema=ESQUEMA_QUESTOES)
+        itens = modelo.gerar_json(prompt,
+                                  SISTEMA_GERADOR_CE if ce else SISTEMA_GERADOR,
+                                  max_tokens=4096,
+                                  schema=ESQUEMA_QUESTOES_CE if ce else ESQUEMA_QUESTOES)
         if isinstance(itens, dict):
             itens = itens.get("questoes", [])
-        novas = _validar(itens)
+        novas = _validar_ce(itens) if ce else _validar(itens)
         if not novas:
             break               # modelo travou; devolve o que já veio
         coletadas.extend(novas)
         restante = quantidade - len(coletadas)
 
     return coletadas[:quantidade]
+
+
+def _artigo_limpo(q) -> str | None:
+    return (q.get("artigo") or "").strip().replace("Art.", "").strip() or None
 
 
 def _validar(itens) -> list[dict]:
@@ -296,10 +422,42 @@ def _validar(itens) -> list[dict]:
             continue
         dicas = [str(d).strip() for d in (q.get("dicas") or []) if str(d).strip()]
         validas.append({
-            "artigo": (q.get("artigo") or "").strip().replace("Art.", "").strip() or None,
+            "tipo": "resposta_livre",
+            "artigo": _artigo_limpo(q),
             "tema": (q.get("tema") or "Sem tema").strip(),
             "enunciado": q["enunciado"].strip(),
             "gabarito": q["gabarito"].strip(),
+            "gabarito_ce": None,
             "dicas": dicas[:3],
+        })
+    return validas
+
+
+def _validar_ce(itens) -> list[dict]:
+    """
+    `gabarito_ce` é checado com `isinstance(..., bool)`, não por veracidade:
+    `if not q.get("gabarito_ce")` descartaria TODO item cujo gabarito é
+    ERRADO (False é falsy) — metade do lote, e justamente a metade que dá
+    valor ao formato. Item sem o campo, ou com string no lugar do booleano,
+    é que não serve.
+
+    A justificativa vira `gabarito` (a coluna segue NOT NULL nos dois
+    tipos) e `dicas` fica vazia de propósito: não há escada socrática num
+    item binário — ver `avaliar_certo_errado`.
+    """
+    validas = []
+    for q in itens or []:
+        if not isinstance(q, dict) or not q.get("enunciado"):
+            continue
+        if not isinstance(q.get("gabarito_ce"), bool) or not q.get("justificativa"):
+            continue
+        validas.append({
+            "tipo": "certo_errado",
+            "artigo": _artigo_limpo(q),
+            "tema": (q.get("tema") or "Sem tema").strip(),
+            "enunciado": q["enunciado"].strip(),
+            "gabarito": q["justificativa"].strip(),
+            "gabarito_ce": q["gabarito_ce"],
+            "dicas": [],
         })
     return validas

@@ -42,7 +42,7 @@ from core import auth, desafio as desafio_mod
 from core import llm, mesa as mesa_mod, ritmo, scheduler, simulado as simulado_mod, socratic
 from core.config import CLI_USUARIO_EMAIL
 
-VERSAO = "chat-v28"
+VERSAO = "chat-v21"
 con = Console()
 MAX_DICAS = 3
 
@@ -202,8 +202,10 @@ def _estudar_lista(uid: int, pendentes: list) -> bool:
             ultima_resposta = resposta
             with con.status("corrigindo…"):
                 try:
-                    av = socratic.avaliar(q["enunciado"], q["gabarito"], resposta,
-                                          erradas, historico)
+                    # Dispatcher, não `avaliar()`: item C/E é corrigido em
+                    # código. A CLI seguia chamando o LLM direto e compararia
+                    # "C" contra a justificativa em prosa — errado e pago.
+                    av = socratic.avaliar_questao(q, resposta, erradas, historico)
                 except llm.ErroLLM as e:
                     con.print(f"[red]LLM indisponível:[/] {e}")
                     con.print(Panel(q["gabarito"], title="gabarito", border_style="green"))
