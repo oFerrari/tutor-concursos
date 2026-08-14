@@ -3,14 +3,16 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, ChevronDown, LogOut, Plus, Trash2 } from "lucide-react";
+import { Check, ChevronDown, Pencil, Plus, Trash2 } from "lucide-react";
 import { Confirmar } from "@/components/Confirmar";
+import { MenuConta } from "@/components/MenuConta";
 import { Marca } from "@/components/Marca";
 import {
   ErroApi,
   MesaNaLista,
   Usuario,
   apagarMesa,
+  atualizarMesa,
   criarMesa,
   getMe,
   getMesaAtiva,
@@ -51,11 +53,13 @@ function CartaoMesa({
   mesa,
   ativa,
   onEntrar,
+  onEditar,
   onApagar,
 }: {
   mesa: MesaNaLista;
   ativa: boolean;
   onEntrar: () => void;
+  onEditar: () => void;
   onApagar: () => void;
 }) {
   // TÓPICOS é a unidade do edital — é assim que o concurseiro pensa a
@@ -121,14 +125,23 @@ function CartaoMesa({
       </button>
 
       {/* Fora do <button> de propósito: botão dentro de botão não é HTML
-          válido e o clique de apagar acabaria entrando na mesa. */}
-      <button
-        onClick={onApagar}
-        aria-label={`apagar a mesa ${mesa.nome}`}
-        className="absolute right-3 top-3 rounded-lg p-1.5 text-subtle transition-colors hover:bg-surface-hover hover:text-danger"
-      >
-        <Trash2 className="h-3.5 w-3.5" />
-      </button>
+          válido e o clique nestes acabaria entrando na mesa. */}
+      <div className="absolute right-2.5 top-3 flex items-center gap-0.5">
+        <button
+          onClick={onEditar}
+          aria-label={`editar a mesa ${mesa.nome}`}
+          className="rounded-lg p-1.5 text-subtle transition-colors hover:bg-surface-hover hover:text-foreground"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+        <button
+          onClick={onApagar}
+          aria-label={`apagar a mesa ${mesa.nome}`}
+          className="rounded-lg p-1.5 text-subtle transition-colors hover:bg-surface-hover hover:text-danger"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
     </div>
   );
 }
@@ -136,7 +149,6 @@ function CartaoMesa({
 export default function PaginaMesas() {
   const router = useRouter();
   const [usuario, setUsuario] = useState<Usuario | null>(null);
-  const [menuAberto, setMenuAberto] = useState(false);
 
   const [mesas, setMesas] = useState<MesaNaLista[] | null>(null);
   const [ativa, setAtiva] = useState<number | null>(null);
@@ -151,6 +163,11 @@ export default function PaginaMesas() {
   // "modal aberto") é o que deixa o diálogo nomear qual mesa vai embora —
   // "Apagar a mesa?" sem o nome é onde se apaga a errada.
   const [paraApagar, setParaApagar] = useState<MesaNaLista | null>(null);
+  // Editar reaproveita O MESMO formulário de criar: os campos são os
+  // mesmos três (nome, órgão, banca) e manter dois formulários faria o
+  // próximo campo novo nascer só num deles. `editando` diz qual mesa está
+  // sendo alterada; `null` com `criando` verdadeiro = mesa nova.
+  const [editando, setEditando] = useState<MesaNaLista | null>(null);
 
   const carregar = useCallback(async () => {
     try {
@@ -184,17 +201,43 @@ export default function PaginaMesas() {
     router.push("/");
   }
 
-  async function aoCriar(e: React.FormEvent) {
+  function limparFormulario() {
+    setNome("");
+    setOrgao("");
+    setBanca("");
+    setCriando(false);
+    setEditando(null);
+  }
+
+  async function aoSalvar(e: React.FormEvent) {
     e.preventDefault();
     if (!nome.trim() || salvando) return;
     setSalvando(true);
     setErro(null);
+
+    // EDIÇÃO não redireciona: quem renomeia a mesa quer continuar no lobby
+    // vendo o cartão com o nome novo. Só a CRIAÇÃO leva embora, porque a
+    // mesa nova ainda não tem edital e o próximo passo é subir o PDF.
+    if (editando) {
+      try {
+        await atualizarMesa(editando.id, {
+          nome: nome.trim(),
+          orgao: orgao.trim() || null,
+          banca: banca.trim() || null,
+        });
+        limparFormulario();
+        await carregar();
+      } catch (e) {
+        setErro(e instanceof ErroApi ? e.message : "Não deu pra salvar a mesa");
+      } finally {
+        setSalvando(false);
+      }
+      return;
+    }
+
     try {
       const nova = await criarMesa(nome.trim(), orgao || undefined, banca || undefined);
-      setNome("");
-      setOrgao("");
-      setBanca("");
-      setCriando(false);
+      limparFormulario();
       // Entra direto na mesa recém-criada E vai pro upload do edital.
       //
       // Mesa nova NUNCA tem edital — é o que a criação produz. Mandar pra
@@ -241,52 +284,15 @@ export default function PaginaMesas() {
           <Marca />
         </Link>
 
-        <div className="relative">
-          <button
-            onClick={() => setMenuAberto((a) => !a)}
-            className="flex items-center gap-2.5 rounded-full border border-line-soft py-1.5 pl-2 pr-3 transition-colors hover:bg-surface-hover"
-          >
+        <MenuConta usuario={usuario}>
+          <span className="flex items-center gap-2.5 rounded-full border border-line-soft py-1.5 pl-2 pr-3 transition-colors hover:bg-surface-hover">
             <span className="flex h-[26px] w-[26px] items-center justify-center rounded-full border border-line-strong bg-surface-hover text-[12px] font-semibold text-accent-text">
               {inicial}
             </span>
             <span className="max-w-[160px] truncate text-[13px]">{usuario?.email ?? "conta"}</span>
             <ChevronDown className="h-3.5 w-3.5 text-subtle" />
-          </button>
-
-          {menuAberto && (
-            <>
-              <div onClick={() => setMenuAberto(false)} className="fixed inset-0 z-[25]" />
-              <div className="absolute right-0 top-[calc(100%+8px)] z-30 w-[232px] rounded-[14px] border border-line-strong bg-surface p-1.5 shadow-[var(--shadow-drawer)]">
-                <div className="mb-1.5 border-b border-line-soft px-3 pb-3 pt-2.5">
-                  <p className="font-mono text-[11px] text-subtle">{usuario?.email ?? "—"}</p>
-                </div>
-                <Link
-                  href="/materiais"
-                  className="block rounded-[9px] px-3 py-2.5 text-[13px] text-body transition-colors hover:bg-surface-hover hover:text-foreground"
-                >
-                  Meus materiais
-                </Link>
-                <Link
-                  href="/meta"
-                  className="block rounded-[9px] px-3 py-2.5 text-[13px] text-body transition-colors hover:bg-surface-hover hover:text-foreground"
-                >
-                  Meu edital
-                </Link>
-                <div className="mx-1 my-1.5 h-px bg-line-soft" />
-                <button
-                  onClick={() => {
-                    limparToken();
-                    router.push("/login");
-                  }}
-                  className="flex w-full items-center gap-2.5 rounded-[9px] px-3 py-2.5 text-[13px] text-danger transition-colors hover:bg-surface-hover"
-                >
-                  <LogOut className="h-[15px] w-[15px]" />
-                  Sair da conta
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+          </span>
+        </MenuConta>
       </div>
 
       <h1 className="text-[30px]">
@@ -306,15 +312,27 @@ export default function PaginaMesas() {
             mesa={m}
             ativa={ativa === m.id}
             onEntrar={() => entrar(m.id)}
+            onEditar={() => {
+              setEditando(m);
+              setNome(m.nome);
+              setOrgao(m.orgao ?? "");
+              setBanca(m.banca ?? "");
+              setCriando(true);
+            }}
             onApagar={() => setParaApagar(m)}
           />
         ))}
 
         {criando ? (
           <form
-            onSubmit={aoCriar}
+            onSubmit={aoSalvar}
             className="flex min-h-[168px] flex-col gap-2.5 rounded-[14px] border border-line-strong bg-surface p-4"
           >
+            {/* `editando.nome` é o nome ORIGINAL (o estado guarda a mesa de
+                quando o lápis foi clicado), então ele não muda enquanto se
+                digita — é o que permite renomear sem perder a referência do
+                que está sendo renomeado. */}
+            {editando && <p className="rotulo mb-0.5">editando · {editando.nome}</p>}
             <input
               autoFocus
               value={nome}
@@ -336,10 +354,14 @@ export default function PaginaMesas() {
             />
             <div className="mt-auto flex gap-2">
               <button type="submit" disabled={!nome.trim() || salvando} className="btn-primary">
-                {salvando ? "criando…" : "criar mesa"}
+                {salvando
+                  ? "Salvando…"
+                  : editando
+                    ? "Salvar alterações"
+                    : "Criar mesa"}
               </button>
-              <button type="button" onClick={() => setCriando(false)} className="btn-ghost">
-                cancelar
+              <button type="button" onClick={limparFormulario} className="btn-ghost">
+                Cancelar
               </button>
             </div>
           </form>

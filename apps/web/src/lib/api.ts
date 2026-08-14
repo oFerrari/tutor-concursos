@@ -202,6 +202,16 @@ export function criarMesa(nome: string, orgao?: string, banca?: string): Promise
   });
 }
 
+export function atualizarMesa(
+  id: number,
+  campos: { nome?: string; orgao?: string | null; banca?: string | null }
+): Promise<Mesa> {
+  return chamar<Mesa>(`/mesas/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(campos),
+  });
+}
+
 export function apagarMesa(id: number): Promise<{ ok: boolean }> {
   return chamar(`/mesas/${id}`, { method: "DELETE" });
 }

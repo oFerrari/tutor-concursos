@@ -300,7 +300,7 @@ def meta(usuario_id: int, data_prova: date | None = None, mesa_id: int | None = 
             # navegador, onde não existe terminal nenhum. `core/` é
             # compartilhado por CLI e API: o que sai daqui não pode
             # presumir por qual das duas a pessoa chegou.
-            "aviso": "sem data de prova conhecida — ingira o edital ou informe a data",
+            "aviso": "Sem data de prova conhecida — ingira o edital ou informe a data.",
         }
 
     dias = max((data_prova - date.today()).days, 0)

@@ -322,6 +322,13 @@
            disabled:cursor-not-allowed disabled:opacity-50;
   }
 
+  /* Linha de menu suspenso — mesma forma no menu da conta e em qualquer
+     dropdown futuro. Estava duplicada em duas telas com paddings diferentes. */
+  .item-menu {
+    @apply flex w-full items-center gap-2.5 rounded-[9px] px-3 py-2.5 text-left text-[13px]
+           text-body transition-colors hover:bg-surface-hover hover:text-foreground;
+  }
+
   /* Ação DESTRUTIVA. Mesma pílula, mas contorno de perigo e texto rubro em
      vez do preenchimento sólido do `.btn-primary`: o botão que apaga não
      pode competir em peso visual com o que confirma — quem chega distraído

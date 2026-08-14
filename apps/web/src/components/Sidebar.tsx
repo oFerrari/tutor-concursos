@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   BarChart3,
   Book,
@@ -11,7 +11,6 @@ import {
   FileText,
   FolderOpen,
   LayoutDashboard,
-  LogOut,
   MessageSquare,
   MoreVertical,
   PanelLeftClose,
@@ -23,7 +22,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Marca, MarcaIcone } from "@/components/Marca";
-import { HistoricoSimulado, Mesa, Usuario, getMe, getSimulados, limparToken } from "@/lib/api";
+import { MenuConta } from "@/components/MenuConta";
+import { HistoricoSimulado, Mesa, Usuario, getMe, getSimulados } from "@/lib/api";
 
 // Ordem e rótulos do protótipo. "Fila do dia" não existe lá — mas existe
 // como rota real e funcionando aqui, e tirar do menu uma tela que funciona
@@ -98,7 +98,6 @@ const LARGURA_ABERTA = "w-[258px]";
  */
 export function Sidebar({ recolhida, onAlternar, mesa, drawer = false, onFechar }: Props) {
   const pathname = usePathname();
-  const router = useRouter();
   const [recentes, setRecentes] = useState<HistoricoSimulado[] | null>(null);
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [espiando, setEspiando] = useState(false);
@@ -114,11 +113,6 @@ export function Sidebar({ recolhida, onAlternar, mesa, drawer = false, onFechar 
       .then(setUsuario)
       .catch(() => {});
   }, []);
-
-  function sair() {
-    limparToken();
-    router.push("/login");
-  }
 
   const aberta = drawer || !recolhida || espiando;
   const nome = nomeDoEmail(usuario?.email);
@@ -227,24 +221,35 @@ export function Sidebar({ recolhida, onAlternar, mesa, drawer = false, onFechar 
           do `/me` — mesmo lugar, informação que existe. */}
       <div className="border-t border-line-soft pt-3">
         {aberta ? (
-          <div className="flex items-center gap-2.5 rounded-xl px-2 py-2 transition-colors hover:bg-surface-hover">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line-strong bg-surface-hover text-[12px] font-semibold text-accent-text">
-              {nome[0]}
+          /* O ⋮ ANTES deslogava direto: ícone de "mais opções" executando a
+             ação mais destrutiva da tela, sem menu e sem aviso. Agora ele
+             abre o mesmo menu do lobby — a pessoa clica pra ver o que tem e
+             vê o que tem. */
+          <MenuConta usuario={usuario} ancora="acima">
+            <span className="flex items-center gap-2.5 rounded-xl px-2 py-2 transition-colors hover:bg-surface-hover">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line-strong bg-surface-hover text-[12px] font-semibold text-accent-text">
+                {nome[0]}
+              </span>
+              <span className="min-w-0 flex-1 text-left">
+                <span className="block truncate text-[13.5px] font-semibold">{nome}</span>
+                <span className="block truncate font-mono text-[11px] text-subtle">
+                  {usuario?.email ?? "—"}
+                </span>
+              </span>
+              <MoreVertical className="h-4 w-4 shrink-0 text-subtle" />
             </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13.5px] font-semibold">{nome}</span>
-              <span className="block truncate font-mono text-[11px] text-subtle">
-                {usuario?.email ?? "—"}
+          </MenuConta>
+        ) : (
+          /* Recolhida também abre o MENU, não desloga direto: "trocar de
+             mesa" é a opção mais usada daqui, e ela sumia justamente no
+             estado em que a nav ocupa menos espaço. */
+          <MenuConta usuario={usuario} ancora="acima">
+            <span className="sidebar-link w-full justify-center" aria-label="conta">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full border border-line-strong bg-surface-hover text-[11px] font-semibold text-accent-text">
+                {nome[0]}
               </span>
             </span>
-            <button onClick={sair} className="shrink-0 text-subtle transition-colors hover:text-danger" aria-label="sair da conta">
-              <MoreVertical className="h-4 w-4" />
-            </button>
-          </div>
-        ) : (
-          <button onClick={sair} className="sidebar-link w-full justify-center" aria-label="sair da conta">
-            <LogOut className="h-4 w-4 shrink-0" strokeWidth={2.2} />
-          </button>
+          </MenuConta>
         )}
       </div>
     </>
