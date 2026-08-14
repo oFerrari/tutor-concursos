@@ -6,11 +6,10 @@ import {
   EditalAtual,
   ErroApi,
   Meta,
-  ResultadoIngestaoEdital,
   getEdital,
   getMeta,
   getToken,
-  ingerirEdital,
+  criarRascunho,
   limparToken,
 } from "@/lib/api";
 
@@ -20,11 +19,7 @@ export default function PaginaMeta() {
   const [edital, setEdital] = useState<EditalAtual | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
-  const [arquivo, setArquivo] = useState<File | null>(null);
-  const [orgao, setOrgao] = useState("");
-  const [banca, setBanca] = useState("");
   const [enviando, setEnviando] = useState(false);
-  const [resultadoUpload, setResultadoUpload] = useState<ResultadoIngestaoEdital | null>(null);
 
   async function carregar() {
     try {
@@ -56,22 +51,16 @@ export default function PaginaMeta() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
-  async function aoEnviarEdital(e: React.FormEvent) {
-    e.preventDefault();
-    if (!arquivo || enviando) return;
+  async function enviarEdital(arquivo: File) {
     setEnviando(true);
     setErro(null);
     try {
-      // Sem título explícito, a API cairia no nome do arquivo TEMPORÁRIO
-      // (aleatório, ilegível) — o nome do PDF enviado é o fallback que
-      // faz sentido, não o arquivo interno que o servidor cria pra salvar o upload.
-      const tituloPadrao = arquivo.name.replace(/\.pdf$/i, "");
-      const r = await ingerirEdital(arquivo, tituloPadrao, orgao || undefined, banca || undefined);
-      setResultadoUpload(r);
-      await carregar(); // meta/edital agora refletem o que acabou de subir
+      // Vai pra CURADORIA, não direto pro banco: o edital pode ter vários
+      // cargos, e quem escolhe qual entra na mesa é a pessoa.
+      const d = await criarRascunho(arquivo, arquivo.name.replace(/\.pdf$/i, ""));
+      router.push(`/edital/${d.id}`);
     } catch (e) {
-      setErro(e instanceof ErroApi ? e.message : "não deu pra ingerir o edital");
-    } finally {
+      setErro(e instanceof ErroApi ? e.message : "não deu pra ler o edital");
       setEnviando(false);
     }
   }
@@ -144,54 +133,24 @@ export default function PaginaMeta() {
         <h2 className="mb-3 text-sm font-medium text-muted">
           {edital ? "ingerir outro edital" : "ingerir edital"}
         </h2>
-        <form onSubmit={aoEnviarEdital} className="max-w-sm space-y-3">
-          <input
-            type="file"
-            accept="application/pdf"
-            onChange={(e) => setArquivo(e.target.files?.[0] ?? null)}
-            className="block w-full text-sm text-muted"
-          />
-          <input
-            type="text"
-            placeholder="órgão (opcional)"
-            value={orgao}
-            onChange={(e) => setOrgao(e.target.value)}
-            className="field"
-          />
-          <input
-            type="text"
-            placeholder="banca (opcional)"
-            value={banca}
-            onChange={(e) => setBanca(e.target.value)}
-            className="field"
-          />
-          <button type="submit" disabled={!arquivo || enviando} className="btn-primary">
-            {enviando ? "processando…" : "enviar"}
-          </button>
-        </form>
-
-        {resultadoUpload && (
-          <div className="mt-4 card text-sm">
-            <p>
-              data da prova identificada: <strong>{resultadoUpload.data_prova ?? "não encontrada"}</strong>
-            </p>
-            {resultadoUpload.candidatos_data.length > 1 && (
-              <div className="mt-2 text-xs text-muted">
-                <p>outros candidatos (confira se a escolha acima está certa):</p>
-                <ul className="mt-1 space-y-1">
-                  {resultadoUpload.candidatos_data.slice(1).map((c, i) => (
-                    <li key={i}>
-                      {c.data} (pontuação {c.pontuacao}) — …{c.contexto}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            <p className="mt-2 text-muted">
-              {resultadoUpload.topicos} tópicos em {resultadoUpload.disciplinas.length} disciplinas
-            </p>
-          </div>
-        )}
+        <input
+          type="file"
+          accept="application/pdf"
+          disabled={enviando}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            // zera pra permitir reescolher o MESMO arquivo (o `change` só
+            // dispara quando o value muda)
+            e.target.value = "";
+            if (f) enviarEdital(f);
+          }}
+          className="block w-full text-sm text-muted"
+        />
+        <p className="mt-2 text-[12px] text-subtle">
+          {enviando
+            ? "lendo o edital…"
+            : "o PDF vai pra uma tela de conferência: você escolhe o cargo e revisa as matérias antes de valer."}
+        </p>
       </div>
     </div>
   );

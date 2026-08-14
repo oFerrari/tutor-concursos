@@ -35,7 +35,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
-from core import auth, desafio, edital, mesa, questoes, ritmo, scheduler, simulado, socratic
+from core import (auth, desafio, edital, mesa, questoes, rascunho, ritmo, scheduler,
+                  simulado, socratic)
 from core.config import CORS_ORIGINS
 from core.llm import ErroLLM
 
@@ -458,6 +459,78 @@ def rota_ingerir_edital(arquivo: UploadFile = File(...), titulo: str | None = Fo
                               orgao=orgao, banca=banca)
     finally:
         caminho.unlink(missing_ok=True)
+
+
+# ----------------------------------------------------- edital: curadoria
+# Fluxo em dois tempos, e o intervalo entre eles é o ponto: subir o PDF NÃO
+# cria edital nenhum, só um rascunho. Quem transforma extração em dado
+# oficial — e portanto em fila SM-2, meta e cobertura — é a pessoa, depois
+# de escolher o cargo e ajustar as disciplinas. Ver core/rascunho.py.
+def _texto_do_pdf(arquivo: UploadFile) -> str:
+    from pypdf import PdfReader
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        tmp.write(arquivo.file.read())
+        caminho = Path(tmp.name)
+    try:
+        reader = PdfReader(str(caminho))
+        return "\n\n".join((p.extract_text() or "") for p in reader.pages)
+    finally:
+        caminho.unlink(missing_ok=True)
+
+
+@app.post("/editais/rascunho")
+def rota_criar_rascunho(arquivo: UploadFile = File(...), titulo: str | None = Form(None),
+                        uid: int = Depends(usuario_atual)):
+    nome = _titulo_do_upload(arquivo)
+    try:
+        return rascunho.criar(uid, titulo or nome or "edital sem nome",
+                              _texto_do_pdf(arquivo), arquivo=arquivo.filename)
+    except ErroLLM as e:  # só chega aqui se o fallback foi acionado e caiu
+        raise HTTPException(503, f"LLM indisponível ao ler o edital: {e}")
+
+
+@app.get("/editais/rascunho/{rid}")
+def rota_obter_rascunho(rid: int, uid: int = Depends(usuario_atual)):
+    r = rascunho.obter(uid, rid)
+    if not r:
+        raise HTTPException(404, "rascunho não encontrado ou expirado")
+    return r
+
+
+@app.delete("/editais/rascunho/{rid}")
+def rota_apagar_rascunho(rid: int, uid: int = Depends(usuario_atual)):
+    if not rascunho.apagar(uid, rid):
+        raise HTTPException(404, "rascunho não encontrado ou expirado")
+    return {"ok": True}
+
+
+class DisciplinaCurada(BaseModel):
+    disciplina: str
+    topicos: list[str] = []
+
+
+class ConfirmarRascunhoBody(BaseModel):
+    disciplinas: list[DisciplinaCurada]
+    titulo: str | None = None
+    data_prova: date | None = None
+    orgao: str | None = None
+    banca: str | None = None
+
+
+@app.post("/editais/rascunho/{rid}/confirmar")
+def rota_confirmar_rascunho(rid: int, body: ConfirmarRascunhoBody,
+                            uid: int = Depends(usuario_atual),
+                            m: dict = Depends(mesa_atual)):
+    """Grava na MESA do header o que a pessoa curou — não o que o extrator
+    achou. A partir daqui isso é edital de verdade e passa a recortar a
+    mesa."""
+    try:
+        return rascunho.confirmar(uid, rid, m["id"],
+                                  [d.model_dump() for d in body.disciplinas],
+                                  titulo=body.titulo, data_prova=body.data_prova,
+                                  orgao=body.orgao, banca=body.banca)
+    except rascunho.ErroRascunho as e:
+        raise HTTPException(400, str(e))
 
 
 @app.get("/edital")

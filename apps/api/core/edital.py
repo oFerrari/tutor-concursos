@@ -84,14 +84,13 @@ RE_DISCIPLINA = re.compile(
     r"^[ \t]*(?:\d{1,2}[.)]\s+)?([A-ZÀ-Ü][A-ZÀ-Ü0-9 \t\-/&(),]{2,70}?)[ \t]*:",
     re.MULTILINE)
 
-# "PERFIL 3: DESENVOLVIMENTO DE SOFTWARE" — marcador de CARGO, não de
-# disciplina. Vira disciplina mesmo assim porque há perfis (o 1, por
-# exemplo) cujo conteúdo é uma lista numerada direta, sem subcabeçalho: sem
-# isso os tópicos dele cairiam na disciplina anterior, que é pior que um
-# nome de disciplina largo demais. Perfis COM subcabeçalhos ganham um bloco
-# vazio aqui, que morre sozinho por não ter subitem.
-RE_PERFIL = re.compile(
-    r"^[ \t]*PERFIL\s+\d{1,2}\s*[:\-–—]\s*(.+?)[ \t]*:?[ \t]*$",
+# MARCADOR DE CARGO. As duas bancas escrevem diferente e as duas cabem
+# aqui: "PERFIL 3: DESENVOLVIMENTO DE SOFTWARE" (FGV, 13 perfis no mesmo
+# edital) e "CARGO: DELEGADO DE POLÍCIA CIVIL" (AOCP, 3 cargos). É o
+# marcador que separa "o que todo mundo estuda" do "o que ESTE cargo
+# estuda" — sem ele os 13 perfis viravam 52 disciplinas numa mesa só.
+RE_CARGO = re.compile(
+    r"^[ \t]*(?:CARGO|PERFIL)\s*\d{0,2}\s*[:\-–—]\s*(.+?)[ \t]*:?[ \t]*$",
     re.MULTILINE | re.IGNORECASE)
 
 # Linhas que são ESTRUTURA do documento, não matéria de estudo.
@@ -236,19 +235,20 @@ def _continuacao_de_paragrafo(texto: str, inicio: int) -> bool:
     return bool(anterior) and anterior[-1] in "0123456789,;–-"
 
 
-def _cabecalhos(texto: str) -> list[tuple[int, int, str]]:
-    """(início, fim, nome) de cada cabeçalho, em ordem de posição."""
-    marcas = [(m.start(), m.end(), m.group(1)) for m in RE_PERFIL.finditer(texto)]
+def _marcas(texto: str) -> list[tuple[int, int, str, str]]:
+    """(início, fim, tipo, nome) de cada marcador, em ordem de posição.
+    tipo ∈ {"cargo", "disciplina"}."""
+    marcas = [(m.start(), m.end(), "cargo", m.group(1)) for m in RE_CARGO.finditer(texto)]
     for m in RE_DISCIPLINA.finditer(texto):
         if RE_ESTRUTURA.match(m.group(1).strip()):
             continue
         if _continuacao_de_paragrafo(texto, m.start()):
             continue
-        marcas.append((m.start(), m.end(), m.group(1)))
+        marcas.append((m.start(), m.end(), "disciplina", m.group(1)))
     marcas.sort()
-    # A linha do PERFIL casa nas duas regexes; fica a primeira (a do perfil,
-    # que captura o nome do cargo em vez do literal "PERFIL N").
-    limpo: list[tuple[int, int, str]] = []
+    # A linha do cargo casa nas duas regexes; fica a primeira (a do cargo,
+    # que captura o nome em vez do literal "PERFIL N").
+    limpo: list[tuple[int, int, str, str]] = []
     for marca in marcas:
         if limpo and marca[0] < limpo[-1][1]:
             continue
@@ -256,42 +256,162 @@ def _cabecalhos(texto: str) -> list[tuple[int, int, str]]:
     return limpo
 
 
-def extrair_topicos(texto: str) -> list[dict]:
-    """
-    [{"disciplina": ..., "ordem": N, "texto": "1.1.1 Princípios..."}]
+def _nome(bruto: str) -> str:
+    return re.sub(r"\s+", " ", bruto).strip(" :").title()
 
-    Cabeçalho de disciplina é detectado no texto CRU (ver RE_DISCIPLINA — a
-    quebra de linha é o sinal); só o corpo de cada bloco é normalizado, que
-    é onde a quebra de linha atrapalha. Ver limitações (1) e (2) no
-    docstring do módulo.
+
+def _topicos_do_bloco(bruto: str) -> list[str]:
+    # lstrip: o primeiro item do bloco precisa encostar no início da string
+    # pra RE_SUBITEM aceitá-lo pela alternativa `^` (ele é o único que não
+    # vem depois de pontuação — vem depois do cabeçalho).
+    bloco = _normalizar(bruto).lstrip()
+    subitens = list(RE_SUBITEM.finditer(bloco))
+    topicos = []
+    for j, s in enumerate(subitens):
+        fim = subitens[j + 1].start() if j + 1 < len(subitens) else len(bloco)
+        # Só FOLHA vira tópico: "4" seguido de "4.1" é o pai do próximo, e
+        # contar os dois inflaria a mesma matéria duas vezes — o denominador
+        # de "quantos tópicos existem" tem que ser o que se estuda, não a
+        # árvore inteira.
+        if j + 1 < len(subitens) and subitens[j + 1].group(1).startswith(s.group(1) + "."):
+            continue
+        texto = bloco[s.start():fim].strip()
+        if texto:
+            topicos.append(texto)
+    return topicos
+
+
+def extrair_estrutura(texto: str) -> dict:
+    """
+    {"comuns": [{"disciplina", "topicos"}], "cargos": [{"nome", "disciplinas"}]}
+
+    A REGRA DE AGRUPAMENTO É POSICIONAL, e os dois editais reais concordam
+    com ela: o conteúdo programático abre com o que vale pra TODO MUNDO
+    ("CONHECIMENTOS COMUNS PARA TODOS OS CARGOS" no AOCP, "MODULO I ...
+    PARA TODOS OS CARGOS/PERFIS" na FGV) e só depois começam os blocos de
+    cargo. Então: disciplina antes do primeiro marcador de cargo é comum;
+    depois dele, pertence ao cargo aberto.
+
+    Isso é o que faltava pra "1015 tópicos em 52 disciplinas" virar uma
+    escolha em vez de uma soma — os 13 perfis da Dataprev estavam todos
+    empilhados na mesma mesa.
+
+    Perfil que lista tópicos direto, sem subcabeçalho de disciplina (o
+    PERFIL 1 da FGV é assim), vira uma disciplina com o nome do próprio
+    cargo: melhor um nome largo demais que os tópicos caírem no cargo
+    anterior.
     """
     corpo, _ = recortar_conteudo_programatico(limpar_paginacao(texto))
-    marcas = _cabecalhos(corpo)
-    topicos = []
-    for i, (_, fim, bruto) in enumerate(marcas):
-        disciplina = re.sub(r"\s+", " ", bruto).strip(" :").title()
+    marcas = _marcas(corpo)
+    comuns: list[dict] = []
+    cargos: list[dict] = []
+    atual: dict | None = None
+
+    for i, (_, fim, tipo, bruto) in enumerate(marcas):
         # O teto no último bloco é rede de segurança pra quando o recorte do
         # conteúdo programático não encontrou marcador: sem ele, a última
         # disciplina engoliria o resto do documento inteiro.
         prox = marcas[i + 1][0] if i + 1 < len(marcas) else min(len(corpo), fim + 8000)
-        # lstrip: o primeiro item do bloco precisa encostar no início da
-        # string pra RE_SUBITEM aceitá-lo pela alternativa `^` (ele é o
-        # único que não vem depois de pontuação — vem depois do cabeçalho).
-        bloco = _normalizar(corpo[fim:prox]).lstrip()
-        subitens = list(RE_SUBITEM.finditer(bloco))
-        for j, s in enumerate(subitens):
-            fim_s = subitens[j + 1].start() if j + 1 < len(subitens) else len(bloco)
-            # Só FOLHA vira tópico: "4" seguido de "4.1" é o pai do próximo,
-            # e contar os dois inflaria a mesma matéria duas vezes — o
-            # denominador de "quantos tópicos existem" tem que ser o que se
-            # estuda, não a árvore inteira.
-            if j + 1 < len(subitens) and subitens[j + 1].group(1).startswith(s.group(1) + "."):
-                continue
-            texto_topico = bloco[s.start():fim_s].strip()
-            if texto_topico:
-                topicos.append({"disciplina": disciplina, "ordem": len(topicos),
-                                "texto": texto_topico})
+        topicos = _topicos_do_bloco(corpo[fim:prox])
+        if tipo == "cargo":
+            atual = {"nome": _nome(bruto), "disciplinas": []}
+            cargos.append(atual)
+            if topicos:
+                atual["disciplinas"].append({"disciplina": atual["nome"], "topicos": topicos})
+        elif topicos:
+            (atual["disciplinas"] if atual else comuns).append(
+                {"disciplina": _nome(bruto), "topicos": topicos})
+
+    return {"comuns": comuns, "cargos": cargos}
+
+
+def achatar(estrutura: dict, cargo: str | None = None) -> list[dict]:
+    """
+    Estrutura -> [{"disciplina", "ordem", "texto"}], que é a forma que
+    `topico` guarda. `cargo=None` junta tudo (comportamento anterior à
+    seleção de cargo); com cargo, junta comuns + só aquele cargo — é isso
+    que a curadoria persiste.
+    """
+    grupos = list(estrutura["comuns"])
+    for c in estrutura["cargos"]:
+        if cargo is None or c["nome"] == cargo:
+            grupos += c["disciplinas"]
+    topicos: list[dict] = []
+    for g in grupos:
+        for t in g["topicos"]:
+            topicos.append({"disciplina": g["disciplina"], "ordem": len(topicos), "texto": t})
     return topicos
+
+
+def extrair_topicos(texto: str) -> list[dict]:
+    """Todos os tópicos, de todos os cargos — a visão achatada de sempre.
+    Quem quer escolher cargo usa `extrair_estrutura()` + `achatar()`."""
+    return achatar(extrair_estrutura(texto))
+
+
+# ------------------------------------------------------------ fallback LLM
+_DISCIPLINA_SCHEMA = {
+    "type": "object",
+    "properties": {"disciplina": {"type": "string"},
+                   "topicos": {"type": "array", "items": {"type": "string"}}},
+    "required": ["disciplina", "topicos"],
+}
+ESQUEMA_ESTRUTURA = {
+    "type": "object",
+    "properties": {
+        "comuns": {"type": "array", "items": _DISCIPLINA_SCHEMA},
+        "cargos": {"type": "array", "items": {
+            "type": "object",
+            "properties": {"nome": {"type": "string"},
+                           "disciplinas": {"type": "array", "items": _DISCIPLINA_SCHEMA}},
+            "required": ["nome", "disciplinas"]}},
+    },
+    "required": ["comuns", "cargos"],
+}
+
+# Teto de texto mandado ao modelo. Edital inteiro estoura contexto e cota
+# sem necessidade: o que interessa é o conteúdo programático, que o
+# recorte já isolou.
+MAX_CHARS_LLM = 30_000
+
+
+def estrutura_com_fallback(texto: str) -> tuple[dict, str]:
+    """
+    Devolve (estrutura, origem) com origem ∈ {"parser", "llm"}.
+
+    O PARSER PRIMEIRO, SEMPRE. Ele acerta os dois layouts reais que existem
+    em fixture, custa zero cota, roda em milissegundos e é determinístico —
+    dá pra travar em teste, coisa que resposta de LLM não dá. O modelo só
+    entra quando o parser não achou disciplina NENHUMA, que é o sinal
+    honesto de "layout que eu não conheço".
+
+    O gatilho é "zero disciplina", não "zero cargo": concurso de cargo
+    único existe e é legítimo, e chamar o LLM nele seria queimar cota pra
+    confirmar o que o parser já acertou.
+
+    Falha do LLM não derruba a ingestão — devolve o que o parser tinha
+    (vazio) e a curadoria vira preenchimento manual. Melhor uma tela vazia
+    e honesta que um erro 503 em cima de um upload que o usuário já fez.
+    """
+    estrutura = extrair_estrutura(texto)
+    if estrutura["comuns"] or estrutura["cargos"]:
+        return estrutura, "parser"
+
+    from . import llm
+    corpo, _ = recortar_conteudo_programatico(limpar_paginacao(texto))
+    sistema = (
+        "Você extrai o conteúdo programático de editais de concurso público brasileiros. "
+        "Devolva SOMENTE o que está escrito no texto — nunca invente disciplina nem tópico, "
+        "e nunca resuma: cada item numerado do edital vira um tópico. "
+        "Disciplinas cobradas de TODOS os candidatos vão em `comuns`; as específicas de cada "
+        "cargo/perfil vão dentro do cargo correspondente. Se o edital tem um cargo só, "
+        "`cargos` pode ter um item só; se não separa por cargo, deixe `cargos` vazio."
+    )
+    try:
+        return llm.obter().gerar_json(
+            corpo[:MAX_CHARS_LLM], sistema, max_tokens=8000, schema=ESQUEMA_ESTRUTURA), "llm"
+    except (llm.ErroLLM, ValueError, KeyError, TypeError):
+        return estrutura, "parser"
 
 
 # --------------------------------------------------------------- borda (db)

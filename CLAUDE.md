@@ -52,6 +52,7 @@ db/007_edital.sql          tabelas edital e topico
 db/008_usuario.sql         usuario, progresso (caixa/prox_revisao saem de questao), usuario_id em tudo pessoal
 db/009_cascade_usuario.sql ON DELETE CASCADE consistente em toda FK pra usuario
 db/010_mesa.sql            mesa de estudo: edital passa a ser da mesa, simulado ganha etiqueta
+db/011_edital_rascunho.sql rascunho de edital: curadoria (escolher cargo) antes de virar oficial
 db/schema.dbml             schema documentado (DBML) — visualização, não fonte de verdade
 core/chunking.py           lei -> chunks por artigo (função pura)
 core/embeddings.py         e5 local, prefixos query:/passage:, cache
@@ -61,6 +62,7 @@ core/socratic.py           avaliação e geração de questões (schemas JSON)
 core/questoes.py           lookup simples do banco de questões (compartilhado, sem usuario_id)
 core/auth.py               hash de senha (bcrypt), token de sessão (JWT), usuário fixo da CLI
 core/mesa.py               mesa de estudo (o concurso-alvo) e o predicado de recorte por disciplina
+core/rascunho.py           curadoria do edital: extrai pra rascunho, pessoa escolhe o cargo, confirma
 core/scheduler_regras.py   regras de promoção — FUNÇÕES PURAS
 core/scheduler.py          fila, registro, caderno de erros, meta — tudo por usuario_id
 core/simulado.py           prova sob condição de exame: sem dica, corrige no final
@@ -479,6 +481,43 @@ porque nenhuma contagem denuncia. Só apareceu porque o fixture foi
 ATUALIZADO pra incluir a mobília depois que a primeira versão do conserto
 já estava "passando" — fixture limpo demais mente tanto quanto métrica
 errada (mesma lição de `diagnostico.py` auditar estrutura e não conteúdo).
+
+**Curadoria antes de virar oficial: subir o PDF cria um RASCUNHO, não um
+edital (migração 011).** Um edital tem vários cargos, e cada cargo tem
+conteúdo específico próprio. O da Dataprev tem TREZE perfis — ingerir tudo
+junto deu "1015 tópicos em 52 disciplinas", com Advocacia, Contabilidade e
+Engenharia dentro do plano de quem vai prestar TI. **Somar cargo é pior
+que não ler**: vira revisão espaçada de matéria que nunca vai cair na
+prova daquela pessoa. Agora `POST /editais/rascunho` extrai pra uma tabela
+temporária, a tela mostra os cargos encontrados, a pessoa escolhe um e
+ajusta a lista, e só o `confirmar` cria `edital` + `topico`. O erro do
+extrator morre na tela, antes de virar agendamento.
+
+O agrupamento por cargo é POSICIONAL, e os dois editais reais concordam:
+o conteúdo programático abre com o que vale pra todo mundo ("CONHECIMENTOS
+COMUNS PARA TODOS OS CARGOS", "MODULO I ... PARA TODOS OS CARGOS/PERFIS") e
+só depois vêm os blocos de cargo. Disciplina antes do primeiro marcador é
+comum; depois dele, é do cargo aberto. O marcador é o mesmo `RE_CARGO` pras
+duas bancas: "PERFIL 3: X" (FGV) e "CARGO: X" (AOCP).
+
+**O extrator continua sendo o parser; o LLM é FALLBACK.** O parser acerta
+os dois layouts que existem em fixture, custa zero cota, roda em
+milissegundos e é determinístico — dá pra travar em teste, coisa que
+resposta de modelo não dá. `estrutura_com_fallback()` só chama o Gemini
+(com `responseSchema`, saída estruturada) quando o parser não achou
+disciplina NENHUMA — o sinal honesto de "layout que eu não conheço". O
+gatilho é "zero disciplina", não "zero cargo": concurso de cargo único é
+legítimo e chamar o modelo nele seria queimar cota pra confirmar o que o
+parser já acertou. Falha do LLM não derruba a ingestão: devolve o vazio do
+parser e a curadoria vira preenchimento manual.
+
+**Rascunho em Postgres, não em Redis.** É um registro escrito uma vez e
+lido duas; não paga uma dependência de infra nova, um processo a mais pra
+subir e um modo de falha a mais ("o Redis caiu no meio da curadoria").
+`expira_em` faz o trabalho do TTL e sobrevive a restart — que é justamente
+quando o TTL em memória perderia o PDF que o usuário já subiu. A estrutura
+vai em JSONB porque é dado em TRÂNSITO: normalizar em tabelas seria modelar
+o que ainda vai ser editado e descartado.
 
 **Segundo edital real, segunda rodada de zeros: o AOCP (PC-BA) devolveu 0
 tópicos em 0 disciplinas.** Duas causas independentes, nenhuma delas

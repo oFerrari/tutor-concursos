@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Upload } from "lucide-react";
 import { MarcaGlifo } from "@/components/Marca";
-import { ErroApi, ResultadoIngestaoEdital, ingerirEdital } from "@/lib/api";
+import { ErroApi, criarRascunho } from "@/lib/api";
 import { ENTREVISTA } from "@/mock/prototipo";
 
 /**
@@ -13,18 +13,20 @@ import { ENTREVISTA } from "@/mock/prototipo";
  *
  * Metade desta tela é REAL e metade é vitrine, e a divisão importa:
  *
- *  - O upload do edital chama `POST /edital` de verdade (`ingerirEdital`),
- *    que roda `core/edital.py` e devolve data da prova, tópicos e
- *    disciplinas. Depois disso `/meta` e o Raio-X passam a ter número.
+ *  - O upload do edital é REAL, mas não grava nada ainda: cria um
+ *    RASCUNHO (`POST /editais/rascunho`) e leva pra tela de curadoria, onde
+ *    a pessoa escolhe o cargo e revisa as disciplinas. Um edital tem vários
+ *    cargos, e ingerir todos junto punha matéria de Advocacia no plano de
+ *    quem vai prestar TI.
  *  - As três perguntas (horas/nível/turno) são vitrine — TODO(backend):
  *    não há onde gravar preferência de estudo; `usuario` tem só id, email
  *    e hash de senha. Enquanto não houver, a resposta some ao sair da tela,
  *    e a tela DIZ isso em vez de fingir que guardou.
  *
  * Sobre a extração: `core/edital.py` é MELHOR ESFORÇO, não contrato —
- * `candidatos_data_prova()` devolve todos os candidatos com pontuação
- * justamente porque layout de edital varia por banca. Por isso a tela
- * mostra os candidatos quando há mais de um, em vez de escolher calado.
+ * layout de edital varia por banca. É exatamente por isso que existe a
+ * curadoria: o extrator pode errar sem consequência, porque o erro morre
+ * na tela antes de virar agendamento de revisão.
  */
 export default function PaginaOnboarding() {
   const router = useRouter();
@@ -35,21 +37,18 @@ export default function PaginaOnboarding() {
   );
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [resultado, setResultado] = useState<ResultadoIngestaoEdital | null>(null);
 
   async function enviarEdital(arquivo: File) {
     setErro(null);
-    // Limpa o resultado ANTES de subir o próximo: sem isso o painel do
-    // edital anterior fica na tela durante o upload novo, e quando os dois
-    // dão o mesmo número a tela parece congelada (foi o que pareceu
-    // "precisar de F5" ao trocar de edital).
-    setResultado(null);
     setEnviando(true);
     try {
-      setResultado(await ingerirEdital(arquivo, arquivo.name.replace(/\.pdf$/i, "")));
+      // Sobe pra RASCUNHO e leva pra curadoria: nada vira edital antes de
+      // a pessoa escolher o cargo. Um edital tem vários cargos, e ingerir
+      // todos põe matéria de outro concurso dentro do plano dela.
+      const d = await criarRascunho(arquivo, arquivo.name.replace(/\.pdf$/i, ""));
+      router.push(`/edital/${d.id}`);
     } catch (e) {
-      setErro(e instanceof ErroApi ? e.message : "não deu pra enviar o edital");
-    } finally {
+      setErro(e instanceof ErroApi ? e.message : "não deu pra ler o edital");
       setEnviando(false);
     }
   }
@@ -118,33 +117,6 @@ export default function PaginaOnboarding() {
       </button>
 
       {erro && <p className="callout-danger mb-4 !p-3 text-[13px]">{erro}</p>}
-
-      {resultado && (
-        <div className="callout-success mb-4">
-          <p className="text-sm font-medium">
-            {resultado.topicos} tópicos em {resultado.disciplinas.length} disciplinas.
-          </p>
-          <p className="mt-1 text-[13px] opacity-90">
-            {resultado.data_prova
-              ? `data da prova: ${resultado.data_prova}`
-              : "não achei a data da prova — dá pra informar na tela do edital"}
-          </p>
-          {/* Reporta as datas descartadas em vez de decidir calado — mesma
-              postura de `edital.py` na CLI. O rótulo dizia "outros
-              candidatos", que num edital de concurso lê como "outras
-              PESSOAS inscritas": são outras DATAS achadas no PDF, e a
-              escolhida acima é a que aparece mais perto de "prova
-              objetiva". */}
-          {resultado.candidatos_data.length > 1 && (
-            <p className="mt-2 text-[11.5px] opacity-80">
-              outras datas que achei no PDF (a de cima é a mais provável):{" "}
-              <span className="font-mono">
-                {resultado.candidatos_data.slice(1, 4).map((c) => c.data).join(" · ")}
-              </span>
-            </p>
-          )}
-        </div>
-      )}
 
       {/* ------------------------------------------------- entrevista */}
       <div className="mb-4 overflow-hidden rounded-2xl border border-line bg-surface">

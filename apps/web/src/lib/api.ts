@@ -434,6 +434,54 @@ export function getEdital(): Promise<EditalAtual> {
   return chamar<EditalAtual>("/edital");
 }
 
+// ------------------------------------------------- edital: curadoria
+// Subir o PDF cria um RASCUNHO, não um edital. Nada vira fila SM-2 antes
+// de a pessoa escolher o cargo e revisar as disciplinas — um edital tem
+// vários cargos, e somar todos põe matéria de Advocacia no plano de quem
+// vai prestar TI. Ver core/rascunho.py.
+export type DisciplinaEdital = { disciplina: string; topicos: string[] };
+export type CargoEdital = { nome: string; disciplinas: DisciplinaEdital[] };
+export type EstruturaEdital = { comuns: DisciplinaEdital[]; cargos: CargoEdital[] };
+
+export type Rascunho = {
+  id: number;
+  titulo: string;
+  arquivo: string | null;
+  data_prova: string | null;
+  candidatos_data: { data: string; pontuacao: number; contexto: string }[];
+  estrutura: EstruturaEdital;
+  /** quem extraiu. "llm" merece revisão mais atenta que "parser". */
+  origem: "parser" | "llm";
+  expira_em: string;
+};
+
+export function criarRascunho(arquivo: File, titulo?: string): Promise<Rascunho> {
+  const form = new FormData();
+  form.append("arquivo", arquivo);
+  if (titulo) form.append("titulo", titulo);
+  return chamarFormData<Rascunho>("/editais/rascunho", form);
+}
+
+export function getRascunho(id: number): Promise<Rascunho> {
+  return chamar<Rascunho>(`/editais/rascunho/${id}`);
+}
+
+export function confirmarRascunho(
+  id: number,
+  dados: {
+    disciplinas: DisciplinaEdital[];
+    titulo?: string;
+    data_prova?: string;
+    orgao?: string;
+    banca?: string;
+  }
+): Promise<{ edital_id: number; disciplinas: number; topicos: number }> {
+  return chamar(`/editais/rascunho/${id}/confirmar`, {
+    method: "POST",
+    body: JSON.stringify(dados),
+  });
+}
+
 export type CandidatoData = { data: string; pontuacao: number; contexto: string };
 
 export type ResultadoIngestaoEdital = {
