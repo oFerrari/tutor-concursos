@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, ChevronDown, LogOut, Plus, Trash2 } from "lucide-react";
+import { Confirmar } from "@/components/Confirmar";
 import { Marca } from "@/components/Marca";
 import {
   ErroApi,
@@ -146,6 +147,10 @@ export default function PaginaMesas() {
   const [orgao, setOrgao] = useState("");
   const [banca, setBanca] = useState("");
   const [salvando, setSalvando] = useState(false);
+  // A mesa esperando confirmação. Guardar o OBJETO (e não um booleano
+  // "modal aberto") é o que deixa o diálogo nomear qual mesa vai embora —
+  // "Apagar a mesa?" sem o nome é onde se apaga a errada.
+  const [paraApagar, setParaApagar] = useState<MesaNaLista | null>(null);
 
   const carregar = useCallback(async () => {
     try {
@@ -208,12 +213,10 @@ export default function PaginaMesas() {
     }
   }
 
-  async function aoApagar(mesa: MesaNaLista) {
-    const ok = window.confirm(
-      `Apagar a mesa "${mesa.nome}"?\n\nO edital dela vai junto. Seu progresso ` +
-        `(caixas, tentativas, caderno de erros) NÃO é apagado — ele é seu, não da mesa.`
-    );
-    if (!ok) return;
+  async function aoApagar() {
+    const mesa = paraApagar;
+    if (!mesa) return;
+    setParaApagar(null);
     try {
       await apagarMesa(mesa.id);
       if (getMesaAtiva() === mesa.id) {
@@ -303,7 +306,7 @@ export default function PaginaMesas() {
             mesa={m}
             ativa={ativa === m.id}
             onEntrar={() => entrar(m.id)}
-            onApagar={() => aoApagar(m)}
+            onApagar={() => setParaApagar(m)}
           />
         ))}
 
@@ -366,6 +369,27 @@ export default function PaginaMesas() {
           edital — ou seja, mostra o acervo inteiro.
         </p>
       )}
+
+      <Confirmar
+        aberto={paraApagar !== null}
+        destrutivo
+        titulo={`Apagar a mesa "${paraApagar?.nome ?? ""}"?`}
+        descricao={
+          <>
+            O edital dela vai junto, e com ele o recorte por disciplina que esta mesa aplica.
+            {paraApagar?.topicos ? ` São ${paraApagar.topicos} tópicos.` : ""}
+          </>
+        }
+        detalhe={
+          <>
+            Seu progresso <strong className="font-semibold">não</strong> é apagado — caixas,
+            tentativas e caderno de erros são seus, não da mesa, e continuam valendo nas outras.
+          </>
+        }
+        rotuloConfirmar="Apagar mesa"
+        onConfirmar={aoApagar}
+        onCancelar={() => setParaApagar(null)}
+      />
     </div>
   );
 }

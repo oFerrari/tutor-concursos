@@ -322,6 +322,17 @@
            disabled:cursor-not-allowed disabled:opacity-50;
   }
 
+  /* Ação DESTRUTIVA. Mesma pílula, mas contorno de perigo e texto rubro em
+     vez do preenchimento sólido do `.btn-primary`: o botão que apaga não
+     pode competir em peso visual com o que confirma — quem chega distraído
+     precisa que o gesto perigoso pareça uma escolha, não o caminho padrão. */
+  .btn-perigo {
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-danger-line
+           bg-danger-soft px-4 py-2 text-[13px] font-semibold text-danger transition-colors
+           hover:bg-danger hover:text-accent-foreground
+           disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
   /* CTA principal: mesma pílula, maior, com glow em vez de gradiente. */
   .btn-cta {
     @apply inline-flex items-center justify-center gap-2.5 rounded-full bg-accent px-7 py-3.5
