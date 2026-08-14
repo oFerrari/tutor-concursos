@@ -13,7 +13,7 @@ Sem isso, modelo pequeno erra a sintaxe e a sessão de estudo morre no meio.
 """
 from . import llm, retrieval
 
-VERSAO = "socratic-v30"
+VERSAO = "socratic-v31"
 
 # ------------------------------------------------------------------ schemas
 # Subconjunto OpenAPI aceito pelo Gemini. propertyOrdering importa: o modelo
@@ -393,9 +393,12 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         # que responde "qualquer um" a uma pergunta do tutor recebe de volta
         # "qualquer um de quê?" — aconteceu em uso real. Vem ANTES da
         # pergunta atual porque é o que a contextualiza.
+        # O EVENTO entra rotulado como fato, não como fala: "(o aluno
+        # respondeu e errou)" dito por "Você" faria o modelo tratar aquilo
+        # como coisa que ele mesmo afirmou antes.
+        rotulos = {"aluno": "Aluno", "tutor": "Você", "evento": "[fato da sessão]"}
         turnos = "\n".join(
-            f"{'Aluno' if m['autor'] == 'aluno' else 'Você'}: {m['texto']}"
-            for m in historico)
+            f"{rotulos.get(m['autor'], 'Aluno')}: {m['texto']}" for m in historico)
         partes.append(f"### Conversa até aqui\n{turnos}")
     partes.append(f"### Pergunta do aluno\n{pergunta}")
 
@@ -425,6 +428,10 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         "artigo ela saiu e a grava na fila de revisão — questão escrita solta no chat não passa "
         "por nenhuma dessas três coisas e some quando a conversa rola. Nunca diga que não tem "
         "como gerar. "
+        "Linhas marcadas como [fato da sessão] são o que o aluno FEZ (respondeu uma questão, "
+        "acertou, errou) — não são fala sua nem dele. Use-as: errar a questão que você acabou de "
+        "propor vale mais que qualquer coisa que ele diga sobre entender ou não, e a próxima "
+        "resposta deve partir DAÍ, não repetir a explicação que já não funcionou. "
         "Quando houver conversa anterior, CONTINUE dela: se o aluno responder de forma curta "
         "('qualquer um', 'esse mesmo', 'sim'), entenda que ele está respondendo à SUA última "
         "pergunta e siga daí, em vez de pedir que ele reformule. Não repita explicação já dada. "

@@ -80,6 +80,12 @@ export default function PaginaTutor() {
   // pergunta abre uma no servidor e devolve o id, então não há chamada
   // extra só pra criar (migração 014).
   const [conversaId, setConversaId] = useState<number | null>(null);
+  // Questões geradas DENTRO desta conversa, respondidas aqui mesmo. Antes o
+  // botão empurrava pra /fila: você pedia questão no meio de um raciocínio
+  // e era jogado pra outra tela — o que quebra exatamente o que a conversa
+  // acabou de construir. Elas continuam entrando na fila normal (são
+  // gravadas no acervo); a diferença é onde você as responde.
+  const [geradas, setGeradas] = useState<Questao[]>([]);
   const [pensando, setPensando] = useState(false);
   const fim = useRef<HTMLDivElement>(null);
 
@@ -379,6 +385,21 @@ export default function PaginaTutor() {
             <p className="rotulo animate-[pxPulse_1.4s_ease-in-out_infinite] pl-[42px]">consultando o acervo</p>
           )}
 
+          {/* As questões criadas nesta conversa, respondidas AQUI. Cada uma
+              com `key` própria: sem isso o React reaproveita a instância e a
+              segunda questão abre já mostrando o resultado da primeira — o
+              mesmo bug que o /desafio teve. */}
+          {geradas.map((q) => (
+            <div key={q.id} className="pl-[42px]">
+              <BalaoQuestao
+                tipo={q.tipo}
+                questao={q}
+                conversaId={conversaId ?? undefined}
+                onFechado={() => setGeradas((atual) => atual.filter((x) => x.id !== q.id))}
+              />
+            </div>
+          ))}
+
           {/* Treinar o que acabou de ser explicado, sem trocar de tela. O
               tema é a última pergunta DO ALUNO — é o que ele está estudando
               agora, e é com ele que a busca escolhe de qual artigo cobrar.
@@ -391,7 +412,12 @@ export default function PaginaTutor() {
                 tema={ultimoAssunto}
                 quantidade={2}
                 rotulo="Quero questões sobre isto"
-                onPronto={() => router.push("/fila")}
+                conversaId={conversaId ?? undefined}
+                onQuestoes={(qs) =>
+                  setGeradas(
+                    qs.map((q) => ({ ...q, caixa: 0, prox_revisao: "" }) as Questao)
+                  )
+                }
               />
             </div>
           )}

@@ -20,6 +20,7 @@ export type TipoQuestao = "resposta_livre" | "multipla_escolha" | "certo_errado"
 type Props = {
   tipo: TipoQuestao;
   questao: Questao;
+  conversaId?: number;
   onFechado: (r: ResultadoQuestao) => void;
   onSair?: () => void;
 };
@@ -32,7 +33,7 @@ type Props = {
  * socrático e item C/E é `<QuestaoInterativa>`, o mesmo dispatcher que
  * /fila, /questao/[id] e /desafio usam. Este arquivo só cuida da moldura.
  */
-export function BalaoQuestao({ tipo, questao, onFechado, onSair }: Props) {
+export function BalaoQuestao({ tipo, questao, conversaId, onFechado, onSair }: Props) {
   if (tipo === "multipla_escolha") {
     return (
       <div className="callout-warning !p-4 text-sm">
@@ -50,6 +51,7 @@ export function BalaoQuestao({ tipo, questao, onFechado, onSair }: Props) {
     <div className="overflow-hidden rounded-[14px] border border-line bg-surface px-[18px] py-4">
       <QuestaoInterativa
         questao={questao}
+        conversaId={conversaId}
         onFechado={onFechado}
         onSair={onSair}
         rotuloContinuar="Ok, entendi"

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Sparkles } from "lucide-react";
-import { ErroApi, gerarQuestoes } from "@/lib/api";
+import { ErroApi, QuestoesGeradas, gerarQuestoes } from "@/lib/api";
 
 /**
  * "Não tem questão disto? Faça." — o botão que fecha o buraco entre ter
@@ -26,12 +26,20 @@ export function GerarQuestoes({
   tema,
   quantidade = 3,
   rotulo = "Gerar questões a partir do material",
+  conversaId,
   onPronto,
+  onQuestoes,
 }: {
   tema?: string;
   quantidade?: number;
   rotulo?: string;
+  /** Gerando DENTRO de uma conversa: o fato entra na linha do tempo dela. */
+  conversaId?: number;
   onPronto?: () => void;
+  /** Recebe as questões criadas. Quem passa isto RESPONDE ali mesmo, em vez
+   *  de mandar o aluno pra outra tela — no chat, ser jogado pra /fila no
+   *  meio de um raciocínio quebra justamente o que a conversa construiu. */
+  onQuestoes?: (qs: QuestoesGeradas["questoes"]) => void;
 }) {
   const [gerando, setGerando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -45,7 +53,7 @@ export function GerarQuestoes({
     setSemMaterial(false);
     setResumo(null);
     try {
-      const r = await gerarQuestoes(tema, quantidade);
+      const r = await gerarQuestoes(tema, quantidade, undefined, conversaId);
       const n = r.questoes.length;
       setResumo(
         n === 0
@@ -55,7 +63,10 @@ export function GerarQuestoes({
               ? ` · ${r.descartadas} descartada${r.descartadas > 1 ? "s" : ""} por citar artigo fora do material`
               : "")
       );
-      if (n > 0) onPronto?.();
+      if (n > 0) {
+        onQuestoes?.(r.questoes);
+        onPronto?.();
+      }
     } catch (e) {
       if (e instanceof ErroApi && e.status === 409) setSemMaterial(true);
       else setErro(e instanceof ErroApi ? e.message : "Não deu pra gerar agora");

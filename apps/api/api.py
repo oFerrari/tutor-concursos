@@ -339,6 +339,10 @@ class RegistrarBody(BaseModel):
     dicas_usadas: int = 0
     segundos: int | None = None
     simulado_id: int | None = None
+    # Respondida DENTRO de uma conversa: o resultado entra na linha do tempo
+    # dela. É o que faz o tutor considerar a evolução em vez de continuar
+    # explicando como se nada tivesse acontecido.
+    conversa_id: int | None = None
 
 
 @app.post("/questoes/{qid}/registrar")
@@ -347,10 +351,26 @@ def rota_registrar_tentativa(qid: int, body: RegistrarBody, uid: int = Depends(u
     if body.veredito not in ("correta", "parcial", "incorreta"):
         raise HTTPException(422, "veredito precisa ser correta/parcial/incorreta")
     try:
-        return scheduler.registrar(uid, qid, body.veredito, body.resposta, body.dicas_usadas,
-                                   body.segundos, body.simulado_id)
+        r = scheduler.registrar(uid, qid, body.veredito, body.resposta, body.dicas_usadas,
+                                body.segundos, body.simulado_id)
     except ValueError as e:
         raise HTTPException(404, str(e))
+
+    if body.conversa_id is not None and conversa.obter(uid, body.conversa_id):
+        q = questoes.obter(qid) or {}
+        # O TEXTO do evento é curto e factual de propósito: o modelo não
+        # precisa do enunciado inteiro de volta (ele acabou de propô-lo), e
+        # sim do veredito e do assunto — é isso que muda a próxima frase.
+        # `dicas_usadas` entra porque acertar com três dicas não é a mesma
+        # demonstração que acertar de primeira.
+        veredito = {"correta": "ACERTOU", "parcial": "acertou em parte",
+                    "incorreta": "ERROU"}.get(body.veredito, body.veredito)
+        ajuda = f", usando {body.dicas_usadas} dica(s)" if body.dicas_usadas else ""
+        conversa.registrar_evento(
+            body.conversa_id,
+            f"O aluno respondeu a questão sobre \"{q.get('tema', 'o tema')}\" "
+            f"e {veredito}{ajuda}. A caixa dele nessa questão agora é {r['caixa']}.")
+    return r
 
 
 # -------------------------------------------------------------------- desafio
@@ -528,6 +548,10 @@ class GerarQuestaoBody(BaseModel):
     # None = decidir pela banca da mesa (Cebraspe -> item C/E). Explícito
     # vence, pra quem quer treinar o outro formato de propósito.
     tipo: str | None = None
+    # Quando a questão nasce DENTRO de uma conversa, o fato entra na linha
+    # do tempo dela — senão o tutor propõe o exercício e não fica sabendo
+    # que propôs.
+    conversa_id: int | None = None
 
 
 @app.post("/questoes/gerar")
@@ -546,7 +570,7 @@ def rota_gerar_questoes(body: GerarQuestaoBody, uid: int = Depends(usuario_atual
     """
     try:
         tipo = body.tipo or geracao.tipo_da_banca(m.get("banca"))
-        return geracao.sob_demanda(m["disciplinas"], body.tema, body.quantidade, tipo)
+        r = geracao.sob_demanda(m["disciplinas"], body.tema, body.quantidade, tipo)
     except geracao.SemMaterial as e:
         # 409, não 500: o pedido é válido e o sistema está são — o acervo é
         # que não tem material dessa matéria. A tela precisa distinguir isso
@@ -554,6 +578,14 @@ def rota_gerar_questoes(body: GerarQuestaoBody, uid: int = Depends(usuario_atual
         raise HTTPException(409, str(e))
     except ErroLLM as e:
         raise HTTPException(503, f"LLM indisponível: {e}")
+
+    if body.conversa_id is not None and conversa.obter(uid, body.conversa_id) and r["questoes"]:
+        temas = ", ".join(q["tema"] for q in r["questoes"])
+        conversa.registrar_evento(
+            body.conversa_id,
+            f"Você propôs {len(r['questoes'])} questão(ões) sobre {temas}. "
+            f"O aluno vai respondê-las agora, dentro desta conversa.")
+    return r
 
 
 # --------------------------------------------------------------------- edital

@@ -115,6 +115,20 @@ def gravar(conversa_id: int, autor: str, texto: str, fontes: list | None = None)
     return msg
 
 
+def registrar_evento(conversa_id: int, texto: str) -> dict:
+    """
+    Grava um FATO da sessão na linha do tempo da conversa: "respondeu a
+    questão sobre peculato e errou".
+
+    Não é fala de ninguém (ver db/016). Existe porque a informação mais
+    valiosa de uma conversa de estudo não é o que o aluno DIZ, é o que ele
+    DEMONSTRA — dizer "não entendi" é relato, errar a questão é evidência.
+    Sem isto o tutor gera três itens, o aluno erra os três, e a mensagem
+    seguinte continua explicando como se nada tivesse acontecido.
+    """
+    return gravar(conversa_id, "evento", texto)
+
+
 def historico_para_prompt(conversa_id: int, janela: int = JANELA) -> list[dict]:
     """
     Últimos turnos no formato que `socratic.explicar` consome.

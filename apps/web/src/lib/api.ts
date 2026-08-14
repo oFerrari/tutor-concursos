@@ -505,11 +505,14 @@ export function gerarQuestoes(
   quantidade = 3,
   /** Omitido = o servidor decide pela banca da mesa (Cebraspe -> item
    *  C/E). A regra de "qual formato treinar" tem um dono só, e é ele. */
-  tipo?: TipoQuestao
+  tipo?: TipoQuestao,
+  /** Quando a questão nasce DENTRO de uma conversa, o fato entra na linha
+   *  do tempo dela — senão o tutor propõe o exercício e não fica sabendo. */
+  conversaId?: number
 ): Promise<QuestoesGeradas> {
   return chamar<QuestoesGeradas>("/questoes/gerar", {
     method: "POST",
-    body: JSON.stringify({ tema, quantidade, tipo }),
+    body: JSON.stringify({ tema, quantidade, tipo, conversa_id: conversaId }),
   });
 }
 
@@ -636,7 +639,11 @@ export function registrarTentativa(
   veredito: "correta" | "parcial" | "incorreta",
   resposta: string,
   dicasUsadas: number,
-  segundos: number
+  segundos: number,
+  /** Respondida DENTRO de uma conversa: o resultado entra na linha do tempo
+   *  dela, e o tutor considera isso no próximo turno em vez de continuar
+   *  explicando como se nada tivesse acontecido. */
+  conversaId?: number
 ): Promise<Registro> {
   return chamar<Registro>(`/questoes/${questaoId}/registrar`, {
     method: "POST",
@@ -645,6 +652,7 @@ export function registrarTentativa(
       resposta,
       dicas_usadas: dicasUsadas,
       segundos,
+      conversa_id: conversaId,
     }),
   });
 }

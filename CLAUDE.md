@@ -580,6 +580,46 @@ exatamente quem mais precisa parar. E ela NUNCA bloqueia: "continuar mesmo
 assim" fica ao lado, porque tutor que impede o aluno de estudar é pior que
 tutor calado.
 
+**A conversa registra o que o aluno FEZ, não só o que disse (migração
+016).** A 014 deu memória do que foi DITO; faltava o que acontece ENTRE os
+turnos. O tutor explicava peculato, gerava três itens, o aluno errava os
+três — e a mensagem seguinte continuava explicando como se nada tivesse
+acontecido. É a mesma cegueira da 014 um nível acima, e sobre a informação
+mais valiosa da conversa: dizer "não entendi" é relato, **errar a questão é
+evidência**.
+
+`mensagem.autor` ganhou um terceiro valor, `'evento'`. Não dá pra
+reaproveitar os dois que existiam: gravar "respondeu e errou" como fala do
+ALUNO põe na boca dele uma frase que ele não escreveu; como fala do TUTOR,
+inventa uma resposta que o modelo nunca gerou. As duas mentem justamente no
+histórico que volta pro prompt e que o aluno relê na tela. No prompt o
+evento entra rotulado `[fato da sessão]` — "(o aluno errou)" dito por
+"Você" faria o modelo tratar aquilo como coisa que ele mesmo afirmou.
+
+Não bastava o `_resumo_desempenho` que já ia no prompt: ele é AGREGADO
+("73% em Constitucional, 111 tentativas") e um erro isolado some numa média
+de 111 — mas é exatamente o erro isolado, recém-cometido, sobre o assunto
+em discussão, que deveria mudar a próxima frase do tutor. Medido: depois de
+errar uma questão de concussão gerada na conversa, a resposta seguinte
+abriu com "Você errou a questão sobre concussão agora pouco, então vamos
+direto ao ponto crítico".
+
+**A questão gerada no chat é respondida NO CHAT.** Antes o botão fazia
+`router.push("/fila")`: você pedia questão no meio de um raciocínio e era
+jogado pra outra tela, e o que acertava lá não voltava pra conversa. As
+questões continuam entrando na fila normal (são gravadas no acervo, como
+sempre); o que mudou é ONDE se responde.
+
+**Relevância manda mais que novidade na geração por tema.** Bug real,
+achado na primeira conversa de verdade: pedir questão sobre PECULATO
+devolveu uma sobre DESACATO, porque peculato já tinha questão e desacato
+não. A ordenação era `(ja_tem, ranking)` — todo inédito à frente de todo
+cobrado, que é "cobrar o artigo errado só por ser inédito", exatamente o
+que o comentário do próprio código dizia evitar. Agora o 1º colocado da
+busca entra SEMPRE (quando a busca é precisa — "art. 312", "concussão" —
+ele É o assunto) e a novidade só ordena as vagas restantes, dentro de um
+pool ainda relevante.
+
 **Onde o aprendizado é MEDIDO, e onde não é.** Vale ter isto explícito
 porque é fácil supor errado: fila, `/questao/[id]`, desafio, simulado e a
 questão embutida no /tutor passam TODOS por `scheduler.registrar` — logo
@@ -594,6 +634,12 @@ responder questão, e contar conversa como tentativa inflaria acerto e
 ofensiva sem ninguém ter sido avaliado. Ele é CONSUMIDOR dos insights
 (`_resumo_desempenho` entra no prompt), não produtor. A única coisa que ele
 grava é a própria conversa (014).
+
+Mas a QUESTÃO respondida dentro da conversa registra normalmente, como
+qualquer outra — e desde a 016 registra DUAS vezes: em `tentativa`/
+`progresso` (o aprendizado, igual à fila) e como evento na linha do tempo
+da conversa (o contexto, pro tutor considerar no próximo turno). São coisas
+diferentes e nenhuma substitui a outra.
 
 ## Invariantes (violação = bug)
 

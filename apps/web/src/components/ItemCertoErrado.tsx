@@ -31,11 +31,14 @@ import { Intervencao } from "@/components/Intervencao";
 export function ItemCertoErrado({
   questao,
   rotuloContinuar = "próxima",
+  conversaId,
   onFechado,
   onSair,
 }: {
   questao: Questao;
   rotuloContinuar?: string;
+  /** Quando a questão é respondida dentro de uma conversa do tutor. */
+  conversaId?: number;
   onFechado: (r: ResultadoQuestao) => void;
   onSair?: () => void;
 }) {
@@ -56,7 +59,8 @@ export function ItemCertoErrado({
       // dicas_usadas = 0 SEMPRE: não existe dica neste formato, então acerto
       // sempre promove a caixa. É o mesmo raciocínio do simulado, que também
       // nunca oferece dica — mesma regra de promoção, sinal limpo.
-      const r = await registrarTentativa(questao.id, av.veredito, escolha, 0, segundos);
+      const r = await registrarTentativa(questao.id, av.veredito, escolha, 0, segundos,
+                                        conversaId);
       setResultado({
         veredito: av.veredito,
         comentario: av.comentario,

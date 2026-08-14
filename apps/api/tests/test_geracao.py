@@ -373,3 +373,23 @@ def test_um_item_so_nao_vira_serie(usuario, llm_falso):
     db.query("DELETE FROM questao WHERE id = ANY(%(ids)s)",
              {"ids": [q["id"] for q in r["questoes"]]})
     del chamadas_antes
+
+
+def test_tema_manda_mais_que_novidade(usuario):
+    """
+    Bug real, achado na primeira conversa de verdade: pedir questão sobre
+    PECULATO devolvia uma sobre DESACATO, porque peculato já tinha questão e
+    desacato não. A ordenação punha todo inédito à frente de todo cobrado —
+    "cobrar o artigo errado só por ser inédito", exatamente o que o
+    comentário do código dizia evitar.
+
+    Agora o 1º colocado da busca entra SEMPRE, e a novidade só ordena as
+    vagas restantes.
+    """
+    for tema, norma, artigo in [("peculato", "CP", "312"),
+                                ("concussão", "CP", "316")]:
+        ids = geracao._por_tema(tema, 2)
+        if not ids:
+            continue
+        primeiro = db.exec1("SELECT norma, artigo FROM chunk WHERE id = %(i)s", {"i": ids[0]})
+        assert (primeiro["norma"], primeiro["artigo"]) == (norma, artigo), (tema, primeiro)

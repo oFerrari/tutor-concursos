@@ -20,6 +20,8 @@ import { Questao } from "@/lib/api";
 export function QuestaoInterativa(props: {
   questao: Questao;
   rotuloContinuar?: string;
+  /** Quando a questão é respondida dentro de uma conversa do tutor. */
+  conversaId?: number;
   onFechado: (r: ResultadoQuestao) => void;
   onSair?: () => void;
 }) {

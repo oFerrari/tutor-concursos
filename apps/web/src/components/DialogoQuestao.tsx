@@ -25,6 +25,10 @@ type Props = {
   /** "sair" no meio: aborta o fluxo inteiro (não é "pular esta e seguir"). Omitir esconde o botão. */
   onSair?: () => void;
   rotuloContinuar?: string;
+  /** Respondida DENTRO de uma conversa do tutor: o resultado entra na linha
+   *  do tempo dela e o modelo passa a considerar essa evolução no turno
+   *  seguinte (migração 016). Ausente = fila, /questao, desafio. */
+  conversaId?: number;
 };
 
 /**
@@ -35,7 +39,13 @@ type Props = {
  * desafio usa exatamente este mesmo loop, só a lista de onde tira a
  * próxima questão é diferente.
  */
-export function DialogoQuestao({ questao, onFechado, onSair, rotuloContinuar = "continuar" }: Props) {
+export function DialogoQuestao({
+  questao,
+  onFechado,
+  onSair,
+  conversaId,
+  rotuloContinuar = "continuar",
+}: Props) {
   const [resposta, setResposta] = useState("");
   const [historico, setHistorico] = useState<Turno[]>([]);
   const [erradas, setErradas] = useState(0);
@@ -75,7 +85,8 @@ export function DialogoQuestao({ questao, onFechado, onSair, rotuloContinuar = "
     // conta como erro; contar as duas juntaria a mesma falha duas vezes.
     const penalidade = erradasFinal + dicasPedidasFinal;
     const segundos = decorridos(inicio.current);
-    const r = await registrarTentativa(questao.id, veredito, respostaFinal, penalidade, segundos);
+    const r = await registrarTentativa(questao.id, veredito, respostaFinal, penalidade,
+                                      segundos, conversaId);
     setResultado({
       veredito,
       // "Acertou de primeira" só quando penalidade é 0 — correta na 2ª

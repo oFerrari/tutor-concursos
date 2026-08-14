@@ -124,3 +124,89 @@ def test_titulo_sai_da_primeira_pergunta_sem_llm(usuario, llm_falso):
     assert len(c["titulo"]) <= conversa.MAX_TITULO + 1
     assert c["titulo"].endswith("…")
     assert llm_falso.chamadas == []
+
+
+# ------------------------------------ evolução dentro da conversa (016)
+def test_resposta_a_questao_entra_na_linha_do_tempo(client, usuario, llm_falso):
+    """
+    O ponto da 016: o que o aluno FAZ vale mais que o que ele diz. Dizer
+    "não entendi" é relato; errar a questão é evidência — e antes disso o
+    tutor propunha três itens, o aluno errava os três, e a mensagem seguinte
+    continuava explicando como se nada tivesse acontecido.
+    """
+    _resposta_falsa(llm_falso)
+    cid = client.post("/perguntar", json={"pergunta": "peculato"},
+                      headers=usuario["headers"]).json()["conversa_id"]
+    q = db.exec1("SELECT id, tema FROM questao LIMIT 1")
+    if not q:
+        return
+
+    client.post(f"/questoes/{q['id']}/registrar",
+                json={"veredito": "incorreta", "resposta": "chutei", "dicas_usadas": 2,
+                      "segundos": 40, "conversa_id": cid},
+                headers=usuario["headers"])
+
+    msgs = client.get(f"/conversas/{cid}", headers=usuario["headers"]).json()["mensagens"]
+    evento = [m for m in msgs if m["autor"] == "evento"]
+    assert len(evento) == 1
+    assert "ERROU" in evento[0]["texto"]
+    assert q["tema"] in evento[0]["texto"]
+    # dicas entram: acertar com 3 dicas não é a mesma demonstração que
+    # acertar de primeira.
+    assert "2 dica" in evento[0]["texto"]
+
+
+def test_evento_chega_ao_prompt_rotulado_como_fato(client, usuario, llm_falso):
+    """Evento NÃO pode entrar como fala: "(o aluno errou)" dito por "Você"
+    faria o modelo tratar aquilo como coisa que ele mesmo afirmou antes."""
+    _resposta_falsa(llm_falso)
+    cid = client.post("/perguntar", json={"pergunta": "peculato"},
+                      headers=usuario["headers"]).json()["conversa_id"]
+    q = db.exec1("SELECT id FROM questao LIMIT 1")
+    if not q:
+        return
+    client.post(f"/questoes/{q['id']}/registrar",
+                json={"veredito": "incorreta", "resposta": "x", "dicas_usadas": 0,
+                      "segundos": 10, "conversa_id": cid},
+                headers=usuario["headers"])
+
+    llm_falso.chamadas.clear()
+    client.post("/perguntar", json={"pergunta": "explica de novo", "conversa_id": cid},
+                headers=usuario["headers"])
+    prompt = llm_falso.chamadas[-1]["prompt"]
+    assert "[fato da sessão]" in prompt
+    assert "ERROU" in prompt
+
+
+def test_registrar_sem_conversa_nao_cria_evento(client, usuario, llm_falso):
+    """Fila, /questao e desafio não têm conversa — e não devem inventar uma.
+    O evento existe pra conversa em curso, não pra toda tentativa."""
+    _resposta_falsa(llm_falso)
+    cid = client.post("/perguntar", json={"pergunta": "oi"},
+                      headers=usuario["headers"]).json()["conversa_id"]
+    q = db.exec1("SELECT id FROM questao LIMIT 1")
+    if not q:
+        return
+    client.post(f"/questoes/{q['id']}/registrar",
+                json={"veredito": "correta", "resposta": "x", "dicas_usadas": 0,
+                      "segundos": 10},
+                headers=usuario["headers"])
+    msgs = client.get(f"/conversas/{cid}", headers=usuario["headers"]).json()["mensagens"]
+    assert not [m for m in msgs if m["autor"] == "evento"]
+
+
+def test_conversa_de_outro_usuario_nao_recebe_evento(client, usuario, outro_usuario, llm_falso):
+    """`conversa_id` vem do cliente: sem checar posse, daria pra escrever na
+    linha do tempo de qualquer um. `conversa.obter` já é escopado."""
+    _resposta_falsa(llm_falso)
+    cid = client.post("/perguntar", json={"pergunta": "minha"},
+                      headers=usuario["headers"]).json()["conversa_id"]
+    q = db.exec1("SELECT id FROM questao LIMIT 1")
+    if not q:
+        return
+    client.post(f"/questoes/{q['id']}/registrar",
+                json={"veredito": "correta", "resposta": "x", "dicas_usadas": 0,
+                      "segundos": 10, "conversa_id": cid},
+                headers=outro_usuario["headers"])
+    msgs = client.get(f"/conversas/{cid}", headers=usuario["headers"]).json()["mensagens"]
+    assert not [m for m in msgs if m["autor"] == "evento"]

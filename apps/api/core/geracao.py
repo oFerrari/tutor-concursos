@@ -42,10 +42,13 @@ import re
 
 from . import db, llm, mesa, retrieval, socratic
 
-VERSAO = "geracao-v3"
+VERSAO = "geracao-v4"
 
 MIN_TEXTO = 140          # abaixo disso é stub, revogado ou remissão
 MAX_POR_VEZ = 5          # teto por chamada: cota de LLM é o recurso escasso
+# Quantos candidatos por questão pedida entram no pool de onde a novidade
+# escolhe. 3 dá folga pra evitar repetir artigo sem sair do assunto.
+POOL_POR_PEDIDO = 3
 
 
 class SemMaterial(Exception):
@@ -165,12 +168,34 @@ def _por_tema(tema: str, limite: int) -> list[int]:
              WHERE c.id = ANY(%(ids)s) AND {FILTRO_UTIL}""",
         {"ids": [c["id"] for c in achados], "min": MIN_TEXTO},
     )
-    # Preserva a ordem da busca (relevância), só empurrando pro fim o que já
-    # virou questão — melhor cobrar de novo o artigo certo do que cobrar o
-    # artigo errado só por ser inédito.
+    # RELEVÂNCIA DEFINE O QUE ESTÁ NO ASSUNTO; novidade só escolhe DENTRO
+    # disso. A primeira versão ordenava por `(ja_tem, ranking)`, o que punha
+    # todo chunk inédito à frente de todo chunk já cobrado — e o efeito
+    # apareceu na primeira conversa real: pedir questão sobre PECULATO
+    # devolveu uma sobre DESACATO, porque peculato já tinha questão e
+    # desacato não. Era exatamente o "cobrar o artigo errado só por ser
+    # inédito" que o comentário dizia evitar, e o código fazia.
+    #
+    # Agora o corte é em dois passos: os mais relevantes formam o pool
+    # (`POOL_POR_PEDIDO` vezes o pedido, pra sobrar escolha), e só dentro
+    # dele a preferência é pelo que ainda não virou questão.
     ranking = {c["id"]: i for i, c in enumerate(achados)}
-    ordenados = sorted(uteis, key=lambda r: (r["ja_tem"], ranking.get(r["id"], 99)))
-    return [r["id"] for r in ordenados[:limite]]
+    por_relevancia = sorted(uteis, key=lambda r: ranking.get(r["id"], 99))
+
+    # O PRIMEIRO COLOCADO ENTRA SEMPRE, cobrado ou não. Quando a busca é
+    # precisa — citação de dispositivo ("art. 312") ou nome do crime
+    # ("concussão") — `retrieval.buscar` devolve o alvo em 1º e o resto é
+    # complemento. Deixar a novidade decidir aí devolvia CP 131 e 136 pra
+    # quem pediu concussão, só porque o art. 316 já tinha questão: resposta
+    # inédita e fora do assunto, que é o pior dos dois mundos.
+    #
+    # Só as vagas RESTANTES preferem o inédito, e dentro de um pool de
+    # candidatos ainda relevantes — é o que evita repetir o mesmo artigo em
+    # sessões seguidas sem sair do que foi perguntado.
+    primeiro = por_relevancia[:1]
+    resto = por_relevancia[1:max(limite * POOL_POR_PEDIDO, limite + 2)]
+    resto.sort(key=lambda r: (r["ja_tem"], ranking.get(r["id"], 99)))
+    return [r["id"] for r in (primeiro + resto)[:limite]]
 
 
 BANCAS_CERTO_ERRADO = ("cebraspe", "cespe", "unb")
