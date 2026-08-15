@@ -120,7 +120,7 @@ export default function PaginaPanorama() {
   const nome = primeiroNome(usuario?.email);
 
   return (
-    <div className="mx-auto w-full max-w-[1000px] px-6 pb-10 pt-6">
+    <div className="mx-auto flex min-h-full w-full max-w-[1000px] flex-col px-6 pb-10 pt-6">
       <p className="rotulo-accent mb-2.5">
         {`// ${saudacao()}${nome ? `, ${nome.toLowerCase()}` : ""}`}
       </p>
@@ -256,14 +256,18 @@ export default function PaginaPanorama() {
       {/* ---------------------------------------------------- composer */}
       {/* O protótipo põe a caixa de conversa no rodapé do painel: falar com
           o tutor é a ação primária, e ela fica igual em todas as telas. O
-          texto vai pro /tutor, que é quem tem o `POST /perguntar`. */}
+          texto vai pro /tutor, que é quem tem o `POST /perguntar`.
+          `mt-auto` (num container `flex min-h-full flex-col`) é o que ancora
+          o composer no FIM da página de verdade — sem isso, com pouco
+          conteúdo acima (poucas disciplinas, sem alerta), ele ficava
+          flutuando no meio da tela com um vão vazio embaixo. */}
       <form
         onSubmit={(e) => {
           e.preventDefault();
           const t = pergunta.trim();
           router.push(t ? `/tutor?q=${encodeURIComponent(t)}` : "/tutor");
         }}
-        className="mt-7 rounded-[18px] border border-line-strong bg-surface-input px-3.5 pb-2.5 pt-3.5 shadow-[var(--shadow-float)] focus-within:border-accent"
+        className="mt-auto rounded-[18px] border border-line-strong bg-surface-input px-3.5 pb-2.5 pt-3.5 shadow-[var(--shadow-float)] focus-within:border-accent"
       >
         <input
           value={pergunta}

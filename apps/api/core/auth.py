@@ -16,11 +16,12 @@ import bcrypt
 import jwt
 
 import json
+import re
 
 from . import db
 from .config import JWT_SECRET
 
-VERSAO = "auth-v2"
+VERSAO = "auth-v3"
 
 ALGORITMO = "HS256"
 EXPIRA_HORAS = 24 * 7   # uma semana — uso pessoal/pequeno grupo, não banco
@@ -160,19 +161,33 @@ CAMPOS_PERFIL = {
     "turno": {"Manhã", "Tarde", "Noite", "Madrugada"},
 }
 
+# "horas" também aceita um número personalizado ("3h", "5h" — a tela tem um
+# chip "personalizado" pra quando os presets não batem com a rotina real de
+# ninguém). NÃO é abrir o campo: continua só dígito(s) + "h", 1 a 16 —
+# formato fixo, sem texto, então o mesmo argumento de "campo livre é
+# injeção disfarçada" continua valendo. É por isso que isto é um REGEX
+# fechado, não `if k in CAMPOS_PERFIL` virar `isinstance(v, str)`.
+_RE_HORAS_PERSONALIZADA = re.compile(r"^(1[0-6]|[1-9])h$")
+
+
+def _valor_valido(campo: str, valor) -> bool:
+    if campo == "horas" and isinstance(valor, str) and _RE_HORAS_PERSONALIZADA.match(valor):
+        return True
+    return campo in CAMPOS_PERFIL and valor in CAMPOS_PERFIL[campo]
+
 
 def atualizar_perfil(usuario_id: int, perfil: dict) -> dict:
     """
     Grava só o que é conhecido E válido. Campo desconhecido ou valor fora da
-    lista é IGNORADO em silêncio — não é erro do usuário, é cliente
-    desatualizado ou payload malicioso, e nos dois casos a resposta certa é
-    seguir com o que dá pra aproveitar.
+    lista (ou fora do padrão de horas personalizadas) é IGNORADO em
+    silêncio — não é erro do usuário, é cliente desatualizado ou payload
+    malicioso, e nos dois casos a resposta certa é seguir com o que dá pra
+    aproveitar.
 
     Faz merge com o que já existe: mandar `{"turno": "Noite"}` não deve
     apagar as horas respondidas na semana passada.
     """
-    limpo = {k: v for k, v in (perfil or {}).items()
-             if k in CAMPOS_PERFIL and v in CAMPOS_PERFIL[k]}
+    limpo = {k: v for k, v in (perfil or {}).items() if _valor_valido(k, v)}
     r = db.exec1(
         "UPDATE usuario SET perfil = perfil || %(p)s::jsonb WHERE id = %(i)s "
         "RETURNING perfil",

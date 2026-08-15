@@ -229,6 +229,15 @@ def rota_perfil(body: PerfilBody, uid: int = Depends(usuario_atual)):
     return {"perfil": auth.atualizar_perfil(uid, body.model_dump(exclude_none=True))}
 
 
+@app.get("/me/perfil")
+def rota_obter_perfil(uid: int = Depends(usuario_atual)):
+    """Faltava o caminho de VOLTA: só existia gravar, não ler. É o que
+    /desafio usa pra calibrar o orçamento padrão pelas horas declaradas
+    (core.desafio.minutos_do_perfil) e o que a tela usaria pra mostrar as
+    respostas do onboarding já marcadas se a pessoa reabrir a entrevista."""
+    return auth.perfil(uid)
+
+
 @app.get("/me")
 def rota_me(uid: int = Depends(usuario_atual)):
     u = auth.obter(uid)
@@ -392,7 +401,19 @@ def rota_desafio(n_reincidentes: int = 3, n_novas: int = 5, n_simulado: int = 5,
                  minutos: int | None = None,
                  uid: int = Depends(usuario_atual), m: dict = Depends(mesa_atual)):
     """`minutos` é o "só tenho 20 minutos hoje": o desafio encolhe pra caber,
-    cortando na ordem que rende mais por minuto (ver desafio.orcamento_blocos)."""
+    cortando na ordem que rende mais por minuto (ver desafio.orcamento_blocos).
+
+    A proporção dos blocos (`n_reincidentes/n_novas/n_simulado`) é ajustada
+    pelo "nível" do perfil ANTES de montar — só quando os três ainda estão
+    no default (`proporcao_por_nivel` não mexe em override explícito, e
+    hoje nenhum chamador manda um). `minutos` propositalmente NÃO ganha um
+    padrão calibrado por perfil aqui: essa calibração acontece no
+    FRONTEND, na primeira carga da tela — fazer aqui não daria pra
+    distinguir "ninguém escolheu ainda" de "escolheu 'sessão cheia' de
+    propósito", já que os dois chegam como `minutos=None`."""
+    perfil = auth.perfil(uid)
+    n_reincidentes, n_novas, n_simulado = desafio.proporcao_por_nivel(
+        perfil, n_reincidentes, n_novas, n_simulado)
     return desafio.montar(uid, n_reincidentes, n_novas, n_simulado, m["disciplinas"], minutos)
 
 
@@ -405,6 +426,9 @@ class IniciarSimuladoBody(BaseModel):
     # aleatório — mesmo espírito de chat.simulado(questoes=...) aceitar uma
     # lista já escolhida em vez de reamostrar o acervo todo de novo.
     questao_ids: list[int] | None = None
+    # Opcional (migração 019) — sem nome, a tela do histórico cai pro
+    # rótulo por data, que é ambíguo quando há mais de uma prova no dia.
+    nome: str | None = None
 
 
 @app.post("/simulados")
@@ -420,45 +444,109 @@ def rota_iniciar_simulado(body: IniciarSimuladoBody, uid: int = Depends(usuario_
         qs = simulado.selecionar(body.n, body.disciplina, m["disciplinas"])
     if not qs:
         raise HTTPException(404, "nenhuma questão no acervo (ou disciplina inexistente)")
-    sid = simulado.iniciar(uid, len(qs), body.minutos, m["id"])
+    sid = simulado.iniciar(uid, len(qs), body.minutos, m["id"], questao_ids=[q["id"] for q in qs],
+                           nome=body.nome)
     return {"simulado_id": sid, "questoes": qs}
 
 
-class RespostaSimuladoItem(BaseModel):
+@app.delete("/simulados/{sid}")
+def rota_apagar_simulado(sid: int, uid: int = Depends(usuario_atual)):
+    """Tira a prova do histórico (não apaga tentativa/progresso — ver
+    core/simulado.apagar). 404 se não existe ou não é sua, mesmo padrão de
+    sempre; sem corpo de resposta porque não há nada a devolver depois de
+    apagar."""
+    if not simulado.apagar(sid, uid):
+        raise HTTPException(404, "simulado não encontrado")
+    return {"ok": True}
+
+
+@app.get("/simulados/{sid}/estado")
+def rota_estado_simulado(sid: int, uid: int = Depends(usuario_atual)):
+    """Reconstrói a prova pra retomar: questões na ordem original, quais já
+    têm tentativa (a tela pula pra primeira sem resposta) e o relógio
+    acumulado. 404 tanto pra id inexistente quanto pra id de outra conta —
+    mesmo motivo de sempre (não confirmar posse de id alheio)."""
+    e = simulado.estado(sid, uid)
+    if e is None:
+        raise HTTPException(404, "simulado não encontrado")
+    return e
+
+
+class ResponderUmaBody(BaseModel):
     questao_id: int
     resposta: str
-    segundos: int | None = None
+    segundos_pergunta: int = 0
+    segundos_acumulados: int = 0
 
 
-class RespostasSimuladoBody(BaseModel):
-    respostas: list[RespostaSimuladoItem]
+@app.post("/simulados/{sid}/responder")
+def rota_responder_uma(sid: int, body: ResponderUmaBody, uid: int = Depends(usuario_atual)):
+    """
+    Salva UMA resposta na hora — migração 018. Antes desta rota, o
+    simulado inteiro só chegava ao banco numa tacada só no final
+    (`finalizar`); conexão cair ou aba fechar no meio perdia 100% do que
+    já tinha sido respondido. Sem diálogo nem correção mostrada aqui (isso
+    continua só em `finalizar` — ver core/simulado.py), só a GRAVAÇÃO deixou
+    de ficar empilhada pro fim.
+    """
+    try:
+        return simulado.responder_uma(sid, uid, body.questao_id, body.resposta,
+                                      body.segundos_pergunta, body.segundos_acumulados)
+    except ValueError:
+        raise HTTPException(404, "simulado não encontrado")
+    except ErroLLM as e:
+        raise HTTPException(503, f"LLM indisponível ao corrigir: {e}")
+
+
+class TempoSimuladoBody(BaseModel):
+    segundos_acumulados: int
+
+
+@app.post("/simulados/{sid}/tempo")
+def rota_tempo_simulado(sid: int, body: TempoSimuladoBody, uid: int = Depends(usuario_atual)):
+    """Só salva o relógio — sem responder questão nenhuma. É o que
+    "pausar" e "sair" chamam pra não perder o tempo decorrido quando a
+    pessoa não respondeu mais nada nesta visita (ver core.simulado.
+    atualizar_tempo)."""
+    if not simulado.pertence_a(sid, uid):
+        raise HTTPException(404, "simulado não encontrado")
+    simulado.atualizar_tempo(sid, uid, body.segundos_acumulados)
+    return {"ok": True}
+
+
+class FinalizarSimuladoBody(BaseModel):
     segundos_total: int = 0
 
 
-@app.post("/simulados/{sid}/respostas")
-def rota_responder_simulado(sid: int, body: RespostasSimuladoBody, uid: int = Depends(usuario_atual)):
-    """
-    Sem diálogo (por design — ver core/simulado.py): manda TODAS as
-    respostas de uma vez, corrige tudo, registra e devolve o relatório. É a
-    versão HTTP do laço final de `chat.simulado()`.
-    """
+@app.post("/simulados/{sid}/finalizar")
+def rota_finalizar_simulado(sid: int, body: FinalizarSimuladoBody, uid: int = Depends(usuario_atual)):
+    """Fecha a prova e devolve o relatório. Não recebe respostas — todas já
+    foram salvas via `POST /simulados/{sid}/responder`, uma a uma, conforme
+    o aluno respondia. Substituiu o antigo `POST /simulados/{sid}/respostas`
+    (lote único no final), que ficou incompatível com prova retomável: não
+    dá pra "mandar tudo de uma vez" de uma sessão que pode ter sido
+    respondida em três pedaços, em três dias diferentes."""
     if not simulado.pertence_a(sid, uid):
-        # 404, não 403: não confirma pra quem tenta adivinhar que o id existe
-        # e só não é seu (mesmo espírito da mensagem de login em auth.py).
         raise HTTPException(404, "simulado não encontrado")
-    qmap = questoes.obter_varias([r.questao_id for r in body.respostas])
-    for item in body.respostas:
-        q = qmap.get(item.questao_id)
-        if not q:
-            continue
-        try:
-            av = simulado.corrigir(q, item.resposta)
-        except ErroLLM as e:
-            raise HTTPException(503, f"LLM indisponível ao corrigir \"{q['tema']}\": {e}")
-        scheduler.registrar(uid, q["id"], av["veredito"], item.resposta, 0, item.segundos,
-                            simulado_id=sid)
     return {
         "resultado": simulado.finalizar(sid, uid, body.segundos_total),
+        "relatorio": simulado.relatorio(sid, uid),
+        "erros": simulado.erros_do(sid, uid),
+    }
+
+
+@app.get("/simulados/{sid}/relatorio")
+def rota_relatorio_simulado(sid: int, uid: int = Depends(usuario_atual)):
+    """Reabre a revisão de uma prova — em andamento ou já fechada, tanto
+    faz: os dois só leem `tentativa`, nunca re-finalizam (diferente de
+    `POST .../finalizar`, que grava `segundos_total`). É o que o histórico
+    usa pro "ver revisão" continuar disponível bem depois da prova ter
+    acabado — a resposta e o gabarito de cada questão não deveriam
+    desaparecer só porque a tela de resultado foi fechada."""
+    if not simulado.pertence_a(sid, uid):
+        raise HTTPException(404, "simulado não encontrado")
+    return {
+        "resultado": simulado.resultado(sid, uid),
         "relatorio": simulado.relatorio(sid, uid),
         "erros": simulado.erros_do(sid, uid),
     }

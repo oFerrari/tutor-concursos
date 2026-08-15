@@ -186,6 +186,17 @@
   outline-offset: 2px;
 }
 
+/* Campo de texto já tem o próprio sinal de foco (borda muda de cor —
+   `.field:focus`, `focus-within:border-accent` nos composers) — o contorno
+   duro de 2px acima ficava por CIMA desse tratamento mais simples, porque
+   regra fora de `@layer` sempre vence utilitário do Tailwind (`outline-none`
+   não bastava). Sem o contorno aqui, o campo ainda sinaliza foco — só do
+   jeito mais discreto que já estava desenhado, não do jeito nenhum. */
+input:focus-visible,
+textarea:focus-visible {
+  outline: none;
+}
+
 /* Barra de rolagem fina e escura — a padrão do sistema é clara e rasga a
    tela inteira num app que é preto de ponta a ponta. */
 ::-webkit-scrollbar {
@@ -224,6 +235,76 @@
   }
   50% {
     opacity: 0.25;
+  }
+}
+
+/* Relógio do simulado estourando o tempo alvo (SimuladoRunner) — chacoalha
+   uma vez a cada ciclo, não continuamente: tremer o tempo INTEIRO seria
+   mais irritante que informativo depois dos primeiros segundos. */
+@keyframes pxChacoalha {
+  0%,
+  85%,
+  100% {
+    transform: translateX(0);
+  }
+  87% {
+    transform: translateX(-2px);
+  }
+  89% {
+    transform: translateX(2px);
+  }
+  91% {
+    transform: translateX(-2px);
+  }
+  93% {
+    transform: translateX(2px);
+  }
+  95% {
+    transform: translateX(0);
+  }
+}
+
+.relogio-estourado {
+  animation: pxChacoalha 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .relogio-estourado {
+    animation: none;
+  }
+}
+
+@keyframes pxRiseGrande {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Entrada de página (app/template.tsx) — sobe mais que pxRise (22px, não
+   8px) porque é o container inteiro, não um balão dentro dele; 8px nesta
+   escala passava batido. Curva de saída (não linear, não bounce) é o que
+   faz "profissional" em vez de "bonequinho". */
+.animar-entrada-pagina {
+  animation: pxRiseGrande 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Cascata de balões do /tutor (abertura, fala do aluno, resposta) — cada
+   um usa esta classe com um `animationDelay` inline crescente, pra subir
+   em SEQUÊNCIA em vez de todos de uma vez. Reaproveita pxRise (8px), a
+   escala certa pra um balão individual. */
+.balao-subida {
+  animation: pxRise 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animar-entrada-pagina,
+  .balao-subida {
+    animation: none;
   }
 }
 

@@ -79,15 +79,12 @@ export function MenuConta({
               </p>
             </div>
 
+            {/* "Meu edital" e "Meus materiais" saíram daqui — duplicavam
+                itens que já estão na sidebar, um clique acima disto. Menu
+                de conta é conta (trocar mesa, sair), não navegação. */}
             <Link href="/mesas" onClick={() => setAberto(false)} className="item-menu">
               <LayoutGrid className="h-[15px] w-[15px]" />
               Trocar de mesa
-            </Link>
-            <Link href="/meta" onClick={() => setAberto(false)} className="item-menu">
-              Meu edital
-            </Link>
-            <Link href="/materiais" onClick={() => setAberto(false)} className="item-menu">
-              Meus materiais
             </Link>
 
             <div className="mx-1 my-1.5 h-px bg-line-soft" />

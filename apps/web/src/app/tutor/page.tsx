@@ -234,7 +234,7 @@ export default function PaginaTutor() {
           </p>
 
           {/* ------------------------------------------ abertura + rota */}
-          <div className="flex items-start gap-3">
+          <div className="balao-subida flex items-start gap-3" style={{ animationDelay: "40ms" }}>
             <span className="mt-0 flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] bg-accent text-accent-foreground">
               <MarcaGlifo className="h-4 w-4" />
             </span>
@@ -274,12 +274,12 @@ export default function PaginaTutor() {
           </div>
 
           {/* ------------------------------------------- fala do aluno */}
-          <div className="flex justify-end">
+          <div className="balao-subida flex justify-end" style={{ animationDelay: "170ms" }}>
             <div className="balao-usuario">{ABERTURA_TUTOR.perguntaUsuario}</div>
           </div>
 
           {/* ------------------------------- resposta socrática + questão */}
-          <div className="flex items-start gap-3">
+          <div className="balao-subida flex items-start gap-3" style={{ animationDelay: "300ms" }}>
             <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] bg-accent text-accent-foreground">
               <MarcaGlifo className="h-4 w-4" />
             </span>

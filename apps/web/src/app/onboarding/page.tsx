@@ -25,10 +25,13 @@ import { ENTREVISTA } from "@/mock/prototipo";
  *    a pessoa escolhe o cargo e revisa as disciplinas. Um edital tem vários
  *    cargos, e ingerir todos junto punha matéria de Advocacia no plano de
  *    quem vai prestar TI.
- *  - As três perguntas (horas/nível/turno) são vitrine — TODO(backend):
- *    não há onde gravar preferência de estudo; `usuario` tem só id, email
- *    e hash de senha. Enquanto não houver, a resposta some ao sair da tela,
- *    e a tela DIZ isso em vez de fingir que guardou.
+ *  - As três perguntas (horas/nível/turno) são REAIS desde a migração 015:
+ *    `usuario.perfil` (JSONB) grava a cada clique via `salvarPerfil()`,
+ *    sem botão de "salvar" — ver o comentário no `onClick` mais abaixo pro
+ *    porquê. "Horas" também aceita um valor personalizado (`core/auth.py`,
+ *    `_valor_valido`): a lista fechada continua existindo pros presets,
+ *    mas um número dentro de um padrão fixo (`Nh`, 1 a 16) passa — não é
+ *    abrir campo livre, é um padrão fechado maior que 4 valores.
  *
  * Sobre a extração: `core/edital.py` é MELHOR ESFORÇO, não contrato —
  * layout de edital varia por banca. É exatamente por isso que existe a
@@ -44,6 +47,18 @@ export default function PaginaOnboarding() {
   );
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+
+  // Chip "personalizado" só faz sentido em "horas" — as outras duas
+  // perguntas (nível, turno) são categóricas, um número não responde
+  // nenhuma delas. `core/auth._valor_valido` aceita "Nh" de 1 a 16.
+  const [personalizandoHoras, setPersonalizandoHoras] = useState(false);
+  const [horasPersonalizadas, setHorasPersonalizadas] = useState("");
+
+  function escolherHoras(valor: string) {
+    const novas = { ...respostas, horas: valor };
+    setRespostas(novas);
+    salvarPerfil(novas).catch(() => {});
+  }
 
   // Esta tela é o destino de DOIS caminhos: a conta nova (que nunca viu o
   // produto) e a criação da segunda, terceira, quarta mesa — porque mesa
@@ -177,11 +192,12 @@ export default function PaginaOnboarding() {
             className="grid grid-cols-1 items-center gap-4 border-b border-line-soft px-5 py-4 last:border-b-0 md:grid-cols-[190px_1fr]"
           >
             <p className="text-sm text-body">{p.rotulo}</p>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {p.opcoes.map((o) => (
                 <button
                   key={o}
                   onClick={() => {
+                    if (p.chave === "horas") setPersonalizandoHoras(false);
                     const novas = { ...respostas, [p.chave]: o };
                     setRespostas(novas);
                     // Grava a cada clique, não num "salvar" no fim: são três
@@ -191,11 +207,41 @@ export default function PaginaOnboarding() {
                     // perdida. Falhar aqui não pode travar o onboarding.
                     salvarPerfil(novas).catch(() => {});
                   }}
-                  className={respostas[p.chave] === o ? "chip-ativo" : "chip"}
+                  className={!personalizandoHoras && respostas[p.chave] === o ? "chip-ativo" : "chip"}
                 >
                   {o}
                 </button>
               ))}
+
+              {p.chave === "horas" &&
+                (personalizandoHoras ? (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const n = Number(horasPersonalizadas);
+                      if (n >= 1 && n <= 16) escolherHoras(`${n}h`);
+                    }}
+                    className="flex items-center gap-1.5"
+                  >
+                    <input
+                      type="number"
+                      min={1}
+                      max={16}
+                      autoFocus
+                      value={horasPersonalizadas}
+                      onChange={(e) => setHorasPersonalizadas(e.target.value)}
+                      placeholder="h/dia"
+                      className="field w-[70px] !py-1.5 text-center text-[13px]"
+                    />
+                    <button type="submit" className="chip-ativo">
+                      ok
+                    </button>
+                  </form>
+                ) : (
+                  <button onClick={() => setPersonalizandoHoras(true)} className="chip">
+                    personalizado
+                  </button>
+                ))}
             </div>
           </div>
         ))}

@@ -20,10 +20,63 @@ Estimativa de tempo vem do histórico real DESTE usuário
 levou `v_desempenho_disciplina` a existir: medir, não estimar às cegas.
 Sem histórico ainda (usuário novo), cai num default documentado abaixo.
 """
+import re
+
 from . import db, mesa
 from .scheduler import CAMPOS_Q, JOIN_CTX
 
-VERSAO = "desafio-v4"
+VERSAO = "desafio-v5"
+
+_RE_HORAS = re.compile(r"^(\d+)h\+?$")
+
+
+def minutos_do_perfil(perfil: dict | None) -> int | None:
+    """
+    Converte `usuario.perfil["horas"]` (migração 015, "1h"/"2h"/"4h"/"6h+"
+    ou o personalizado "Nh" da migração de auth.py) num orçamento de
+    minutos pra UMA sessão de desafio. `None` se a pessoa nunca respondeu
+    o onboarding — aí `/desafio` cai no comportamento antigo ("sessão
+    cheia", sem corte).
+
+    Aproximação DECLARADA: "horas por dia" é um total diário, e o desafio
+    é UMA sessão — tratar as duas coisas como a mesma grandeza (1h/dia vira
+    exatamente 60min de UM desafio) supõe que a pessoa estuda numa sentada
+    só. Pra quem divide 6h em várias sessões ao longo do dia, isso
+    superestima o tamanho de cada uma. Ainda assim é estritamente melhor
+    que o que existia antes (zero conexão — 1h/dia e 6h/dia recebiam o
+    MESMO desafio) e usa a mesma máquina já calibrada por velocidade real
+    (`orcamento_blocos`/`tempo_medio_segundos`), não um número novo
+    chutado. Corrigir a aproximação exigiria saber quantas sessões por dia
+    a pessoa pretende fazer — pergunta que o onboarding não faz hoje.
+    """
+    if not perfil:
+        return None
+    m = _RE_HORAS.match(str(perfil.get("horas", "")))
+    return int(m.group(1)) * 60 if m else None
+
+
+# "Começando" pesa pra reincidentes (reforça o que já viu, em vez de
+# empilhar material inédito em cima de base ainda instável); "Avançado"
+# pesa pra novas (cobre o acervo mais rápido, já tem onde pendurar
+# conteúdo novo). "Intermediário" e perfil ausente mantêm 3/5/5 — o default
+# de sempre, não uma escolha nova. Números pequenos e simples de propósito:
+# isto é uma correção de ênfase, não uma fórmula — inventar uma proporção
+# elaborada sobre uma escala de 3 valores seria precisão falsa.
+_PESO_NIVEL = {
+    "Começando": (5, 3, 5),
+    "Avançado": (2, 7, 5),
+}
+
+
+def proporcao_por_nivel(perfil: dict | None, n_reincidentes: int, n_novas: int,
+                        n_simulado: int) -> tuple[int, int, int]:
+    """Só reajusta quando os TRÊS ainda estão no default (3/5/5) — se algum
+    dia um chamador passar valores explícitos diferentes, essa escolha
+    explícita vence o perfil, não o contrário."""
+    if (n_reincidentes, n_novas, n_simulado) != (3, 5, 5):
+        return n_reincidentes, n_novas, n_simulado
+    nivel = (perfil or {}).get("nivel")
+    return _PESO_NIVEL.get(nivel, (n_reincidentes, n_novas, n_simulado))
 
 # Sem tentativa nenhuma DESTE usuário ainda não há média para calcular. 90s é
 # chute conservador para uma resposta dissertativa curta — melhor superestimar

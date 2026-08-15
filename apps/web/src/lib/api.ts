@@ -149,14 +149,18 @@ export function getMe(): Promise<Usuario> {
   return chamar<Usuario>("/me");
 }
 
+export type Perfil = { horas?: string; nivel?: string; turno?: string };
+
 /** As três respostas do onboarding (horas/nível/turno). Faz merge no
  *  servidor: mandar só `turno` não apaga o que já estava lá. */
-export function salvarPerfil(perfil: {
-  horas?: string;
-  nivel?: string;
-  turno?: string;
-}): Promise<{ perfil: Record<string, string> }> {
+export function salvarPerfil(perfil: Perfil): Promise<{ perfil: Record<string, string> }> {
   return chamar("/me/perfil", { method: "PUT", body: JSON.stringify(perfil) });
+}
+
+/** Faltava o caminho de volta — só existia gravar. `/desafio` usa isto pra
+ *  calibrar o orçamento padrão de UMA sessão pelas horas/dia declaradas. */
+export function getPerfil(): Promise<Perfil> {
+  return chamar<Perfil>("/me/perfil");
 }
 
 // ---------------------------------------------------------------------- mesas
@@ -373,11 +377,12 @@ export type QuestaoSimulado = {
 export function iniciarSimulado(
   n: number,
   minutos?: number,
-  disciplina?: string
+  disciplina?: string,
+  nome?: string
 ): Promise<{ simulado_id: number; questoes: QuestaoSimulado[] }> {
   return chamar("/simulados", {
     method: "POST",
-    body: JSON.stringify({ n, minutos, disciplina }),
+    body: JSON.stringify({ n, minutos, disciplina, nome: nome || undefined }),
   });
 }
 
@@ -392,28 +397,97 @@ export function iniciarSimuladoComIds(
   });
 }
 
-export type RespostaSimuladoItem = { questao_id: number; resposta: string; segundos: number };
 export type ResultadoSimulado = { total: number; acertos: number; parciais: number; erros: number; nota_pct: number };
 export type RelatorioDisciplina = { disciplina: string; questoes: number; acertos: number; pct: number };
 export type ErroSimulado = { tema: string; enunciado: string; gabarito: string; resposta: string; veredito: string };
 
-export function responderSimulado(
+/**
+ * Salva UMA resposta na hora (migração 018) — não é lote no final. É o que
+ * faz o simulado sobreviver a aba fechada ou conexão caindo no meio: cada
+ * resposta já está no banco antes da próxima pergunta aparecer, não só
+ * depois de "finalizar". `segundosAcumulados` é o relógio ATIVO da prova
+ * (exclui tempo pausado) — quem manda o valor certo é `SimuladoRunner`.
+ */
+export function responderUmaSimulado(
   simuladoId: number,
-  respostas: RespostaSimuladoItem[],
+  questaoId: number,
+  resposta: string,
+  segundosPergunta: number,
+  segundosAcumulados: number
+): Promise<{ ok: boolean; ja_respondida: boolean }> {
+  return chamar(`/simulados/${simuladoId}/responder`, {
+    method: "POST",
+    body: JSON.stringify({
+      questao_id: questaoId,
+      resposta,
+      segundos_pergunta: segundosPergunta,
+      segundos_acumulados: segundosAcumulados,
+    }),
+  });
+}
+
+/** Só o relógio, sem responder questão nenhuma — "pausar" e "sair" chamam
+ *  isto pra não perder o tempo decorrido quando não há resposta nova
+ *  nesta visita (sem isso, só `responderUmaSimulado` salvava o tempo). */
+export function salvarTempoSimulado(
+  simuladoId: number,
+  segundosAcumulados: number
+): Promise<{ ok: boolean }> {
+  return chamar(`/simulados/${simuladoId}/tempo`, {
+    method: "POST",
+    body: JSON.stringify({ segundos_acumulados: segundosAcumulados }),
+  });
+}
+
+export type EstadoSimulado = {
+  id: number;
+  questoes: (QuestaoSimulado & { respondida: boolean; resposta_dada: string | null })[];
+  minutos_alvo: number | null;
+  segundos_acumulados: number;
+  finalizado: boolean;
+};
+
+/** Reconstrói uma prova em andamento — o que a tela usa pra "continuar de
+ *  onde parei": pula as já respondidas, retoma o relógio do ponto salvo. */
+export function getEstadoSimulado(simuladoId: number): Promise<EstadoSimulado> {
+  return chamar<EstadoSimulado>(`/simulados/${simuladoId}/estado`);
+}
+
+/** Fecha a prova e devolve o relatório. Não manda respostas — todas já
+ *  foram salvas via `responderUmaSimulado`, uma a uma. */
+export function finalizarSimulado(
+  simuladoId: number,
   segundosTotal: number
 ): Promise<{ resultado: ResultadoSimulado; relatorio: RelatorioDisciplina[]; erros: ErroSimulado[] }> {
-  return chamar(`/simulados/${simuladoId}/respostas`, {
+  return chamar(`/simulados/${simuladoId}/finalizar`, {
     method: "POST",
-    body: JSON.stringify({ respostas, segundos_total: segundosTotal }),
+    body: JSON.stringify({ segundos_total: segundosTotal }),
   });
+}
+
+/** Tira a prova do histórico — não mexe em tentativa/progresso, só na
+ *  etiqueta "isso foi uma prova" (ver core/simulado.apagar). */
+export function apagarSimulado(simuladoId: number): Promise<{ ok: boolean }> {
+  return chamar(`/simulados/${simuladoId}`, { method: "DELETE" });
+}
+
+/** Reabre a revisão de uma prova — em andamento ou já fechada, tanto faz.
+ *  Só LÊ (nunca re-finaliza) — é o que o histórico usa pro "ver revisão"
+ *  continuar disponível bem depois da prova ter acabado. */
+export function getRelatorioSimulado(
+  simuladoId: number
+): Promise<{ resultado: ResultadoSimulado; relatorio: RelatorioDisciplina[]; erros: ErroSimulado[] }> {
+  return chamar(`/simulados/${simuladoId}/relatorio`);
 }
 
 export type HistoricoSimulado = {
   id: number;
+  nome: string | null;
   n_questoes: number;
   minutos_alvo: number | null;
   segundos_total: number | null;
   criado_em: string;
+  em_andamento: boolean;
   acertos: number;
   respondidas: number;
   nota_pct: number | null;
