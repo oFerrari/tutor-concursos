@@ -197,6 +197,22 @@ textarea:focus-visible {
   outline: none;
 }
 
+/* Setinhas nativas de <input type="number"> (Chrome/Safari: par de chevron
+   cinza-claro que aparece no HOVER, por cima do fundo escuro do `.field` —
+   sobra de tema claro que o app não usa em lugar nenhum). Onboarding,
+   desafio e simulado usam number só pra digitar (1-16h, minutos, questões),
+   nunca pra incrementar clicando na seta — escondê-la não tira função,
+   só o enfeite que não combina com o resto da tela. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  appearance: textfield;
+}
+
 /* Barra de rolagem fina e escura — a padrão do sistema é clara e rasga a
    tela inteira num app que é preto de ponta a ponta. */
 ::-webkit-scrollbar {
@@ -457,6 +473,58 @@ textarea:focus-visible {
 
   .field:focus {
     box-shadow: var(--ring-accent);
+  }
+
+  /* --------------------------------------------- seletor com sugestão
+
+     Lista PRÓPRIA, e não `<datalist>`/`<select>` nativo, por um motivo só:
+     o popup nativo é desenhado pelo NAVEGADOR e CSS não alcança ele — o
+     realce do item sob o mouse vem azul do sistema, num site que não tem
+     azul na paleta. Trazer a lista pra dentro da página é o único jeito de
+     ela ter a mesma cara do input e o rubro no hover.
+
+     O que isso NÃO pode custar: a lista continua sendo DICA, não domínio
+     fechado. Quem digita matéria que não está na lista é atendido igual —
+     por isso o campo de disciplina/assunto segue sendo um `<input>` de
+     verdade por baixo, com a lista só sugerindo. */
+  .seletor-painel {
+    @apply absolute left-0 right-0 top-[calc(100%+4px)] z-30 max-h-[264px] overflow-y-auto
+           rounded-xl border border-line-strong bg-surface-input py-1.5 shadow-2xl;
+  }
+
+  .seletor-item {
+    @apply flex w-full cursor-pointer items-center justify-between gap-2 px-3.5 py-2
+           text-left text-[13.5px] text-body transition-colors;
+  }
+
+  /* Hover e navegação por teclado usam o MESMO realce: dois destaques
+     diferentes na mesma lista fariam a pessoa procurar qual dos dois vale. */
+  .seletor-item:hover,
+  .seletor-item-ativo {
+    @apply bg-accent-soft text-accent-text;
+  }
+
+  /* ------------------------------------------------ alternância (switch)
+
+     Era um chip rubro escrito "de meu edital". Chip é ETIQUETA: quem abre a
+     tela pela primeira vez lê um rótulo, não um controle, e não descobre que
+     ali dá pra alternar a fonte da sugestão. Trilho com bolinha é a forma que
+     já significa "isto liga e desliga" sem precisar de legenda. */
+  .switch {
+    @apply relative h-[18px] w-[32px] shrink-0 cursor-pointer rounded-full border
+           border-line-strong bg-surface-raised transition-colors;
+  }
+
+  .switch-ligado {
+    @apply border-accent bg-accent-soft;
+  }
+
+  .switch-bolinha {
+    @apply absolute top-[2px] h-[12px] w-[12px] rounded-full bg-subtle transition-all;
+  }
+
+  .switch-ligado .switch-bolinha {
+    @apply bg-accent-text;
   }
 
   /* Alternativa de múltipla escolha (A/B/C do tutor socrático). */

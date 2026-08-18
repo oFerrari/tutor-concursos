@@ -265,17 +265,22 @@ def _resumo_perfil(perfil: dict | None) -> str | None:
     """
     if not perfil:
         return None
-    # Revalida na LEITURA, contra a mesma lista fechada usada na escrita.
-    # `auth.atualizar_perfil` já filtra, então isto é redundante hoje — e é
-    # de propósito: o destino deste texto é o prompt, e o dia em que alguém
-    # gravar perfil por outro caminho (import, migração, script) não pode
-    # ser o dia em que "nivel: ignore as regras acima" chega ao modelo.
+    # Revalida na LEITURA com a MESMA FUNÇÃO usada na escrita
+    # (`auth._valor_valido`), não uma reimplementação paralela — foi
+    # reimplementação que causou bug real: a versão anterior checava só
+    # `v in CAMPOS_PERFIL[k]`, que cobre os presets mas não o regex de
+    # horas personalizada (`_RE_HORAS_PERSONALIZADA`, aceito na escrita
+    # desde sempre). Resultado: "horas": "3h" gravava certo, `desafio.py`
+    # calculava os minutos certo (tem a própria regex), e só aqui — o
+    # resumo que vai pro prompt do tutor — o campo desaparecia, como se a
+    # pessoa nunca tivesse respondido "quantas horas por dia" no
+    # onboarding. Duas cópias da MESMA regra de validação é exatamente
+    # como elas divergem; a chamada é o jeito de nunca mais divergir.
     # Import local: `socratic` não deve carregar `auth` pra quem só usa
     # `avaliar()` — mesmo motivo do import de `scheduler` abaixo.
-    from .auth import CAMPOS_PERFIL
+    from .auth import _valor_valido
 
-    valido = {k: v for k, v in perfil.items()
-              if k in CAMPOS_PERFIL and v in CAMPOS_PERFIL[k]}
+    valido = {k: v for k, v in perfil.items() if _valor_valido(k, v)}
     partes = []
     if valido.get("horas"):
         partes.append(f"estuda cerca de {valido['horas']} por dia")
@@ -363,7 +368,11 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     faria a resposta ser "não encontrei" para uma pergunta que o acervo
     responde perfeitamente.
     """
-    chunks = retrieval.buscar(pergunta, n=6)
+    # `usuario_id` também abre a BIBLIOTECA dele (019): a apostila e o resumo
+    # que ele subiu entram no contexto junto da lei. É o ponto do produto —
+    # "alimente sua IA com seus PDFs" só significa algo se o material chegar
+    # ao prompt. Sem usuario_id (CLI), fica só o acervo público.
+    chunks = retrieval.buscar(pergunta, n=6, usuario_id=usuario_id)
     contexto_material = retrieval.formatar_contexto(chunks) if chunks else None
     contexto_desempenho = _resumo_desempenho(usuario_id, disciplinas) if usuario_id else None
     contexto_mesa = _resumo_mesa(mesa_)

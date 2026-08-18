@@ -149,6 +149,15 @@ export function getMe(): Promise<Usuario> {
   return chamar<Usuario>("/me");
 }
 
+/** Apaga a conta — irreversível, `DELETE /me` exige a senha atual mesmo já
+ *  autenticada por token (`core/auth.py`): um token vazado não deveria
+ *  bastar pra sequestrar E apagar a conta. `ON DELETE CASCADE` (migração
+ *  009) limpa tentativa/progresso/erro_caderno/simulado/mesa(+edital+tópico)
+ *  de uma vez — não existe desfazer depois disto. */
+export function apagarConta(senha: string): Promise<{ ok: true }> {
+  return chamar("/me", { method: "DELETE", body: JSON.stringify({ senha }) });
+}
+
 export type Perfil = { horas?: string; nivel?: string; turno?: string };
 
 /** As três respostas do onboarding (horas/nível/turno). Faz merge no
@@ -646,7 +655,127 @@ export type CoberturaDisciplina = {
   topicos_pendentes_estimado: number;
 };
 
-export type EditalAtual = { id: number; titulo: string; data_prova: string | null; cobertura: CoberturaDisciplina[] };
+export type EditalAtual = {
+  id: number; titulo: string; data_prova: string | null;
+  /** Cargo escolhido na curadoria (migração 018). null = não declarado:
+   *  concurso de cargo único, ingestão por CLI, ou o aluno seguiu sem nomear
+   *  o próprio cargo. Tratar como ausência, nunca como erro. */
+  cargo: string | null;
+  cobertura: CoberturaDisciplina[];
+};
+
+/** Tira ou acrescenta matéria num edital JÁ confirmado, sem subir o PDF de
+ *  novo. A curadoria acontecia uma vez só; o aluno muda de ideia no MEIO do
+ *  estudo, que é quando ele sabe o que está sobrando. */
+export function ajustarDisciplinasEdital(
+  ajuste: { remover?: string[]; adicionar?: string[] }
+): Promise<{ cobertura: CoberturaDisciplina[] }> {
+  return chamar("/edital/disciplinas", { method: "PATCH", body: JSON.stringify(ajuste) });
+}
+
+/** Aponta uma data futura quando a do edital já passou. Prova vencida deixa a
+ *  meta em "0 dias / 0%" — verdadeiro e inútil: sem prazo não há ritmo. */
+export function corrigirDataProva(data_prova: string): Promise<EditalAtual> {
+  return chamar("/edital/data-prova", { method: "PATCH", body: JSON.stringify({ data_prova }) });
+}
+
+/** Um material da biblioteca privada do aluno (migração 019). */
+export type Material = {
+  id: number;
+  titulo: string;
+  /** null = ainda não classificado (020). O classificador roda em background
+   *  depois de indexar; a tela mostra "identificando…" nesse meio-tempo. */
+  disciplina: string | null;
+  /** Um nível abaixo da disciplina — é o que distingue a aula 3 da aula 11 de
+   *  um mesmo curso, que caem todas na mesma disciplina. */
+  assunto: string | null;
+  /** Procedência do rótulo: `aluno` digitou, `modelo` leu o começo do texto.
+   *  A tela usa isso pra pedir conferência só no palpite. */
+  classificado_por: "aluno" | "modelo" | "acervo" | null;
+  tipo: "aula" | "resumo" | "jurisprudencia";
+  status: "processando" | "pronto" | "falha";
+  /** Razão da falha, em texto — "PDF protegido", "precisa de OCR". null quando
+   *  não falhou. Sem ela o aluno vê "falha" e não sabe o que fazer. */
+  erro: string | null;
+  /** Trechos ESPERADOS (gravado antes de indexar) e os já indexados. Os dois
+   *  juntos dão o "187 de 340" enquanto o embedding roda. */
+  chunks_total: number | null;
+  chunks: number;
+  origem: string | null;
+  criado_em: string;
+};
+
+/** Rótulos que ESTE aluno já usou, pro seletor da tela oferecer em vez de
+ *  exigir que ele lembre da grafia exata que digitou semana passada.
+ *
+ *  `assuntos_por_disciplina` existe porque assunto só faz sentido DENTRO de uma
+ *  matéria: oferecer "Remédios constitucionais" a quem está subindo
+ *  Contabilidade é ruído. A lista chapada serve pra quando não há disciplina
+ *  escolhida ainda. */
+export type SugestoesMaterial = {
+  disciplinas: string[];
+  assuntos: string[];
+  assuntos_por_disciplina: Record<string, string[]>;
+};
+
+export function getSugestoesMaterial(): Promise<SugestoesMaterial> {
+  return chamar("/materiais/sugestoes");
+}
+
+export function getMateriais(): Promise<{ materiais: Material[] }> {
+  return chamar("/materiais");
+}
+
+/** O embedding roda local na CPU e leva minutos num PDF grande, então isto
+ *  responde na hora com `status: "processando"` — quem acompanha o progresso é
+ *  o polling da lista, não esta chamada. */
+export function subirMaterial(
+  arquivo: File,
+  dados: { disciplina?: string; assunto?: string; tipo: string; titulo?: string }
+): Promise<Material> {
+  const fd = new FormData();
+  fd.append("arquivo", arquivo);
+  // Disciplina e assunto são OPCIONAIS (020): vazio significa "descubra você",
+  // e o classificador preenche. Mandar string vazia seria o mesmo que mandar
+  // nada, mas explicitar evita gravar "" como se fosse rótulo.
+  if (dados.disciplina?.trim()) fd.append("disciplina", dados.disciplina.trim());
+  if (dados.assunto?.trim()) fd.append("assunto", dados.assunto.trim());
+  fd.append("tipo", dados.tipo);
+  if (dados.titulo) fd.append("titulo", dados.titulo);
+  return chamarFormData("/materiais", fd);
+}
+
+/** Indexa uma URL pública. O servidor resolve o DNS e recusa IP não-público
+ *  (SSRF) — ver `material.baixar`, que também diz o que isso NÃO cobre. */
+export function indexarLink(dados: {
+  url: string;
+  disciplina?: string;
+  assunto?: string;
+  tipo?: string;
+}): Promise<Material> {
+  return chamar("/materiais/link", { method: "POST", body: JSON.stringify(dados) });
+}
+
+/** Corrige o palpite do classificador. Passa a valer como `aluno`. */
+export function classificarMaterial(
+  id: number,
+  dados: { disciplina?: string; assunto?: string }
+): Promise<Material> {
+  return chamar(`/materiais/${id}`, { method: "PATCH", body: JSON.stringify(dados) });
+}
+
+/** Tenta indexar de novo. O arquivo volta porque o servidor guarda só o NOME
+ *  em `documento.origem`, não os bytes — e `indexar` é idempotente, então isto
+ *  não duplica trechos. */
+export function reindexarMaterial(id: number, arquivo: File): Promise<{ ok: true }> {
+  const fd = new FormData();
+  fd.append("arquivo", arquivo);
+  return chamarFormData(`/materiais/${id}/reindexar`, fd);
+}
+
+export function apagarMaterial(id: number): Promise<{ ok: true }> {
+  return chamar(`/materiais/${id}`, { method: "DELETE" });
+}
 
 export function getEdital(): Promise<EditalAtual> {
   return chamar<EditalAtual>("/edital");
@@ -669,7 +798,7 @@ export type Rascunho = {
   candidatos_data: { data: string; pontuacao: number; contexto: string }[];
   estrutura: EstruturaEdital;
   /** quem extraiu. "llm" merece revisão mais atenta que "parser". */
-  origem: "parser" | "llm";
+  origem: "parser" | "llm" | "parser_apos_falha";
   expira_em: string;
 };
 
@@ -692,6 +821,8 @@ export function confirmarRascunho(
     data_prova?: string;
     orgao?: string;
     banca?: string;
+    /** Cargo escolhido na curadoria — vai pra `edital.cargo` (018). */
+    cargo?: string;
   }
 ): Promise<{ edital_id: number; disciplinas: number; topicos: number }> {
   return chamar(`/editais/rascunho/${id}/confirmar`, {

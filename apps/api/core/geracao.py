@@ -158,6 +158,14 @@ def _por_tema(tema: str, limite: int) -> list[int]:
     Depois filtra pelo que serve de fonte — a busca é otimizada pra explicar
     (histórico ajuda a explicar), a geração exige proveniência.
     """
+    # SEM `usuario_id` de propósito, e não é esquecimento: `questao` é acervo
+    # COMPARTILHADO (008, sem usuario_id). Gerar do material privado gravaria
+    # um enunciado com trecho da apostila paga de um aluno dentro do banco de
+    # questões de todo mundo — vazaria conteúdo e ainda citaria como
+    # proveniência um chunk que os outros não podem ver.
+    #
+    # O tutor LÊ a biblioteca (socratic.explicar); a geração de questão só
+    # produz do acervo público. Mudar isso exige `questao.usuario_id` antes.
     achados = retrieval.buscar(tema, n=12)
     if not achados:
         return []

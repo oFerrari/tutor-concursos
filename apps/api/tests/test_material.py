@@ -1,0 +1,269 @@
+"""Biblioteca do aluno (019): material privado indexado no acervo comum."""
+import pytest
+
+from core import db, material, retrieval
+
+VERSAO = "test-material-v1"
+TXT = ("MEU RESUMO PARTICULAR\n\nO mnemônico QUIXOTEBRAVO organiza os prazos "
+       "recursais do processo penal conforme minha anotação de aula. " * 10).encode()
+
+
+def _material(client, headers, nome="Resumo.txt", disciplina="Direito Processual Penal"):
+    return client.post("/materiais",
+                       files={"arquivo": (nome, TXT, "text/plain")},
+                       data={"disciplina": disciplina, "tipo": "resumo"},
+                       headers=headers)
+
+
+def test_sobe_lista_e_apaga(client, usuario):
+    r = _material(client, usuario["headers"])
+    assert r.status_code == 201, r.text
+    doc = r.json()
+    # Responde NA HORA com processando: o embedding leva minutos e não pode
+    # acontecer dentro do request.
+    assert doc["status"] == "processando" and doc["chunks_total"] >= 1
+
+    lista = client.get("/materiais", headers=usuario["headers"]).json()["materiais"]
+    assert [m["id"] for m in lista] == [doc["id"]]
+
+    assert client.delete(f"/materiais/{doc['id']}", headers=usuario["headers"]).status_code == 200
+    assert client.get("/materiais", headers=usuario["headers"]).json()["materiais"] == []
+
+
+def test_disciplina_e_OPCIONAL_e_o_sistema_descobre(client, usuario, llm_falso):
+    """MUDANÇA DELIBERADA (020). Antes a disciplina era obrigatória e isso não
+    sobreviveu ao primeiro uso real: subir 14 aulas de um curso é digitar a
+    mesma coisa 14 vezes, e o caso que mais importa é o material que a pessoa
+    NÃO conhece ("joguei lá, não sei se agrega"). Obrigar a rotular é obrigar a
+    LER antes de subir — inverte quem trabalha."""
+    llm_falso.retorno = '{"disciplina": "Direito Processual Penal", "assunto": "Prazos recursais"}'
+    r = client.post("/materiais", files={"arquivo": ("x.txt", TXT, "text/plain")},
+                    data={"tipo": "resumo"}, headers=usuario["headers"])
+    assert r.status_code == 201
+    doc = r.json()
+    assert doc["disciplina"] is None and doc["classificado_por"] is None
+
+    material.indexar(doc["id"], "x.txt", TXT)
+    m = client.get("/materiais", headers=usuario["headers"]).json()["materiais"][0]
+    assert m["disciplina"] == "Direito Processual Penal"
+    assert m["assunto"] == "Prazos recursais"
+    assert m["classificado_por"] == "modelo"
+
+
+def test_palpite_do_modelo_nao_sobrescreve_o_que_o_aluno_disse(client, usuario, llm_falso):
+    """Quem informou a matéria decidiu. Um palpite passando por cima é o
+    sistema discordando de quem tem mais contexto — mas o campo VAZIO ainda é
+    completado, porque "informei a disciplina, descubra o assunto" é normal."""
+    llm_falso.retorno = '{"disciplina": "Outra Coisa", "assunto": "Prazos recursais"}'
+    doc = client.post("/materiais", files={"arquivo": ("x.txt", TXT, "text/plain")},
+                      data={"disciplina": "Direito Penal", "tipo": "resumo"},
+                      headers=usuario["headers"]).json()
+    assert doc["classificado_por"] == "aluno"
+    material.indexar(doc["id"], "x.txt", TXT)
+    m = client.get("/materiais", headers=usuario["headers"]).json()["materiais"][0]
+    assert m["disciplina"] == "Direito Penal"      # preservado
+    assert m["assunto"] == "Prazos recursais"      # completado
+    assert m["classificado_por"] == "aluno"        # a parte que recorta é dele
+
+
+def test_falha_do_classificador_nao_perde_o_material(client, usuario, llm_falso):
+    """Sem cota, o material continua indexado e buscável — só aparece sem
+    rótulo. Perder o material porque a cota acabou seria trocar um defeito
+    pequeno por um grande."""
+    llm_falso.excecao = RuntimeError("sem cota")
+    doc = client.post("/materiais", files={"arquivo": ("x.txt", TXT, "text/plain")},
+                      data={"tipo": "resumo"}, headers=usuario["headers"]).json()
+    material.indexar(doc["id"], "x.txt", TXT)
+    m = client.get("/materiais", headers=usuario["headers"]).json()["materiais"][0]
+    assert m["status"] == "pronto" and m["chunks"] >= 1
+    assert m["disciplina"] is None
+
+
+def test_aluno_corrige_o_palpite(client, usuario):
+    doc = client.post("/materiais", files={"arquivo": ("x.txt", TXT, "text/plain")},
+                      data={"tipo": "resumo"}, headers=usuario["headers"]).json()
+    r = client.patch(f"/materiais/{doc['id']}",
+                     json={"disciplina": "Direito Constitucional", "assunto": "Remédios"},
+                     headers=usuario["headers"])
+    assert r.status_code == 200
+    assert r.json()["disciplina"] == "Direito Constitucional"
+    assert r.json()["classificado_por"] == "aluno"
+
+
+def test_corrigir_material_de_outro_da_404(client, usuario, outro_usuario):
+    doc = client.post("/materiais", files={"arquivo": ("x.txt", TXT, "text/plain")},
+                      data={"tipo": "resumo"}, headers=usuario["headers"]).json()
+    r = client.patch(f"/materiais/{doc['id']}", json={"disciplina": "X"},
+                     headers=outro_usuario["headers"])
+    assert r.status_code == 404
+
+
+@pytest.mark.parametrize("url", [
+    "http://127.0.0.1:8000/admin",
+    "http://localhost/admin",
+    "http://169.254.169.254/latest/meta-data/",   # credencial de instância em nuvem
+    "http://10.0.0.5/interno",
+    "file:///etc/passwd",
+])
+def test_link_recusa_endereco_interno(client, usuario, url):
+    """SSRF: o pedido sai de DENTRO da rede. A checagem é sobre o IP RESOLVIDO,
+    não sobre o texto da URL — `http://meu-dominio.com` pode apontar pra
+    127.0.0.1, e olhar só a string não veria."""
+    r = client.post("/materiais/link", json={"url": url}, headers=usuario["headers"])
+    assert r.status_code == 400
+
+
+def test_tipo_lei_e_recusado(client, usuario):
+    """Material do aluno NUNCA entra como lei: `chunk_lei` extrai (norma,
+    artigo) pra citação exata, e apostila comentada cita "art. 312" no meio do
+    texto do professor — viraria chunk com artigo='312' e `por_dispositivo`
+    devolveria o comentário em vez da lei."""
+    r = client.post("/materiais", files={"arquivo": ("x.txt", TXT, "text/plain")},
+                    data={"disciplina": "Direito Penal", "tipo": "lei"},
+                    headers=usuario["headers"])
+    assert r.status_code == 400
+
+
+def test_texto_curto_avisa_sobre_ocr(client, usuario):
+    """PDF escaneado é imagem: o texto extraído vem quase vazio. Dizer "falhou"
+    não deixa o aluno agir; dizer "rode OCR" deixa."""
+    r = client.post("/materiais", files={"arquivo": ("x.txt", b"tres palavras aqui", "text/plain")},
+                    data={"disciplina": "Direito Penal", "tipo": "resumo"},
+                    headers=usuario["headers"])
+    assert r.status_code == 400 and "OCR" in r.json()["detail"]
+
+
+def test_mesmo_arquivo_duas_vezes_e_barrado(client, usuario):
+    assert _material(client, usuario["headers"]).status_code == 201
+    r = _material(client, usuario["headers"])
+    assert r.status_code == 400 and "já subiu" in r.json()["detail"]
+
+
+def test_material_de_outro_aluno_nao_aparece_nem_apaga(client, usuario, outro_usuario):
+    """O contrato da tela ("só você tem acesso") tem que ser do BANCO, não da
+    interface. 404 e não 403 pra não confirmar a quem chuta um id."""
+    doc = _material(client, usuario["headers"]).json()
+    assert client.get("/materiais", headers=outro_usuario["headers"]).json()["materiais"] == []
+    assert client.delete(f"/materiais/{doc['id']}", headers=outro_usuario["headers"]).status_code == 404
+
+
+def test_busca_isola_biblioteca_entre_alunos(client, usuario, outro_usuario):
+    """O teste que justifica a migração inteira: sem `documento.usuario_id`, a
+    apostila paga de um aluno entraria no prompt do tutor de todos os outros."""
+    doc = _material(client, usuario["headers"]).json()
+    material.indexar(doc["id"], "Resumo.txt", TXT)   # síncrono aqui: sem background
+
+    def achou(uid):
+        return any("QUIXOTEBRAVO" in c["texto"]
+                   for c in retrieval.buscar("QUIXOTEBRAVO prazos recursais", n=6, usuario_id=uid))
+
+    assert achou(usuario["id"]), "o dono tem que achar o próprio material"
+    assert not achou(outro_usuario["id"]), "outro aluno NÃO pode achar"
+    assert not achou(None), "sem usuário (CLI/avaliar_retrieval) vê só o acervo público"
+
+
+def test_falha_no_indexar_vira_status_e_nao_excecao(client, usuario, monkeypatch):
+    """Exceção em background task morre sem ninguém ver, e o aluno ficaria com
+    "processando" pra sempre. Vira `status='falha'` com a razão em texto."""
+    doc = _material(client, usuario["headers"]).json()
+    monkeypatch.setattr(material.embeddings, "embed_passagens",
+                        lambda _: (_ for _ in ()).throw(RuntimeError("modelo fora do ar")))
+    material.indexar(doc["id"], "Resumo.txt", TXT)
+    m = db.exec1("SELECT status, erro FROM documento WHERE id = %(i)s", {"i": doc["id"]})
+    assert m["status"] == "falha" and "modelo fora do ar" in m["erro"]
+
+
+def test_indexar_e_idempotente(client, usuario):
+    """Reindexar não pode dobrar os trechos. Acontece de verdade em dois casos:
+    o processo reinicia no meio (linha fica "processando" e alguém manda tentar
+    de novo) e o retry manual da tela."""
+    doc = _material(client, usuario["headers"]).json()
+    for _ in range(3):
+        material.indexar(doc["id"], "Resumo.txt", TXT)
+    n = db.exec1("SELECT count(*) AS n FROM chunk WHERE documento_id=%(i)s", {"i": doc["id"]})["n"]
+    assert n == doc["chunks_total"]
+
+
+def test_reindexar_de_outro_aluno_da_404(client, usuario, outro_usuario):
+    doc = _material(client, usuario["headers"]).json()
+    r = client.post(f"/materiais/{doc['id']}/reindexar",
+                    files={"arquivo": ("Resumo.txt", TXT, "text/plain")},
+                    headers=outro_usuario["headers"])
+    assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Sugestões de rótulo (o seletor da tela de biblioteca)
+# ---------------------------------------------------------------------------
+
+def _subir(client, headers, nome, disciplina=None, assunto=None):
+    """Como `_material`, mas com rótulo à escolha e conteúdo único por nome —
+    `registrar` barra o MESMO arquivo duas vezes (hash), e um lote de teste
+    precisa de linhas distintas."""
+    dados = {"tipo": "resumo"}
+    if disciplina is not None:
+        dados["disciplina"] = disciplina
+    if assunto is not None:
+        dados["assunto"] = assunto
+    corpo = (f"MEU RESUMO {nome}\n\n" + TXT.decode()).encode()
+    return client.post("/materiais", files={"arquivo": (nome, corpo, "text/plain")},
+                       data=dados, headers=headers)
+
+
+def test_sugestoes_saem_so_da_biblioteca_de_quem_pergunta(client, usuario, outro_usuario):
+    """Sugerir a disciplina que OUTRO aluno cadastrou vazaria o que ele estuda.
+
+    Mesmo princípio já testado em `listar`/`buscar`, aqui num campo que parece
+    inofensivo — nome de matéria — mas que revela o material de outra pessoa."""
+    _subir(client, usuario["headers"], "meu.txt", "Direito Penal", "Peculato")
+    _subir(client, outro_usuario["headers"], "dele.txt", "Contabilidade", "DRE")
+
+    s = client.get("/materiais/sugestoes", headers=usuario["headers"]).json()
+    assert s["disciplinas"] == ["Direito Penal"]
+    assert s["assuntos"] == ["Peculato"]
+    assert "Contabilidade" not in s["disciplinas"] and "DRE" not in s["assuntos"]
+
+
+def test_sugestoes_agrupam_assunto_por_disciplina(client, usuario):
+    """A tela oferece o assunto DA matéria escolhida — oferecer "Remédios
+    constitucionais" a quem digita Contabilidade é ruído, não sugestão."""
+    h = usuario["headers"]
+    _subir(client, h, "a.txt", "Direito Penal", "Peculato")
+    _subir(client, h, "b.txt", "Direito Penal", "Concussão")
+    _subir(client, h, "c.txt", "Direito Constitucional", "Remédios")
+
+    s = client.get("/materiais/sugestoes", headers=h).json()
+    assert s["assuntos_por_disciplina"]["Direito Penal"] == ["Concussão", "Peculato"]
+    assert s["assuntos_por_disciplina"]["Direito Constitucional"] == ["Remédios"]
+
+
+def test_sugestoes_nao_oferecem_vazio_nem_repetem(client, usuario, llm_falso):
+    """Disciplina é OPCIONAL (020), então a biblioteca tem linhas sem rótulo —
+    e nenhuma delas pode virar opção em branco na lista. Repetição também não:
+    14 aulas do mesmo curso são UMA sugestão, e é justamente o lote de 14 (os
+    campos preenchidos uma vez só) que produz esse caso.
+
+    `llm_falso` devolvendo lixo é de propósito: sem ele o classificador REAL
+    roda e rotula os sem-rótulo — comportamento correto (é o que a 020 existe
+    pra fazer), mas que apagaria justamente o caso que este teste mede, além
+    de gastar cota a cada pytest."""
+    llm_falso.retorno = "isto não é json"
+    h = usuario["headers"]
+    for i in range(3):
+        _subir(client, h, f"aula-{i}.txt", "Direito Penal", "Peculato")
+    _subir(client, h, "sem-rotulo.txt")
+    _subir(client, h, "so-assunto.txt", assunto="Avulso")
+
+    s = client.get("/materiais/sugestoes", headers=h).json()
+    assert s["disciplinas"] == ["Direito Penal"]
+    assert s["assuntos"] == ["Avulso", "Peculato"]
+    # Assunto sem disciplina não inventa grupo: nem chave vazia, nem null.
+    assert list(s["assuntos_por_disciplina"]) == ["Direito Penal"]
+
+
+def test_sugestoes_nao_sao_engolidas_pela_rota_de_id(client, usuario):
+    """`/materiais/sugestoes` conviver com `/materiais/{id}` é ordem de
+    registro, não sorte: uma rota de path param declarada antes tentaria
+    converter "sugestoes" em int. Este teste quebra se alguém reordenar."""
+    r = client.get("/materiais/sugestoes", headers=usuario["headers"])
+    assert r.status_code == 200 and "disciplinas" in r.json()

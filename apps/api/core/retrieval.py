@@ -76,18 +76,33 @@ GENERICOS = {"art", "arts", "artigo", "artigos", "paragrafo", "parágrafo",
 CAMPOS = """c.id, c.texto, c.norma, c.artigo, c.paragrafo, c.rubrica, c.secao,
             c.pagina, d.titulo, d.disciplina, d.tipo"""
 
+# DONO DO MATERIAL (migração 019). "O público MAIS o meu", e nada além.
+#
+# Vai DENTRO das CTEs `sem`/`lex`, não só no WHERE final, e a diferença não é
+# estética: as CTEs cortam em LIMIT k ANTES do join com `documento`. Filtrar
+# depois deixaria o material de outros alunos OCUPAR vagas do top-k e ser
+# descartado em seguida — a busca perderia recall silenciosamente, e quanto
+# mais gente subisse apostila, pior ficaria pra todos.
+#
+# `usuario_id = NULL` é NULL (nunca true) em SQL, então quem chama sem
+# identificar o usuário — a CLI, `avaliar_retrieval.py`, o gabarito — vê
+# exatamente o acervo público. O padrão inseguro seria o contrário.
+DONO = "(d.usuario_id IS NULL OR d.usuario_id = %(uid)s)"
+
 SQL_HIBRIDA = f"""
 WITH sem AS (
-    SELECT id, ROW_NUMBER() OVER (ORDER BY embedding <=> %(emb)s::vector) AS pos
-    FROM chunk
-    WHERE embedding IS NOT NULL
-    ORDER BY embedding <=> %(emb)s::vector
+    SELECT c.id, ROW_NUMBER() OVER (ORDER BY c.embedding <=> %(emb)s::vector) AS pos
+    FROM chunk c JOIN documento d ON d.id = c.documento_id
+    WHERE c.embedding IS NOT NULL AND {DONO}
+    ORDER BY c.embedding <=> %(emb)s::vector
     LIMIT %(k)s
 ),
 lex AS (
     SELECT c.id, ROW_NUMBER() OVER (ORDER BY ts_rank_cd(c.busca, q) DESC) AS pos
-    FROM chunk c, websearch_to_tsquery('portuguese', %(termos)s) q
-    WHERE c.busca @@ q
+    FROM chunk c
+    JOIN documento d ON d.id = c.documento_id,
+         websearch_to_tsquery('portuguese', %(termos)s) q
+    WHERE c.busca @@ q AND {DONO}
     ORDER BY ts_rank_cd(c.busca, q) DESC
     LIMIT %(k)s
 )
@@ -147,7 +162,7 @@ def _norma_mencionada(pergunta: str) -> str | None:
     return None
 
 
-def por_dispositivo(pergunta: str, n: int = 4) -> list[dict]:
+def por_dispositivo(pergunta: str, n: int = 4, usuario_id: int | None = None) -> list[dict]:
     """
     Artigos 1º a 9º levam o ordinal "º" por convenção de redação legislativa
     (LC 95/1998); do 10 em diante não. Quase ninguém digita "º" ao perguntar
@@ -166,13 +181,14 @@ def por_dispositivo(pergunta: str, n: int = 4) -> list[dict]:
             WHERE regexp_replace(c.artigo, '[ºo]$', '', 'i')
                   = regexp_replace(%(art)s, '[ºo]$', '', 'i')
               AND (%(norma)s::text IS NULL OR c.norma = %(norma)s)
+              AND {DONO}
             ORDER BY d.tipo = 'lei' DESC, c.norma, c.ordem
             LIMIT %(n)s""",
-        {"art": m.group(1), "n": n, "norma": norma},
+        {"art": m.group(1), "n": n, "norma": norma, "uid": usuario_id},
     )
 
 
-def por_rubrica(pergunta: str, n: int = 4) -> list[dict]:
+def por_rubrica(pergunta: str, n: int = 4, usuario_id: int | None = None) -> list[dict]:
     """Nome de crime é o jeito humano de referenciar um tipo penal."""
     return db.query(
         f"""SELECT {CAMPOS}, 1.0 AS score
@@ -180,16 +196,19 @@ def por_rubrica(pergunta: str, n: int = 4) -> list[dict]:
                  websearch_to_tsquery('portuguese', %(t)s) q
             WHERE c.rubrica IS NOT NULL
               AND to_tsvector('portuguese', c.rubrica) @@ q
+              AND {DONO}
             ORDER BY ts_rank_cd(to_tsvector('portuguese', c.rubrica), q) DESC
             LIMIT %(n)s""",
-        {"t": _termos_lexicais(pergunta), "n": n},
+        {"t": _termos_lexicais(pergunta), "n": n, "uid": usuario_id},
     )
 
 
-def hibrida(pergunta: str, n: int = 6, k: int = 40) -> list[dict]:
+def hibrida(pergunta: str, n: int = 6, k: int = 40,
+            usuario_id: int | None = None) -> list[dict]:
     return db.query(SQL_HIBRIDA, {
         "emb": embed_consulta(pergunta),
         "termos": _termos_lexicais(pergunta),
+        "uid": usuario_id,
         "k": k,
         "n": n,
         "rrf": RRF_K,
@@ -198,24 +217,32 @@ def hibrida(pergunta: str, n: int = 6, k: int = 40) -> list[dict]:
     })
 
 
-def buscar(pergunta: str, n: int = 6) -> list[dict]:
+def buscar(pergunta: str, n: int = 6, usuario_id: int | None = None) -> list[dict]:
     """
     Ponto de entrada. Precisão vence recall: quando há acerto exato de
     dispositivo, devolve só ele. Contexto extra não ajuda o modelo a
     responder "o que diz o art. 312" — só o convida a citar outra coisa.
+
+    `usuario_id` abre a biblioteca PRIVADA daquele aluno (migração 019) além
+    do acervo público. Omitir é o padrão SEGURO — só público —, e é por isso
+    que o parâmetro é opcional em vez de obrigatório: a CLI, o `gerar.py` e o
+    `avaliar_retrieval.py` medem contra o acervo compartilhado, e passar a
+    biblioteca de alguém ali mudaria o gabarito de um teste conforme o que um
+    aluno subiu ontem.
     """
-    exatos = por_dispositivo(pergunta, n=n)
+    exatos = por_dispositivo(pergunta, n=n, usuario_id=usuario_id)
     if exatos:
         return exatos
 
-    rubricas = por_rubrica(pergunta, n=3)
+    rubricas = por_rubrica(pergunta, n=3, usuario_id=usuario_id)
     if rubricas:
         # Acerto de rubrica é forte: só 2 vagas de complemento, para permitir
         # comparação entre tipos sem afogar a resposta em artigo parecido.
         vistos = {c["id"] for c in rubricas}
-        extra = [c for c in hibrida(pergunta, n=4) if c["id"] not in vistos][:2]
+        extra = [c for c in hibrida(pergunta, n=4, usuario_id=usuario_id)
+                 if c["id"] not in vistos][:2]
         return rubricas + extra
-    return hibrida(pergunta, n=n)
+    return hibrida(pergunta, n=n, usuario_id=usuario_id)
 
 
 def formatar_contexto(chunks: list[dict]) -> str:

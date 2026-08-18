@@ -30,12 +30,13 @@ import tempfile
 from datetime import date
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi import (BackgroundTasks, Depends, FastAPI, File, Form, Header, HTTPException,
+                     UploadFile)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
-from core import (auth, conversa, desafio, edital, geracao, mesa, questoes, rascunho,
+from core import (auth, conversa, desafio, edital, geracao, material, mesa, questoes, rascunho,
                   ritmo, scheduler, simulado, socratic)
 from core.config import CORS_ORIGINS
 from core.llm import ErroLLM
@@ -775,6 +776,10 @@ class ConfirmarRascunhoBody(BaseModel):
     data_prova: date | None = None
     orgao: str | None = None
     banca: str | None = None
+    # Cargo escolhido na curadoria (migração 018). Sem isto a meta mostrava
+    # nome de ARQUIVO e nunca de quem era o plano — num edital com 17 cargos
+    # isso omite a informação mais importante da tela.
+    cargo: str | None = None
 
 
 @app.post("/editais/rascunho/{rid}/confirmar")
@@ -788,7 +793,7 @@ def rota_confirmar_rascunho(rid: int, body: ConfirmarRascunhoBody,
         return rascunho.confirmar(uid, rid, m["id"],
                                   [d.model_dump() for d in body.disciplinas],
                                   titulo=body.titulo, data_prova=body.data_prova,
-                                  orgao=body.orgao, banca=body.banca)
+                                  orgao=body.orgao, banca=body.banca, cargo=body.cargo)
     except rascunho.ErroRascunho as e:
         raise HTTPException(400, str(e))
 
@@ -799,6 +804,179 @@ def rota_edital_atual(uid: int = Depends(usuario_atual), m: dict = Depends(mesa_
     if not ed:
         raise HTTPException(404, "nenhum edital ingerido ainda")
     return {**ed, "cobertura": edital.cobertura(ed["id"], uid)}
+
+
+class AjusteDisciplinasBody(BaseModel):
+    remover: list[str] = []
+    adicionar: list[str] = []
+
+
+@app.patch("/edital/disciplinas")
+def rota_ajustar_disciplinas(body: AjusteDisciplinasBody,
+                             uid: int = Depends(usuario_atual),
+                             m: dict = Depends(mesa_atual)):
+    """Tirar ou acrescentar matéria num edital JÁ confirmado.
+
+    A curadoria só acontecia uma vez: depois de confirmar, mudar de ideia
+    exigia subir o PDF inteiro de novo. O aluno muda de ideia NO MEIO do
+    estudo, que é quando ele finalmente sabe o que está sobrando.
+
+    Escopo pela MESA (não por id de edital vindo do cliente): `mais_recente`
+    já filtra por mesa, e a mesa vem do token — mandar um `edital_id` no corpo
+    deixaria editar o edital de outra pessoa por tentativa."""
+    ed = edital.mais_recente(m["id"])
+    if not ed:
+        raise HTTPException(404, "nenhum edital ingerido ainda")
+    r = edital.ajustar_disciplinas(ed["id"], body.remover, body.adicionar)
+    return {**r, "cobertura": edital.cobertura(ed["id"], uid)}
+
+
+class DataProvaBody(BaseModel):
+    data_prova: date
+
+
+@app.patch("/edital/data-prova")
+def rota_corrigir_data_prova(body: DataProvaBody, uid: int = Depends(usuario_atual),
+                             m: dict = Depends(mesa_atual)):
+    """Aponta uma data futura quando a do edital já passou.
+
+    O edital da PF em corpus/ é de 2025: a prova passou, e `scheduler.meta`
+    devolvia "0 dias restantes / 0%" — verdadeiro e inútil. Quem estuda por
+    edital antigo (concurso que vai reabrir) é o caso NORMAL de preparação, e
+    não tinha saída: reingerir o PDF traria a mesma data velha."""
+    ed = edital.mais_recente(m["id"])
+    if not ed:
+        raise HTTPException(404, "nenhum edital ingerido ainda")
+    novo = edital.corrigir_data_prova(ed["id"], body.data_prova)
+    return {**novo, "cobertura": edital.cobertura(ed["id"], uid)}
+
+
+# ------------------------------------------------------------- biblioteca
+@app.get("/materiais")
+def rota_listar_materiais(uid: int = Depends(usuario_atual)):
+    """A biblioteca DESTE aluno. O acervo público não entra: não é dele, ele
+    não subiu e não pode apagar."""
+    return {"materiais": material.listar(uid)}
+
+
+@app.get("/materiais/sugestoes")
+def rota_sugestoes_material(uid: int = Depends(usuario_atual)):
+    """Rótulos que ESTE aluno já usou, pra alimentar o seletor da tela.
+
+    Declarada ANTES de `/materiais/{documento_id}` não por acaso: o FastAPI
+    casa rotas na ordem de registro, e uma rota de path param declarada antes
+    engoliria "sugestoes" tentando convertê-la em int."""
+    return material.sugestoes(uid)
+
+
+@app.post("/materiais", status_code=201)
+async def rota_subir_material(fundo: BackgroundTasks,
+                              arquivo: UploadFile = File(...),
+                              disciplina: str | None = Form(None),
+                              assunto: str | None = Form(None),
+                              tipo: str = Form("aula"),
+                              titulo: str | None = Form(None),
+                              uid: int = Depends(usuario_atual)):
+    """
+    Sobe material privado e responde NA HORA, com status `processando`.
+
+    O embedding roda local na CPU (ver "Pilha"): um PDF de 800 trechos leva
+    minutos. Fazer isso dentro do request daria timeout no navegador e perderia
+    o trabalho já pago em CPU. Então `registrar` grava a linha e valida o que dá
+    pra validar de graça (duplicata, PDF protegido, PDF escaneado), e `indexar`
+    roda em background gravando o progresso no banco — é de lá que sai o
+    "187 de 340" da tela, e é por isso que ele sobrevive a um F5.
+
+    `arquivo.filename` e não o caminho do temporário: essa é a mesma classe de
+    erro que já fez um edital ser gravado como "tmpcmrpqinr" no banco.
+    """
+    dados = await arquivo.read()
+    try:
+        doc = material.registrar(uid, arquivo.filename or "material", dados,
+                                 disciplina=disciplina, tipo=tipo, titulo=titulo,
+                                 assunto=assunto)
+    except material.ErroMaterial as e:
+        raise HTTPException(400, str(e))
+    fundo.add_task(material.indexar, doc["id"], arquivo.filename or "material", dados)
+    return doc
+
+
+@app.post("/materiais/{documento_id}/reindexar")
+async def rota_reindexar_material(documento_id: int, fundo: BackgroundTasks,
+                                  arquivo: UploadFile = File(...),
+                                  uid: int = Depends(usuario_atual)):
+    """Tentar de novo, reenviando o arquivo.
+
+    Existe porque a indexação roda em background NO PROCESSO do servidor: um
+    restart no meio deixa a linha em `processando` pra sempre, e sem retry a
+    única saída seria apagar e subir de novo.
+
+    O arquivo VOLTA no request porque o servidor não guarda os bytes — só o
+    nome, em `origem`. Guardar o PDF exigiria armazenamento de arquivo, que o
+    projeto não tem, e é honesto pedir de novo em vez de fingir que dá.
+
+    `indexar` é idempotente (apaga os trechos do documento antes), então
+    reindexar não duplica nada — é o que torna este botão seguro."""
+    if not material.para_reindexar(uid, documento_id):
+        raise HTTPException(404, "material não encontrado")
+    dados = await arquivo.read()
+    fundo.add_task(material.indexar, documento_id, arquivo.filename or "material", dados)
+    return {"ok": True, "status": "processando"}
+
+
+class LinkBody(BaseModel):
+    url: str
+    disciplina: str | None = None
+    assunto: str | None = None
+    tipo: str = "aula"
+
+
+@app.post("/materiais/link", status_code=201)
+def rota_indexar_link(body: LinkBody, fundo: BackgroundTasks,
+                      uid: int = Depends(usuario_atual)):
+    """Indexa o conteúdo de uma URL pública.
+
+    O download acontece DENTRO do request, ao contrário do embedding: ele é
+    rápido, e é onde as falhas que o aluno precisa ver acontecem (404, endereço
+    interno, conteúdo que não sei ler). Falhar em background aqui daria uma
+    linha vermelha minutos depois em vez de um erro na hora.
+
+    Sobre o risco: `material.baixar` resolve o DNS e recusa IP não-público,
+    revalidando a cada redirecionamento. Não é allowlist de domínio — está
+    escrito no docstring dele por quê, e o que isso deixa de cobrir."""
+    try:
+        nome, dados = material.baixar(body.url)
+        doc = material.registrar(uid, nome, dados, disciplina=body.disciplina,
+                                 tipo=body.tipo, titulo=nome, assunto=body.assunto)
+    except material.ErroMaterial as e:
+        raise HTTPException(400, str(e))
+    fundo.add_task(material.indexar, doc["id"], nome, dados)
+    return doc
+
+
+class ClassificarBody(BaseModel):
+    disciplina: str | None = None
+    assunto: str | None = None
+
+
+@app.patch("/materiais/{documento_id}")
+def rota_classificar_material(documento_id: int, body: ClassificarBody,
+                              uid: int = Depends(usuario_atual)):
+    """O aluno corrige o palpite do classificador. Passa a valer como 'aluno':
+    a lista da tela é que vale, mesmo princípio da curadoria de edital."""
+    r = material.atualizar(uid, documento_id, body.disciplina, body.assunto)
+    if not r:
+        raise HTTPException(404, "material não encontrado")
+    return r
+
+
+@app.delete("/materiais/{documento_id}")
+def rota_apagar_material(documento_id: int, uid: int = Depends(usuario_atual)):
+    """404 e não 403 pra material de outra pessoa: mesma escolha de
+    `mesa.obter` — não confirmar a quem chuta um id que ele existe."""
+    if not material.apagar(uid, documento_id):
+        raise HTTPException(404, "material não encontrado")
+    return {"ok": True}
 
 
 if __name__ == "__main__":
