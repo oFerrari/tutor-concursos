@@ -161,13 +161,23 @@ CAMPOS_PERFIL = {
     "turno": {"Manhã", "Tarde", "Noite", "Madrugada"},
 }
 
-# "horas" também aceita um número personalizado ("3h", "5h" — a tela tem um
-# chip "personalizado" pra quando os presets não batem com a rotina real de
-# ninguém). NÃO é abrir o campo: continua só dígito(s) + "h", 1 a 16 —
-# formato fixo, sem texto, então o mesmo argumento de "campo livre é
-# injeção disfarçada" continua valendo. É por isso que isto é um REGEX
-# fechado, não `if k in CAMPOS_PERFIL` virar `isinstance(v, str)`.
-_RE_HORAS_PERSONALIZADA = re.compile(r"^(1[0-6]|[1-9])h$")
+# "horas" também aceita um número personalizado ("3h", "3.5h" — a tela tem
+# um chip "personalizado" pra quando os presets não batem com a rotina real
+# de ninguém, e rotina real tem fração: "3,5h" foi o primeiro valor que uma
+# pessoa de verdade tentou digitar). NÃO é abrir o campo: continua só
+# dígito(s) + fração opcional de UMA casa + "h", 1 a 16 — formato fixo, sem
+# texto, então o mesmo argumento de "campo livre é injeção disfarçada"
+# continua valendo (mais uma casa decimal não abre a porta pra prosa). É
+# por isso que isto é um REGEX fechado, não `if k in CAMPOS_PERFIL` virar
+# `isinstance(v, str)`.
+#
+# Vírgula (separador decimal do pt-BR) é rejeitada DE PROPÓSITO — normalizar
+# é trabalho do CLIENTE, antes de mandar. Aceitar as duas grafias aqui
+# duplicaria a regra "o que é um número válido" entre front e back, e é
+# exatamente esse tipo de duplicação que já causou bug nesta mesma função
+# (ver `socratic._resumo_perfil`, que reimplementava esta validação em vez
+# de chamar `_valor_valido`).
+_RE_HORAS_PERSONALIZADA = re.compile(r"^(1[0-6]|[1-9])(\.\d)?h$")
 
 
 def _valor_valido(campo: str, valor) -> bool:

@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { LayoutGrid, LogOut } from "lucide-react";
+import { useRouter, usePathname } from "next/navigation";
+import { LayoutGrid, LogOut, SlidersHorizontal, Trash2 } from "lucide-react";
 import { Usuario, limparToken } from "@/lib/api";
+import { ExcluirConta } from "@/components/ExcluirConta";
 
 /**
  * O menu da conta — um só, usado pelo cabeçalho de /mesas e pelo rodapé da
@@ -22,6 +23,15 @@ import { Usuario, limparToken } from "@/lib/api";
  *
  * `ancora` inverte a origem: no topo o menu desce, no rodapé da sidebar ele
  * sobe — senão abriria pra fora da tela.
+ *
+ * Dois itens dependem de ONDE o menu abre, por `usePathname()` — não por
+ * prop, porque as duas cópias já divergiram uma vez e a rota é o dado que
+ * as duas instâncias já enxergam sozinhas:
+ *   - "Trocar de mesa" some em `/mesas`: o link leva pra lá, e mostrar "vá
+ *     pra onde você já está" é a nav sendo burra sobre o próprio estado.
+ *   - "Excluir minha conta" só aparece em `/mesas`: é a ação mais grave do
+ *     menu, e `/mesas` é justamente a tela SEM sessão de estudo em curso —
+ *     ninguém deveria topar com ela no meio de uma fila ou de um simulado.
  */
 export function MenuConta({
   usuario,
@@ -35,7 +45,13 @@ export function MenuConta({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const emMesas = pathname === "/mesas";
   const [aberto, setAberto] = useState(false);
+  // Diálogo próprio (pede senha) — não é o mesmo menu dropdown, então tem
+  // estado separado e sobrevive ao menu fechar (clique fora do menu não
+  // pode fechar o diálogo de exclusão por baixo dele).
+  const [excluindo, setExcluindo] = useState(false);
   const caixa = useRef<HTMLDivElement>(null);
 
   // Esc fecha, como em qualquer camada sobreposta do app (o mesmo atalho
@@ -81,10 +97,22 @@ export function MenuConta({
 
             {/* "Meu edital" e "Meus materiais" saíram daqui — duplicavam
                 itens que já estão na sidebar, um clique acima disto. Menu
-                de conta é conta (trocar mesa, sair), não navegação. */}
-            <Link href="/mesas" onClick={() => setAberto(false)} className="item-menu">
-              <LayoutGrid className="h-[15px] w-[15px]" />
-              Trocar de mesa
+                de conta é conta (trocar mesa, preferências, sair) —
+                "trocar de mesa" só entra fora de `/mesas`, onde ela é
+                atalho de verdade e não "vá pra onde você já está". */}
+            {!emMesas && (
+              <Link href="/mesas" onClick={() => setAberto(false)} className="item-menu">
+                <LayoutGrid className="h-[15px] w-[15px]" />
+                Trocar de mesa
+              </Link>
+            )}
+
+            {/* As três respostas da entrevista (horas/nível/turno,
+                migração 015) — só se gravava no dia do onboarding; agora
+                tem pra onde voltar quando a rotina muda. */}
+            <Link href="/perfil" onClick={() => setAberto(false)} className="item-menu">
+              <SlidersHorizontal className="h-[15px] w-[15px]" />
+              Preferências de estudo
             </Link>
 
             <div className="mx-1 my-1.5 h-px bg-line-soft" />
@@ -98,8 +126,43 @@ export function MenuConta({
               <LogOut className="h-[15px] w-[15px]" />
               Sair da conta
             </button>
+
+            {/* Só em `/mesas`, de propósito: é a ação mais grave do menu, e
+                `/mesas` é a tela SEM sessão de estudo em curso — ninguém
+                deveria topar com "excluir conta" no meio de uma fila ou de
+                um simulado. Separada de "sair" por um traço próprio (não o
+                mesmo agrupamento): um desloga, o outro apaga tudo, e
+                parecer a mesma categoria de ação é o tipo de vizinhança que
+                faz gente clicar errado. Antes disto, a única saída era
+                `docker exec psql` na mão (conta de teste ou gente que só
+                quer sair de verdade). */}
+            {emMesas && (
+              <>
+                <div className="mx-1 my-1.5 h-px bg-line-soft" />
+                <button
+                  onClick={() => {
+                    setAberto(false);
+                    setExcluindo(true);
+                  }}
+                  className="item-menu !text-danger"
+                >
+                  <Trash2 className="h-[15px] w-[15px]" />
+                  Excluir minha conta
+                </button>
+              </>
+            )}
           </div>
         </>
+      )}
+
+      {excluindo && (
+        <ExcluirConta
+          onCancelar={() => setExcluindo(false)}
+          onExcluida={() => {
+            limparToken();
+            router.push("/login");
+          }}
+        />
       )}
     </div>
   );

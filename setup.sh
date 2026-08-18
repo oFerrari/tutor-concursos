@@ -66,7 +66,7 @@ cat <<'EOF'
 tudo pronto. Faltam 2 terminais:
 
   terminal 1 (API):
-    cd apps/api && source .venv/bin/activate && uvicorn api:app --reload --port 8000
+    cd ~/tutor-concursos/apps/api && source .venv/bin/activate && uvicorn api:app --reload --port 8000
 
   terminal 2 (frontend):
     cd apps/web && yarn dev

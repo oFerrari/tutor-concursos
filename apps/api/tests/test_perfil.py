@@ -6,9 +6,9 @@ livre vindo do cliente aqui é injeção de instrução disfarçada de
 preferência, e é por isso que a lista é fechada — e revalidada também na
 LEITURA, não só na escrita.
 """
-from core import auth, db, socratic
+from core import auth, db, desafio, socratic
 
-VERSAO = "test-perfil-v1"
+VERSAO = "test-perfil-v2"
 
 
 def test_grava_e_faz_merge(client, usuario):
@@ -20,6 +20,32 @@ def test_grava_e_faz_merge(client, usuario):
     r = client.put("/me/perfil", json={"turno": "Noite"},
                    headers=usuario["headers"]).json()["perfil"]
     assert r == {"horas": "2h", "nivel": "Intermediário", "turno": "Noite"}
+
+
+def test_horas_personalizada_aceita_fracao_de_uma_casa(usuario):
+    """"3,5h" foi o primeiro valor que uma pessoa de verdade tentou
+    digitar no chip "personalizado" — rotina real tem fração, não só hora
+    cheia. O CLIENTE normaliza vírgula pra ponto antes de mandar (ver
+    `EditorPerfil.tsx`); o servidor só precisa aceitar o formato já
+    normalizado."""
+    r = auth.atualizar_perfil(usuario["id"], {"horas": "3.5h"})
+    assert r == {"horas": "3.5h"}
+
+
+def test_horas_personalizada_com_virgula_e_rejeitada_no_servidor(usuario):
+    """Vírgula não é sintaxe válida AQUI de propósito — normalizar é
+    trabalho do cliente, não duplicar "o que é um número válido" em dois
+    lugares (foi exatamente essa duplicação que causou o bug do
+    `_resumo_perfil` que ignorava horas personalizada)."""
+    r = auth.atualizar_perfil(usuario["id"], {"horas": "3,5h"})
+    assert r == {}
+
+
+def test_minutos_do_perfil_com_fracao_de_hora():
+    """3.5h/dia -> 210min, não 180 (truncar a fração) nem None (rejeitar).
+    Regressão do mesmo bug: `desafio._RE_HORAS` só casava dígito inteiro."""
+    assert desafio.minutos_do_perfil({"horas": "3.5h"}) == 210
+    assert desafio.minutos_do_perfil({"horas": "1.5h"}) == 90
 
 
 def test_valor_fora_da_lista_e_ignorado_em_silencio(usuario):
@@ -51,6 +77,18 @@ def test_resumo_vira_frase_e_marca_que_e_declaracao(usuario):
     texto = socratic._resumo_perfil({"horas": "6h+", "nivel": "Avançado", "turno": "Madrugada"})
     assert "Declarado" in texto
     assert "6h+" in texto and "Avançado" in texto and "Madrugada" in texto
+
+
+def test_resumo_aceita_horas_personalizadas(usuario):
+    """Regressão: `_resumo_perfil` reimplementava a validação em vez de
+    chamar `auth._valor_valido`, e a cópia esquecia o regex de horas
+    personalizada — "3h" gravava certo (auth.atualizar_perfil aceita) e o
+    desafio calculava os minutos certo (regex própria em core/desafio.py),
+    mas o resumo que vai pro PROMPT DO TUTOR descartava o campo em
+    silêncio, como se a pessoa nunca tivesse respondido "quantas horas"."""
+    texto = socratic._resumo_perfil({"horas": "3h", "nivel": "Intermediário", "turno": "Noite"})
+    assert texto is not None
+    assert "3h" in texto
 
 
 def test_perfil_vazio_nao_polui_o_prompt(usuario):

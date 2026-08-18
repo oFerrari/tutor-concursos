@@ -25,3 +25,6 @@ node_modules/
 .turbo/
 .next/
 dist/
+
+# Metadado do Windows/WSL que vem colado em arquivo baixado. Não é dado.
+*:Zone.Identifier

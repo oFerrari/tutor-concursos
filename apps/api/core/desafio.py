@@ -27,16 +27,22 @@ from .scheduler import CAMPOS_Q, JOIN_CTX
 
 VERSAO = "desafio-v5"
 
-_RE_HORAS = re.compile(r"^(\d+)h\+?$")
+_RE_HORAS = re.compile(r"^(\d+(?:\.\d)?)h\+?$")
 
 
 def minutos_do_perfil(perfil: dict | None) -> int | None:
     """
     Converte `usuario.perfil["horas"]` (migração 015, "1h"/"2h"/"4h"/"6h+"
-    ou o personalizado "Nh" da migração de auth.py) num orçamento de
-    minutos pra UMA sessão de desafio. `None` se a pessoa nunca respondeu
-    o onboarding — aí `/desafio` cai no comportamento antigo ("sessão
-    cheia", sem corte).
+    ou o personalizado "Nh"/"N.Nh" de `auth._RE_HORAS_PERSONALIZADA`) num
+    orçamento de minutos pra UMA sessão de desafio. `None` se a pessoa
+    nunca respondeu o onboarding — aí `/desafio` cai no comportamento
+    antigo ("sessão cheia", sem corte).
+
+    `float` e não `int` no grupo capturado: "3.5h" é rotina real (a
+    primeira pessoa que testou o personalizado digitou exatamente isso),
+    e truncar pra "3h" satisfaria o regex mas mentiria 30min de orçamento
+    todo santo dia. `round()` cobre o resíduo de ponto flutuante que
+    aparece em fração de hora (ex.: `3.3 * 60` não cai exato em `198`).
 
     Aproximação DECLARADA: "horas por dia" é um total diário, e o desafio
     é UMA sessão — tratar as duas coisas como a mesma grandeza (1h/dia vira
@@ -52,7 +58,7 @@ def minutos_do_perfil(perfil: dict | None) -> int | None:
     if not perfil:
         return None
     m = _RE_HORAS.match(str(perfil.get("horas", "")))
-    return int(m.group(1)) * 60 if m else None
+    return round(float(m.group(1)) * 60) if m else None
 
 
 # "Começando" pesa pra reincidentes (reforça o que já viu, em vez de

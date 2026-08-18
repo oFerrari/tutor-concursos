@@ -43,7 +43,16 @@ export default function PaginaCadastro() {
     try {
       const { token } = await registrar(email, senha);
       setToken(token);
-      router.push("/onboarding");
+      // Pro LOBBY, não pro onboarding: a conta nova ainda não tem mesa
+      // nenhuma, e o onboarding pede "o PDF do SEU edital" sem que exista
+      // um concurso-alvo pra receber ele — o edital acabava caindo numa
+      // "Mesa principal" que o servidor cria por baixo (`mesa.padrao`) e
+      // que a pessoa nunca escolheu nem nomeou. Perguntar "de qual
+      // concurso é este edital?" ANTES de pedir o PDF é a ordem que a
+      // própria criação de mesa já usa (`/mesas` -> criar -> /onboarding
+      // com a mesa ativa definida); o cadastro era o único caminho que
+      // pulava esse passo e entrava no fluxo pelo meio.
+      router.push("/mesas");
     } catch (e) {
       // ErroApi.message já vem do "detail" do FastAPI — mesma mensagem
       // que auth.py devolve pra e-mail duplicado ou senha curta.
