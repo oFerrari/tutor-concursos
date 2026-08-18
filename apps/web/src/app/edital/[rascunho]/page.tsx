@@ -9,6 +9,7 @@ import {
   ErroApi,
   Rascunho,
   confirmarRascunho,
+  getMesaAtual,
   getRascunho,
   getToken,
 } from "@/lib/api";
@@ -29,6 +30,12 @@ import {
  * que ele engoliu. O que vira edital é a lista DESTA tela, não o que o
  * parser achou — o rascunho é insumo, a decisão é do aluno.
  */
+/** Sentinela do "meu cargo não está aqui". Não é nome de cargo nenhum e nunca
+ *  vai casar com `estrutura.cargos[].nome` — é justamente por isso que serve:
+ *  marca que a escolha foi FEITA (a tela destrava) sem escolher um dos cargos
+ *  que a leitura ofereceu. */
+const MEU_CARGO_NAO_ESTA_AQUI = "\u0000manual";
+
 export default function PaginaCuradoria() {
   const router = useRouter();
   const params = useParams<{ rascunho: string }>();
@@ -42,6 +49,12 @@ export default function PaginaCuradoria() {
   const [titulo, setTitulo] = useState("");
   const [orgao, setOrgao] = useState("");
   const [banca, setBanca] = useState("");
+  /** Nome que o aluno dá ao próprio cargo quando a leitura não o achou. Vai
+   *  pro TÍTULO do edital, que é o único lugar onde ele volta a aparecer —
+   *  `topico` guarda disciplina, não cargo (ver a aproximação (1) declarada
+   *  em core/edital.py). Melhor gravar num campo que existe do que prometer
+   *  um vínculo que o schema não tem. */
+  const [cargoManual, setCargoManual] = useState("");
   const [salvando, setSalvando] = useState(false);
 
   /** comuns + as do cargo escolhido. Trocar de cargo remonta a lista —
@@ -73,6 +86,22 @@ export default function PaginaCuradoria() {
             : "Não deu pra carregar o rascunho"
         )
       );
+
+    // Órgão e banca JÁ FORAM digitados: a criação da mesa pede os dois, e
+    // esta tela é o passo seguinte do mesmo fluxo. Nascer em branco fazia a
+    // pessoa redigitar o que acabou de informar — ou, pior, deixar vazio por
+    // achar que já estava salvo, e aí `mesa.banca` some. É `mesa.banca` que
+    // decide o FORMATO da questão gerada (`geracao.tipo_da_banca`: Cebraspe
+    // gera item C/E), então perdê-la aqui muda o que o aluno treina.
+    //
+    // Preenche, não trava: os campos seguem editáveis, porque o edital pode
+    // corrigir o que foi digitado na pressa ao criar a mesa.
+    getMesaAtual()
+      .then((m) => {
+        if (m.orgao) setOrgao(m.orgao);
+        if (m.banca) setBanca(m.banca);
+      })
+      .catch(() => {});
   }, [id, router, montar]);
 
   function escolherCargo(nome: string) {
@@ -88,6 +117,13 @@ export default function PaginaCuradoria() {
       await confirmarRascunho(draft.id, {
         disciplinas,
         titulo: titulo.trim() || undefined,
+        // O cargo agora tem COLUNA (018) em vez de ser colado no título: é o
+        // que a meta mostra pra dizer de quem é o plano. O sentinela do
+        // "não está aqui" nunca vai pro banco — o que vale ali é o nome que
+        // o aluno digitou, e vazio é ausência legítima.
+        cargo: cargo === MEU_CARGO_NAO_ESTA_AQUI
+          ? cargoManual.trim() || undefined
+          : cargo ?? undefined,
         orgao: orgao.trim() || undefined,
         banca: banca.trim() || undefined,
       });
@@ -138,8 +174,24 @@ export default function PaginaCuradoria() {
         {" · "}
         {draft.origem === "parser"
           ? "lido pela estrutura do edital"
-          : "lido pela IA — confira com atenção, modelo pode omitir matéria"}
+          : draft.origem === "parser_apos_falha"
+            ? "a IA não conseguiu ler — isto é só a leitura mecânica"
+            : "lido pela IA — confira com atenção, modelo pode omitir matéria"}
       </p>
+
+      {/* Falhar caladamente entregando o resultado PIOR é o pior dos dois
+          mundos: o aluno via "lido pela estrutura do edital" e ia embora com
+          os cargos somados numa lista só, sem saber que dava pra tentar de
+          novo. "Seguir em frente" e "tentar de novo" são reações opostas, e
+          antes as duas telas eram idênticas. */}
+      {draft.origem === "parser_apos_falha" && (
+        <p className="callout-warning mt-4 text-[13px]">
+          A leitura por IA falhou (cota diária do modelo ou edital muito longo). O que está
+          abaixo veio só do reconhecimento de padrão, então os cargos podem aparecer
+          somados numa lista só. Vale subir o PDF de novo mais tarde — ou seguir daqui,
+          tirando na mão o que não é seu.
+        </p>
+      )}
 
       {erro && <p className="callout-danger mt-4">{erro}</p>}
 
@@ -177,7 +229,54 @@ export default function PaginaCuradoria() {
                 </span>
               </button>
             ))}
+
+            {/* SAÍDA MANUAL, e ela é obrigatória: toda etapa automatizada que
+                pode falhar precisa de um caminho que não dependa dela ter
+                acertado. A leitura já errou de tudo em edital real — cargo a
+                menos, cargo a mais, nome truncado — e sem esta opção o aluno
+                cujo cargo não apareceu ficava preso numa tela que só oferece
+                cargos que não são dele. Começa da lista COMUM (o que vale pra
+                todos costuma estar certo) e ele monta o resto na mão, que é o
+                que a tela de disciplinas abaixo já sabe fazer. */}
+            <button
+              onClick={() => {
+                setCargo(MEU_CARGO_NAO_ESTA_AQUI);
+                if (draft) setDisciplinas([...draft.estrutura.comuns]);
+              }}
+              className={cargo === MEU_CARGO_NAO_ESTA_AQUI ? "chip-ativo" : "chip"}
+            >
+              {cargo === MEU_CARGO_NAO_ESTA_AQUI && (
+                <Check className="h-3.5 w-3.5" strokeWidth={3} />
+              )}
+              Meu cargo não está aqui
+            </button>
           </div>
+
+          {/* Nomear o cargo importa mesmo quando a leitura não o achou: é ele
+              que dá nome ao que o aluno está montando, e sem campo pra isso a
+              opção manual ficava pela metade — dava pra escolher as matérias
+              mas não dizia de quem elas são. Fica ao lado das matérias, não
+              numa tela nova, porque é a mesma decisão. */}
+          {cargo === MEU_CARGO_NAO_ESTA_AQUI && (
+            <div className="callout-info mt-3 text-[13px]">
+              <p className="mb-2.5">
+                Sem problema — a lista abaixo começa só com o que é comum a todos os cargos.
+                Acrescente as matérias do seu cargo no campo do fim da lista; o que vale é o
+                que ficar nesta tela.
+              </p>
+              <label className="block">
+                <span className="mb-1 block text-[12px] text-subtle">
+                  Qual é o seu cargo? (opcional — só pra dar nome ao seu plano)
+                </span>
+                <input
+                  value={cargoManual}
+                  onChange={(e) => setCargoManual(e.target.value)}
+                  placeholder="Perito Criminal Federal – Área 3"
+                  className="field !py-2 text-[13px]"
+                />
+              </label>
+            </div>
+          )}
         </div>
       )}
 

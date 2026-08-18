@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Check, ChevronDown, Pencil, Plus, Trash2 } from "lucide-react";
 import { Confirmar } from "@/components/Confirmar";
 import { MenuConta } from "@/components/MenuConta";
@@ -165,7 +165,7 @@ function CartaoMesa({
   );
 }
 
-export default function PaginaMesas() {
+function ConteudoMesas() {
   const router = useRouter();
   const [usuario, setUsuario] = useState<Usuario | null>(null);
 
@@ -187,6 +187,11 @@ export default function PaginaMesas() {
   // próximo campo novo nascer só num deles. `editando` diz qual mesa está
   // sendo alterada; `null` com `criando` verdadeiro = mesa nova.
   const [editando, setEditando] = useState<MesaNaLista | null>(null);
+  /** `?editar=alvo` abre o editor da mesa ATIVA já no alvo. É o atalho do
+   *  onboarding pra quem não vai subir edital agora: sem ele, "escolher as
+   *  matérias na mão" viraria "vá pra /mesas, ache sua mesa, clique no lápis"
+   *  — três passos pra uma decisão que a tela anterior já ofereceu. */
+  const abrirAlvo = useSearchParams().get("editar") === "alvo";
   // Alvo declarado à mão, pra quem estuda pra concurso cujo edital ainda
   // não saiu. As opções saem do ACERVO (não de lista fixa): escolher uma
   // matéria que não existe no material daria fila vazia sem explicação.
@@ -220,6 +225,24 @@ export default function PaginaMesas() {
     getDisciplinasDoAcervo().then((r) => setDoAcervo(r.disciplinas)).catch(() => {});
     getMe().then(setUsuario).catch(() => {});
   }, [router, carregar]);
+
+  // Abre o editor DEPOIS que as mesas chegaram: `editando` guarda a mesa, não
+  // um id, então antes do fetch não há o que abrir. Roda uma vez — daí o
+  // `abriu`, senão fechar o editor com o query param ainda na URL o reabriria
+  // no próximo render.
+  const abriu = useRef(false);
+  useEffect(() => {
+    if (!abrirAlvo || abriu.current || !mesas) return;
+    const alvoMesa = mesas.find((m) => m.id === getMesaAtiva()) ?? mesas[0];
+    if (!alvoMesa) return;
+    abriu.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setEditando(alvoMesa);
+    setNome(alvoMesa.nome);
+    setOrgao(alvoMesa.orgao ?? "");
+    setBanca(alvoMesa.banca ?? "");
+    setAlvo(alvoMesa.disciplinas_manuais ?? []);
+  }, [abrirAlvo, mesas]);
 
   function entrar(id: number) {
     setMesaAtiva(id);
@@ -485,5 +508,20 @@ export default function PaginaMesas() {
         onCancelar={() => setParaApagar(null)}
       />
     </div>
+  );
+}
+
+/**
+ * `useSearchParams()` obriga a ter fronteira de Suspense: sem ela o build de
+ * produção falha ao pré-renderizar esta rota (`?editar=alvo`, que vem do
+ * onboarding e do /meta, só existe no cliente). `fallback={null}` porque a
+ * própria página já tem estado de carregando — dois avisos de espera
+ * empilhados seriam pisca-pisca, não informação.
+ */
+export default function PaginaMesas() {
+  return (
+    <Suspense fallback={null}>
+      <ConteudoMesas />
+    </Suspense>
   );
 }

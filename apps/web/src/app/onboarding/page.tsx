@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Upload } from "lucide-react";
 import { MarcaGlifo } from "@/components/Marca";
+import { EditorPerfil } from "@/components/EditorPerfil";
 import {
   ErroApi,
   MesaNaLista,
@@ -12,7 +13,7 @@ import {
   getMesas,
   salvarPerfil,
 } from "@/lib/api";
-import { ENTREVISTA } from "@/mock/prototipo";
+import { ENTREVISTA } from "@/lib/perfil";
 
 /**
  * "Primeiro contato" — o onboarding do protótipo: o PDF do edital mais
@@ -48,15 +49,13 @@ export default function PaginaOnboarding() {
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  // Chip "personalizado" só faz sentido em "horas" — as outras duas
-  // perguntas (nível, turno) são categóricas, um número não responde
-  // nenhuma delas. `core/auth._valor_valido` aceita "Nh" de 1 a 16.
-  const [personalizandoHoras, setPersonalizandoHoras] = useState(false);
-  const [horasPersonalizadas, setHorasPersonalizadas] = useState("");
-
-  function escolherHoras(valor: string) {
-    const novas = { ...respostas, horas: valor };
+  function escolherResposta(chave: string, valor: string) {
+    const novas = { ...respostas, [chave]: valor };
     setRespostas(novas);
+    // Grava a cada clique, não num "salvar" no fim: são três escolhas de
+    // um toque e a pessoa costuma sair da tela pelo upload do PDF, não por
+    // um botão de confirmar — um "salvar" que ela nunca aperta é
+    // preferência perdida. Falhar aqui não pode travar o onboarding.
     salvarPerfil(novas).catch(() => {});
   }
 
@@ -185,67 +184,9 @@ export default function PaginaOnboarding() {
           e ela não muda por ter aberto um segundo edital. (Continua sem
           gravar em lugar nenhum — ver o aviso logo abaixo do bloco.) */}
       {primeiraVez && (
-      <div className="mb-4 overflow-hidden rounded-2xl border border-line bg-surface">
-        {ENTREVISTA.map((p) => (
-          <div
-            key={p.chave}
-            className="grid grid-cols-1 items-center gap-4 border-b border-line-soft px-5 py-4 last:border-b-0 md:grid-cols-[190px_1fr]"
-          >
-            <p className="text-sm text-body">{p.rotulo}</p>
-            <div className="flex flex-wrap items-center gap-2">
-              {p.opcoes.map((o) => (
-                <button
-                  key={o}
-                  onClick={() => {
-                    if (p.chave === "horas") setPersonalizandoHoras(false);
-                    const novas = { ...respostas, [p.chave]: o };
-                    setRespostas(novas);
-                    // Grava a cada clique, não num "salvar" no fim: são três
-                    // escolhas de um toque e a pessoa costuma sair da tela
-                    // pelo upload do PDF, não por um botão de confirmar —
-                    // um "salvar" que ela nunca aperta é preferência
-                    // perdida. Falhar aqui não pode travar o onboarding.
-                    salvarPerfil(novas).catch(() => {});
-                  }}
-                  className={!personalizandoHoras && respostas[p.chave] === o ? "chip-ativo" : "chip"}
-                >
-                  {o}
-                </button>
-              ))}
-
-              {p.chave === "horas" &&
-                (personalizandoHoras ? (
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      const n = Number(horasPersonalizadas);
-                      if (n >= 1 && n <= 16) escolherHoras(`${n}h`);
-                    }}
-                    className="flex items-center gap-1.5"
-                  >
-                    <input
-                      type="number"
-                      min={1}
-                      max={16}
-                      autoFocus
-                      value={horasPersonalizadas}
-                      onChange={(e) => setHorasPersonalizadas(e.target.value)}
-                      placeholder="h/dia"
-                      className="field w-[70px] !py-1.5 text-center text-[13px]"
-                    />
-                    <button type="submit" className="chip-ativo">
-                      ok
-                    </button>
-                  </form>
-                ) : (
-                  <button onClick={() => setPersonalizandoHoras(true)} className="chip">
-                    personalizado
-                  </button>
-                ))}
-            </div>
-          </div>
-        ))}
-      </div>
+        <div className="mb-4">
+          <EditorPerfil respostas={respostas} onEscolher={escolherResposta} />
+        </div>
       )}
 
       {primeiraVez && (
@@ -260,9 +201,23 @@ export default function PaginaOnboarding() {
         <div className="flex gap-2">
           {/* Sem edital, "montar meu plano" não monta plano nenhum — a mesa
               segue sem recorte. Duas saídas com o mesmo destino e nomes
-              diferentes prometiam coisas diferentes; ficou uma, honesta. */}
+              diferentes prometiam coisas diferentes; ficou uma, honesta.
+
+              A TERCEIRA saída é a que faltava: quem não tem o PDF (edital não
+              publicado é metade do tempo de preparação de verdade) ficava só
+              com "depois" — e "depois" deixa a mesa sem recorte nenhum,
+              mostrando o acervo inteiro. O alvo manual existe desde a
+              migração 017 e já estava ligado no editor de /mesas; o que não
+              existia era o caminho ATÉ ele a partir daqui. */}
           <button onClick={() => router.push("/mesas")} className="btn-ghost">
             Voltar pras mesas
+          </button>
+          <button
+            onClick={() => router.push("/mesas?editar=alvo")}
+            className="btn-ghost"
+            title="Escolher as matérias do que existe no acervo, sem o PDF"
+          >
+            Não tenho o edital — escolher matérias
           </button>
           <button onClick={() => router.push("/")} className="btn-primary">
             Configuro o edital depois

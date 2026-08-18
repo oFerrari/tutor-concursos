@@ -60,6 +60,16 @@ MESES = {"janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5,
 RE_DATA_EVENTO = re.compile(
     r"\bdia\s+(\d{1,2})\s+de\s+(" + "|".join(MESES) + r")\s+de\s+(20\d{2})", re.I)
 
+# DATA NUMÉRICA "d/m/aaaa" — como a CEBRASPE escreve no cronograma. O edital da
+# PF não traz NENHUMA data em prosa: a aplicação das provas está numa tabela do
+# Anexo I, "Aplicação das provas objetiva e discursiva 27/7/2025". Sem este
+# padrão a tela dizia "Sem data de prova reconhecida" num edital que tem a data
+# escrita — e sem data não há meta, não há prazo, não há ritmo necessário.
+#
+# Dia e mês com 1 OU 2 dígitos: o cronograma mistura "27/7/2025" e "13/01/2026"
+# na mesma tabela. Exigir dois dígitos perderia metade das linhas.
+RE_DATA_NUMERICA = re.compile(r"\b(\d{1,2})/(\d{1,2})/(20\d{2})\b")
+
 # CABEÇALHO DE DISCIPLINA — nome em CAIXA ALTA seguido de ":", ANCORADO NO
 # INÍCIO DA LINHA, com numeração opcional.
 #
@@ -80,8 +90,21 @@ RE_DATA_EVENTO = re.compile(
 # meio de frase, e era exatamente o sinal que `_normalizar()` destruía antes
 # da regex rodar. Por isso a detecção de cabeçalho acontece sobre o texto
 # CRU, e só o corpo de cada bloco é normalizado depois.
+# SEGUNDA ÂNCORA (a alternativa com `{2,}`): o cabeçalho pode não começar a
+# linha. Medido no PC-PR, cujo texto extraído traz
+# "DELEGADO  DE  POLÍCIA   1.  DIREITO  PENAL:" — cargo e primeira disciplina
+# na MESMA linha. Exigir início de linha perdia justamente Direito Penal, que
+# vale 20 das 100 questões da prova de Delegado.
+#
+# Aqui a numeração é OBRIGATÓRIA, e é ela que segura o portão. O falso positivo
+# que a âncora de linha existe pra evitar ("...version 1.1. PLATAFORMA
+# BÁSICA:", "3. ECF:" no meio de um parágrafo de Contabilidade Tributária) vive
+# no meio de FRASE, separado por UM espaço; cabeçalho colado pela extração vem
+# depois do espaçamento largo da linha justificada, 2+ espaços. Travado nos
+# fixtures da FGV: `Ecf`, `Iof`, `Lalur` e `1988` continuam fora.
 RE_DISCIPLINA = re.compile(
-    r"^[ \t]*(?:\d{1,2}[.)]\s+)?([A-ZÀ-Ü][A-ZÀ-Ü0-9 \t\-/&(),]{2,70}?)[ \t]*:",
+    r"(?:^[ \t]*(?:\d{1,2}[.)]\s+)?|(?<=\S)[ \t]{2,}\d{1,2}[.)][ \t]+)"
+    r"([A-ZÀ-Ü][A-ZÀ-Ü0-9 \t\-/&(),]{2,70}?)[ \t]*:",
     re.MULTILINE)
 
 # MARCADOR DE CARGO. As duas bancas escrevem diferente e as duas cabem
@@ -93,6 +116,26 @@ RE_CARGO = re.compile(
     r"^[ \t]*(?:CARGO|PERFIL)\s*\d{0,2}\s*[:\-–—]\s*(.+?)[ \t]*:?[ \t]*$",
     re.MULTILINE | re.IGNORECASE)
 
+# NÃO EXISTE `RE_CARGO_NU`, e a ausência é decisão — foi tentada e revertida.
+# A ideia era pegar o cargo escrito como CABEÇALHO NU (a linha em maiúsculas
+# sem "CARGO:"/"PERFIL N:" na frente, como no PC-PR: "DELEGADO DE POLÍCIA").
+# Medida contra os PDFs REAIS, a regra achou:
+#   · Jateí/MS: 16 "cargos" onde existem 3 — incluindo "PÁGINA 26 DE 32"
+#     (mobília de página), "NÍVEL SUPERIOR" (seção) e "LÍNGUA PORTUGUESA"
+#     (DISCIPLINA);
+#   · PC-PR: 3 cargos chamados "Econômica", "Cibernética", "Cibernética" —
+#     pedaços de cabeçalho de disciplina que o PDF quebra em duas linhas.
+# E fez um estrago a mais, silencioso: o Jateí ANTES caía no fallback de LLM
+# (os cabeçalhos dele não têm ":", então o parser achava zero e o modelo lia).
+# Produzir lixo SUPRIMIU o fallback — o parser passou a "achar" alguma coisa.
+#
+# A lição não é "a regex estava mal calibrada", é que o problema não é de
+# casamento de padrão: distinguir cargo de seção, de disciplina e de rodapé
+# num layout nunca visto é LEITURA. Quatro editais, quatro layouts, e cada
+# regex nova quebrava o edital seguinte. Por isso a decisão passou a ser
+# "o parser agrupa só quando o edital DIZ onde o cargo começa; quando não
+# diz, quem lê é o modelo" — ver `estrutura_com_fallback`.
+
 # Linhas que são ESTRUTURA do documento, não matéria de estudo.
 RE_ESTRUTURA = re.compile(r"^(M[OÓ]DULO|ANEXO|CARGO|PERFIL)\b", re.IGNORECASE)
 
@@ -102,7 +145,16 @@ RE_ESTRUTURA = re.compile(r"^(M[OÓ]DULO|ANEXO|CARGO|PERFIL)\b", re.IGNORECASE)
 # estudo — foi assim que uma disciplina fantasma acumulou 257 "tópicos".
 # Singular E plural: a FGV escreve "ANEXO I – CONTEÚDO PROGRAMÁTICO", o
 # AOCP escreve "ANEXO I – DOS CONTEÚDOS PROGRAMÁTICOS".
-RE_INICIO_CONTEUDO = re.compile(r"\bCONTE[ÚU]DOS?\s+PROGRAM[ÁA]TICOS?\b", re.IGNORECASE)
+# "OBJETOS DE AVALIAÇÃO" é como a CEBRASPE chama a mesma seção — o edital da
+# PF (131 páginas) tem "23 DOS OBJETOS DE AVALIAÇÃO (HABILIDADES E
+# CONHECIMENTOS)" e a palavra "programático" não aparece NENHUMA vez nele.
+# Sem esta alternativa o recorte não achava marcador e o parser varria o
+# documento inteiro: 441.052 caracteres em vez de ~40.000, e aí as tabelas de
+# vagas viravam marcador de cargo ("Perito Criminal Federal – Área 1:
+# Contábil-Financeira 54 6 54" é uma LINHA DE TABELA, não um cabeçalho).
+RE_INICIO_CONTEUDO = re.compile(
+    r"\b(?:CONTE[ÚU]DOS?\s+PROGRAM[ÁA]TICOS?|OBJETOS?\s+DE\s+AVALIA[ÇC][ÃA]O)\b",
+    re.IGNORECASE)
 RE_ANEXO = re.compile(r"^[ \t]*ANEXO\s+[IVXLC]+\b", re.MULTILINE | re.IGNORECASE)
 
 # "1", "1.", "1.1", "1.1.1" etc. seguido de texto iniciando em maiúscula.
@@ -146,19 +198,40 @@ def candidatos_data_prova(texto: str, janela: int = 250) -> list[dict]:
     flat = _normalizar(texto)
     candidatos = []
     fim_anterior = 0
-    for m in RE_DATA_EVENTO.finditer(flat):
+    # As duas formas entram na MESMA lista e competem pela mesma pontuação de
+    # contexto: o edital pode ter as duas (prosa no corpo, tabela no anexo) e
+    # quem decide é a proximidade de "prova objetiva", não o formato.
+    achados = sorted(
+        [(m, "prosa") for m in RE_DATA_EVENTO.finditer(flat)]
+        + [(m, "num") for m in RE_DATA_NUMERICA.finditer(flat)],
+        key=lambda x: x[0].start())
+    for m, forma in achados:
         # A janela nunca cruza o candidato anterior — sem isso, duas datas
         # próximas (comum: "Prova Objetiva dia X... Prova Discursiva dia Y"
         # em sequência) "emprestam" pontuação uma da outra, e a segunda
         # data rouba o crédito de "prova objetiva" que pertence à primeira.
         ini = max(0, m.start() - janela, fim_anterior)
-        contexto = flat[ini:m.start() + 40]
-        pontos = (contexto.lower().count("prova objetiva") * 3
-                  + contexto.lower().count("realizad"))
+        # Data NUMÉRICA não olha pra frente. Em tabela de cronograma a linha é
+        # "ATIVIDADE  DATA", então o que vem depois da data é a atividade da
+        # linha SEGUINTE — e a janela roubava o crédito dela: "…locais de
+        # provas 14/7/2025 Aplicação da prova objetiva…" fazia 14/7 empatar com
+        # 27/7, que é a data real da prova, e o empate era decidido por ordem
+        # no documento. Em prosa o "depois" ainda serve ("dia 11 de outubro de
+        # 2026, quando serão aplicadas as provas").
+        contexto = flat[ini:m.start() + (0 if forma == "num" else 40)]
+        baixo = contexto.lower()
+        pontos = (baixo.count("prova objetiva") * 3
+                  + baixo.count("realizad")
+                  # "Aplicação das provas" é como a tabela de cronograma
+                  # nomeia a linha que importa; sem isso a data certa do PF
+                  # empatava em zero com as 30 outras datas do anexo.
+                  + baixo.count("aplicação das provas") * 3
+                  + baixo.count("aplicação da prova") * 3)
         fim_anterior = m.end()
         try:
-            d = date(int(m.group(3)), MESES[m.group(2).lower()], int(m.group(1)))
-        except ValueError:
+            mes = int(m.group(2)) if forma == "num" else MESES[m.group(2).lower()]
+            d = date(int(m.group(3)), mes, int(m.group(1)))
+        except (ValueError, KeyError):
             continue
         candidatos.append({"data": d, "pontuacao": pontos,
                            "contexto": contexto[-140:].strip()})
@@ -231,6 +304,21 @@ def _continuacao_de_paragrafo(texto: str, inicio: int) -> bool:
     ("...formalidade."); frase cortada no meio termina pendurada — em
     número, vírgula ou ponto e vírgula, como o "2.4" acima.
     """
+    NUMERADO = re.compile(r"[ \t]*\d{1,2}[.)][ \t]")
+    # NUMERAÇÃO PRÓPRIA vence o filtro, e isso é o que separa os dois casos.
+    # "LALUR:" — o falso positivo que motivou este guarda — é palavra NUA: não
+    # tem número, então continua sendo barrado. "4. DIREITO CONSTITUCIONAL:"
+    # traz o próprio número e é cabeçalho, ainda que o texto anterior termine
+    # pendurado.
+    #
+    # Medido no PC-PR: o bloco do Delegado perdia DUAS das oito disciplinas por
+    # aqui — a 4 porque o texto antes termina em "3.19" (dígito: o número do
+    # último subitem, que a extração jogou adiante) e a 7 porque termina em
+    # "12.037/2009);" (ponto e vírgula, de uma citação de lei). Num edital cuja
+    # extração espalha a pontuação assim, "terminou em ; ou dígito" é frequente
+    # e legítimo — o sinal sozinho não distingue mais nada.
+    if NUMERADO.match(texto, inicio):
+        return False
     anterior = texto[:inicio].rstrip()
     return bool(anterior) and anterior[-1] in "0123456789,;–-"
 
@@ -257,7 +345,13 @@ def _marcas(texto: str) -> list[tuple[int, int, str, str]]:
 
 
 def _nome(bruto: str) -> str:
-    return re.sub(r"\s+", " ", bruto).strip(" :").title()
+    # `.` e `-` soltos na ponta vêm da extração do PDF: o título promovido de
+    # item numerado termina no ponto do próprio item ("Fundamentos da
+    # computação."), e o hífen às vezes aparece separado ("Perícia Médico
+    # -Legal"). Nome de disciplina é o que a mesa usa pra RECORTAR (`mesa.filtro`
+    # casa por ILIKE dos dois lados), então pontuação sobrando estraga o casamento.
+    limpo = re.sub(r"\s+([-–])", r"\1", re.sub(r"\s+", " ", bruto))
+    return limpo.strip(" :.;,").title()
 
 
 def _topicos_do_bloco(bruto: str) -> list[str]:
@@ -279,6 +373,104 @@ def _topicos_do_bloco(bruto: str) -> list[str]:
         if texto:
             topicos.append(texto)
     return topicos
+
+
+def _disciplinas_do_bloco_plano(bruto: str) -> list[dict]:
+    """
+    Bloco de cargo SEM subcabeçalho nomeado: os itens de PRIMEIRO NÍVEL viram
+    as disciplinas, e as folhas de cada um viram os tópicos dele.
+
+    Medido no edital da PF: cada uma das 13 áreas de Perito Criminal é uma
+    lista numerada plana — "1 Fundamentos da computação. 1.1 Organização e
+    arquitetura de computadores. ... 2 Bancos de dados. 2.1 ...". Não há
+    cabeçalho de matéria pra `RE_DISCIPLINA` achar, então o cargo saía com UMA
+    disciplina chamada "Perito Criminal Federal – Área 3: Informática Forense"
+    e 104 tópicos dentro. Fiel ao documento e inútil pro estudo: `mesa.filtro`
+    recorta por NOME de disciplina, e esse nome não casa com nada do acervo.
+
+    Os itens de primeiro nível são as matérias — é assim que o candidato fala
+    delas ("estou em bancos de dados"). Promover é o mesmo julgamento que já
+    está em `extrair_estrutura` pro PERFIL 1 da FGV, um nível abaixo.
+
+    Item de primeiro nível SEM filho vira uma disciplina com ele mesmo como
+    único tópico, em vez de sumir: perder conteúdo é pior que uma disciplina
+    de um tópico só.
+    """
+    bloco = _normalizar(bruto).lstrip()
+    subitens = list(RE_SUBITEM.finditer(bloco))
+    grupos: list[dict] = []
+    for j, s in enumerate(subitens):
+        fim = subitens[j + 1].start() if j + 1 < len(subitens) else len(bloco)
+        corpo_item = bloco[s.end():fim].strip()
+        if "." not in s.group(1):
+            # O título é o texto até o primeiro ponto — depois dele já começa o
+            # conteúdo ("Fundamentos da computação. 1.1 Organização...").
+            titulo = re.split(r"(?<=[a-zà-ÿ)])\.\s", corpo_item, maxsplit=1)[0]
+            grupos.append({"disciplina": _nome(titulo[:90]),
+                           "topicos": [], "proprio": bloco[s.start():fim].strip()})
+        elif grupos:
+            grupos[-1]["topicos"].append(bloco[s.start():fim].strip())
+
+    for g in grupos:
+        if not g["topicos"] and g["proprio"]:
+            g["topicos"] = [g["proprio"]]
+        g.pop("proprio")
+    return [g for g in grupos if g["disciplina"] and g["topicos"]]
+
+
+def _redistribuir_compartilhados(cargos: list[dict]) -> list[dict]:
+    """
+    Bloco cujo cabeçalho nomeia DOIS OU MAIS cargos vale pra cada um deles.
+
+    O PC-PR 01/2026 tem três cargos e QUATRO cabeçalhos, porque um deles é
+    "AGENTE DE POLÍCIA JUDICIÁRIA E PAPILOSCOPISTA POLICIAL" — os
+    Conhecimentos Gerais que esses dois dividem (Português, RLM, Realidade do
+    Paraná), e que o Delegado não estuda. Sem este passo o aluno via quatro
+    opções onde existem três cargos, e escolher "Papiloscopista Policial"
+    entregava um plano SEM Português — o edital cobra 25 questões dele.
+
+    Não dá pra resolver isso jogando o bloco em `comuns`: comum é o que vale
+    pra TODO MUNDO, e este não vale pro Delegado. A estrutura ("comuns + um
+    cargo") não tem onde pendurar "comum a alguns", então a saída é
+    distribuir: cada cargo nomeado recebe uma cópia, e o bloco guarda-chuva
+    some da lista de escolhas.
+
+    "CONTER O NOME" NÃO BASTA, e essa versão ingênua apagou 13 cargos de um
+    edital real. No da PF os nomes curtos "Perito Criminal" e "Perito Criminal
+    Federal" existem como marcador (vêm de linha de tabela de vagas cortada), e
+    os dois são substring de "Perito Criminal Federal – Área 1:
+    Contábil-FINANCEIRA". Com a regra "2+ nomes contidos", cada um dos treze
+    peritos virava guarda-chuva e era REMOVIDO da escolha — o aluno via 4
+    cargos onde o edital tem 17, e nenhum deles era perito.
+
+    A regra certa é ENUMERAÇÃO, não continência: o cabeçalho guarda-chuva é
+    feito só dos outros nomes colados por conector. Tirando os nomes contidos,
+    "Agente de Polícia Judiciária E Papiloscopista Policial" deixa " E " —
+    nada. "Perito Criminal Federal – Área 1: Contábil-Financeira" deixa
+    "Área 1 Contábil Financeira", que é conteúdo próprio: é um cargo, não uma
+    lista de cargos.
+    """
+    def e_enumeracao(nome: str, contidos: list[str]) -> bool:
+        resto = nome
+        for n in sorted(contidos, key=len, reverse=True):   # maior primeiro
+            resto = resto.replace(n, " ")
+        sobra = [w for w in re.sub(r"[^0-9A-Za-zÀ-ÿ]+", " ", resto).split()
+                 if w.lower() not in {"e", "ou", "de", "do", "da", "dos", "das"}]
+        return not sobra
+
+    guarda_chuva = []
+    proprios = []
+    for c in cargos:
+        alvos = [o for o in cargos if o is not c and o["nome"] in c["nome"]]
+        umbrella = len(alvos) >= 2 and e_enumeracao(c["nome"], [o["nome"] for o in alvos])
+        (guarda_chuva if umbrella else proprios).append((c, alvos))
+
+    for bloco, alvos in guarda_chuva:
+        for alvo in alvos:
+            # Na frente: o compartilhado vem ANTES no edital, e a ordem das
+            # disciplinas é a ordem em que a pessoa vai lê-las na curadoria.
+            alvo["disciplinas"] = bloco["disciplinas"] + alvo["disciplinas"]
+    return [c for c, _ in proprios]
 
 
 def extrair_estrutura(texto: str) -> dict:
@@ -317,12 +509,19 @@ def extrair_estrutura(texto: str) -> dict:
             atual = {"nome": _nome(bruto), "disciplinas": []}
             cargos.append(atual)
             if topicos:
-                atual["disciplinas"].append({"disciplina": atual["nome"], "topicos": topicos})
+                # Bloco plano (sem subcabeçalho): os itens de primeiro nível
+                # são as matérias. Só aceita a promoção se ela render MAIS de
+                # uma — com uma só, o nome do cargo é a etiqueta mais honesta,
+                # que é o comportamento antigo (PERFIL 1 da FGV).
+                partes = _disciplinas_do_bloco_plano(corpo[fim:prox])
+                atual["disciplinas"].extend(
+                    partes if len(partes) > 1
+                    else [{"disciplina": atual["nome"], "topicos": topicos}])
         elif topicos:
             (atual["disciplinas"] if atual else comuns).append(
                 {"disciplina": _nome(bruto), "topicos": topicos})
 
-    return {"comuns": comuns, "cargos": cargos}
+    return {"comuns": comuns, "cargos": _redistribuir_compartilhados(cargos)}
 
 
 def achatar(estrutura: dict, cargo: str | None = None) -> list[dict]:
@@ -372,46 +571,242 @@ ESQUEMA_ESTRUTURA = {
 # Teto de texto mandado ao modelo. Edital inteiro estoura contexto e cota
 # sem necessidade: o que interessa é o conteúdo programático, que o
 # recorte já isolou.
-MAX_CHARS_LLM = 30_000
+#
+# 60k e não 30k porque 30k CORTAVA edital real: o conteúdo programático do
+# PC-PR tem 37.736 caracteres, e o bloco do Papiloscopista — o último —
+# simplesmente não chegava ao modelo. Truncar entrada não dá erro, dá
+# resposta incompleta, que é a falha mais difícil de ver.
+MAX_CHARS_LLM = 60_000
+
+
+# AGRUPAMENTO: o modelo diz DE QUEM é cada disciplina que o parser achou.
+#
+# TRÊS tentativas morreram aqui. Ficam registradas porque cada uma parecia a
+# solução óbvia da anterior, e o custo de redescobrir isso é alto:
+#
+# 1ª — pedir ao modelo a estrutura inteira, nomes E tópicos. Medido no PC-PR:
+#      246 tópicos = ~5.500 tokens de saída contra teto de 8.000; JSON cortado,
+#      parse estourava, `except` devolvia o parser e a tela dizia "lido pela
+#      estrutura do edital". Chamou, falhou, ninguém soube.
+#
+# 2ª — ÍNDICES do catálogo do parser (esta versão). Saída ~200 tokens, modelo
+#      classifica certo, tópicos determinísticos.
+#
+# 3ª — o modelo NOMEIA os cabeçalhos e o código FATIA os tópicos entre eles,
+#      pra não depender do recall do parser. Revertida: não existe âncora
+#      confiável no texto que o pypdf devolve. Medido no PC-PR — a extração
+#      PERDE PALAVRAS CURTAS em linha justificada (`ECONÔMICA\n \n \nESTADO\n
+#      \n \nPARANÁ` não tem os dois "DO"; `CIBERNÉTICA\n \n \nCRIMES` perdeu o
+#      "E"), então string exata não casa; com folga entre as palavras,
+#      "DIREITO PENAL" casa em "2. DIREITO PROCESSUAL PENAL"; e âncora de
+#      início de linha não vale porque o extrator junta cabeçalhos na mesma
+#      linha ("CONHECIMENTOS GERAIS   1. LÍNGUA PORTUGUESA:").
+#      Essa perda de palavra é também a origem das disciplinas chamadas
+#      "Paraná" e "Digitais": são o rabo do título, o pedaço que sobrou.
+#
+# LIMITE CONHECIDO da versão que ficou: a qualidade tem teto no RECALL DO
+# PARSER. No PC-PR ele entrega 24 dos 32 cabeçalhos reais — somem "1. DIREITO
+# PENAL", "4. DIREITO CONSTITUCIONAL", "7. DIREITOS HUMANOS" e "LÍNGUA
+# PORTUGUESA", e o Delegado aparece com 5 matérias onde tem 8. O modelo não
+# pode devolver o que nunca viu. É por isso que a curadoria tem "Meu cargo não
+# está aqui" e campo pra acrescentar matéria na mão: enquanto a leitura tem
+# teto, o aluno precisa de um caminho que não dependa dela ter acertado.
+ESQUEMA_AGRUPAMENTO = {
+    "type": "object",
+    "properties": {
+        "comuns": {"type": "array", "items": {"type": "integer"}},
+        "cargos": {"type": "array", "items": {
+            "type": "object",
+            "properties": {
+                "nome": {"type": "string"},
+                "disciplinas": {"type": "array", "items": {
+                    "type": "object",
+                    "properties": {"indice": {"type": "integer"}, "nome": {"type": "string"}},
+                    "required": ["indice", "nome"]}},
+            },
+            "required": ["nome", "disciplinas"]}},
+    },
+    "required": ["comuns", "cargos"],
+}
+
+
+def _agrupar_com_llm(corpo: str, achadas: list[dict]) -> dict:
+    """Recebe as disciplinas que o PARSER achou (em ordem de documento) e
+    devolve a mesma estrutura de sempre, agora agrupada por cargo.
+
+    Os tópicos nunca passam pelo modelo: saem daqui exatamente como o parser
+    os leu. O modelo só responde "de quem é" e "como se chama de verdade" —
+    e o `nome` importa porque o catálogo chega com títulos truncados pela
+    extração do PDF ("Digitais", "Paraná")."""
+    from . import llm
+
+    catalogo = "\n".join(f"[{i}] {d['disciplina']}" for i, d in enumerate(achadas))
+    sistema = (
+        "Você lê o conteúdo programático de um edital de concurso público brasileiro.\n"
+        "Recebe uma LISTA NUMERADA de cabeçalhos de disciplina já extraídos do documento, "
+        "na ordem em que aparecem, e devolve a QUEM cada um pertence.\n\n"
+        "Use SOMENTE os índices da lista — não invente disciplina, não descarte nenhuma.\n"
+        "- `comuns`: índices das disciplinas cobradas de TODOS os candidatos.\n"
+        "- `cargos`: um item por CARGO do edital, com os índices das disciplinas só dele.\n"
+        "CARGO é o posto que a pessoa vai ocupar (\"Contador\", \"Papiloscopista Policial\"), "
+        "nunca uma matéria, nunca uma seção (\"Conhecimentos Específicos\", \"Nível Superior\") "
+        "e nunca mobília de página (\"Página 26 de 32\"). O cabeçalho do cargo pode vir sem a "
+        "palavra \"cargo\": uma linha em maiúsculas sozinha, logo antes do conteúdo dele.\n"
+        "Se um bloco vale para MAIS DE UM cargo, repita os índices em cada cargo citado.\n\n"
+        "O campo `nome` de cada disciplina é o título COMPLETO como está no documento. "
+        "A lista pode trazer o cabeçalho pela metade, porque a extração do PDF come palavras "
+        "curtas e quebra título em duas linhas: \"Digitais\" é o fim de \"Tecnologia e Sistemas "
+        "de Informação e de Comunicação, Segurança Cibernética e Crimes Digitais\", e "
+        "\"Paraná\" é o fim de \"Realidade Étnica, Social, Histórica, Geográfica, Cultural, "
+        "Política e Econômica do Estado do Paraná\". Devolva o título inteiro."
+    )
+    lido = llm.obter().gerar_json(
+        f"CABEÇALHOS ENCONTRADOS:\n{catalogo}\n\nCONTEÚDO PROGRAMÁTICO:\n{corpo[:MAX_CHARS_LLM]}",
+        sistema, max_tokens=4000, schema=ESQUEMA_AGRUPAMENTO)
+
+    def por_indice(i, nome=None):
+        # Índice fora da lista é resposta inválida, não dado — some em silêncio
+        # em vez de derrubar a ingestão inteira por causa de um item.
+        if not isinstance(i, int) or not 0 <= i < len(achadas):
+            return None
+        d = achadas[i]
+        # Nome vazio cai no do parser: melhor título truncado que nenhum.
+        return {"disciplina": (nome or "").strip() or d["disciplina"], "topicos": d["topicos"]}
+
+    comuns = [x for x in (por_indice(i) for i in lido.get("comuns") or []) if x]
+    cargos = []
+    for c in lido.get("cargos") or []:
+        ds = [x for x in (por_indice(d.get("indice"), d.get("nome"))
+                          for d in c.get("disciplinas") or []) if x]
+        if ds:
+            cargos.append({"nome": c.get("nome") or "Cargo", "disciplinas": ds})
+    return {"comuns": comuns, "cargos": _redistribuir_compartilhados(cargos)}
 
 
 def estrutura_com_fallback(texto: str) -> tuple[dict, str]:
     """
     Devolve (estrutura, origem) com origem ∈ {"parser", "llm"}.
 
-    O PARSER PRIMEIRO, SEMPRE. Ele acerta os dois layouts reais que existem
-    em fixture, custa zero cota, roda em milissegundos e é determinístico —
-    dá pra travar em teste, coisa que resposta de LLM não dá. O modelo só
-    entra quando o parser não achou disciplina NENHUMA, que é o sinal
-    honesto de "layout que eu não conheço".
+    A REGRA: o parser agrupa por cargo SÓ QUANDO O EDITAL DIZ onde o cargo
+    começa ("CARGO: X", "PERFIL N: X" — `RE_CARGO`). Quando não diz, quem
+    lê é o modelo.
 
-    O gatilho é "zero disciplina", não "zero cargo": concurso de cargo
-    único existe e é legítimo, e chamar o LLM nele seria queimar cota pra
-    confirmar o que o parser já acertou.
+    O gatilho ANTES era "o parser não achou disciplina nenhuma", e ele
+    media a coisa errada. Achar disciplina não é sinal de ter entendido a
+    estrutura: no PC-PR o parser achava 24 disciplinas e ZERO cargos, e
+    entregava os três cargos somados — Biologia e Química (só do
+    Papiloscopista) no plano de quem vai prestar Delegado. Como havia
+    disciplina, o modelo nunca era chamado. O gatilho protegia a cota e
+    deixava passar exatamente o erro que mais custa ao aluno.
 
-    Falha do LLM não derruba a ingestão — devolve o que o parser tinha
-    (vazio) e a curadoria vira preenchimento manual. Melhor uma tela vazia
-    e honesta que um erro 503 em cima de um upload que o usuário já fez.
+    Tentei fechar esse buraco com mais regex (cabeçalho nu em maiúsculas) e
+    o resultado está documentado lá em cima, junto de `RE_CARGO`: 16 cargos
+    falsos no Jateí, nomes truncados no PC-PR, e o fallback de LLM
+    SUPRIMIDO porque o parser passou a "achar" lixo. Quatro editais, quatro
+    layouts — separar cargo de seção, de disciplina e de rodapé num layout
+    nunca visto é leitura, não casamento de padrão. É por isso que a régua
+    agora é "o edital declarou o cargo?" e não "sobrou alguma coisa?".
+
+    O parser continua primeiro e continua barato: quando o marcador existe
+    ele resolve em milissegundos, sem cota, de forma determinística e
+    testável (FGV e AOCP, travados em fixture). O modelo entra UMA vez por
+    edital enviado — não por questão, não por sessão —, e o que ele devolve
+    ainda passa pela curadoria antes de virar agendamento de revisão.
+
+    Custo aceito de propósito: concurso de cargo único, que o parser
+    resolveria sozinho, também gasta uma chamada. É o preço de não
+    conseguir distinguir "tem um cargo só" de "tem vários escritos de um
+    jeito que eu não reconheço" — e essa distinção é justamente a que exige
+    ler o documento.
+
+    DOIS CAMINHOS quando o modelo entra, e a diferença é quanto o parser já
+    conseguiu ler:
+      · achou as disciplinas (PC-PR: 24, com 246 tópicos) — falta saber DE
+        QUEM são. `_agrupar_com_llm` pede só isso: índices. Os tópicos saem
+        do parser, sem passar pelo modelo.
+      · não achou nada (Jateí: os cabeçalhos não têm ":") — aí não há o que
+        agrupar, e o modelo extrai o conteúdo inteiro.
+
+    Falha do LLM não derruba a ingestão — devolve o que o parser tinha, mas
+    com origem `parser_apos_falha`, não `parser`. A diferença importa na
+    tela: "lido pela estrutura do edital" e "o modelo falhou, isto aqui é a
+    leitura mecânica" pedem reações opostas do aluno (seguir em frente vs.
+    tentar de novo), e antes as duas apareciam iguais. Falhar caladamente
+    entregando o resultado PIOR é o pior dos dois mundos.
     """
     estrutura = extrair_estrutura(texto)
-    if estrutura["comuns"] or estrutura["cargos"]:
+    if estrutura["cargos"]:
         return estrutura, "parser"
 
     from . import llm
     corpo, _ = recortar_conteudo_programatico(limpar_paginacao(texto))
+
+    # `comuns` não-vazio significa que o edital tem ITEM NUMERADO — é isso que
+    # o parser sabe achar, e é isso que permite fatiar os tópicos daqui em vez
+    # de pedi-los ao modelo. Num edital de parágrafo corrido (Jateí) não há o
+    # que fatiar, e a extração inteira volta a ser do modelo.
+    if estrutura["comuns"]:
+        try:
+            agrupada = _agrupar_com_llm(corpo, estrutura["comuns"])
+            # Modelo que não achou cabeçalho nenhum é resposta inútil, não
+            # dado: melhor a lista somada do parser, que ao menos tem conteúdo.
+            if agrupada["comuns"] or agrupada["cargos"]:
+                return agrupada, "llm"
+            return estrutura, "parser_apos_falha"
+        except (llm.ErroLLM, ValueError, KeyError, TypeError, AttributeError):
+            return estrutura, "parser_apos_falha"
+
     sistema = (
         "Você extrai o conteúdo programático de editais de concurso público brasileiros. "
         "Devolva SOMENTE o que está escrito no texto — nunca invente disciplina nem tópico, "
         "e nunca resuma: cada item numerado do edital vira um tópico. "
         "Disciplinas cobradas de TODOS os candidatos vão em `comuns`; as específicas de cada "
         "cargo/perfil vão dentro do cargo correspondente. Se o edital tem um cargo só, "
-        "`cargos` pode ter um item só; se não separa por cargo, deixe `cargos` vazio."
+        "`cargos` pode ter um item só; se não separa por cargo, deixe `cargos` vazio.\n\n"
+        # As quatro instruções abaixo não são genéricas: cada uma nomeia um
+        # erro que uma tentativa de regex cometeu num edital REAL. Ficam
+        # explícitas porque este caminho existe justamente para os layouts
+        # que ninguém previu, e o modelo precisa saber o que NÃO é cargo.
+        "CARGO é o posto que a pessoa vai ocupar (\"Contador\", \"Delegado de Polícia\", "
+        "\"Assistente Técnico Legislativo\"). NÃO são cargos, e não podem virar item de "
+        "`cargos`:\n"
+        "- MATÉRIA de estudo (\"Língua Portuguesa\", \"Informática\", \"Raciocínio Lógico\") "
+        "— isso é disciplina;\n"
+        "- SEÇÃO do documento (\"Conhecimentos Gerais\", \"Conhecimentos Específicos\", "
+        "\"Nível Superior\", \"Nível Médio\", \"Anexo I\") — é divisória, não posto;\n"
+        "- MOBÍLIA de página (\"Página 26 de 32\", nome do órgão repetido no topo, rodapé "
+        "com endereço ou site) — ignore por completo;\n"
+        "- PEDAÇO de um título que o PDF quebrou em duas linhas (\"Cibernética e Crimes "
+        "Digitais\" sozinho é a segunda metade de um cabeçalho) — junte as linhas antes de "
+        "decidir.\n"
+        "O cargo pode aparecer SEM a palavra \"cargo\" na frente: uma linha em maiúsculas "
+        "sozinha, logo antes do conteúdo dele, já é o cabeçalho do cargo.\n"
+        "Se um bloco vale para MAIS DE UM cargo (\"AGENTE DE POLÍCIA JUDICIÁRIA E "
+        "PAPILOSCOPISTA POLICIAL\"), repita essas disciplinas dentro de CADA cargo citado.\n\n"
+        # Achado no Jateí: o conteúdo específico do Analista TEM subcabeçalhos
+        # ("FINANÇAS PÚBLICAS:", "ECONOMIA:", "CONTABILIDADE PÚBLICA:") e saiu
+        # com 5 disciplinas; o do Contador e o do Assistente são um parágrafo
+        # corrido, sem subcabeçalho nenhum, e saíram como UMA disciplina
+        # chamada "Conhecimentos Específicos" — que é o nome da SEÇÃO, não de
+        # matéria nenhuma. Nomear pelo cargo é o que o projeto já faz quando o
+        # PERFIL 1 da FGV lista tópicos direto (ver `extrair_estrutura`).
+        "DENTRO do bloco de um cargo, cada subcabeçalho de matéria vira uma disciplina "
+        "(\"FINANÇAS PÚBLICAS\", \"ECONOMIA\", \"CONTABILIDADE PÚBLICA\"). Se o bloco NÃO tem "
+        "subcabeçalho — é um parágrafo corrido de conteúdo —, então ele é UMA disciplina só, "
+        "e o nome dela é o NOME DO CARGO. Nunca use \"Conhecimentos Específicos\", "
+        "\"Conhecimentos Gerais\" ou \"Conteúdo Programático\" como nome de disciplina: "
+        "isso é divisória do documento, não matéria de estudo."
     )
     try:
-        return llm.obter().gerar_json(
-            corpo[:MAX_CHARS_LLM], sistema, max_tokens=8000, schema=ESQUEMA_ESTRUTURA), "llm"
+        lido = llm.obter().gerar_json(
+            corpo[:MAX_CHARS_LLM], sistema, max_tokens=8000, schema=ESQUEMA_ESTRUTURA)
+        # Mesmo tratamento do bloco guarda-chuva que o parser recebe: a
+        # instrução acima pede pra repetir, mas instrução de prompt vaza —
+        # e aqui a correção em código custa uma passada numa lista.
+        lido["cargos"] = _redistribuir_compartilhados(lido.get("cargos") or [])
+        return lido, "llm"
     except (llm.ErroLLM, ValueError, KeyError, TypeError):
-        return estrutura, "parser"
+        return estrutura, "parser_apos_falha"
 
 
 # --------------------------------------------------------------- borda (db)
@@ -457,7 +852,7 @@ def mais_recente(mesa_id: int) -> dict | None:
     anterior aqui e em `mesa.disciplinas()` — as duas coisas leem o mesmo
     "último", senão a meta usaria uma data e o filtro de disciplina outra."""
     return db.exec1(
-        "SELECT id, titulo, orgao, banca, data_prova FROM edital WHERE mesa_id = %(m)s "
+        "SELECT id, titulo, orgao, banca, data_prova, cargo FROM edital WHERE mesa_id = %(m)s "
         "ORDER BY criado_em DESC, id DESC LIMIT 1",
         {"m": mesa_id},
     )
@@ -550,3 +945,76 @@ def probabilidade_fechamento(edital_id: int, usuario_id: int, data_prova: date |
         "ritmo_necessario_topicos_dia": round(ritmo_necessario, 2) if ritmo_necessario is not None else None,
         "probabilidade_fechamento_pct": probabilidade,
     }
+
+
+def ajustar_disciplinas(edital_id: int, remover: list[str] | None = None,
+                        adicionar: list[str] | None = None) -> dict:
+    """
+    Tira ou acrescenta disciplina num edital JÁ CONFIRMADO, sem subir o PDF de
+    novo.
+
+    Existe porque a curadoria só acontecia UMA vez: depois de confirmar, mudar
+    de ideia sobre uma matéria exigia reingerir o edital inteiro — e o aluno
+    muda de ideia no meio do estudo, que é justamente quando ele sabe o que
+    está sobrando. O mesmo princípio da curadoria, agora contínuo: vale a lista
+    que o aluno mantém, não a que a leitura achou.
+
+    ADICIONAR grava um tópico ÚNICO com o nome da disciplina como texto, e a
+    razão é estrutural: `mesa.disciplinas()` sai de `SELECT DISTINCT
+    topico.disciplina`, então disciplina sem nenhum tópico não existe pro
+    recorte — seria uma linha que o aluno vê na tela e o filtro ignora. Um
+    tópico declarado é honesto; zero tópico seria mentira silenciosa.
+
+    REMOVER apaga os tópicos daquela disciplina (é o que a define). Não toca em
+    `questao` nem em `progresso`: o que o aluno já respondeu é histórico dele,
+    não do edital — mesma decisão da migração 010 pra `simulado -> mesa`.
+    """
+    tirados = 0
+    for nome in remover or []:
+        r = db.query("DELETE FROM topico WHERE edital_id = %(e)s AND disciplina = %(d)s",
+                     {"e": edital_id, "d": nome})
+        tirados += r if isinstance(r, int) else 0
+
+    postos = []
+    for nome in adicionar or []:
+        nome = re.sub(r"\s+", " ", nome).strip()
+        if not nome:
+            continue
+        # Já existe? Não duplica — o aluno pode clicar duas vezes, e uma
+        # disciplina repetida apareceria duas vezes na cobertura.
+        ja = db.exec1("SELECT 1 FROM topico WHERE edital_id = %(e)s AND disciplina = %(d)s LIMIT 1",
+                      {"e": edital_id, "d": nome})
+        if ja:
+            continue
+        prox = db.exec1("SELECT COALESCE(MAX(ordem), -1) + 1 AS n FROM topico WHERE edital_id = %(e)s",
+                        {"e": edital_id})["n"]
+        db.query("""INSERT INTO topico (edital_id, disciplina, ordem, texto)
+                    VALUES (%(e)s, %(d)s, %(o)s, %(t)s)""",
+                 {"e": edital_id, "d": nome, "o": prox,
+                  "t": f"{nome} (acrescentada por você — sem tópicos do edital)"})
+        postos.append(nome)
+
+    return {"removidas": remover or [], "adicionadas": postos, "topicos_apagados": tirados}
+
+
+def corrigir_data_prova(edital_id: int, data_prova) -> dict | None:
+    """
+    Troca a data da prova de um edital já confirmado.
+
+    Existe por um caso concreto: o edital da PF em `corpus/` é de 2025 e a
+    prova JÁ PASSOU. `scheduler.meta` devolvia "0 dias restantes" e
+    "probabilidade 0%" — números verdadeiros e inúteis, porque não há mais
+    prazo pra medir ritmo contra. Sem uma forma de apontar uma data futura, a
+    mesa inteira fica sem meta: o aluno que estuda por um edital antigo (pra
+    concurso que vai reabrir, o caso mais comum de preparação) não tinha saída
+    nenhuma além de reingerir o PDF, que traria a mesma data velha de novo.
+
+    Mesma lógica que a CLI já tinha (`chat.py meta 2026-11-15`, data manual
+    sempre vence a do edital), agora com onde gravar em vez de só no argumento
+    do comando — porque no navegador não há argumento pra repetir toda vez.
+    """
+    return db.exec1(
+        "UPDATE edital SET data_prova = %(d)s WHERE id = %(e)s "
+        "RETURNING id, titulo, orgao, banca, data_prova, cargo",
+        {"d": data_prova, "e": edital_id},
+    )

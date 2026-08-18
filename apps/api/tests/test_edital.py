@@ -1,7 +1,10 @@
 """Testes de core/edital.py — funções puras de extração, sem banco."""
 from pathlib import Path
 
-from core.edital import (candidatos_data_prova, extrair_topicos, limpar_paginacao,
+from core import llm
+from core.edital import (candidatos_data_prova, estrutura_com_fallback, extrair_estrutura,
+                         extrair_topicos,
+                         limpar_paginacao,
                          recortar_conteudo_programatico)
 
 # Trecho REAL do edital 001/2026 da Dataprev (banca FGV) — o layout que
@@ -119,11 +122,25 @@ def test_fgv_nao_inventa_disciplina_de_numero_de_versao_nem_de_item():
     assert _disciplinas(FGV).isdisjoint({"Ecf", "Iof", "Lalur"})
 
 
-def test_fgv_perfil_vira_disciplina_quando_nao_tem_subcabecalho():
-    """PERFIL 1 lista os tópicos direto, sem "DISCIPLINA:" no meio. Sem
-    tratar o marcador de perfil, esses tópicos cairiam na disciplina
-    anterior — em Legislação, que não tem nada a ver."""
-    assert "Análise De Negócios De Ti" in _disciplinas(FGV)
+def test_perfil_sem_subcabecalho_vira_uma_disciplina_POR_ITEM():
+    """
+    MUDANÇA DE COMPORTAMENTO deliberada. Antes, perfil que lista tópicos
+    direto (sem "DISCIPLINA:" no meio) virava UMA disciplina com o nome do
+    próprio cargo. Passou a virar uma disciplina por ITEM DE PRIMEIRO NÍVEL.
+
+    O que forçou: as 13 áreas de Perito Criminal do edital da PF são todas
+    assim, e a Área 3 saía como "Perito Criminal Federal – Área 3: Informática
+    Forense" com 104 tópicos dentro. Fiel ao documento e inútil pro produto —
+    `mesa.filtro` recorta por NOME de disciplina, e esse nome não casa com
+    nada do acervo. Os itens de primeiro nível são as matérias, e é assim que
+    o candidato fala delas ("estou em bancos de dados").
+
+    O que o teste antigo protegia continua valendo e está aqui embaixo:
+    nenhum tópico do perfil pode cair no cargo ANTERIOR.
+    """
+    d = _disciplinas(FGV)
+    assert "Análise De Negócios" in d          # item 1 do PERFIL 1, agora disciplina
+    assert "Análise De Negócios De Ti" not in d  # o nome do CARGO não é matéria
 
 
 def test_recorte_ignora_as_regras_do_edital():
@@ -206,3 +223,118 @@ def test_numero_no_fim_de_frase_nao_vira_topico():
     abrir oração ou não — sem essa âncora, "1988" viraria tópico."""
     textos = [t["texto"] for t in extrair_topicos(AOCP)]
     assert not [t for t in textos if t.startswith("1988")]
+
+
+# --------------------------------- quem decide a estrutura (cargo x matéria)
+# A régua mudou depois de quatro editais reais: o parser agrupa só quando o
+# EDITAL DIZ onde o cargo começa ("CARGO: X", "PERFIL N: X"). Quando não diz,
+# quem lê é o modelo — separar cargo de seção, de disciplina e de rodapé num
+# layout nunca visto é leitura, não casamento de padrão. Ver o comentário
+# longo em `estrutura_com_fallback` e o que substituiu `RE_CARGO_NU`.
+
+def test_parser_resolve_sozinho_quando_o_edital_declara_o_cargo(llm_falso):
+    """FGV ("PERFIL N:") e AOCP ("CARGO:") não gastam cota: o marcador está
+    escrito, o agrupamento é determinístico e está travado em fixture."""
+    for texto in (FGV, AOCP):
+        estrutura, origem = estrutura_com_fallback(texto)
+        assert origem == "parser"
+        assert estrutura["cargos"]
+    assert llm_falso.chamadas == [], "não deveria chamar o modelo"
+
+
+def test_sem_marcador_de_cargo_quem_le_e_o_modelo(llm_falso):
+    """O caso que o gatilho antigo deixava passar: o parser ACHA disciplina
+    (então não parecia falha) mas não acha cargo nenhum — e entregava os
+    cargos somados numa lista só. Achar disciplina não é ter entendido a
+    estrutura."""
+    llm_falso.retorno = ('{"comuns": [0], "cargos": [{"nome": "Contador",'
+                         ' "disciplinas": [{"indice": 1, "nome": "Informática"}]}]}')
+    texto = ("ANEXO I - CONTEÚDO PROGRAMÁTICO\n"
+             "1. LÍNGUA PORTUGUESA: 1.1 Crase. 1.2 Pontuação.\n"
+             "2. INFORMÁTICA: 2.1 Windows. 2.2 Excel.\n")
+    parser_sozinho = extrair_estrutura(texto)
+    assert parser_sozinho["comuns"] and not parser_sozinho["cargos"]   # acha matéria, não acha cargo
+
+    estrutura, origem = estrutura_com_fallback(texto)
+    assert origem == "llm", "sem marcador de cargo, o modelo tem que ler"
+    assert [c["nome"] for c in estrutura["cargos"]] == ["Contador"]
+
+
+def test_agrupamento_nao_manda_topico_pro_modelo(llm_falso):
+    """O erro que quebrou o PC-PR: pedir ao modelo os 246 tópicos que o
+    parser JÁ tem estourava o teto de saída, o JSON vinha cortado e o
+    `except` devolvia a lista somada — caladamente. Agora o modelo responde
+    ÍNDICE, e os tópicos saem do parser."""
+    llm_falso.retorno = ('{"comuns": [], "cargos": [{"nome": "Papiloscopista Policial",'
+                         ' "disciplinas": [{"indice": 1, "nome": "Biologia Forense"}]}]}')
+    texto = ("ANEXO I - CONTEÚDO PROGRAMÁTICO\n"
+             "1. DIREITO PENAL: 1.1 Dolo. 1.2 Culpa.\n"
+             "2. BIOLOGIA: 2.1 Citologia. 2.2 Genética.\n")
+    estrutura, origem = estrutura_com_fallback(texto)
+    assert origem == "llm"
+    disc = estrutura["cargos"][0]["disciplinas"][0]
+    # nome corrigido pelo modelo (o PDF quebra título), tópicos vindos do parser
+    assert disc["disciplina"] == "Biologia Forense"
+    assert [t.split()[0] for t in disc["topicos"]] == ["2.1", "2.2"]
+    # o prompt mandou o CATÁLOGO de cabeçalhos, nunca os tópicos pra devolver
+    assert "[1] Biologia" in llm_falso.chamadas[-1]["prompt"]
+
+
+def test_indice_invalido_do_modelo_nao_derruba_a_ingestao(llm_falso):
+    """Índice fora da lista é resposta inválida, não dado: some sozinho em
+    vez de estourar em cima de um upload que o usuário já fez."""
+    llm_falso.retorno = ('{"comuns": [0, 99], "cargos": []}')
+    estrutura, origem = estrutura_com_fallback(
+        "ANEXO I - CONTEÚDO PROGRAMÁTICO\n1. DIREITO PENAL: 1.1 Dolo.\n")
+    assert origem == "llm"
+    assert [d["disciplina"] for d in estrutura["comuns"]] == ["Direito Penal"]
+
+
+def test_falha_do_modelo_fica_VISIVEL_na_origem(llm_falso):
+    """Antes devolvia `parser`, idêntico a "o parser resolveu sozinho" — e o
+    aluno ia embora com os cargos somados sem saber que dava pra tentar de
+    novo."""
+    llm_falso.excecao = llm.ErroLLM("sem cota")
+    _, origem = estrutura_com_fallback(
+        "ANEXO I - CONTEÚDO PROGRAMÁTICO\n1. DIREITO PENAL: 1.1 Dolo.\n")
+    assert origem == "parser_apos_falha"
+
+
+# ------------------------------- cabeçalho que a extração desloca (PC-PR)
+# Os três casos abaixo vêm do MESMO bloco (Delegado de Polícia, PC-PR 01/2026),
+# que tem 8 disciplinas e saía com 5. Cada um é um defeito distinto, e os três
+# foram medidos no PDF real antes de virar regra.
+
+def test_disciplina_colada_na_mesma_linha_do_cargo():
+    """A extração do PC-PR entrega "DELEGADO  DE  POLÍCIA   1.  DIREITO
+    PENAL:" — cargo e primeira disciplina na MESMA linha. Exigir início de
+    linha perdia Direito Penal, que vale 20 das 100 questões da prova."""
+    d = _disciplinas("ANEXO I\nDELEGADO  DE  POLÍCIA   1.  DIREITO PENAL: 1.1 Dolo. 1.2 Culpa.\n")
+    assert "Direito Penal" in d
+
+
+def test_numeracao_propria_vence_o_filtro_de_continuacao():
+    """O guarda de continuação existe pra matar "LALUR:" no meio do item 2.4.
+    Mas ele rejeita por "o texto antes terminou em dígito / ponto e vírgula",
+    e num edital cuja extração espalha pontuação isso é comum e LEGÍTIMO: no
+    PC-PR sumiam duas disciplinas — a 4 porque o texto antes termina em "3.19"
+    e a 7 porque termina em "12.037/2009);".
+
+    O que separa os dois casos é a numeração PRÓPRIA: "LALUR:" é palavra nua."""
+    texto = ("ANEXO I - CONTEÚDO PROGRAMÁTICO\n"
+             "3. LEGISLAÇÃO: 3.18 Marco Legal. 3.19\n"
+             "4. DIREITO CONSTITUCIONAL: 4.1 Teoria. 4.2 Controle.\n"
+             "6. LEGISLAÇÃO ESTADUAL: 6.7 LGPD (Lei n.º 12.037/2009);\n"
+             "7. DIREITOS HUMANOS: 7.1 Teoria Geral. 7.2 Sistemas.\n")
+    d = _disciplinas(texto)
+    assert {"Direito Constitucional", "Direitos Humanos"} <= d
+
+
+def test_palavra_nua_depois_de_item_pendurado_continua_barrada():
+    """A contraprova do teste acima: sem numeração própria, o cabeçalho falso
+    que motivou o guarda segue fora. Se este teste passar a falhar, a regra
+    nova virou peneira."""
+    texto = ("ANEXO I - CONTEÚDO PROGRAMÁTICO\n"
+             "2. CONTABILIDADE: 2.3 Formas de pagamento; 2.4\n"
+             "LALUR: forma de escrituração fiscal do lucro real.\n")
+    assert "Lalur" not in _disciplinas(texto)

@@ -47,12 +47,19 @@ def test_estrutura_separa_comum_de_especifico_do_cargo():
     assert "Direito Processual Penal" not in investigador
 
 
-def test_perfil_sem_subcabecalho_vira_disciplina_com_o_nome_do_cargo():
-    """PERFIL 1 da FGV lista tópicos direto. Sem tratar isso, eles cairiam
-    no cargo anterior — matéria de um concurso dentro do plano de outro."""
+def test_perfil_sem_subcabecalho_se_divide_nos_itens_de_primeiro_nivel():
+    """MUDANÇA deliberada (ver o teste irmão em test_edital.py): bloco de
+    cargo sem subcabeçalho nomeado se divide nos itens de primeiro nível, em
+    vez de virar uma disciplina só com o nome do cargo. Forçado pelas 13
+    áreas de Perito Criminal da PF, que saíam com 104 tópicos numa disciplina
+    cujo nome não casa com disciplina nenhuma do acervo.
+
+    O que segue protegido: os tópicos ficam DENTRO do perfil, não vazam pro
+    cargo anterior."""
     e = edital.extrair_estrutura(FGV)
     perfil1 = next(c for c in e["cargos"] if c["nome"] == "Análise De Negócios De Ti")
-    assert [d["disciplina"] for d in perfil1["disciplinas"]] == ["Análise De Negócios De Ti"]
+    nomes = [d["disciplina"] for d in perfil1["disciplinas"]]
+    assert len(nomes) > 1 and "Análise De Negócios" in nomes
 
 
 def test_achatar_por_cargo_junta_comuns_mais_um_cargo_so():

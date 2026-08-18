@@ -80,7 +80,7 @@ def apagar(usuario_id: int, rascunho_id: int) -> bool:
 def confirmar(usuario_id: int, rascunho_id: int, mesa_id: int,
               disciplinas: list[dict], titulo: str | None = None,
               data_prova=None, orgao: str | None = None,
-              banca: str | None = None) -> dict:
+              banca: str | None = None, cargo: str | None = None) -> dict:
     """
     O "salvar de verdade": vira `edital` + `topico` na mesa e o rascunho
     morre. `disciplinas` é a lista JÁ CURADA que veio da tela
@@ -101,10 +101,13 @@ def confirmar(usuario_id: int, rascunho_id: int, mesa_id: int,
         raise ErroRascunho("escolha ao menos uma disciplina antes de confirmar")
 
     eid = db.exec1(
-        """INSERT INTO edital (mesa_id, titulo, orgao, banca, data_prova, arquivo)
-           VALUES (%(m)s, %(t)s, %(o)s, %(b)s, %(d)s, %(a)s) RETURNING id""",
+        """INSERT INTO edital (mesa_id, titulo, orgao, banca, data_prova, arquivo, cargo)
+           VALUES (%(m)s, %(t)s, %(o)s, %(b)s, %(d)s, %(a)s, %(c)s) RETURNING id""",
         {"m": mesa_id, "t": (titulo or r["titulo"]).strip(), "o": orgao, "b": banca,
-         "d": data_prova or r["data_prova"], "a": r["arquivo"]},
+         "d": data_prova or r["data_prova"], "a": r["arquivo"],
+         # NULL quando não declarado (cargo único, CLI, ou o aluno seguiu sem
+         # nomear) — ver migração 018. Vazio não é erro, é ausência.
+         "c": (cargo or "").strip() or None},
     )["id"]
 
     ordem = 0
