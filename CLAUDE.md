@@ -64,6 +64,9 @@ db/012_questao_tipo.sql    questao.tipo + gabarito_ce: item CERTO/ERRADO (Cebras
 db/013_contexto.sql        "Texto associado": texto-base compartilhado por vários itens
 db/014_conversa.sql        conversa + mensagem: o chat do tutor passa a ter memória
 db/015_perfil.sql          usuario.perfil (JSONB): horas/nível/turno declarados no onboarding
+db/018_edital_cargo.sql    edital.cargo: o plano diz PARA QUEM ele é (17 cargos no da PF)
+db/019_material_do_aluno.sql documento.usuario_id + status/erro/chunks_total: biblioteca privada
+db/020_material_classificado.sql disciplina virou NULLABLE + assunto + classificado_por
 db/schema.dbml             schema documentado (DBML) — visualização, não fonte de verdade
 core/chunking.py           lei -> chunks por artigo (função pura)
 core/embeddings.py         e5 local, prefixos query:/passage:, cache
@@ -83,6 +86,7 @@ core/desafio.py            meta do dia: reincidentes + novas + mini-simulado, te
 core/ritmo_regras.py       gatilho de intervenção proativa — FUNÇÕES PURAS
 core/ritmo.py              busca desempenho/reincidência/sequência, prioriza 1 sugestão
 core/edital.py             extrai data da prova e conteúdo programático de PDF de edital
+core/material.py           biblioteca do ALUNO: sobe/baixa, classifica, indexa material privado
 edital.py                  CLI de ingestão de edital, reporta candidatos (não decide calado)
 corpus/html_para_texto.py  converte HTML compilado do Planalto pra .txt (cp1252, descarta tachado/revogado)
 ingest.py                  ingestão (batch)
@@ -677,6 +681,87 @@ qualquer outra — e desde a 016 registra DUAS vezes: em `tentativa`/
 da conversa (o contexto, pro tutor considerar no próximo turno). São coisas
 diferentes e nenhuma substitui a outra.
 
+**Biblioteca do aluno: o acervo passa a ter DONO opcional (migração 019).**
+Até aqui `documento` era só material público (lei do Planalto), e o aluno não
+tinha como alimentar o tutor com o PDF do curso que ele pagou. A alternativa
+teria sido uma tabela nova (`material`, `material_chunk`) — e ela duplicaria
+chunking, embedding, cache e busca híbrida pra chegar no mesmo lugar. Uma
+COLUNA `usuario_id` nullable em `documento` reaproveita tudo: `NULL` é o acervo
+público de sempre, preenchido é material de UM aluno.
+
+O preço dessa escolha é que o predicado de dono tem que estar em TODA busca, e
+não no código que chama: `retrieval.DONO = "(d.usuario_id IS NULL OR
+d.usuario_id = %(uid)s)"` entra DENTRO das CTEs de `por_dispositivo`,
+`por_rubrica` e `hibrida`. Filtrar depois de rankear seria pior que não filtrar:
+o material de outro aluno gastaria vaga no top-6 e sairia da lista, então a
+pergunta perderia contexto sem ninguém ver por quê. `usuario_id=None` é o
+default e devolve só público — a CLI e qualquer chamador que ainda não conhece
+biblioteca continuam vendo o que sempre viram, e o vazamento exige um
+`usuario_id` explícito, não um esquecimento. Medido com dois alunos e um
+mnemônico inventado: o dono ACHOU, o outro não, a CLI não.
+
+`geracao.py` NÃO recebe `usuario_id`, e isso é decisão, não esquecimento:
+`questao` é acervo COMPARTILHADO (008), então questão gerada de material pago
+de um aluno seria distribuída pros outros. O tutor pode LER o material privado
+pra explicar; o gerador não pode COPIÁ-LO pra dentro de uma tabela pública.
+
+**Indexar é `BackgroundTasks`, com o progresso no BANCO.** O embedding roda
+local na CPU (decisão de "Pilha") e um PDF de curso leva minutos — não cabe num
+request. `status`/`chunks_total`/`chunks` em `documento` e não em memória porque
+o aluno dá F5, fecha a aba e volta depois; progresso em memória perderia
+exatamente o PDF que ele já subiu. `indexar()` é IDEMPOTENTE (`DELETE FROM
+chunk WHERE documento_id` antes de inserir) — provado com 3 execuções seguidas,
+sem duplicar trecho: sem isso o botão "tentar de novo" dobraria o material.
+
+**Disciplina é OPCIONAL e quem descobre é o classificador (migração 020).**
+Obrigar a rotular é obrigar a LER antes de subir, e o caso que mais importa é
+justamente o material que a pessoa não conhece ("joguei lá, não sei se
+agrega"). `assunto` entrou junto porque disciplina sozinha não distingue a aula
+3 da aula 11 de um mesmo curso, e `classificado_por` existe pra tela pedir
+conferência SÓ no palpite — o que o aluno digitou não precisa de aviso, ele
+sabe o que escreveu. O classificador NUNCA sobrescreve rótulo do aluno, e roda
+FORA do `try` da indexação: uma falha de rótulo marcando como `falha` um
+material inteiramente indexado seria mentir sobre o que aconteceu.
+
+**Lote: os campos valem pros N arquivos, e um arquivo ruim não derruba os
+outros.** "Opcional" resolvia metade do problema — subir 14 aulas ainda era 14
+idas ao seletor de arquivo. O envio é SEQUENCIAL de propósito: o servidor
+indexa em background no próprio processo, então disparar 14 de uma vez não
+termina mais rápido, só some com o progresso ("3 de 14") e concorre por CPU com
+o embedding que já está rodando. E quem escolheu 14 não deveria reenviar 13 que
+já entraram por causa do que falhou — os que falharam são NOMEADOS no fim,
+porque "3 falharam" sem dizer quais é um erro que não dá pra agir.
+
+**O seletor de rótulo é `<datalist>`, não `<select>`, e a fonte tem um botão.**
+A lista é DICA, não domínio fechado: `<select>` seria o componente errado
+(recusaria matéria nova) e um combobox caseiro reimplementaria teclado, foco e
+"aceita valor de fora" pra chegar onde o navegador já está. As sugestões saem de
+`GET /materiais/sugestoes`, e só da biblioteca de QUEM pergunta — oferecer a
+disciplina que outro aluno cadastrou vazaria o que ele estuda, num campo que
+parece inofensivo. O botão troca a fonte da DISCIPLINA entre as matérias da
+mesa (edital, 011, ou alvo manual, 017) e o que o aluno já usou aqui; fica
+desabilitado DIZENDO POR QUÊ quando a mesa não declarou matérias, em vez de
+ligar e não sugerir nada. Vem LIGADO quando há alvo, porque usar a grafia do
+edital faz a biblioteca agrupar com o mesmo nome que o plano de estudo usa.
+ASSUNTO só tem sugestão com o botão desligado: o alvo da mesa não tem assunto
+pra oferecer — tem disciplina e tópico, e tópico é outra coisa (o edital da
+Dataprev tem 1015; uma datalist com isso não é sugestão, é um documento).
+Dentro da biblioteca, prefere os assuntos DA disciplina escolhida
+(`assuntos_por_disciplina`): oferecer "Remédios constitucionais" a quem digita
+Contabilidade é ruído. No lápis de cada linha não há botão — corrigir um rótulo
+é ação sobre a biblioteca, e fazer a correção depender de um modo que está no
+outro canto da tela esconderia metade das grafias possíveis.
+
+**Link indexado resolve o DNS antes de baixar (SSRF).** O pedido sai de dentro
+da rede do servidor, então "cole uma URL" é uma primitiva de requisição
+arbitrária se ninguém olhar. `material.baixar` resolve o nome, exige
+`ipaddress.is_global` em todos os endereços e REVALIDA a cada redirecionamento
+— redirect é o furo clássico: o domínio público responde 302 pra
+`169.254.169.254`. Verificado contra `127.0.0.1`, `localhost`,
+`169.254.169.254`, `10.0.0.5` e `file://`. O que isso NÃO é: allowlist de
+domínio. Endereço público que serve conteúdo hostil continua aceito, e a tela
+diz o limite ANTES de a pessoa colar e falhar.
+
 ## Invariantes (violação = bug)
 
 - Todo `Art.` do arquivo vira um chunk. `diagnostico.py` verifica.
@@ -781,6 +866,25 @@ diferentes e nenhuma substitui a outra.
   zera quando `salvar()` de fato salva algo — "a chamada funcionou" e "a
   chamada rendeu progresso" são coisas diferentes, e só a segunda deveria
   resetar o contador de desistência.
+
+- **`@lru_cache` NÃO é trava: ele memoiza o resultado, não protege o corpo.**
+  `embeddings._modelo()` era `@lru_cache(maxsize=1)`, e isso pareceu suficiente
+  por meses porque nada rodava embedding em paralelo. Subir TRÊS materiais em
+  lote pela tela quebrou: `api.py` indexa em `BackgroundTasks` (pool de
+  threads), as três threads erraram o cache juntas, as três construíram o
+  SentenceTransformer, e duas morreram com `Cannot copy out of meta tensor; no
+  data!` — o transformers inicializa os pesos no device `meta` e depois os move,
+  e as cargas simultâneas disputam esse estado. Resultado medido: 2 `falha` e 1
+  `pronto`, com a razão gravada em `documento.erro` (foi o único motivo de eu
+  ter descoberto em vez de achar que o PDF era ruim). Corrigido com dupla
+  checagem (`threading.Lock` + global), caminho rápido sem trava. Não é caso só
+  do lote: uma pergunta no tutor DURANTE uma indexação chama `embed_consulta` de
+  outra thread, então o furo estava no caminho interativo também. **Não
+  serializei os `encode`**, e é escolha: uma trava global ali poria a pergunta
+  do aluno atrás de um lote de 14 arquivos por dez minutos. `tests/
+  test_embeddings_concorrencia.py` trava isso — e o teste foi conferido CONTRA
+  o bug (a versão com `lru_cache` constrói 6x na mesma corrida), porque um teste
+  de concorrência que não reprova a versão quebrada não está medindo nada.
 
 **Extração de edital: a quebra de linha É o dado, e `_normalizar()` a
 destruía antes de qualquer regex rodar.** Achado com um edital REAL
@@ -959,6 +1063,24 @@ upload: caminho interno do servidor não é dado do usuário.
   requisição), mas fechar o navegador e abrir noutra máquina começa da mesa
   padrão.
 
+- A indexação da biblioteca roda no PROCESSO do servidor
+  (`BackgroundTasks`), não num worker. Reiniciar o uvicorn no meio deixa
+  material em `processando` pra sempre — por isso a tela tem "tentar de novo"
+  também nesse status, e não só em `falha`. Cada indexação também segura uma
+  thread do pool do FastAPI pelos minutos que durar: com o limite default (40)
+  um lote de 14 arquivos cabe folgado, um de 50 começaria a travar rota
+  síncrona. Worker de verdade é o conserto, e é o mesmo item já aberto em
+  "Pré-geração em background".
+- O classificador de material custa UMA chamada de LLM por arquivo, contra a
+  cota gratuita baixa do Gemini. Num lote grande isso queima o dia — quem já
+  sabe do que é o material preenche disciplina/assunto e o classificador nem
+  é chamado.
+- Indexar link não é allowlist de domínio: `material.baixar` só garante que o
+  endereço é PÚBLICO (anti-SSRF), não que o conteúdo é confiável.
+- `sincronizar.py` não exporta a biblioteca do aluno (019): os bytes do PDF
+  nem ficam no servidor (só o nome, em `documento.origem`), então a outra
+  máquina precisa subir os arquivos de novo.
+
 ## Aberto
 
 - **Múltipla escolha** (FGV, Vunesp): exige tabela de alternativas. O
@@ -1007,7 +1129,10 @@ upload: caminho interno do servidor não é dado do usuário.
   simulado, desafio, stats, edital e mesas leem a API de verdade.
   `scheduler`/`socratic` continuam funções puras por baixo. O que ainda é
   vitrine em `apps/web` está listado no cabeçalho de `src/mock/prototipo.ts`,
-  com a rota que falta anotada em cada bloco (materiais e onboarding).
+  com a rota que falta anotada em cada bloco. **`/materiais` saiu da vitrine**
+  (019/020): sobe arquivo em lote, indexa link, classifica, agrupa e edita
+  rótulo contra a API de verdade, e o `MATERIAIS_EXEMPLO` do mock foi apagado —
+  mock que sobrevive à tela real é o que faz alguém depurar dado inventado.
 - Se a rotina exportar/importar do `sincronizar.py` cansar: Postgres hospedado
   (Neon, Supabase) com `DATABASE_URL` único resolve, ao custo de exigir rede.
 - **Precisão de `retrieval.py` MEDIDA** (`avaliar_retrieval.py`, agora 22
@@ -1174,7 +1299,7 @@ upload: caminho interno do servidor não é dado do usuário.
   `test_conversa.py` (histórico chegando ao prompt) e `test_perfil.py`
   (perfil inválido nunca chegando ao prompt).
 - **Migração numerada nova exige aplicar na mão** (ver a armadilha do
-  `docker-entrypoint-initdb.d` logo abaixo). Da 012 à 015 todas foram
+  `docker-entrypoint-initdb.d` logo abaixo). Da 012 à 020 todas foram
   aplicadas assim; num banco recriado do zero elas entram sozinhas.
 
 ## Comandos
@@ -1245,6 +1370,22 @@ curl -s -X POST localhost:8000/mesas -H "Authorization: Bearer $TOKEN" \
      -H 'content-type: application/json' -d '{"nome":"PF Agente","banca":"Cebraspe"}'
 curl -s localhost:8000/mesas -H "Authorization: Bearer $TOKEN"
 curl -s localhost:8000/fila  -H "Authorization: Bearer $TOKEN" -H "X-Mesa-Id: 3"
+
+# biblioteca do aluno (019/020): material PRIVADO, indexado no mesmo acervo
+curl -s localhost:8000/materiais -H "Authorization: Bearer $TOKEN"
+# disciplina e assunto são OPCIONAIS — sem eles, o classificador descobre
+curl -s -X POST localhost:8000/materiais -H "Authorization: Bearer $TOKEN" \
+     -F "arquivo=@aula-03.pdf" -F "tipo=aula"
+curl -s -X POST localhost:8000/materiais/link -H "Authorization: Bearer $TOKEN" \
+     -H 'content-type: application/json' -d '{"url":"https://exemplo.org/lei.pdf"}'
+# o que alimenta o seletor da tela: só os rótulos DESTE aluno
+curl -s localhost:8000/materiais/sugestoes -H "Authorization: Bearer $TOKEN"
+
+# editar o alvo DEPOIS de o edital estar valendo, sem subir o PDF de novo
+curl -s -X PATCH localhost:8000/edital/disciplinas -H "Authorization: Bearer $TOKEN" \
+     -H 'content-type: application/json' -d '{"remover":["Contabilidade"]}'
+curl -s -X PATCH localhost:8000/edital/data-prova -H "Authorization: Bearer $TOKEN" \
+     -H 'content-type: application/json' -d '{"data_prova":"2026-11-15"}'
 ```
 
 

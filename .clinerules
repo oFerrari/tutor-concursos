@@ -1,0 +1,55 @@
+# Regras de trabalho neste projeto
+
+**Sempre leia este arquivo antes de iniciar qualquer nova tarefa neste projeto e
+siga estritamente estas regras de economia de tokens e limite de escopo.**
+
+> `CLAUDE.md`/`AGENTS.md` (raiz) continua sendo o CONTEXTO do projeto — o que
+> existe e por quê. Este arquivo é o PROCESSO: como conduzir a tarefa. Os dois
+> valem juntos; em caso de conflito sobre *escopo de execução*, este vence.
+
+---
+
+## PASSO 1 — Mapeamento e classificação (apenas leitura)
+
+1. Classificar o pedido: **[FRONTEND/VISUAL]**, **[BACKEND/LÓGICA]** ou
+   **[FULLSTACK]**.
+2. Listar os arquivos essenciais a partir do conhecimento que já se tem do
+   projeto.
+3. Só se não souber onde está o arquivo: **no máximo UMA** busca, específica
+   (`grep -rn "termo" caminho/`). Proibida varredura ampla.
+
+## PASSO 2 — Plano de ação e escopo (PARADA OBRIGATÓRIA)
+
+Antes de escrever qualquer código, responder com:
+
+- a **classificação** da tarefa;
+- os **arquivos/rotas exatos** que serão alterados;
+- **o que será feito**, em 1 ou 2 frases;
+- e a pergunta: **"Posso prosseguir?"**
+
+Nada de código antes da aprovação.
+
+## PASSO 3 — Execução restrita (gatilho rígido)
+
+Só depois da aprovação, e obedecendo a:
+
+- **[FRONTEND/VISUAL]**: PROIBIDO tocar em banco de dados, criar/alterar rota de
+  API, mexer no backend ou rodar teste automatizado. Só `.tsx` / `.css` /
+  `.html`.
+- **Não reescrever arquivo inteiro** sem necessidade. Preferir substituição
+  pontual (edição de bloco específico, `sed`, regex).
+- **Não rodar suíte inteira** (`pytest`, `npm test`) a menos que pedido
+  explicitamente.
+- Erro durante a alteração: **no máximo DUAS** tentativas autônomas de conserto.
+  Falhando na segunda, **parar e reportar o erro**.
+
+---
+
+## Notas de casa que não mudam com o workflow
+
+- Migração numerada nova exige aplicar na mão (ver `CLAUDE.md`); commitar não é
+  aplicar.
+- Escrita em `tentativa`/`progresso`/`simulado`/`edital`/`mesa` em teste vai
+  contra usuário DESCARTÁVEL, nunca contra `CLI_USUARIO_EMAIL`.
+- Nunca `DELETE FROM documento` pra reprocessar: usar `reingest.py`.
+- Este repositório é de dados PÚBLICOS. Nada de dado de empresa aqui.
