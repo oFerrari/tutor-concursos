@@ -11,25 +11,53 @@ correção de chunking barata: mudou a rubrica de 30 artigos, reprocessa 30,
 não 436.
 """
 import hashlib
-from functools import lru_cache
+import threading
 
 from . import db
 from .config import EMBEDDING_MODEL
 
-VERSAO = "embeddings-v2"
+VERSAO = "embeddings-v3"
 DIMENSOES = 768  # precisa casar com vector(768) no schema
 
 
-@lru_cache(maxsize=1)
+_TRAVA_MODELO = threading.Lock()
+_MODELO = None
+
+
 def _modelo():
-    from sentence_transformers import SentenceTransformer
-    # device="cpu" explícito: a decisão documentada é "LOCAL (CPU)", mas sem
-    # forçar isso o sentence-transformers autodetecta CUDA. Numa GPU
-    # incompatível com o build do torch instalado, isso quebra em runtime
-    # (CUDA error: no kernel image for device); numa GPU compatível, usaria
-    # VRAM calado, contradizendo a decisão. CPU é rápido o bastante para um
-    # modelo de 768 dim e evita as duas armadilhas.
-    return SentenceTransformer(EMBEDDING_MODEL, device="cpu")
+    """Singleton do modelo, carregado UMA vez e com trava.
+
+    Era `@lru_cache(maxsize=1)`, e isso não basta: o lru_cache memoiza o
+    RESULTADO, não protege o CORPO. Duas threads que entram juntas erram o
+    cache as duas e CONSTROEM o modelo as duas — e carregar o mesmo
+    SentenceTransformer em paralelo estoura com `Cannot copy out of meta
+    tensor; no data!`, porque o transformers inicializa os pesos no device
+    `meta` e depois os move, e as duas cargas disputam esse estado.
+
+    Não é hipótese: apareceu subindo TRÊS materiais em lote pela tela
+    (`api.py` roda cada indexação em `BackgroundTasks`, ou seja, no pool de
+    threads). Duas das três falharam e a primeira passou. O caminho
+    interativo tem a mesma exposição — uma pergunta no tutor durante uma
+    indexação chama `embed_consulta` de outra thread.
+
+    Dupla checagem: o caminho rápido lê o global sem trava (atribuição a
+    global é atômica no CPython), e só quem chega antes da primeira carga
+    paga o lock."""
+    global _MODELO
+    if _MODELO is not None:
+        return _MODELO
+    with _TRAVA_MODELO:
+        if _MODELO is None:
+            from sentence_transformers import SentenceTransformer
+            # device="cpu" explícito: a decisão documentada é "LOCAL (CPU)",
+            # mas sem forçar isso o sentence-transformers autodetecta CUDA.
+            # Numa GPU incompatível com o build do torch instalado, isso quebra
+            # em runtime (CUDA error: no kernel image for device); numa GPU
+            # compatível, usaria VRAM calado, contradizendo a decisão. CPU é
+            # rápido o bastante para um modelo de 768 dim e evita as duas
+            # armadilhas.
+            _MODELO = SentenceTransformer(EMBEDDING_MODEL, device="cpu")
+    return _MODELO
 
 
 def _hash(texto: str) -> str:
