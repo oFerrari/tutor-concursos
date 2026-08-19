@@ -1,0 +1,358 @@
+# Trecho REAL do edital 04/2026 da TRANSPETRO (banca Fundação Cesgranrio),
+# extraído pelo pypdf — as quebras de linha, o espaçamento largo da linha
+# justificada e a mobília de página ("pcimarkpci ...", "www.pciconcursos.com.br")
+# são o dado, não sujeira: cabeçalho que quebra em duas linhas foi o defeito
+# que este edital expôs. Fixture limpo demais mente tanto quanto métrica errada.
+#
+# Do ANEXO IV mantive CONHECIMENTOS BÁSICOS inteiro e CINCO ênfases escolhidas
+# por terem sublayouts DIFERENTES entre si — é isso que se está testando:
+#   ÊNFASE 1   subcabeçalhos em CAIXA ALTA seguidos de dois-pontos
+#   ÊNFASE 3   subseções numeradas em Title Case ("1. Ecologia e Conservação...")
+#   ÊNFASE 8   subseções em NUMERAL ROMANO ("I- MATEMÁTICA:"), com cabeçalho
+#              quebrando no meio ("III- DADOS E BASES DE\nDADOS:")
+#   ÊNFASE 17  NENHUM subcabeçalho — lista corrida separada por ponto-e-vírgula
+#   ÊNFASE 22  subseções numeradas em CAIXA ALTA ("1. PROBABILIDADE E ...")
+# E o ANEXO V (cronograma), porque a data da prova sai de lá.
+
+ANEXO IV - CONTEÚDOS PROGRAMÁTICOS 
+ 
+ 
+CONTEÚDOS PROGRAMÁTICOS  
+ 
+CONHECIMENTOS BÁSICOS  
+LÍNGUA PORTUGUESA: 1. Compreensão de textos. 2. Ortografia oficial. 3. Mecanismos de coesão textual. 4. Significação das 
+palavras. 5. Emprego de tempos e modos verbais. 6. Emprego das classes de palavras. 7. Coordenação e de subordinação. 8. 
+Emprego dos sinais de pontuação. 9. Concordância verbal e nominal. 10. Regência verbal e nominal. 11. Emprego do sinal 
+indicativo de crase. 12. Colocação dos pronomes átonos.  
+LÍNGUA INGLESA: 1. Compreensão de texto escrito em língua inglesa. 2. Itens gramaticais relevantes para a compreensão dos 
+conteúdos semânticos. 
+ 
+CONHECIMENTOS ESPECÍFICOS  
+ÊNFASE 1: ADMINISTRAÇÃO  
+ADMINISTRAÇÃO FINANCEIRA E ORÇAMENTÁRIA: Matemática Financeira, Valor do Dinheiro no Tempo, Risco X Retorno, 
+Análise de Investimentos, Alavancagem e Endividamento, Planejamento Financeiro e Orçamentário, Administração do Capital 
+de Giro, Fontes de Financiamento a Longo Prazo. ADMINISTRAÇÃO DA PRODUÇÃO E COMPRAS: Estratégia de Suprimento 
+(Strategic Sourcing); Administração de Compras; Gestão de Estoques: MRP , Ponto de Ressuprimento, Lote Econômico de 
+Compra, Just in Time, Sistema de Rastreamento de Materiais (RFID, Código de Barras e Unique Identi fication Device); 
+Planejamento e Controle da Produção; Gestão da Cadeia de Suprimentos (Supply Chain Management). CONTRATAÇÃO: 
+Artigos 28 ao 91 da Lei nº 13.303 de 30 de junho de 2016 (Estatuto Jurídico da empresa pública, da sociedade de economia 
+mista e de suas subsidiárias); Artigos 42 ao 49 da Lei complementar nº 123, de 14 de dezembro de 2006 (Estatuto nacional da 
+microempresa e da empresa de pequeno porte) e alterações. GERENCIAMENTO DE PROJETOS:  Ciclo de Vida, Estrutura 
+analítica de projeto, Estudo d e viabilidade técnica e econômica, Gerenciamento das Aquisições do Projeto (PMBok 7ª ed). 
+Metodologias Ágeis. CONFLITOS E NEGOCIAÇÃO. ADMINISTRAÇÃO DE SISTEMAS DE INFORMAÇÃO:  sistemas 
+operacionais e sistemas de apoio à decisão; gestão dos sistemas de infor mação: dimensões, competências, metodologias e 
+ferramentas. ESTRATÉGIA EMPRESARIAL: Estruturas Organizacionais, Estratégia Organizacional, Ferramentas da Análise 
+Estratégica; Processo de Administração Estratégica; Avaliação do ambiente Externo e das Capacidades da Empresa; Estratégias 
+no Nível do Negócio; Estratégias Corporativas; Implementação, gestão e mensuração das estratégias. ADMINISTRAÇÃO 
+MERCADOLÓGICA: Marketing, Marketing B2B, Marketing de Serviços, Pesquisa de Mercado, Planejamento de Marketing, 
+Estratégias de Marketing, Relacionamento com Clientes, Gestão Comercial, Comportamento do Consumidor, Marca, Mídias 
+digitais, Plataformização. CONTABILIDADE: Contabilidade Geral, Contabilidade de Custos, Contabilidade Gerencial, 
+Governança, Compliance e Ris cos. PROCESSO DECISÓRIO:  A Natureza da Decisão; O Modelo Racional da Tomada de 
+Decisão; Vieses comuns e mitigação; Conscientização Limitada; Técnicas e Instrumentos de Apoio à Decisão. 
+ADMINISTRAÇÃO DE RECURSOS HUMANOS: Estratégias de RH, Remuneração e Ben efícios, Desempenho, Cultura 
+Organizacional, Desenvolvimento de RH, Gestão do Conhecimento, Carreira e Sucessão, Liderança e Equipe. LÓGICA: 
+Funções, Análise Combinatória, Progressões, Raciocínio Lógico Quantitativo. ESTATÍSTICA: Probabilidade, Estatística  
+Descritiva. SUSTENTABILIDADE E RESPONSABILIDADE SOCIOAMBIENTAL:  Gestão Ambiental nas Organizações; 
+Relacionamento com Públicos de Interesse; Modelos e Práticas de Relatórios Ambientais; Indicadores de Gestão Ambiental e 
+ESG. 
+ 
+ÊNFASE 3: ANÁLISE AMBIENTAL  
+1. Ecologia e Conservação da Biodiversidade: 1.1 Ecossistemas: Conceitos, estrutura, classificação, tipos de ecossistemas 
+brasileiros. 1.2 Ciclos biogeoquímicos. 1.3 Dinâmica das populações. 1.4 Meio ambiente, sociedade e noções de sociologia e de 
+antropologia. 1.5 Plan ejamento ambiental: planejamento territorial, urbanismo, vocação e uso do solo. 1.6 Biogeografia. 1.7 
+Conservação de recursos naturais e serviços ambientais. 1.8 Sistema Nacional de Unidades de Conservação 1.9 Política 
+Nacional de Biodiversidade (PNB) e Decreto nº 12.485/2025, que dispõe sobre a Estratégia e o Plano de Ação Nacionais para a 
+Biodiversidade. 1.10 Convenções internacionais voltadas à proteção de espécies das quais o Brasil é signatário: Convenção 
+Sobre a Diversidade Biológica (CDB); Convenção Internacional sobre o Comércio das Espécies da Fauna e Flora em Perigo de 
+Extinção (CITES). 2. Ciências do Ambiente, Desenvolvimento Sustentável e Sustentabilidade:  2.1 Benefícios da política 
+ambiental. 2.2 Educação Ambiental. 2.3 Desenvolvimento sustentáv el: Conceitos, objetivos e diretrizes. 2.4 Fundamentos 
+teóricos e metodológicos da valoração econômica do meio ambiente. 2.5 Avaliação do uso de recursos naturais. 2.6 Zoneamento 
+ecológico-econômico. 3. Recursos hídricos e efluentes líquidos:  3.1 Abastecim ento de água. 3.2 Tratamento de água: 
+processos convencionais e processos avançados. 3.3 Qualidade da água. 3.4 Poluição hídrica. 3.5 Política Nacional de Recursos 
+Hídricos. 3.6 Sistema Nacional de Gerenciamento de Recursos Hídricos. 3.7 Noções de manejo d e bacias hidrográficas . 4. 
+Resíduos sólidos e contaminação de solos e águas subterrâneas: 4.1 Qualidade do solo e da água subterrânea. 4.2 Noções 
+de tecnologias de tratamento e destinação ambientalmente adequadas de resíduos sólidos. 4.3 Noções sobre tecno logias de 
+reabilitação de solos e águas subterrâneas. 4.4 Política Nacional de Resíduos Sólidos. 4.5 Norma ABNT NBR 10004 -1:2024: 
+pcimarkpci MDAwMDowMDAwOjAwMDA6MDAwMDowMDAwOmZmZmY6YjEyNDpiNzJh:V2VkLCAxOSBBdWcgMjAyNiAxMDo1MToyMyAtMDMwMA==
+www.pciconcursos.com.br
+57  
+ 
+Resíduos sólidos – Classificação - Parte 1: Requisitos de classificação e Norma ABNT NBR 10004 -2:2024: Resíduos sólidos – 
+Classificação - Parte 2: Sistema Geral de Classificação de Resíduos (SGCR). 5. Emissões atmosféricas e mudanças 
+climáticas: 5.1 Principais conceitos em atmosfera e poluição atmosférica. 5.2 Principais poluentes atmosféricos e suas 
+características. 5.3 Principais fontes de emissões na indústria do petróleo. 5.4 Conceito de efeito estufa. 5.5 Ações de redução 
+de emissões no setor de óleo e gás. 5.6 Conceitos -chave: vulnerabilidade, mitigação e adaptação. 5.7 Acordo de Paris. 5.8 
+Transição energética para baixo carbono: conceito. 5.9 Conceitos de mercado e precificação de carbono. 5.10 Política Nacional 
+sobre Mudança do Clima (PNMC). 6. Prevenção da poluição e uso racional dos recursos naturais na indústria do petróleo 
+e energia:  6.1 Prevenção da poluição: Aspectos  comportamentais e aspectos tecnológicos. 6.2 Conservação da água 6.3 
+Conservação de energia. 6.4 Eficiência energética e fontes renováveis de energia. 6.5 Uso racional dos materiais. 6.6 
+Reciclagem. 6.7 Economia circular. 6.8 Análise de ciclo de vida, segundo as normas ABNT NBR ISO 14.040:2009/corrigida 2014, 
+ABNT NBR ISO 14.044:2009/corrigida 2014 e ABNT ISO/TS 14071:2018. 7. Planejamento e Resposta a Emergências:  7.1 
+Conceitos básicos sobre planos de emergência individual, planos de área e plano nacional de contingência. 7.2 Conceitos básicos 
+sobre cartas de sensibilidade ambiental ao óleo. 7.3 Conceitos básicos sobre manejo de fauna oleada. 8. Análise, Avaliação e 
+Gerenciamento de Riscos:  8.1 Identificação de cenários. 8.2 Avaliação de frequência. 8.3 Av aliação de consequências. 8.4 
+Noções de técnicas de estudo de riscos. 8.5 Critérios de risco individual e social: Conceitos e indicadores. 8.6 Plano de 
+gerenciamento de riscos. 8.7 Norma ABNT NBR ISO 31000:2018 (Gestão de riscos – Diretrizes). 9. Monitoramento Ambiental: 
+9.1 Princípios e técnicas de caracterização e monitoramento ambiental. 9.2 Técnicas de coleta e preparo de amostras biológicas, 
+de solo, ar e água. 9.3 Biomonitoramento passivo e ativo. 9.4 Espécies bioindicadoras. 9.5 Gerenciamento de áreas impactadas: 
+Investigação e caracterização de áreas impactadas. 9.6 Conceitos e técnicas de gerenciamento, manejo e remediação de áreas 
+impactadas. 9.7 Noções de bio e fitorremediação de áreas contaminadas por hidrocarbonetos, água produzida de petróleo e  
+metais. 9.8 Noções de avaliação e valoração de passivos ambientais. 9.9 Ecotoxicologia, biomarcadores e noções de avaliação 
+de risco ecológico. 9.10 Noções básicas de biofouling e acidulação biogênica em reservatórios de petróleo, de biodeterioração  
+de de rivados de petróleo e de corrosão mediada por microorgansimos. 10. Licenciamento ambiental e EIA/RIMA:  10.1 
+Procedimentos para o licenciamento ambiental. 10.2 EIA/RIMA: critérios para sua exigência, métodos de elaboração, etapas de 
+elaboração. 10.3 Process o de licenciamento ambiental: tipos de licenciamento, audiência pública, compensação ambiental, 
+atendimento de condicionantes. 10.4 Licenciamento de atividades de exploração, perfuração, produção de óleo e gás, refino, 
+energia e logística. 10.5 Elaboração, avaliação e seleção de projetos sócio-ambientais e de biotecnologia. 11. Gestão Ambiental 
+e de Saúde e Segurança Ocupacional: 11.1 Requisitos de Sistema de Gestão Ambiental segundo as normas ABNT NBR ISO 
+14.001:2015, considerando a Emenda 1:2024 e NBR ISO  14.004:2018. 11.2 Avaliação de desempenho Ambiental segundo a 
+norma ABNT NBR ISO 14.031:2015. 11.3 Sistemas de Gestão de Saúde e Segurança Ocupacional segundo a norma ISO 
+45.001:2018. 11.4 Diretrizes para Auditoria de Sistemas de Gestão segundo a norma ABNT NBR ISO 19.011:2018/corrigida 2019. 
+12. Responsabilidade Social:  12.1 Princípios da responsabilidade social. 12.2 Responsabilidade social e desenvolvimento 
+sustentável. 12.3 Diretrizes sobre responsabilidade social: ABNT NBR ISO 26000:2010. 12.4 Sistema  de gestão da 
+responsabilidade social: ABNT NBR 16001:2012. 13. Direito e Legislação Ambiental Aplicada:  13.1 Meio ambiente na 
+Constituição Federal de 1988. 13.2 Princípios do direito ambiental. 13.3 Lei Complementar nº 140/2011 (Normas de cooperação 
+entre União, Estados e Municípios). 13.4 Decreto Federal nº 8.437/2015 (Tipologias de empreendimentos e atividades cujo 
+licenciamento ambiental será de competência da União). 13.5 Lei Federal nº 12.651/2012 e suas alterações (Novo Código 
+Flor4stal). 13.6 Lei Federal nº 11.284/2006 e suas alterações (gestão de florestas públicas para produção sustentável, institui o 
+Serviço Florestal Brasileiro - SFB) e Decreto Federal nº 12.046/2024. 13.7 Lei Federal nº 6938/1981, sua regulamentação e suas 
+alterações (Política Nacional do Meio Ambiente). 13.8 Lei Federal nº 9.605/1998 e suas alterações (Lei de Crimes Ambientais). 
+13.9 Lei Federal nº 9.985/2000 e suas alterações (Sistema Nacional de Unidades de Conservação da Natureza – SNUC) e 
+Decreto Federal nº 4.519/2002. 13.10 Lei Federal nº 9.966/2000 e suas alterações (Prevenção, controle e fiscalização de poluição 
+por óleo) e Decreto nº 4.136/2002. 13.11 Lei Federal nº 9.433/1997 e suas alterações (Política Nacional de Recursos Hídricos) . 
+13.12 Lei Federal nº 11.445/ 2007 e suas alterações (Diretrizes Nacionais de Saneamento Básico). 13.13 Lei Federal nº 
+12.187/2009 e suas alterações (Política Nacional sobre Mudança do Clima). 13.14 Lei Federal nº 12.305/2010 e suas alterações 
+(Política Nacional de Resíduos Sólidos). 13.15 Lei Federal nº 12.334/2010, suas alterações e sua regulamentação pelo Decreto 
+Federal nº 11.310/2022 (Política Nacional de Segurança de Barragens). 13.16 Lei Federal nº 14.119/2021 e suas alterações 
+(Política Nacional de Pagamento por Serviços Ambientais). 1 3.17 Decreto Federal nº 10.950/2022 e Decreto Federal nº 
+pcimarkpci MDAwMDowMDAwOjAwMDA6MDAwMDowMDAwOmZmZmY6YjEyNDpiNzJh:V2VkLCAxOSBBdWcgMjAyNiAxMDo1MToyMyAtMDMwMA==
+www.pciconcursos.com.br
+58  
+ 
+8.127/2013 (Plano Nacional de Contingência para Incidentes de Poluição por Óleo em Águas sob Jurisdição Nacional). 13.18 
+Decreto Federal nº 4871/2003 e suas alterações (Planos de Áreas para o combate  à poluição por óleo em águas sob jurisdição 
+nacional). 13.19 Resolução CONAMA 001/86 e suas alterações (EIA/RIMA). 13.20 Resolução CONAMA 237/97 (Licenciamento 
+Ambiental). 13.21 Resolução CONAMA 006/1986 e Resolução CONAMA 281/2001 (Publicação de Licenças ). 13.22 Resolução 
+CONAMA 009/1987 (Audiências Públicas). 13.23 Resolução CONAMA 428/2010 e suas alterações (Autorização para 
+licenciamento em UC). 13.24 Resolução CONAMA 357/05 e suas alterações (Classificação das águas superficiais). 13.25 
+Resolução CONAMA 393/07 (Descarte de água de produção). 13.26 Resolução CONAMA 430/11 (Descarte de efluentes). 13.27 
+Resolução CONAMA 420/09 e suas alterações (Áreas contaminadas). 13.28 Resolução CONAMA 491/18 e Resolução CONAMA 
+nº 506/2024 (Padrões de qualidade do ar). 13.29 Resolução CONAMA 436/11 (Emissões de poluentes atmosféricos para fontes 
+fixas anteriores a janeiro de 2007). 13.30 Resolução CONAMA 382/06 e suas alterações (Emissões de poluentes atmosféricos 
+para fontes fixas). 13.31 Resolução CONAMA nº 306/02 e Resolução CONAMA 381/2006 (Auditorias Ambientais). 13.32 
+Resolução CONAMA 398/2008 (Plano de Emergência Individual – PEI). 13.33 Resolução CONAMA 472/2015 (Uso de 
+dispersantes químicos em acidentes de poluição por óleo no mar). 13.34 Resolução CONAMA 482/2 017 (Técnica de queima 
+controlada emergencial em incidentes de poluição por óleo no mar). 13.35 Portaria MMA nº 422/ 2011 (Licenciamento ambiental 
+para exploração e produção de petróleo e gás natural). 13.36 Instrução Normativa 184/2008 do IBAMA e suas alt erações 
+(Procedimentos para o licenciamento ambiental federal no âmbito do IBAMA).  
+ 
+ÊNFASE 8: CIÊNCIA DE DADOS  
+I- MATEMÁTICA: 1. Cálculo Básico: funções; limites; derivadas; derivadas parciais; máximos e mínimos; integrais.  2. Álgebra 
+Linear: vetores e matrizes; operações com vetores e matrizes; tipos de matrizes; transformações lineares; espaços e subespaços 
+vetoriais de Rn; sistemas de equações lineares; normas (L1, L2, infinita, p-generalizada, Minkowksi e Chebyshev), autovalores e 
+autovetores; decomposição matricial (Cholesky e Singular Value Decomposition (SVD)). II- PROBABILIDADE E ESTATÍSTICA: 
+1. Fundamentos de probabilidade: definições básicas de probabilidade; axiomas; probabilidade condicional. 2. Variáveis 
+aleatórias e distribuições de probabilidades: variáveis aleatórias; funções de probabilidade; principais distribuições discretas e 
+contínuas (Uniforme, Binomial, Normal, Poisson, Bernoulli e Exponencial).  3. Estatísticas Descritivas: medidas de tendência 
+central (média, mediana e moda); medidas de dispersão (variância, desvio padrão e amplitude); medidas de posição (percentis 
+e quartis). 4. Teoremas fundamentais da probabilidade: independência de eventos; teorema de Bayes; teorema da probabilidade 
+total; lei dos grandes números; teorema central do limite. 5. Distribuições amostrais: distribuição amostral da média; distribuição 
+amostral da proporção; distribuição qui -quadrado; distribuição t de Student; distribuição F.  6. Inferência estatística: estimação 
+pontual e intervalar; intervalos de confiança; testes de hipóteses (formulação, tipos de erros, e poder do teste); testes z e t para 
+médias; testes de proporções; testes qui -quadrado para independência e ajuste de Goodness -of-Fit; teste A/B. 7. Correlação: 
+correlação e causalidade; correlação de Pearson; correlação de Spearman; correlação parcial.  III- DADOS E BASES DE 
+DADOS: 1. Conceitos fundamentais de dados, informação e conhecimento; dados qualitativos (nominal, ordinal) e quantitativos 
+(discretos, contínuos); tidy  data; formatos de arquivos de dados comuns (txt, csv, xlsx, xml e json). 2. Introdução a Bases de 
+Dados:  o que são bases de dados; metadados. 3. Introdução ao armazenamento de dados: armazenamento de arquivos; 
+principais estruturas de armazenamento de da dos analíticos (data warehouse, data mart, data lake, data lakehouse), suas 
+diferenças conceituais e casos de uso; armazenamento na nuvem. 4. Sistemas Gerenciadores de Base de Dados (SGBDs): 
+definição de SGBD; principais funções; principais tipos de SGBDs (SQL e NoSQL) e suas diferenças; transações e índices; 
+controle de acesso; regras de integridade. 5. Modelo de dados: modelo de entidade -relacionamento (ER); modelo relacional: 
+tabelas, esquemas, chaves (primária e estrangeira), consultas; dados estruturados, semiestruturados e não estruturados; modelo 
+chave-valor; modelo colunar; modelo orientado a documentos; modelo orientado a grafos. 6. Big Data: conceito de big data; 
+conceitos gerais sobre técnicas e ferramentas para lidar com grandes volumes de dados (Spark, Hadoop, Parquet, HDFS e 
+MapReduce). IV- GESTÃO DE PROJETOS DE CIÊNCIA DE DADOS:  1. Ciclo de vida de projetos de ciência de dados. 2. 
+Metodologias de gestão de projetos de ciência de dados: CRISP -DM, Microsoft Team Data Science Process (TDSP), OSEMN ; 
+princípios de métodos ágeis (Scrum/Kanban). V- QUALIDADE E PREPARAÇÃO DE DADOS: 1. Metadados: a sua importância 
+para avaliação da qualidade de dados; linhagem de dados; 2. Coleta de dados: fontes comuns de dados (internas e externas); 
+técnicas de web scr aping. 3. Problemas comuns de qualidade de dados: valores ausentes; duplicatas; outliers; 
+desbalanceamento; erros de imputação. 4. Preparação de dados: técnicas de tratamento e limpeza de dados; técnicas detecção 
+de vieses; data profiling. 5. Pré-processamento de dados: técnicas de normalização e padronização; discretização; metodologias 
+de codificação de variáveis categóricas (encoding). 6. Feature engineering: processos para enriquecimento de dados, com 
+criação e seleção de features relevantes; transformações matemáticas e estatísticas comuns em variáveis. 7. Divisão de dados: 
+técnicas de amostragem; divisão entre treinamento, validação e teste; abordagens para cross -validation.  VI- MODELAGEM: 1. 
+Pipeline de treinamento de modelos e suas etapas. 2. Otimiz ação de hiperparâmetros: grid search; random search; algoritmos 
+pcimarkpci MDAwMDowMDAwOjAwMDA6MDAwMDowMDAwOmZmZmY6YjEyNDpiNzJh:V2VkLCAxOSBBdWcgMjAyNiAxMDo1MToyMyAtMDMwMA==
+www.pciconcursos.com.br
+62  
+ 
+de otimização avançados; automl; autotuning; autofeature engineering. 3. Métricas para avaliação e seleção de modelos: 
+métricas para regressão (MSE; RMSE; MAE; R²; R² ajustado); métricas para classificação (accuracy, precision, recall, F1-score 
+e ROC-AUC); análise de matriz de confusão; trade -off entre viés e variância; detecção de overfitting e underfitting. 4. Técnicas 
+de regularização: lasso; ridge; elastic net; dropout; early stopping; batch normalization. 5. Dados desbalanceados: técnicas para 
+lidar com dados desbalanceados; oversampling; undersampling; dados sintéticos; ajuste de pesos. 6. Validação de Modelos: K-
+fold cross -validation; leave -one-out cross -validation; bootstrap. 7. Modelage m de IA centrada em dados (data -centric). VII- 
+CLASSES DE MODELOS: 1. Redução de dimensionalidade: Principal Component Analysis (PCA); LDA; ICA; T -SNE; uso de 
+autoencoders. 2. Técnicas de clusterização: K -Means; agrupamento hierárquico; Gaussian Mixture Mo dels; DBSCAN.  3. 
+Técnicas de classificação: Regressão logística; K -Nearest Neighbors (KNN); Suport Vector Machines (SVM); Decision Trees 
+(CART); classificadores Naive-Bayes (Binomial-Beta, Poisson-Gama, Normal-Normal); Florestas Aleatórias (Random Forest). 4. 
+Introdução à regressão: regressão linear simples e múltipla; hipóteses clássicas, método dos mínimos quadrados, diagnóstico e 
+avaliação de modelos de regressão (F-test, coeficiente de determinação, análise de resíduos e demais), testes de significância, 
+intervalos de confiança, análise ANOVA, modelos não lineares (log -log, lin-log, log-lin e inverso). 5. Ensembling de modelos: 
+Bagging; boosting (AdaBoost, Gradient Boosting, XGBoost, LightGBM e CatBoost); stacking.  6. Sistemas de recomendação: 
+Filtragem colaborativa (baseadas em usuários ou itens); filtragem baseada em conteúdo; sistemas híbridos; problemas comuns 
+(cold start, escalabilidade, data sparsity). 7 . Modelos de séries temporais: definição; componentes (tendência, sazonalidade, 
+ciclos e ruído); autocorrelação e autocorrelação parcial; conceito e testes de estacionaridade; cointegração; modelos AR, ARMA 
+e ARIMA; modelos de suavização exponencial; modelos de decomposição; modelos de regressão com variáveis temporais 
+(ARIMAX). 8. Tópicos em regressão: modelos de dados em painel; GLM; regressão espacial; regressão quantílica; regressão de 
+Poisson; modelos VAR; ECM e GARCH. 9. Introdução a modelos causais: fundamentos de causalidade estatística, experimentos 
+e quase-experimentos, desenho de descontinuidade de regressão, modelos de variáveis instrumentais, diferenças em diferenças, 
+métodos de pareamento. 10. Redes neurais: Introdução a Redes Neurais Artificiais (arquitetura, funções de ativação, treinamento, 
+forward pass, backpropagation, loss functions, algoritmos de otimização, épocas, batch size e demais); embeddings; redes 
+profundas (deep learning); Redes Neurais Convolucio nais (CNNs) e Recorrentes (RNNs); LSTM; GRU; GAN; modelos 
+multimodais. VIII- PROCESSAMENTO DE LINGUAGEM NATURAL (NLP): 1. Técnicas de pré-processamento de texto: limpeza; 
+normalização; remoção de stop words; stemming; lematização e demais. 2. Representação de texto: N-grams; CBoW; FTD-IDF; 
+word embeddings (Word2Vec, GloVe e demais) e document embeddings (Doc2Vec, BERT, ELMo e demais). 3. Modelagem de 
+tópicos: latent dirichlet allocation (LDA); non -negative matrix factorization (NMF). 4. Modelos de linguagem : modelos de 
+linguagem tradicionais; redes neurais recorrentes; redes neurais convolucionais; transformers. 5. Tarefas básicas em NLP: 
+classificação de texto; análise de sentimento; extração de informação (NER; REL); similaridade textual; sumarização de te xto; 
+rotulação de partes do discurso (POS-tagging) e tradução automática. IX- PROGRAMAÇÃO E FERRAMENTAS: 1. Linguagem 
+de programação Python: sintaxe básica; operadores; variáveis; estruturas de dados (dataframes, listas, matrizes, dicionários e 
+conjuntos); estruturas de controle de fluxo; funções; escopo; método; paralelização de rotinas; serialização e desserialização. 2. 
+Bibliotecas Python: Pandas (manipulação; limpeza; transformação e pré-processamento de dado); NumPy (operações de arrays); 
+Matplotlib e Seaborn (visualização de dados); TensorFlow; Keras e PyTorch (redes neurais); Scikit-learn e XGBoost (aprendizado 
+de máquina); NLTK e spaCy (processamento de linguagem natural); huggingface (LLM); PySpark (Big data); Beautiful Soup (web 
+scraping); Streamlit (data apps). 3. Linguagem SQL (Structured Query Language): conceitos introdutórios; comandos básicos 
+para consultas (inserção, atualização e exclusão de dados) e para análise de dados (como funções de agregação, filtros, joins , 
+subconsultas e demais). 4.  Microsoft Power BI: conexão e importação de dados; modelagem de dados; criação de medidas e 
+colunas calculadas; visualizações e gráficos; interações entre visualizações; criação de relatórios e painéis. X- VISUALIZAÇÃO; 
+STORYTELLING E COMUNICAÇÃO CORPORATIVA: 1. Principais tipos de visualizações e gráficos: tabela; gráfico de barras; 
+linhas; pizza; dispersão; histograma; área; boxplot; bolhas; radar; mapas cartográficos; mapa de calor. 2. Visualização de dados: 
+princípios de design de gráficos efetivos; principais conceitos de codificação visual; interatividade; acessibilidade em gráficos. 3. 
+Dashboards: técnicas para construção de interfaces e layout; abordagens para escolha de designs; organização de elementos 
+visuais e gráficos; seleção de gráficos e vis ualizações; interatividades e drill -downs; acessibilidade. 4. Storytelling com dados: 
+construção de narrativas visuais e contextualizações; componentes de um storytelling efetivo. XI- GOVERNANÇA E 
+SEGURANÇA DE DADOS:  1. Noções de governança de dados (DMBOK ): conceitos e objetivos da governança de dados; 
+principais técnicas de qualidade e integridade de dados; princípios de privacidade e proteção a dados. XII- GOVERNANÇA, 
+pcimarkpci MDAwMDowMDAwOjAwMDA6MDAwMDowMDAwOmZmZmY6YjEyNDpiNzJh:V2VkLCAxOSBBdWcgMjAyNiAxMDo1MToyMyAtMDMwMA==
+www.pciconcursos.com.br
+63  
+ 
+SEGURANÇA E APLICAÇÃO RESPONSÁVEL DE IA: 1. Noções de governança de IA: conceitos e objetivos da governança de 
+IA; gestão de riscos em IA. 2. Principais riscos e vulnerabilidades relacionados a IA: viés algorítmico; exposição de dados 
+sensíveis; envenenamento de dados de treinamento; ataques adversariais; ataques de manipulação de modelos; r oubo de 
+modelos; ataque de inferência; alucinações. 3. Aplicação de IA responsável: definição; ética; transparência; justiça e equida de; 
+responsabilização; segurança cibernética; compliance regulatório. 
+ 
+ÊNFASE 1 7:  ENGENHARIA DE AUTOMAÇÃO  
+Ferramentas Matemáticas e Computacionais Aplicadas às Engenharias Mecânica e Eletro -Eletrônica; Dinâmica de Sistemas; 
+Modelagem e Simulação de Sistemas Dinâmicos; Sistemas de Atuação Hidráulicos e Pneumáticos; Fundamentos de Robótica; 
+Eletrônica Analógica e Digital; Circuitos Elétricos e Eletrônicos; Processamento e Análise de Sinais; Linguagens e Técnicas d e 
+Programação; Microprocessadores; Microcontroladores; Controladores Lógicos Programáveis; Controle e Servomecanismos; 
+Controle Discreto; Conversão Eletromecânica de Energia; Instrumentação e Técnicas de Medida; Sensores e Transdutores; 
+Sistemas Embarcados; Integração e Automação da Manufatura, Automação Industrial. 
+ 
+ÊNFASE 2 2:  ENGENHARIA DE TELECOMUNICAÇÕES   
+1. PROBABILIDADE E PROCESSOS ESTOCÁSTICOS:  1.1 Conceito de Probabilidade; Eventos; Probabilidades conjuntas; 
+Probabilidades condicionais; Independência estatística; 1.2 Variáveis aleatórias; Distribuições de probabilidade discretas e 
+contínuas; Médias estatísticas de variáveis aleatórias; Teorema do limite central; 1.3 Processo Estocástico; Definição; Momentos; 
+Função Autocorrelação; Estacionariedade; Densidade Espectral de Potência; Teorema de Wiener-Khinchin; Processo Gaussiano. 
+2. MATEMÁTICA APLICADA A SINAIS: 2.1 Operações com números complexos e com as funções de variáveis complexas; 2.2 
+Aplicações e propriedades das funções temporais: exponenciais, trigonométricas e das especiais, tipo impulso e degrau; 2.3 
+Aplicações e análise da Série de Fourier; operações e propriedades da Transformada de F ourier; 2.4 Operação de Convolução 
+para sinais contínuos e discretos no tempo. 3. CONCEITOS BÁSICOS DE SINAIS E SISTEMAS:  3.1 Análise de sistemas 
+lineares e invariantes no tempo (LIT); Aplicação da Transformada de Laplace; Respostas temporais e transitória s de sistemas 
+lineares; respostas às funções impulso e degrau; 3.2 Operação, análise e aplicações dos sinais no domínio da frequência; 3.3 
+Operação de convolução na determinação da saída de um sistema LIT; 3.4 Análise no domínio da frequência,  Resposta em  
+frequência de sistemas lineares; 3.5 Amostragem de sinais contínuos no tempo; Sinais e sistemas discretos no tempo; Aplicação 
+da Transformada Z. 4. PRINCÍPIOS DE TELECOMUNICAÇÕES: 4.1 Blocos de um sistema analógico de transmissão; Blocos 
+de um sistema dig ital de transmissão; Modulação analógica e digital; 4.2 Conversão analógica -digital (A/D); Indicadores de 
+desempenho (razão sinal-ruído, taxa de erro de bit, eficiência espectral); Codificação de fonte e codificação de canal (códigos 
+ARQ e FEC). 5. TELEFONIA E VIDEOCONFERÊNCIA:  5.1 Centrais Telefônicas; Comutação de Circuitos e Comutação de 
+Pacotes; Conceitos básicos sobre tráfego; Fórmulas de congestionamento (Erlang B e C);  5.2 Técnicas de Voz e Vídeo; 
+Multiplexação TDM, FDM e CDM; Sinalização telefônica: CAS, R2, Q-SIG, DPNSS; 5.3 Telefonia e Videoconferência: IP H323 e 
+SIP; VoIP, QoS para Voz e Vídeo. 6. ANTENAS: 6.1 Fundamentos de Antenas (tipos, diagramas de radiação, ganho, polarização); 
+Parâmetros básicos; Zonas de campo próximo e distante; Caracterí sticas gerais de radiação; 6.2 Antenas dipolo; Influência do 
+plano de terra; Monopolos;  6.3 Conjuntos de antenas; Características gerais dos principais tipos de antenas. 7. 
+RADIOPROPAGAÇÃO: 7.1 Teoria da Propagação; Condições para enlaces em radiovisibilidade; Zonas de Fresnel; Atenuação 
+no espaço livre; Modelo de difração por gume-de faca; 7.2 Equação de enlace; Dimensionamento e características dos sistemas 
+de transmissão e recepção digital. 8. SISTEMAS DE TRANSMISSÃO VIA SATÉLITE: 8.1 Transmissão via Satélite; Definição, 
+características e vantagens/desvantagens das órbitas; 8.2 Principais bandas de frequência; Características da transmissão nas  
+bandas de frequência; 8.3 Principais serviços; Fatores que degradam o sinal transmitido; Equação de enlace (cálc ulo da razão 
+portadora-ruído). 9. SISTEMAS DE COMUNICAÇÕES CELULARES: 9.1 Fundamentos teóricos; Características e evolução até 
+5G; 9.2 Princípio da transmissão por células; Técnicas de múltiplo acesso; Principais características das tecnologias utiliza das 
+(GSM, UMTS, LTE etc); características do canal móvel. 10. REDES LOCAIS: 10.1 Redes Wi-Fi padrões IEEE 802.11 a, b, g, n , 
+ac  e ax; QoS em redes Wi-Fi (IEEE 802.11e); 10.2 Redes locais com fio (cabeadas) utilizando “switches” de camadas 2 e 3 com 
+pcimarkpci MDAwMDowMDAwOjAwMDA6MDAwMDowMDAwOmZmZmY6YjEyNDpiNzJh:V2VkLCAxOSBBdWcgMjAyNiAxMDo1MToyMyAtMDMwMA==
+www.pciconcursos.com.br
+72  
+ 
+funcionalidades de roteamento e comutação de pacotes; 10.3 Padrões IEEE 802.1d, 802.1p, 802.1q, 802.1s, 802.1w, RMON I 
+e3 II, SNMPv1, SNMPv2, SNMPv3, Power over Ethernet IEEE 802.3af. 11. REDES IP: 11.1 “IP multicasting”; Técnicas de QoS 
+em redes IP (“DiffServ”, CBWFQ e LLQ);  11.2 Protocolos de roteamento (Estático, OSPF, BGP) e MPLS (Multiprotocol Label 
+Switching); 11.3 Protocolos de roteamento para rede MPLS, MPLS-OSPF, MP-BGP , MPLS-VPN (L2 e L3), MPLS-TE, RSVP-TE, 
+OSPF-TE; 11.4 Internet; Criptografia (IPSec, SSH e SSL); 11.5 Firewalls de Pacote e Conteúdo. 12. SISTEMAS ÓPTICOS: 12.1 
+Características Básicas; Propagação em guias e fibras ópticas; 12.2 Sistemas de comunicação ópticos; 12.3 Redes Ópticas – 
+tecnologias TDM (Time Division Multiplex); SDH (Synchronous Di gital Hierarchy; 12.4 Redes MetroEthernet: DWDM (Dense 
+Wavelength Division Multiplex) e CWDM (Coarse Wavelength Division Multiplex). 13. REGULAMENTAÇÃO DAS 
+TELECOMUNICAÇÕES: 13.1 Lei Geral das Telecomunicações; 13.2 Utilização do espectro de radiofrequências no Brasil; Plano 
+de atribuição, destinação e distribuição de faixas de frequência no Brasil; 13.3 Normas técnicas para emissoras de radiodifusão 
+sonora em FM e TV. 
+ 
+ANEXO V - CRONOGRAMA 
+ 
+EVENTOS BÁSICOS DATAS 
+Inscrições. 12/08 a  14/09/2026 
+Solicitação de inscrição com isenção do valor da taxa. 12 a 19/08/2026 
+Resultado individual preliminar dos pedidos de isenção do valor de inscrição. 27/08/2026 
+Prazo para interposição de eventuais recursos das pessoas candidatas que tiveram a solicitação de isenção do valor de inscrição 
+indeferida. 
+27 e 28/08/2026 
+Consulta individual à situação final das pessoas candidatas que tiveram a solicitação de isenção do valor de inscrição deferida, 
+após contestação. 
+09/09/2026 
+Consulta individual à situação preliminar da solicitação de inscrições nas vagas de  pessoas negras, indígenas e quilombolas, 
+nas vagas de pessoas com deficiência e de atendimentos especiais para a realização das provas e nome social.  
+23/09/2026 
+Prazo para interposição de eventuais recursos contra o indeferimento da inscrição. 23 e 24/09/2026 
+Consulta individual à situação final das solicitações de inscrição nas vagas reservadas para pessoas negras, indígenas e 
+quilombolas, de inscrições nas vagas reservadas para pessoas com deficiência e de atendimentos especiais para a realização 
+das provas e uso de nome social. 
+07/10/2026 
+Obtenção impressa do Cartão de Confirmação de Inscrição no endereço eletrônico da Fundação Cesgranrio 
+(www.cesgranrio.org.br). 
+24/11/2026 
+Atendimento às pessoas candidatas com dúvidas sobre os locais de provas, vagas reservadas, uso de nome  social ou 
+solicitações de adaptações razoáveis para realização das provas.  
+24 a 27/11/2026 
+Aplicação das provas objetivas para todas as ênfases e prova discursiva para a ênfase Advocacia. 29/11/2026 
+Divulgação dos gabaritos das provas objetivas para todas as ênfases. 30/11/2026 
+Prazo para interposição de eventuais recursos quanto às questões objetivas e/ou aos gabaritos divulgados.  30/11 e 01/12/2026 
+Prazo para acerto cadastral, se necessário, no endereço eletrônico da Fundação Cesgranrio (www.cesgranrio.org.br). 02/12/2026 a 04/03/2027 
+Disponibilização da imagem do Cartão-Resposta. 08/01/2027 
+Divulgação das notas das provas objetivas  para todas as ênfases  e das notas da prova discursiva para a ênfase Advocacia , 
+com resultado preliminar.  
+14/01/2027 
+Vista da prova discursiva no site da FUNDAÇÃO CESGRANRIO (www.cesgranrio.org.br) e pedidos de revisão das notas da 
+prova discursiva para a ênfase Advocacia. 
+14 e 15/01/2027 
+Resultado dos pedidos de revisão das notas da discursiva para a ênfase Advocacia. 28/01/2027 
+Convocação para a Avaliação pela Equipe Multiprofissional e Interdisciplinar das pessoas candidatas que concorrem às vagas 
+reservadas a pessoas com deficiência e para o procedimento de confirmação complementar à autodeclaração das pessoas 
+candidatas que se autodeclararam negras. 
+03/02/2027 
+Realização da Avaliação pela Equipe Multiprofissional e Interdisciplinar das pessoas candidatas que concorrem às vagas 
+reservadas a pessoas com deficiência e do Procedimento de confirmação complementar à autodeclaração das pessoas 
+candidatas que concorrem às vagas reservadas para pessoas negras e da verificação documental das pessoas candidatas que 
+concorrem às vagas reservadas para indígenas e quilombolas. 
+13 a 15/02/2027 
+Divulgação do resultado preliminar da Avaliação pela Equipe Multiprofissional e Interdisciplinar das pessoas candidatas que 
+concorrem às vagas reservadas a pessoas com deficiência, do Procedimento de confirmação complementar à a utodeclaração 
+das pessoas candidatas que concorrem às vagas reservadas para pessoas negras e da verificação documental das pessoas 
+candidatas que concorrem às vagas reservadas para indígenas e quilombolas.  
+03/03/2027 
+Interposição de eventuais recursos quanto ao resultado da Avaliação pela Equipe Multiprofissional e Interdisciplinar das pessoas 
+candidatas que concorrem às vagas reservadas a pessoas com deficiência, do Procedimento de confirmação complementar à 
+autodeclaração das pessoas candidatas que concorrem às vagas reservadas para pessoas negras e da verificação documental 
+das pessoas candidatas que concorrem às vagas reservadas para indígenas e quilombolas.  
+03 e 04/03/2027 

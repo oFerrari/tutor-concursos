@@ -338,3 +338,109 @@ def test_palavra_nua_depois_de_item_pendurado_continua_barrada():
              "2. CONTABILIDADE: 2.3 Formas de pagamento; 2.4\n"
              "LALUR: forma de escrituração fiscal do lucro real.\n")
     assert "Lalur" not in _disciplinas(texto)
+
+
+# --------------------------------------------------- Cesgranrio (TRANSPETRO)
+# TERCEIRA banca, terceiro layout, e a lição de método se repetiu pela terceira
+# vez: cada edital novo é um caso de teste novo. Este trouxe QUATRO defeitos
+# distintos, e nenhum deles aparecia nos dois anteriores.
+CESGRANRIO = (Path(__file__).parent / "fixtures"
+              / "edital_cesgranrio_transpetro.txt").read_text(encoding="utf-8")
+
+
+def test_cesgranrio_enfase_e_marcador_de_cargo():
+    """"ÊNFASE 8: CIÊNCIA DE DADOS" é a forma da Cesgranrio de dizer onde o
+    cargo começa — o mesmo papel de "PERFIL 3:" (FGV) e "CARGO:" (AOCP).
+
+    Sem isso o edital da TRANSPETRO (33 ênfases) devolvia ZERO cargo, e o que
+    entrava no lugar era lixo: a tela mostrava "4 disciplinas · 67 tópicos",
+    duas delas chamadas "I- Matemática" e "Dados" — que são SUBSEÇÕES de dentro
+    da ênfase de Ciência de Dados, não matérias do concurso."""
+    est = extrair_estrutura(CESGRANRIO)
+    nomes = {c["nome"] for c in est["cargos"]}
+    assert len(nomes) == 5, nomes
+    assert "Ciência De Dados" in nomes
+    assert "Engenharia De Telecomunicações" in nomes
+    # E o marcador NÃO vira disciplina: "Ênfase 8" como nome de matéria é o
+    # sintoma de o cargo ter sido lido como cabeçalho de conteúdo.
+    assert not [d for d in _disciplinas(CESGRANRIO) if d.lower().startswith("ênfase")]
+
+
+def test_cesgranrio_numero_quebrado_pelo_pdf_ainda_casa():
+    """O pypdf separa o dígito das dezenas do das unidades neste edital:
+    "ÊNFASE 1 0 :", "ÊNFASE 1 4:", "ÊNFASE 2 2:".
+
+    Com `\\d{0,2}` (que era o padrão) 12 das 33 ênfases casavam e 21 sumiam — e o
+    efeito é o pior formato de erro, o mesmo da mobília de página no FGV: os
+    tópicos da ênfase que não casou caem na ênfase ANTERIOR, e o total continua
+    plausível. Nenhuma contagem denuncia."""
+    from core.edital import RE_CARGO
+    for linha in ("ÊNFASE 1 0 : COMERCIALIZAÇÃO E LOGÍSTICA – TRANSPORTE MARÍTIMO",
+                  "ÊNFASE 2 2:  ENGENHARIA DE TELECOMUNICAÇÕES",
+                  "ÊNFASE 1 4:  ENFERMAGEM DO TRABALHO",
+                  "ÊNFASE 8: CIÊNCIA DE DADOS"):
+        assert RE_CARGO.search(linha), linha
+
+
+def test_cesgranrio_bloco_sem_numeracao_nao_perde_o_conteudo():
+    """A Cesgranrio escreve várias ênfases em PROSA, sem numerar nada — as
+    matérias são rótulos em caixa alta e os tópicos vêm separados por ponto ou
+    ponto-e-vírgula.
+
+    `RE_SUBITEM` não acha nada nisso, e `extrair_estrutura` só aceita disciplina
+    COM tópico: as ênfases de Administração e de Advocacia (as duas maiores em
+    conteúdo do edital) saíam com zero disciplina e zero tópico, sem nada
+    denunciar, porque as outras 31 enchiam o número."""
+    est = extrair_estrutura(CESGRANRIO)
+    automacao = next(c for c in est["cargos"] if c["nome"] == "Engenharia De Automação")
+    # A ênfase 17 é UMA lista de matérias separada por ponto-e-vírgula, sem
+    # cabeçalho nenhum: vira uma disciplina com o nome do cargo e os itens dela.
+    assert automacao["disciplinas"], "ênfase em prosa perdeu o conteúdo"
+    assert sum(len(d["topicos"]) for d in automacao["disciplinas"]) >= 10
+
+
+def test_cesgranrio_numeral_romano_sai_do_nome_da_disciplina():
+    """A ênfase de Ciência de Dados numera as seções em ROMANO ("I- MATEMÁTICA:",
+    "VIII- PROCESSAMENTO DE LINGUAGEM NATURAL (NLP):"). O romano entrava no nome
+    e a disciplina virava "I- Matemática" — e nome de disciplina é o que
+    `mesa.filtro` usa pra recortar a fila, por ILIKE dos dois lados. Prefixo
+    sobrando é disciplina que nunca casa com o acervo."""
+    disc = _disciplinas(CESGRANRIO)
+    assert "Matemática" in disc
+    assert not [d for d in disc if d.startswith(("I-", "II-", "III-", "VIII-", "XI-"))]
+
+
+def test_cesgranrio_data_da_prova_nao_e_o_prazo_de_recurso():
+    """Relatado na tela: "Prova em 2026-12-01" quando a prova é 29/11/2026.
+
+    01/12 é o fim do prazo de RECURSO contra o gabarito, e o título da seção
+    ("DA REVISÃO DA NOTA DA PROVA OBJETIVA") cai na janela de contexto dela.
+    Empatava 3 a 3 com a data real, e empate se resolve pela ordem no documento
+    — o item 9.1 está na página 32 e o cronograma na 79."""
+    cands = candidatos_data_prova(CESGRANRIO)
+    assert cands[0]["data"].isoformat() == "2026-11-29", cands[:3]
+
+
+def test_cesgranrio_conhecimentos_basicos_ficam_comuns():
+    """Português e Inglês valem pra TODAS as 33 ênfases: vêm antes do primeiro
+    marcador de cargo, então são comuns — é a regra posicional de sempre. Os
+    números são os do edital: 12 itens de Português, 2 de Inglês."""
+    est = extrair_estrutura(CESGRANRIO)
+    comuns = {d["disciplina"]: len(d["topicos"]) for d in est["comuns"]}
+    assert comuns == {"Língua Portuguesa": 12, "Língua Inglesa": 2}, comuns
+
+
+def test_cesgranrio_nao_mexeu_nas_outras_duas_bancas():
+    """A trava que importa quando se aprende um layout novo. Cada regex nova
+    quebrou o edital seguinte neste módulo — está documentado. Os números
+    abaixo foram medidos no HEAD antes de qualquer alteração para a Cesgranrio,
+    e são IDÊNTICOS depois: FGV 4 cargos/20 disciplinas/104 tópicos, AOCP 2/13/86.
+
+    Se este teste falhar, o layout novo custou o antigo."""
+    for texto, esperado in ((FGV, (4, 20, 104)), (AOCP, (2, 13, 86))):
+        est = extrair_estrutura(texto)
+        cargos = len(est["cargos"])
+        disc = len(est["comuns"]) + sum(len(c["disciplinas"]) for c in est["cargos"])
+        top = (sum(len(d["topicos"]) for d in est["comuns"])
+               + sum(len(d["topicos"]) for c in est["cargos"] for d in c["disciplinas"]))
+        assert (cargos, disc, top) == esperado, (cargos, disc, top)

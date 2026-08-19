@@ -49,7 +49,7 @@ from pathlib import Path
 
 from . import db, mesa as mesa_mod
 
-VERSAO = "edital-v5"
+VERSAO = "edital-v6"
 
 MESES = {"janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5,
          "junho": 6, "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10,
@@ -102,18 +102,76 @@ RE_DATA_NUMERICA = re.compile(r"\b(\d{1,2})/(\d{1,2})/(20\d{2})\b")
 # no meio de FRASE, separado por UM espaço; cabeçalho colado pela extração vem
 # depois do espaçamento largo da linha justificada, 2+ espaços. Travado nos
 # fixtures da FGV: `Ecf`, `Iof`, `Lalur` e `1988` continuam fora.
+# DUAS ADIÇÕES, do edital 04/2026 da TRANSPETRO (Cesgranrio), cada uma
+# consertando conteúdo que SUMIA.
+#
+# E uma TERCEIRA que foi TENTADA E REVERTIDA, registrada porque parecia obviamente
+# certa: deixar o nome do cabeçalho ATRAVESSAR UMA QUEBRA DE LINHA. O pypdf
+# devolve "ADMINISTRAÇÃO\nMERCADOLÓGICA:" e "LICITAÇÕES E\nCONTRATAÇÕES:", e como
+# as classes de caractere não cruzam `\n`, casava só o RABO — as disciplinas
+# viravam "Mercadológica" e "Contratações", e nome truncado nunca casa no
+# `mesa.filtro`. Medido, a permissão fez DUAS coisas piores que o problema:
+#   · engoliu a seção no nome — "CONHECIMENTOS BÁSICOS\nLÍNGUA PORTUGUESA:"
+#     virou a disciplina "Conhecimentos Básicos Língua Portuguesa";
+#   · matou um CARGO: o nome esticado passa do começo da linha seguinte, e o
+#     desempate de `_marcas` (que descarta marca iniciada antes do fim da
+#     anterior) descartava a marca de ÊNFASE. Cinco ênfases viraram quatro.
+# E não consertou nada mensurável: com a adição 2 abaixo, os cabeçalhos
+# quebrados são achados pelo rótulo em linha, com o nome inteiro. Reverter foi
+# o que devolveu o quinto cargo.
+#
+# 1. RÓTULO NO MEIO DA LINHA SEM NÚMERO. A Cesgranrio escreve as matérias como
+#    rótulo em caixa alta dentro do parágrafo, sem numerar: "...(Supply Chain
+#    Management). CONTRATAÇÃO: Artigos 28 ao 91...". A âncora é PONTUAÇÃO QUE
+#    FECHA ORAÇÃO seguida de um espaço — o mesmo julgamento de `RE_SUBITEM`
+#    ("o item precisa abrir uma oração"), aplicado ao rótulo. Sem ela, a ênfase
+#    de Administração saía com 3 disciplinas onde o edital lista 14.
+#
+#    A PONTUAÇÃO PRECISA VIR DEPOIS DE LETRA MINÚSCULA OU FECHA-PARÊNTESE, e
+#    essa exigência não é enfeite: sem ela o ponto do PRÓPRIO NÚMERO servia de
+#    âncora e o bug documentado da FGV voltava inteiro — "...Contabilidade
+#    Tributária. 3. ECF:" e "12. IOF:" viravam disciplinas "Ecf" e "Iof" outra
+#    vez. Peguei rodando `test_edital.py`, que existe exatamente pra isso.
+#    Com a exigência, o "." de "3." é precedido por dígito e não ancora nada;
+#    o "." de "Management)." é precedido por ")" e ancora.
+#
+# 2. Numeral ROMANO como prefixo ("I- MATEMÁTICA:", "VIII- PROCESSAMENTO DE
+#    LINGUAGEM NATURAL (NLP):"), que é como a ênfase de Ciência de Dados
+#    numera. Antes o romano entrava no NOME e a disciplina virava
+#    "I- Matemática".
 RE_DISCIPLINA = re.compile(
-    r"(?:^[ \t]*(?:\d{1,2}[.)]\s+)?|(?<=\S)[ \t]{2,}\d{1,2}[.)][ \t]+)"
+    r"(?:^[ \t]*(?:\d{1,2}[.)]\s+|[IVXL]{1,5}[.)\-–][ \t]*)?"
+    r"|(?<=\S)[ \t]{2,}\d{1,2}[.)][ \t]+"
+    r"|(?<=[a-zà-ÿ)\]][.;)])[ \t](?:[IVXL]{1,5}[.)\-–][ \t]*)?)"
     r"([A-ZÀ-Ü][A-ZÀ-Ü0-9 \t\-/&(),]{2,70}?)[ \t]*:",
     re.MULTILINE)
 
-# MARCADOR DE CARGO. As duas bancas escrevem diferente e as duas cabem
-# aqui: "PERFIL 3: DESENVOLVIMENTO DE SOFTWARE" (FGV, 13 perfis no mesmo
-# edital) e "CARGO: DELEGADO DE POLÍCIA CIVIL" (AOCP, 3 cargos). É o
-# marcador que separa "o que todo mundo estuda" do "o que ESTE cargo
-# estuda" — sem ele os 13 perfis viravam 52 disciplinas numa mesa só.
+# MARCADOR DE CARGO. Três bancas escrevem diferente e as três cabem aqui:
+# "PERFIL 3: DESENVOLVIMENTO DE SOFTWARE" (FGV, 13 perfis no mesmo edital),
+# "CARGO: DELEGADO DE POLÍCIA CIVIL" (AOCP, 3 cargos) e "ÊNFASE 8: CIÊNCIA DE
+# DADOS" (Cesgranrio — o edital 04/2026 da TRANSPETRO tem 33 ênfases). É o
+# marcador que separa "o que todo mundo estuda" do "o que ESTE cargo estuda" —
+# sem ele os 13 perfis viravam 52 disciplinas numa mesa só, e as 33 ênfases da
+# TRANSPETRO viravam lixo: medido antes do conserto, a tela mostrava
+# "4 disciplinas · 67 tópicos", sendo duas delas "I- Matemática" e "Dados" —
+# que são SUBSEÇÕES de dentro da ênfase de Ciência de Dados, não matérias.
+#
+# ÊNFASE entra sem hesitação porque é o caso que este parser existe pra
+# atender: o edital DIZ onde o cargo começa, com marcador literal e numerado.
+# É o oposto do cabeçalho nu que fez `RE_CARGO_NU` ser revertida logo abaixo.
+#
+# `[ÊE]NFASE` com as duas grafias porque o pypdf às vezes devolve a maiúscula
+# acentuada sem o acento, e a alternativa (normalizar o texto antes) destruiria
+# a quebra de linha, que é o dado de que `RE_DISCIPLINA` depende.
+# `[ \t\d]{0,5}` e não `\s*\d{0,2}\s*` porque o pypdf QUEBRA O NÚMERO deste
+# edital: "ÊNFASE 1 0 :", "ÊNFASE 1 4:", "ÊNFASE 2 2:" — o dígito das dezenas
+# vem separado do das unidades por espaço. Com o padrão antigo, 12 das 33
+# ênfases casavam e 21 sumiam, e o efeito era o pior possível: os tópicos de
+# uma ênfase que não casou caem na ênfase ANTERIOR, sem nada denunciar na
+# contagem total. Mesma classe do defeito da mobília de página no FGV.
 RE_CARGO = re.compile(
-    r"^[ \t]*(?:CARGO|PERFIL)\s*\d{0,2}\s*[:\-–—]\s*(.+?)[ \t]*:?[ \t]*$",
+    r"^[ \t]*(?:\d+(?:\.\d+)*[ \t]*[-–—][ \t]*)?"
+    r"(?:CARGO|PERFIL|[ÊE]NFASE)[ \t\d]{0,5}[:\-–—][ \t]*(.+?)[ \t]*:?[ \t]*$",
     re.MULTILINE | re.IGNORECASE)
 
 # NÃO EXISTE `RE_CARGO_NU`, e a ausência é decisão — foi tentada e revertida.
@@ -137,7 +195,7 @@ RE_CARGO = re.compile(
 # diz, quem lê é o modelo" — ver `estrutura_com_fallback`.
 
 # Linhas que são ESTRUTURA do documento, não matéria de estudo.
-RE_ESTRUTURA = re.compile(r"^(M[OÓ]DULO|ANEXO|CARGO|PERFIL)\b", re.IGNORECASE)
+RE_ESTRUTURA = re.compile(r"^(M[OÓ]DULO|ANEXO|CARGO|PERFIL|[ÊE]NFASE)\b", re.IGNORECASE)
 
 # O conteúdo programático costuma viver num anexo próprio. Recortar antes de
 # procurar disciplina evita que o CORPO do edital (regras de inscrição, que
@@ -220,13 +278,30 @@ def candidatos_data_prova(texto: str, janela: int = 250) -> list[dict]:
         # 2026, quando serão aplicadas as provas").
         contexto = flat[ini:m.start() + (0 if forma == "num" else 40)]
         baixo = contexto.lower()
+        # "Aplicação da(s) prova(s)" é como a tabela de cronograma nomeia a linha
+        # que importa, e vale MAIS que "prova objetiva" solta na janela: 5
+        # contra 3. Não é calibragem de gosto — é o desempate de um erro medido
+        # no edital da TRANSPETRO, que a tela mostrava como "Prova em
+        # 2026-12-01" quando a prova é 29/11/2026.
+        #
+        # O que acontecia: 01/12 é o fim do prazo de RECURSO contra o gabarito, e
+        # o título da seção ("9.1. DA REVISÃO DA NOTA DA PROVA OBJETIVA") cai
+        # dentro da janela de 250 caracteres dela. Empate em 3 a 3 com a data
+        # real, e empate se resolve pela ordem no documento — o item 9.1 está na
+        # página 32, o cronograma na 79. A data errada ganhava por chegar antes.
+        #
+        # E as palavras de RECURSO subtraem, que é a outra metade do conserto:
+        # recurso, gabarito e revisão marcam PRAZO SOBRE a prova, não a prova.
+        # Penalidade e não descarte — um cronograma pode nomear a linha da prova
+        # perto da linha do gabarito, e descartar perderia a data certa.
         pontos = (baixo.count("prova objetiva") * 3
+                  + baixo.count("provas objetivas") * 3
                   + baixo.count("realizad")
-                  # "Aplicação das provas" é como a tabela de cronograma
-                  # nomeia a linha que importa; sem isso a data certa do PF
-                  # empatava em zero com as 30 outras datas do anexo.
-                  + baixo.count("aplicação das provas") * 3
-                  + baixo.count("aplicação da prova") * 3)
+                  + baixo.count("aplicação das provas") * 5
+                  + baixo.count("aplicação da prova") * 5
+                  - baixo.count("recurso") * 3
+                  - baixo.count("gabarito") * 2
+                  - baixo.count("revisão") * 2)
         fim_anterior = m.end()
         try:
             mes = int(m.group(2)) if forma == "num" else MESES[m.group(2).lower()]
@@ -354,12 +429,65 @@ def _nome(bruto: str) -> str:
     return limpo.strip(" :.;,").title()
 
 
+# Tópico mais curto que isso é ruído de pontuação ("etc", "e"); mais longo é
+# parágrafo inteiro, e parágrafo não é unidade de estudo.
+MIN_TOPICO_SOLTO = 12
+MAX_TOPICO_SOLTO = 320
+MIN_PARTES_SOLTAS = 3
+
+
+def _topicos_por_pontuacao(bruto: str) -> list[str]:
+    """
+    Tópicos de um bloco SEM NUMERAÇÃO NENHUMA — a última tentativa, e só
+    depois de a numerada falhar.
+
+    A Cesgranrio escreve várias ênfases em prosa corrida, separando as matérias
+    por dois-pontos e os tópicos por ponto-e-vírgula ou ponto:
+
+      "ADMINISTRAÇÃO FINANCEIRA E ORÇAMENTÁRIA: Matemática Financeira, Valor do
+       Dinheiro no Tempo, Risco X Retorno, Análise de Investimentos, ...
+       ADMINISTRAÇÃO DA PRODUÇÃO E COMPRAS: Estratégia de Suprimento ..."
+
+    Sem isso, `RE_SUBITEM` não acha nada, `_topicos_do_bloco` devolve lista
+    vazia e a disciplina é DESCARTADA por `extrair_estrutura` (que só aceita
+    disciplina com tópico). Medido: as ênfases de Administração e de Advocacia
+    do edital da TRANSPETRO — as duas maiores em conteúdo — saíam com ZERO
+    disciplina e zero tópico, e nada na contagem denunciava, porque as outras 31
+    ênfases enchiam o número.
+
+    Só roda quando NÃO há item numerado, e é isso que a torna segura de
+    adicionar: FGV e AOCP numeram tudo, então elas nunca chegam aqui — o
+    fallback não pode regredir o que já funciona, só cobrir o que sumia.
+
+    Ponto-e-vírgula tem precedência sobre ponto quando o bloco usa os dois: é o
+    separador que a banca escolheu de propósito (a ÊNFASE 17 é uma lista de 20
+    matérias separadas por ";" e nada mais), e cortar por ponto ali quebraria
+    abreviação no meio.
+    """
+    bloco = _normalizar(bruto).strip()
+    if not bloco:
+        return []
+    if bloco.count(";") >= MIN_PARTES_SOLTAS - 1:
+        partes = re.split(r";\s*", bloco)
+    else:
+        # Só ponto que FECHA oração (minúscula, dígito ou fecha-parêntese antes)
+        # e é seguido de espaço: evita cortar "Lei nº 13.303" e "art. 28".
+        partes = re.split(r"(?<=[a-zà-ÿ0-9)\]])\.\s+", bloco)
+    topicos = [p.strip(" .;,") for p in partes]
+    topicos = [t for t in topicos if MIN_TOPICO_SOLTO <= len(t) <= MAX_TOPICO_SOLTO]
+    # Uma parte só não é lista: é um fragmento de frase, e promovê-lo a
+    # "disciplina com um tópico" produziria matéria que não existe.
+    return topicos if len(topicos) >= MIN_PARTES_SOLTAS else []
+
+
 def _topicos_do_bloco(bruto: str) -> list[str]:
     # lstrip: o primeiro item do bloco precisa encostar no início da string
     # pra RE_SUBITEM aceitá-lo pela alternativa `^` (ele é o único que não
     # vem depois de pontuação — vem depois do cabeçalho).
     bloco = _normalizar(bruto).lstrip()
     subitens = list(RE_SUBITEM.finditer(bloco))
+    if not subitens:
+        return _topicos_por_pontuacao(bruto)
     topicos = []
     for j, s in enumerate(subitens):
         fim = subitens[j + 1].start() if j + 1 < len(subitens) else len(bloco)

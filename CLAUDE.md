@@ -1067,8 +1067,12 @@ concurso. Três defeitos compostos, cada um invisível sozinho:
 Corrigido: `limpar_paginacao()` -> `recortar_conteudo_programatico()` ->
 cabeçalhos NO TEXTO CRU -> normalizar só o corpo de cada bloco -> contar
 folhas. Medido contra `tests/fixtures/edital_fgv_dataprev.txt` (trecho real
-do PDF, com as quebras de linha como o pypdf entrega): 14 disciplinas
-reais, 98 tópicos, zero fantasma.
+do PDF, com as quebras de linha como o pypdf entrega): disciplinas reais,
+zero fantasma — `Ecf`, `Iof`, `Lalur` e `1988` continuam fora, com teste
+nominal pra cada um. (Os números "14 disciplinas, 98 tópicos" que estavam aqui
+envelheceram: o fixture foi ATUALIZADO depois pra incluir a mobília de página,
+o que mudou as contagens. O número que vale hoje está travado em
+`test_cesgranrio_nao_mexeu_nas_outras_duas_bancas`.)
 
 **O passo que quase passou batido foi a mobília de página.** O PDF abre
 cada página com "DATAPREV | CONCURSO PÚBLICO 2026" e o número da página
@@ -1147,6 +1151,68 @@ ponta a ponta contra o acervo: a mesa da PC-BA casa 18 questões de Direito
 Penal. Lição de método: **cada edital novo é um caso de teste novo** —
 dois bastaram pra achar cinco defeitos distintos, e nenhum deles aparecia
 no outro. Fixture antes de regex.
+
+**Terceira banca, quarta rodada de defeitos: o Cesgranrio (TRANSPETRO, 33
+ênfases) devolvia ZERO cargo, e o que entrava no lugar era pior que vazio.** A
+tela mostrava "4 disciplinas · 67 tópicos", duas delas chamadas `I- Matemática`
+e `Dados` — que são SUBSEÇÕES de dentro da ênfase de Ciência de Dados,
+oferecidas a quem ia prestar outra coisa. Quatro defeitos independentes, nenhum
+visível nos dois editais anteriores:
+
+1. **`ÊNFASE 8: CIÊNCIA DE DADOS` é o marcador de cargo desta banca**, o mesmo
+   papel de `PERFIL 3:` (FGV) e `CARGO:` (AOCP). Entra em `RE_CARGO` sem
+   hesitação porque é o caso que o parser existe pra atender — o edital DIZ onde
+   o cargo começa, com marcador literal e numerado. É o oposto do cabeçalho nu
+   que fez `RE_CARGO_NU` ser revertida.
+2. **O pypdf QUEBRA O NÚMERO**: `ÊNFASE 1 0 :`, `ÊNFASE 1 4:`, `ÊNFASE 2 2:`.
+   Com `\d{0,2}`, 12 das 33 casavam e 21 sumiam — e os tópicos da ênfase que não
+   casou caem na ANTERIOR, com o total continuando plausível. Mesma classe da
+   mobília de página no FGV: o pior formato de erro é o que nenhuma contagem
+   denuncia.
+3. **Ênfase escrita em PROSA, sem numeração nenhuma.** `RE_SUBITEM` não acha
+   nada, e `extrair_estrutura` só aceita disciplina COM tópico — então
+   Administração e Advocacia (as duas maiores em conteúdo) saíam com zero de
+   tudo, sem nada denunciar, porque as outras 31 enchiam o número.
+   `_topicos_por_pontuacao` corta por ponto-e-vírgula (o separador que a banca
+   escolheu de propósito) ou por ponto que fecha oração, e **só roda quando não
+   há item numerado** — é essa guarda que a torna incapaz de regredir FGV e
+   AOCP, que numeram tudo.
+4. **Data da prova errada:** a tela dizia "Prova em 2026-12-01" e a prova é
+   29/11/2026. 01/12 é o fim do prazo de RECURSO, e o título da seção "DA
+   REVISÃO DA NOTA DA PROVA OBJETIVA" cai na janela de 250 caracteres dela —
+   empate em 3 a 3 com a data real, resolvido pela ordem no documento (item 9.1
+   na página 32, cronograma na 79). "Aplicação da(s) prova(s)" passou a valer 5,
+   e recurso, gabarito e revisão SUBTRAEM: marcam prazo SOBRE a prova, não a
+   prova. Penalidade e não descarte — cronograma pode nomear as duas linhas
+   juntas, e descartar perderia a certa.
+
+**Uma quinta mudança foi TENTADA E REVERTIDA, e vale registrar porque parecia
+obviamente certa:** deixar o nome do cabeçalho atravessar uma quebra de linha. O
+pypdf devolve `ADMINISTRAÇÃO\nMERCADOLÓGICA:`, e como as classes de caractere
+não cruzam `\n`, casava só o RABO — a disciplina virava "Mercadológica", e nome
+truncado nunca casa no `mesa.filtro`. Medido, a permissão fez duas coisas
+piores: engoliu a seção no nome (`CONHECIMENTOS BÁSICOS\nLÍNGUA PORTUGUESA:`
+virou a disciplina "Conhecimentos Básicos Língua Portuguesa") e MATOU UM CARGO —
+o nome esticado passa do começo da linha seguinte, e o desempate de `_marcas`
+(que descarta marca iniciada antes do fim da anterior) descartava a marca de
+ÊNFASE. Cinco ênfases viraram quatro. Reverter devolveu o quinto.
+
+Medido no PDF real (83 páginas): **33 cargos, 2 comuns (Português 12, Inglês 2,
+exatos), 237 disciplinas e 1601 tópicos** no total — e escolhendo UMA ênfase na
+curadoria, "Análise de Sistemas – Segurança Cibernética", o edital gravado tem 5
+disciplinas e 37 tópicos: Português, Inglês, Segurança Ofensiva, Segurança
+Defensiva e Compliance. Sem tocar no LLM (`origem: parser`, zero cota). FGV e
+AOCP conferidos byte a byte contra o HEAD antes e depois: **idênticos** (4
+cargos/20 disciplinas/104 tópicos e 2/13/86), e há teste travando esses números
+justamente porque cada regex nova neste módulo quebrou o edital anterior.
+
+E uma armadilha de MÉTODO, que custou tempo e quase virou medição falsa: o
+script que montou o fixture usava `txt.index("ÊNFASE 8: ...")` sem âncora e achou
+a ocorrência do **Anexo III** (requisitos e atribuições) em vez do **Anexo IV**
+(conteúdos programáticos) — o mesmo texto de cabeçalho existe nos dois. Pior: o
+script abortou numa exceção ANTES de gravar, então o arquivo ficou sendo a versão
+velha e três medições seguintes mediram outra coisa. Fixture se confere abrindo,
+não presumindo.
 
 **O produto NÃO é só para Direito.** O filtro da mesa é por NOME de
 disciplina e funciona igual pra TI, bancária, fiscal ou policial — o que
@@ -1259,6 +1325,14 @@ upload: caminho interno do servidor não é dado do usuário.
   consegue COBRÁ-LO, porque `geracao` só usa acervo público (008). Consertar
   exige piso de relevância, e o gabarito do `avaliar_retrieval.py` deve receber
   esse caso ANTES do código.
+
+- O extrator lê o Cesgranrio, e não perfeitamente: **cabeçalho de disciplina que
+  quebra de linha ainda é perdido ou truncado** (`III- DADOS E BASES DE\nDADOS`
+  vira "Dados"), então a ênfase de Administração sai com 5 das ~14 matérias que o
+  edital lista, e 1 dos 33 cargos sai sem disciplina nenhuma. O conserto óbvio
+  (deixar o nome atravessar a quebra) foi medido e é PIOR — ver Decisões. O que
+  NÃO acontece mais é o cargo errado: as 33 ênfases são oferecidas na curadoria
+  e só a escolhida entra na mesa.
 
 ## Aberto
 
