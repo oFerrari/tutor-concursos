@@ -34,6 +34,8 @@ from fastapi import (BackgroundTasks, Depends, FastAPI, File, Form, Header, HTTP
                      UploadFile)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from starlette.concurrency import run_in_threadpool
+
 from pydantic import BaseModel
 
 from core import (auth, conversa, desafio, edital, geracao, material, mesa, questoes, rascunho,
@@ -965,9 +967,26 @@ async def rota_subir_material(fundo: BackgroundTasks,
     """
     dados = await arquivo.read()
     try:
-        doc = material.registrar(uid, arquivo.filename or "material", dados,
-                                 disciplina=disciplina, tipo=tipo, titulo=titulo,
-                                 assunto=assunto, mesa_id=m["id"])
+        # `run_in_threadpool` NÃO é enfeite, é o conserto de um travamento MEDIDO.
+        # Esta rota é `async def`, e dentro de uma corrotina qualquer chamada
+        # bloqueante para o EVENT LOOP INTEIRO — ou seja, todas as outras
+        # requisições, de todos os usuários. `registrar` extrai o PDF com pypdf,
+        # divide em trechos, calcula hash e escreve no banco: num edital de
+        # 1,5 MB isso levou 9,8s.
+        #
+        # Efeito medido antes do conserto, sondando `/fila` a cada 200ms durante
+        # o upload: latência de 289ms (baseline) para 9.295ms, e só 2 sondas
+        # completaram em ~10s em vez de ~50. Era o relato de "a API sobrecarrega
+        # a aplicação inteira" — e não aparecia no meu teste anterior porque eu
+        # tinha usado .txt pequeno, onde a extração é instantânea.
+        #
+        # As rotas de edital não têm o problema: são `def` (síncronas), e o
+        # FastAPI já as roda no pool de threads por conta própria. O perigo é
+        # exclusivo de quem escreve `async def` e chama código bloqueante.
+        doc = await run_in_threadpool(
+            material.registrar, uid, arquivo.filename or "material", dados,
+            disciplina=disciplina, tipo=tipo, titulo=titulo,
+            assunto=assunto, mesa_id=m["id"])
     except material.ErroMaterial as e:
         raise HTTPException(400, str(e))
     fundo.add_task(material.indexar, doc["id"], arquivo.filename or "material", dados)
@@ -990,7 +1009,10 @@ async def rota_reindexar_material(documento_id: int, fundo: BackgroundTasks,
 
     `indexar` é idempotente (apaga os trechos do documento antes), então
     reindexar não duplica nada — é o que torna este botão seguro."""
-    if not material.para_reindexar(uid, documento_id):
+    # Mesmo motivo da rota de subir: consulta de banco numa corrotina bloqueia o
+    # event loop. É rápida, mas "rápida" sob um lote de 14 arquivos indexando não
+    # é rápida — e o custo de errar aqui é a aplicação inteira parada.
+    if not await run_in_threadpool(material.para_reindexar, uid, documento_id):
         raise HTTPException(404, "material não encontrado")
     dados = await arquivo.read()
     fundo.add_task(material.indexar, documento_id, arquivo.filename or "material", dados)

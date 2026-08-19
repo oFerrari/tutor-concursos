@@ -413,3 +413,42 @@ def test_apagar_mesa_nao_apaga_o_material(client, usuario):
     assert linha is not None and linha["usuario_id"] == usuario["id"]
     assert linha["mesa_id"] is None
     assert doc in [x["id"] for x in client.get("/materiais", headers=usuario["headers"]).json()["materiais"]]
+
+
+def test_subir_material_nao_bloqueia_o_event_loop(client, usuario):
+    """Travamento MEDIDO e relatado: "a API parece sobrecarregar a aplicação
+    inteira" ao subir PDF.
+
+    `POST /materiais` é `async def`, e dentro de uma corrotina qualquer chamada
+    bloqueante para o EVENT LOOP INTEIRO — todas as requisições, de todos os
+    usuários. `registrar` extrai o PDF, divide em trechos, calcula hash e escreve
+    no banco: num edital de 1,5 MB isso levou 9,8s.
+
+    Sondando `/fila` a cada 200ms durante o upload, antes do conserto: latência
+    de 289ms (baseline) para 9.295ms, e só 2 sondas completaram em ~10s em vez de
+    ~50. Depois de mover o trabalho pro pool de threads, MESMO PDF: 14 sondas,
+    pior caso 360ms, nenhuma acima de 1s.
+
+    Este teste não mede latência (o TestClient é síncrono e não reproduz
+    concorrência) — ele trava o CONSERTO: garante que a rota não voltou a chamar
+    `registrar` direto do corpo da corrotina. Sem isso, o defeito volta na
+    primeira vez que alguém "simplificar" o `await run_in_threadpool`."""
+    import inspect
+    import api as apimod
+
+    fonte = inspect.getsource(apimod.rota_subir_material)
+    assert inspect.iscoroutinefunction(apimod.rota_subir_material)
+    assert "run_in_threadpool" in fonte, (
+        "rota async voltou a chamar código bloqueante no event loop")
+    # A chamada direta não pode reaparecer fora do executor.
+    assert "material.registrar(" not in fonte.replace("material.registrar,", "")
+
+    fonte_re = inspect.getsource(apimod.rota_reindexar_material)
+    assert "run_in_threadpool" in fonte_re
+
+    # E o caminho continua funcionando ponta a ponta.
+    r = client.post("/materiais", headers=usuario["headers"], data={"tipo": "resumo"},
+                    files={"arquivo": ("no-pool.txt",
+                                       ("material que passa pelo pool. " * 30).encode(),
+                                       "text/plain")})
+    assert r.status_code == 201 and r.json()["status"] == "processando"
