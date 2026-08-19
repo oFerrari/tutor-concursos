@@ -22,7 +22,7 @@ import re
 
 from . import chunking, db, embeddings
 
-VERSAO = "material-v2"
+VERSAO = "material-v3"
 
 LOTE = 32
 MIN_CHARS = 200
@@ -251,7 +251,8 @@ def _html_para_texto(html: str) -> str:
 
 def registrar(usuario_id: int, nome: str, dados: bytes,
               disciplina: str | None = None, tipo: str = "aula",
-              titulo: str | None = None, assunto: str | None = None) -> dict:
+              titulo: str | None = None, assunto: str | None = None,
+              mesa_id: int | None = None) -> dict:
     """
     Grava a LINHA do documento e devolve na hora, com `status='processando'`.
 
@@ -289,15 +290,20 @@ def registrar(usuario_id: int, nome: str, dados: bytes,
 
     doc = db.exec1(
         """INSERT INTO documento (titulo, disciplina, assunto, tipo, origem, hash,
-                                  usuario_id, status, chunks_total, classificado_por)
-           VALUES (%(t)s, %(d)s, %(as)s, %(tp)s, %(o)s, %(h)s, %(u)s,
+                                  usuario_id, mesa_id, status, chunks_total,
+                                  classificado_por)
+           VALUES (%(t)s, %(d)s, %(as)s, %(tp)s, %(o)s, %(h)s, %(u)s, %(mid)s,
                    'processando', %(n)s, %(cp)s)
            RETURNING id, titulo, disciplina, assunto, tipo, status, chunks_total,
-                     classificado_por, criado_em""",
+                     classificado_por, mesa_id, criado_em""",
         {"t": (titulo or re.sub(r"\.[A-Za-z0-9]{1,5}$", "", nome)).strip()[:200],
          "d": (disciplina or "").strip() or None,
          "as": (assunto or "").strip() or None,
          "tp": tipo, "o": nome, "h": digest, "u": usuario_id, "n": len(chunks),
+         # Mesa de ORIGEM (021). `None` grava no pool comum, que é o que a CLI e
+         # qualquer chamador sem contexto de mesa devem fazer — inventar uma mesa
+         # aqui prenderia o material num concurso que ninguém escolheu.
+         "mid": mesa_id,
          # Só marca 'aluno' se ele realmente disse algo. Sem isso, material
          # não classificado apareceria como "você informou" — e a tela usa
          # essa procedência pra decidir se pede conferência.
@@ -471,11 +477,16 @@ def listar(usuario_id: int) -> list[dict]:
     return db.query(
         """SELECT d.id, d.titulo, d.disciplina, d.assunto, d.tipo, d.status,
                   d.erro, d.classificado_por, d.chunks_total, d.origem, d.criado_em,
+                  d.mesa_id, m.nome AS mesa_nome,
                   count(c.id) AS chunks
              FROM documento d
              LEFT JOIN chunk c ON c.documento_id = d.id
+             -- LEFT: material do pool comum (mesa_id NULL) não pode desaparecer
+             -- da lista por não ter mesa. É o caso de tudo que foi subido antes
+             -- da 021.
+             LEFT JOIN mesa m ON m.id = d.mesa_id
             WHERE d.usuario_id = %(u)s
-            GROUP BY d.id
+            GROUP BY d.id, m.nome
             ORDER BY d.criado_em DESC, d.id DESC""",
         {"u": usuario_id})
 

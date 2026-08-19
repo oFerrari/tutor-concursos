@@ -255,13 +255,16 @@ class AtualizarMesaBody(BaseModel):
     disciplinas: list[str] | None = None
     orgao: str | None = None
     banca: str | None = None
+    # `None` PRESERVA (021): um PATCH que só troca o nome não pode religar a
+    # biblioteca compartilhada de volta sem ninguém pedir.
+    biblioteca_compartilhada: bool | None = None
 
 
 @app.patch("/mesas/{mid}")
 def rota_atualizar_mesa(mid: int, body: AtualizarMesaBody, uid: int = Depends(usuario_atual)):
     try:
         m = mesa.atualizar(uid, mid, body.nome, body.orgao, body.banca,
-                           body.disciplinas)
+                           body.disciplinas, body.biblioteca_compartilhada)
     except mesa.ErroMesa as e:
         raise HTTPException(400, str(e))
     if not m:
@@ -945,7 +948,8 @@ async def rota_subir_material(fundo: BackgroundTasks,
                               assunto: str | None = Form(None),
                               tipo: str = Form("aula"),
                               titulo: str | None = Form(None),
-                              uid: int = Depends(usuario_atual)):
+                              uid: int = Depends(usuario_atual),
+                              m: dict = Depends(mesa_atual)):
     """
     Sobe material privado e responde NA HORA, com status `processando`.
 
@@ -963,7 +967,7 @@ async def rota_subir_material(fundo: BackgroundTasks,
     try:
         doc = material.registrar(uid, arquivo.filename or "material", dados,
                                  disciplina=disciplina, tipo=tipo, titulo=titulo,
-                                 assunto=assunto)
+                                 assunto=assunto, mesa_id=m["id"])
     except material.ErroMaterial as e:
         raise HTTPException(400, str(e))
     fundo.add_task(material.indexar, doc["id"], arquivo.filename or "material", dados)
@@ -1002,7 +1006,8 @@ class LinkBody(BaseModel):
 
 @app.post("/materiais/link", status_code=201)
 def rota_indexar_link(body: LinkBody, fundo: BackgroundTasks,
-                      uid: int = Depends(usuario_atual)):
+                      uid: int = Depends(usuario_atual),
+                      m: dict = Depends(mesa_atual)):
     """Indexa o conteúdo de uma URL pública.
 
     O download acontece DENTRO do request, ao contrário do embedding: ele é
@@ -1016,7 +1021,8 @@ def rota_indexar_link(body: LinkBody, fundo: BackgroundTasks,
     try:
         nome, dados = material.baixar(body.url)
         doc = material.registrar(uid, nome, dados, disciplina=body.disciplina,
-                                 tipo=body.tipo, titulo=nome, assunto=body.assunto)
+                                 tipo=body.tipo, titulo=nome, assunto=body.assunto,
+                                 mesa_id=m["id"])
     except material.ErroMaterial as e:
         raise HTTPException(400, str(e))
     fundo.add_task(material.indexar, doc["id"], nome, dados)

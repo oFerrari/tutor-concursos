@@ -9,6 +9,7 @@ import {
   Mesa,
   SugestoesMaterial,
   apagarMaterial,
+  atualizarMesa,
   classificarMaterial,
   getMateriais,
   getMesaAtual,
@@ -18,6 +19,7 @@ import {
   reindexarMaterial,
   subirMaterial,
 } from "@/lib/api";
+import { Carregando } from "@/components/Carregando";
 
 /**
  * "Minha biblioteca" — alimentar o RAG com material PRÓPRIO.
@@ -259,6 +261,11 @@ export default function PaginaMateriais() {
   /** De onde vêm as sugestões de disciplina. Ligado quando a mesa declara
    *  matérias — ver `podeDoAlvo`. */
   const [doAlvo, setDoAlvo] = useState(false);
+
+  /** Biblioteca isolada por mesa (021). Otimista com reversão em erro: o
+   *  interruptor precisa responder na hora, e o efeito dele — o que o tutor
+   *  passa a ler — não é visível aqui de qualquer forma. */
+  const [salvandoBib, setSalvandoBib] = useState(false);
 
   /** Arraste: qual material está na mão e sobre qual grupo ele está. `sobre`
    *  existe só pra dar o realce do alvo — sem ele o aluno solta no escuro. */
@@ -548,6 +555,25 @@ export default function PaginaMateriais() {
     }
   }
 
+  async function alternarBiblioteca() {
+    if (!mesa || salvandoBib) return;
+    const desejado = !mesa.biblioteca_compartilhada;
+    setErro(null);
+    setSalvandoBib(true);
+    setMesa({ ...mesa, biblioteca_compartilhada: desejado });
+    try {
+      await atualizarMesa(mesa.id, { biblioteca_compartilhada: desejado });
+      // O que o tutor lê mudou; nada da lista muda, mas o cache de outras telas
+      // não depende disso — só o recorte da BUSCA, que não é cacheado aqui.
+    } catch (e) {
+      // Reverte: interruptor que fica ligado sem ter ligado é pior que erro.
+      setMesa({ ...mesa, biblioteca_compartilhada: !desejado });
+      setErro(e instanceof ErroApi ? e.message : "Não deu pra mudar a biblioteca desta mesa");
+    } finally {
+      setSalvandoBib(false);
+    }
+  }
+
   async function remover(m: Material) {
     setErro(null);
     try {
@@ -580,6 +606,46 @@ export default function PaginaMateriais() {
         Alimente sua IA com seus PDFs, anotações e resumos privados. Só você tem acesso a este
         material.
       </p>
+
+      {/* Interruptor de escopo da biblioteca (021). Fica AQUI e não no editor de
+          mesas porque é aqui que se vê a consequência: a lista de material logo
+          abaixo, com a etiqueta de qual mesa é cada um. Dois controles pro mesmo
+          estado em telas diferentes é como eles divergem. */}
+      {mesa && (
+        <div className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-line bg-surface px-3.5 py-3">
+          <button
+            type="button"
+            onClick={alternarBiblioteca}
+            disabled={salvandoBib}
+            role="switch"
+            aria-checked={mesa.biblioteca_compartilhada}
+            title={
+              mesa.biblioteca_compartilhada
+                ? "Ligado: o tutor desta mesa lê o material de todas as suas mesas. Desligue pra isolar."
+                : `Desligado: o tutor desta mesa lê só o material subido em "${mesa.nome}" (mais o que não tem mesa). Ligue pra usar tudo.`
+            }
+            className="flex items-center gap-1.5 text-[12.5px] transition-colors disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            <span
+              className={`switch ${mesa.biblioteca_compartilhada ? "switch-edital" : "switch-daqui"}`}
+            >
+              <span
+                className={`switch-bolinha ${mesa.biblioteca_compartilhada ? "left-[17px]" : "left-[2px]"}`}
+              />
+            </span>
+            <span
+              className={mesa.biblioteca_compartilhada ? "text-accent-text" : "text-success"}
+            >
+              {mesa.biblioteca_compartilhada ? "usar material de todas as mesas" : "só o material desta mesa"}
+            </span>
+          </button>
+          <span className="text-[12px] text-subtle">
+            {mesa.biblioteca_compartilhada
+              ? `O tutor de ${mesa.nome} pode citar qualquer material seu.`
+              : `O tutor de ${mesa.nome} ignora o material das outras mesas. Nada é movido nem apagado — dá pra religar quando quiser.`}
+          </span>
+        </div>
+      )}
 
       {erro && <p className="callout-danger mb-4 !p-3 text-[13px]">{erro}</p>}
 
@@ -757,7 +823,7 @@ export default function PaginaMateriais() {
         )}
       </div>
 
-      {materiais === null && <p className="text-[13.5px] text-muted">Carregando sua biblioteca...</p>}
+      {materiais === null && <Carregando linhas={3} titulo rotulo="Carregando sua biblioteca" />}
       {materiais?.length === 0 && (
         <p className="text-[13.5px] text-muted">
           Nada aqui ainda. Suba uma apostila ou cole um link, e o tutor passa a citá-lo nas
@@ -873,6 +939,24 @@ export default function PaginaMateriais() {
                             não precisa de aviso — ele sabe o que escreveu. */}
                         {m.classificado_por === "modelo" && (
                           <span className="text-warning"> · eu deduzi, confira</span>
+                        )}
+                        {/* De qual mesa é. Só aparece quando é de OUTRA: repetir
+                            o nome da mesa atual em toda linha é ruído. */}
+                        {m.mesa_id !== null && mesa && m.mesa_id !== mesa.id && (
+                          <span
+                            className={
+                              mesa.biblioteca_compartilhada ? " text-subtle" : " text-warning"
+                            }
+                            title={
+                              mesa.biblioteca_compartilhada
+                                ? `Subido na mesa ${m.mesa_nome}, e esta mesa usa material de todas.`
+                                : `Subido na mesa ${m.mesa_nome}. Como esta mesa está isolada, o tutor NÃO lê este material aqui.`
+                            }
+                          >
+                            {" · "}
+                            {m.mesa_nome}
+                            {!mesa.biblioteca_compartilhada && " (inativo aqui)"}
+                          </span>
                         )}
                       </p>
                     </>

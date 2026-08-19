@@ -24,7 +24,7 @@ VERSAO = "mesa-v3"
 NOME_PADRAO = "Mesa principal"
 
 CAMPOS = ("id, usuario_id, nome, orgao, banca, criado_em, "
-          "disciplinas_manuais")
+          "disciplinas_manuais, biblioteca_compartilhada")
 
 
 class ErroMesa(Exception):
@@ -274,7 +274,8 @@ def listar(usuario_id: int) -> list[dict]:
 
 def atualizar(usuario_id: int, mesa_id: int, nome: str | None = None,
               orgao: str | None = None, banca: str | None = None,
-              disciplinas_manuais: list[str] | None = None) -> dict | None:
+              disciplinas_manuais: list[str] | None = None,
+              biblioteca_compartilhada: bool | None = None) -> dict | None:
     atual = obter(usuario_id, mesa_id)
     if not atual:
         return None
@@ -312,10 +313,14 @@ def atualizar(usuario_id: int, mesa_id: int, nome: str | None = None,
         f"""UPDATE mesa SET nome = %(n)s,
                             orgao = COALESCE(%(o)s, orgao),
                             banca = COALESCE(%(b)s, banca),
-                            disciplinas_manuais = COALESCE(%(dm)s, disciplinas_manuais)
+                            disciplinas_manuais = COALESCE(%(dm)s, disciplinas_manuais),
+                            -- `None` preserva: um PATCH que só troca o nome não
+                            -- pode religar a biblioteca compartilhada de volta.
+                            biblioteca_compartilhada =
+                                COALESCE(%(bc)s, biblioteca_compartilhada)
              WHERE id = %(id)s AND usuario_id = %(u)s RETURNING {CAMPOS}""",
         {"id": mesa_id, "u": usuario_id, "n": novo_nome, "o": orgao, "b": banca,
-         "dm": disciplinas_manuais},
+         "dm": disciplinas_manuais, "bc": biblioteca_compartilhada},
     )
 
 

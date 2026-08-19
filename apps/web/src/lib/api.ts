@@ -193,6 +193,9 @@ export type Mesa = {
    *  subir o edital. */
   origem_alvo: "edital" | "manual" | "nenhum";
   disciplinas_manuais: string[];
+  /** `false` = a biblioteca desta mesa é isolada (021): o tutor só lê o material
+   *  subido nela e o pool comum. `true` (default) = lê o de todas as mesas. */
+  biblioteca_compartilhada: boolean;
 };
 
 export type MesaNaLista = Mesa & {
@@ -245,6 +248,9 @@ export function atualizarMesa(
     banca?: string | null;
     /** Alvo declarado à mão, pra mesa sem edital publicado. `[]` limpa. */
     disciplinas?: string[];
+    /** `false` isola a biblioteca desta mesa (021): ela passa a ler só o próprio
+     *  material e o pool comum. Omitir PRESERVA — não religa sem pedir. */
+    biblioteca_compartilhada?: boolean;
   }
 ): Promise<Mesa> {
   return chamar<Mesa>(`/mesas/${id}`, {
@@ -749,6 +755,10 @@ export type Material = {
   chunks_total: number | null;
   chunks: number;
   origem: string | null;
+  /** Mesa que subiu este material (021). `null` = pool comum: material anterior
+   *  à migração, ou que serve a qualquer concurso. */
+  mesa_id: number | null;
+  mesa_nome: string | null;
   criado_em: string;
 };
 

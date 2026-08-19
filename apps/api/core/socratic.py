@@ -372,7 +372,13 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     # que ele subiu entram no contexto junto da lei. É o ponto do produto —
     # "alimente sua IA com seus PDFs" só significa algo se o material chegar
     # ao prompt. Sem usuario_id (CLI), fica só o acervo público.
-    chunks = retrieval.buscar(pergunta, n=6, usuario_id=usuario_id)
+    # RECORTE POR MESA (021): só quando a mesa pediu isolamento. Com
+    # `biblioteca_compartilhada` — o default, e o comportamento anterior à 021 —
+    # passa `None` e a busca vê tudo do aluno, como antes. Ler o flag AQUI e não
+    # em quem chama evita que uma segunda rota esqueça de aplicá-lo: o recorte
+    # anda junto do `mesa_` que já chega nesta função.
+    mesa_id = mesa_.get("id") if mesa_ and mesa_.get("biblioteca_compartilhada") is False else None
+    chunks = retrieval.buscar(pergunta, n=6, usuario_id=usuario_id, mesa_id=mesa_id)
     contexto_material = retrieval.formatar_contexto(chunks) if chunks else None
     contexto_desempenho = _resumo_desempenho(usuario_id, disciplinas) if usuario_id else None
     contexto_mesa = _resumo_mesa(mesa_)

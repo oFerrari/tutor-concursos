@@ -310,3 +310,106 @@ def test_limpar_preserva_a_estrutura_do_texto():
     demais aqui viraria um chunk gigante só."""
     assert material._limpar("a\x00b\x1fc") == "abc"
     assert material._limpar("linha1\nlinha2\tcol\r\n") == "linha1\nlinha2\tcol\r\n"
+
+
+# ---------------------------------------------------------------------------
+# Biblioteca por mesa (migração 021)
+# ---------------------------------------------------------------------------
+
+def test_mesa_isolada_nao_le_o_material_da_outra(client, usuario):
+    """Relatado em uso: "ele estuda informática e não quer contaminar o ambiente
+    dele com direito".
+
+    A 019 pôs dono no material e resolveu o vazamento ENTRE ALUNOS; não resolveu
+    a separação DENTRO do mesmo aluno. Quem prepara dois concursos ao mesmo tempo
+    — o caso normal, e a razão de a 010 existir — via o tutor citando a apostila
+    de Direito Penal numa pergunta de Redes.
+
+    O recorte entra DENTRO das CTEs de `retrieval`, junto do predicado de dono e
+    pelo mesmo motivo: filtrar depois de rankear faria o material da outra mesa
+    gastar vaga no top-6 e sair da lista, e a pergunta perderia contexto sem
+    ninguém ver por quê."""
+    ti = client.post("/mesas", json={"nome": "TI 021"}, headers=usuario["headers"]).json()
+    dg = client.post("/mesas", json={"nome": "Delegado 021"}, headers=usuario["headers"]).json()
+    cab_ti = {**usuario["headers"], "X-Mesa-Id": str(ti["id"])}
+    cab_dg = {**usuario["headers"], "X-Mesa-Id": str(dg["id"])}
+
+    client.post("/materiais", headers=cab_ti, data={"tipo": "resumo", "disciplina": "Informática"},
+                files={"arquivo": ("redes.txt",
+                                   ("MNEMONICO ZORBAXTI organiza as camadas. " * 30).encode(),
+                                   "text/plain")})
+    client.post("/materiais", headers=cab_dg, data={"tipo": "resumo", "disciplina": "Direito Penal"},
+                files={"arquivo": ("penal.txt",
+                                   ("MNEMONICO QUIXOTEPENAL organiza os crimes. " * 30).encode(),
+                                   "text/plain")})
+
+    def ve(termo, mesa_id):
+        return any(termo in (c.get("texto") or "") for c in
+                   retrieval.buscar(termo, n=6, usuario_id=usuario["id"], mesa_id=mesa_id))
+
+    # COMPARTILHADA é o default, e tem que continuar sendo: quem já subiu
+    # material está usando tudo em todas as mesas, e entrar isolando calado
+    # mudaria o resultado do tutor sem ninguém pedir.
+    assert client.get("/mesa", headers=cab_ti).json()["biblioteca_compartilhada"] is True
+    # `mesa_id=None` significa "não recorte". O BUG que só apareceu medindo: sem
+    # a guarda `%(mid)s::bigint IS NULL`, isto EXCLUÍA todo material que tem
+    # mesa, porque `d.mesa_id = NULL` é NULL e nunca true em SQL — o caso comum
+    # ficava sem ver a própria biblioteca.
+    assert ve("ZORBAXTI", None) and ve("QUIXOTEPENAL", None)
+
+    # ISOLADO: cada mesa vê só o seu.
+    assert ve("ZORBAXTI", ti["id"]) and not ve("QUIXOTEPENAL", ti["id"])
+    assert ve("QUIXOTEPENAL", dg["id"]) and not ve("ZORBAXTI", dg["id"])
+
+    # E o acervo PÚBLICO atravessa qualquer isolamento: lei seca serve a todo
+    # concurso, e cortá-la daria "não encontrei" pra pergunta que o acervo
+    # responde.
+    assert retrieval.buscar("art. 312", n=4, usuario_id=usuario["id"], mesa_id=ti["id"])
+
+
+def test_interruptor_da_biblioteca_e_reversivel_e_nao_move_material(client, usuario):
+    """O pedido foi explícito: "isso deve ser alterado a qualquer instante por
+    ele". Então o interruptor não move nem apaga nada — só muda o que a busca vê.
+
+    E `None` no PATCH PRESERVA: um pedido que só troca o nome da mesa não pode
+    religar a biblioteca compartilhada de volta sem ninguém pedir."""
+    m = client.post("/mesas", json={"nome": "Vai e volta"}, headers=usuario["headers"]).json()
+    cab = {**usuario["headers"], "X-Mesa-Id": str(m["id"])}
+    client.post("/materiais", headers=cab, data={"tipo": "resumo"},
+                files={"arquivo": ("x.txt", ("material qualquer. " * 30).encode(), "text/plain")})
+    antes = db.exec1("SELECT count(*) n FROM documento WHERE mesa_id = %(m)s", {"m": m["id"]})["n"]
+
+    client.patch(f"/mesas/{m['id']}", json={"biblioteca_compartilhada": False},
+                 headers=usuario["headers"])
+    assert client.get("/mesa", headers=cab).json()["biblioteca_compartilhada"] is False
+
+    client.patch(f"/mesas/{m['id']}", json={"nome": "Só o nome"}, headers=usuario["headers"])
+    assert client.get("/mesa", headers=cab).json()["biblioteca_compartilhada"] is False
+
+    client.patch(f"/mesas/{m['id']}", json={"biblioteca_compartilhada": True},
+                 headers=usuario["headers"])
+    assert client.get("/mesa", headers=cab).json()["biblioteca_compartilhada"] is True
+    assert db.exec1("SELECT count(*) n FROM documento WHERE mesa_id = %(m)s",
+                    {"m": m["id"]})["n"] == antes
+
+
+def test_apagar_mesa_nao_apaga_o_material(client, usuario):
+    """`ON DELETE SET NULL`, não CASCADE: o PDF é do ALUNO, não do concurso —
+    mesma decisão que fez `simulado -> mesa` ser SET NULL na 010, e pelo mesmo
+    motivo (a mesa é etiqueta, não dona). Perder a apostila paga porque a mesa
+    foi criada errada e apagada seria o pior estrago possível nesta tela.
+
+    O material cai no POOL COMUM (`mesa_id NULL`), que toda mesa lê — inclusive
+    as isoladas. Some da etiqueta, não da biblioteca."""
+    m = client.post("/mesas", json={"nome": "Mesa efêmera"}, headers=usuario["headers"]).json()
+    cab = {**usuario["headers"], "X-Mesa-Id": str(m["id"])}
+    r = client.post("/materiais", headers=cab, data={"tipo": "resumo"},
+                    files={"arquivo": ("sobrevive.txt",
+                                       ("MNEMONICO SOBREVIVENTE. " * 30).encode(), "text/plain")})
+    doc = r.json()["id"]
+
+    client.delete(f"/mesas/{m['id']}", headers=usuario["headers"])
+    linha = db.exec1("SELECT usuario_id, mesa_id FROM documento WHERE id = %(d)s", {"d": doc})
+    assert linha is not None and linha["usuario_id"] == usuario["id"]
+    assert linha["mesa_id"] is None
+    assert doc in [x["id"] for x in client.get("/materiais", headers=usuario["headers"]).json()["materiais"]]
