@@ -20,9 +20,9 @@ import {
   getMesas,
   getToken,
   limparMesaAtiva,
-  limparToken,
   setMesaAtiva,
 } from "@/lib/api";
+import { sair } from "@/lib/cache";
 
 /**
  * "Mesas de estudo" — o lobby: cada mesa é um concurso-alvo, com o edital
@@ -187,7 +187,10 @@ function ConteudoMesas() {
   // próximo campo novo nascer só num deles. `editando` diz qual mesa está
   // sendo alterada; `null` com `criando` verdadeiro = mesa nova.
   const [editando, setEditando] = useState<MesaNaLista | null>(null);
-  /** `?editar=alvo` abre o editor da mesa ATIVA já no alvo. É o atalho do
+  /** `?editar=alvo` abre o editor da mesa ATIVA já no alvo. Deixou de ser o
+   *  caminho do onboarding (agora é a tela `/alvo`, que pede matéria em vez de
+   *  administrar mesas) e continua aqui porque é atalho legítimo de quem já
+   *  está gerenciando mesas e quer trocar o alvo de uma delas. O atalho do
    *  onboarding pra quem não vai subir edital agora: sem ele, "escolher as
    *  matérias na mão" viraria "vá pra /mesas, ache sua mesa, clique no lápis"
    *  — três passos pra uma decisão que a tela anterior já ofereceu. */
@@ -204,7 +207,7 @@ function ConteudoMesas() {
       setErro(null);
     } catch (e) {
       if (e instanceof ErroApi && e.status === 401) {
-        limparToken();
+        sair();
         router.push("/login");
         return;
       }

@@ -213,7 +213,7 @@ export default function PaginaOnboarding() {
             Voltar pras mesas
           </button>
           <button
-            onClick={() => router.push("/mesas?editar=alvo")}
+            onClick={() => router.push("/alvo")}
             className="btn-ghost"
             title="Escolher as matérias do que existe no acervo, sem o PDF"
           >
