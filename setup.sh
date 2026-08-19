@@ -1,35 +1,101 @@
 #!/usr/bin/env bash
-# Prepara o projeto do zero (máquina nova) ou retoma numa já usada.
+# Sobe o projeto inteiro: banco, schema, dependências, corpus, API e frontend.
+#
+#   ./setup.sh                 prepara tudo e SOBE os dois serviços
+#   ./setup.sh --subir         pula a preparação e só sobe (o dia a dia)
+#   ./setup.sh --parar         derruba API e frontend (o banco fica de pé)
+#   ./setup.sh --so-preparar   prepara e NÃO sobe nada
+#
+# Roda de QUALQUER pasta do repositório — inclusive de apps/api ou apps/web.
 # Idempotente: rodar de novo não duplica nada (ingest.py pula arquivo já
-# ingerido pelo hash; venv só é criado se não existir).
-#
-#   ./setup.sh
-#
-# Rode da RAIZ do repo. No final, imprime os 2 comandos que faltam rodar
-# em terminais separados (API e frontend — de propósito não ficam em
-# background aqui, você vai querer ver o log dos dois).
+# ingerido pelo hash; venv só é criado se não existir; migração só roda uma vez).
 set -euo pipefail
-cd "$(dirname "$0")"
 
-echo "== 1/6 banco =="
+# ---------------------------------------------------------------- onde estamos
+# Antes isto era `cd "$(dirname "$0")"`, que só acerta quando você invoca o
+# script pelo caminho dele. Quem está em apps/api e digita `../../setup.sh`
+# funcionava por acaso; quem chama por um link simbólico, não. `git rev-parse`
+# responde a pergunta certa — "qual é a raiz deste repositório?" — de onde
+# quer que você esteja. O `dirname` fica como reserva pra cópia sem .git.
+#
+# Duas linhas e não uma: `A || B && C` agrupa como `(A || B) && C`, então a
+# versão de uma linha rodava o `pwd` TAMBÉM quando o git acertava, e RAIZ vinha
+# com dois caminhos. Peguei rodando, não lendo.
+RAIZ=$(git rev-parse --show-toplevel 2>/dev/null) \
+  || RAIZ=$(cd "$(dirname "$0")" && pwd)
+cd "$RAIZ"
+
+LOGS="$RAIZ/.logs"
+mkdir -p "$LOGS"
+PID_API="$LOGS/api.pid"
+PID_WEB="$LOGS/web.pid"
+
+vivo() { [ -f "$1" ] && kill -0 "$(cat "$1")" 2>/dev/null; }
+
+parar() {
+  for par in "API:$PID_API" "frontend:$PID_WEB"; do
+    nome=${par%%:*}; arq=${par#*:}
+    if vivo "$arq"; then
+      # Mata o GRUPO de processos, não só o PID. `uvicorn --reload` e o
+      # `next dev` cada um sobe filhos; matar o pai deixa o filho segurando a
+      # porta, e o próximo setup.sh acha que o serviço está de pé quando é um
+      # órfão respondendo.
+      kill -- -"$(cat "$arq")" 2>/dev/null || kill "$(cat "$arq")" 2>/dev/null || true
+      echo "  $nome parado"
+    fi
+    rm -f "$arq"
+  done
+}
+
+MODO="${1:-}"
+
+if [ "$MODO" = "--parar" ]; then
+  echo "== parando =="
+  parar
+  echo "banco continua de pé (docker compose stop, se quiser derrubar também)."
+  exit 0
+fi
+
+# O banco sobe em TODOS os modos: até o `--subir` precisa dele, e é o passo
+# mais rápido e mais idempotente de todos.
+# ------------------------------------------------------------------ 1/7 banco
+echo "== 1/7 banco =="
 docker compose up -d
-echo -n "esperando o Postgres ficar saudável"
+printf "esperando o Postgres ficar saudável"
 until docker compose ps db --format json 2>/dev/null | grep -q '"Health":"healthy"'; do
-  echo -n "."
+  printf "."
   sleep 1
 done
 echo " ok"
 
 cd apps/api
 
-echo "== 2/6 venv + dependências =="
+# `--subir` é o caminho do DIA A DIA, e existe porque a preparação inteira é
+# caríssima em tempo pra repetir a cada vez que você senta pra trabalhar: pip
+# install, seis ingestões e um yarn install que já estão prontos. Ele confere o
+# schema (que é o que muda quando você dá git pull) e sobe. Preparação completa
+# é pra máquina nova, ou pra depois de um pull que mexeu em dependência.
+if [ "$MODO" = "--subir" ]; then
+  source .venv/bin/activate
+  echo "== schema =="
+  if ! python migrar.py; then
+    echo
+    echo "parei: o schema precisa de uma decisão sua (instruções acima)."
+    exit 1
+  fi
+  cd "$RAIZ"
+else
+
+# ------------------------------------------------------- 2/7 venv + requisitos
+echo "== 2/7 venv + dependências =="
 if [ ! -d .venv ]; then
   python3 -m venv .venv
 fi
 source .venv/bin/activate
 pip install -q -r requirements.txt -r requirements-dev.txt
 
-echo "== 3/6 .env =="
+# ------------------------------------------------------------------- 3/7 .env
+echo "== 3/7 .env =="
 if [ ! -f .env ]; then
   cp .env.example .env
   # JWT_SECRET não precisa de julgamento humano — gera sozinho.
@@ -43,7 +109,22 @@ else
   echo "  .env já existe, não toquei."
 fi
 
-echo "== 4/6 corpus (reingestão — CPU local, sem custo de LLM, pula se já ingerido) =="
+# --------------------------------------------------------------- 4/7 migrações
+# ANTES do corpus, de propósito: `ingest.py` gasta minutos de CPU calculando
+# embedding, e contra schema velho ele falha no fim — depois de pagar o custo
+# inteiro. E é o passo que faltava neste script: `git pull` traz os ARQUIVOS de
+# migração e não aplica nenhum, então o código novo conversava com o schema
+# velho e a aplicação SUBIA pra quebrar depois, num lugar sem relação óbvia.
+echo "== 4/7 schema (migrações pendentes) =="
+if ! python migrar.py; then
+  echo
+  echo "parei aqui: o schema precisa de uma decisão sua (as instruções estão acima)."
+  echo "nada foi ingerido e nenhum serviço subiu."
+  exit 1
+fi
+
+# ------------------------------------------------------------------ 5/7 corpus
+echo "== 5/7 corpus (CPU local, sem custo de LLM, pula se já ingerido) =="
 python ingest.py corpus/cp.txt      --disciplina "Direito Penal"             --tipo lei --norma CP
 python ingest.py corpus/cf.txt      --disciplina "Direito Constitucional"    --tipo lei --norma CF
 python ingest.py corpus/adct.txt    --disciplina "Direito Constitucional"    --tipo lei --norma ADCT --titulo ADCT
@@ -51,34 +132,131 @@ python ingest.py corpus/cpp.txt     --disciplina "Direito Processual Penal"  --t
 python ingest.py corpus/lei8112.txt --disciplina "Direito Administrativo"   --tipo lei --norma L8112 --titulo "Lei 8.112/1990"
 python ingest.py corpus/CF88_Livro_EC91_2016.pdf --disciplina "Direito Constitucional" --tipo historico
 
-echo "== 5/6 questões + progresso (veio pelo git em dados/progresso.json) =="
+echo "== 6/7 questões + progresso (veio pelo git em dados/progresso.json) =="
 python sincronizar.py importar
 
-echo "== 6/6 frontend =="
-cd ../..
+# ---------------------------------------------------------------- 7/7 frontend
+echo "== 7/7 frontend (dependências) =="
+cd "$RAIZ"
 yarn install --silent
 if [ ! -f apps/web/.env.local ]; then
   cp apps/web/.env.local.example apps/web/.env.local
 fi
 
-cat <<'EOF'
+fi   # fim do bloco de preparação (pulado por --subir)
 
-tudo pronto. Faltam 2 terminais:
+if [ "$MODO" = "--so-preparar" ]; then
+  echo
+  echo "preparado. Nada foi subido (--so-preparar)."
+  echo "pra subir: ./setup.sh"
+  exit 0
+fi
 
-  terminal 1 (API):
-    cd ~/tutor-concursos/apps/api && source .venv/bin/activate && uvicorn api:app --reload --port 8000
+# ------------------------------------------------------------------- subir
+# Antes este script terminava imprimindo dois comandos pra você colar em dois
+# terminais. Isso era escolha ("você vai querer ver o log dos dois") e virou
+# atrito: são dois `cd` com caminho absoluto e um `source .venv/bin/activate`
+# decorado, toda vez, nas duas máquinas.
+#
+# Agora ele sobe os dois e faz `tail` dos dois logs junto: você vê o mesmo que
+# veria nos dois terminais, e Ctrl+C derruba tudo (trap abaixo). Quem quiser
+# deixar rodando e fechar o terminal usa `--so-preparar` e sobe à mão.
+echo
+echo "== subindo API e frontend =="
 
-  terminal 2 (frontend):
-    cd apps/web && yarn dev
+porta_ocupada() { ss -ltn 2>/dev/null | grep -q ":$1 "; }
 
-Depois: http://localhost:3000
+# Rastreia o que ESTE script subiu. Sem isso, o fim do script prometia que
+# Ctrl+C derruba os dois mesmo quando os dois já estavam de pé por outra via —
+# e `parar()` só mata PID que este script escreveu, então a promessa era falsa.
+# Serviço que eu não subi eu também não derrubo.
+SUBI=0
 
-  terminal 3 (opcional — testar o front publicado na Vercel contra esta API):
-    ./subir-vercel.sh
-    (sobe banco+API+túnel cloudflared sozinho e imprime a URL pública —
-    cole em NEXT_PUBLIC_API_URL nas env vars do projeto na Vercel e faça
-    redeploy. URL muda a cada reinício do túnel; ver subir-vercel.sh.)
+if vivo "$PID_API"; then
+  echo "  API já está de pé (pid $(cat "$PID_API"))"
+elif porta_ocupada 8000; then
+  echo "  porta 8000 ocupada por um processo que não é deste script — não subi a API."
+  echo "  (se for um uvicorn órfão: ./setup.sh --parar, ou mate o processo na mão)"
+else
+  cd apps/api
+  # setsid pra ganhar um grupo de processos próprio — é o que faz o --parar
+  # conseguir derrubar o uvicorn E os filhos que o --reload cria.
+  setsid ./.venv/bin/uvicorn api:app --reload --port 8000 > "$LOGS/api.log" 2>&1 &
+  echo $! > "$PID_API"
+  cd "$RAIZ"
+  echo "  API subindo (pid $(cat "$PID_API")) · log em .logs/api.log"
+  SUBI=1
+fi
+
+if vivo "$PID_WEB"; then
+  echo "  frontend já está de pé (pid $(cat "$PID_WEB"))"
+elif porta_ocupada 3000; then
+  echo "  porta 3000 ocupada por um processo que não é deste script — não subi o frontend."
+else
+  cd apps/web
+  setsid yarn dev > "$LOGS/web.log" 2>&1 &
+  echo $! > "$PID_WEB"
+  cd "$RAIZ"
+  echo "  frontend subindo (pid $(cat "$PID_WEB")) · log em .logs/web.log"
+  SUBI=1
+fi
+
+# Espera as duas RESPONDEREM, não só existirem: processo vivo não quer dizer
+# porta aberta, e mandar a pessoa abrir o navegador antes disso dá "não é
+# possível acessar esse site" — que parece defeito e é pressa.
+esperar() {  # $1=url  $2=nome  $3=segundos
+  printf "  esperando %s" "$2"
+  for _ in $(seq "$3"); do
+    if curl -fsS -o /dev/null --max-time 2 "$1"; then echo " ok"; return 0; fi
+    printf "."
+    sleep 1
+  done
+  echo " não respondeu em ${3}s — veja o log (.logs/)"
+  return 1
+}
+
+OK_API=0; OK_WEB=0
+esperar http://localhost:8000/openapi.json "a API" 60 && OK_API=1
+esperar http://localhost:3000 "o frontend" 90 && OK_WEB=1
+
+echo
+if [ "$OK_API" = 1 ] && [ "$OK_WEB" = 1 ]; then
+  cat <<EOF
+tudo de pé:
+
+  aplicação   http://localhost:3000
+  API (docs)  http://localhost:8000/docs
 
 Antes de sair desta máquina, sempre:
-  cd apps/api && python sincronizar.py exportar && cd ../.. && git add -A && git commit -m progresso && git push
+  cd apps/api && python sincronizar.py exportar && cd "$RAIZ" && git add -A && git commit -m progresso && git push
 EOF
+else
+  echo "algo não respondeu — o log de quem subiu vem abaixo."
+fi
+
+# Nada subido por mim = nada meu pra acompanhar nem pra derrubar. Sai limpo em
+# vez de dar `tail` em log que não existe (o que quebrava o script no fim, com
+# `tail: no files remaining`, justamente no caminho mais comum: rodar de novo
+# com tudo já de pé).
+if [ "$SUBI" = 0 ]; then
+  echo
+  echo "os dois já estavam de pé — não subi nem vou derrubar nada."
+  echo "pra reiniciar:  ./setup.sh --parar && ./setup.sh --subir"
+  exit 0
+fi
+
+echo
+echo "Ctrl+C aqui derruba o que este script subiu. O banco continua rodando."
+echo "Pra parar depois, de qualquer pasta do repo:  ./setup.sh --parar"
+echo
+echo "--- log a partir daqui ---"
+
+# O trap fica DEPOIS de subir e antes do tail: assim Ctrl+C durante o tail
+# derruba os serviços, que é o que "sair" significa aqui.
+trap 'echo; echo "derrubando..."; parar; exit 0' INT TERM
+# Só os logs que existem: `tail` de arquivo ausente aborta a lista inteira e,
+# com `set -e`, o script todo.
+LOGS_VIVOS=()
+[ -f "$LOGS/api.log" ] && LOGS_VIVOS+=("$LOGS/api.log")
+[ -f "$LOGS/web.log" ] && LOGS_VIVOS+=("$LOGS/web.log")
+tail -n +1 -f "${LOGS_VIVOS[@]}"

@@ -99,8 +99,10 @@ Só depois da aprovação, e obedecendo a:
 
 ## Notas de casa que não mudam com o workflow
 
-- Migração numerada nova exige aplicar na mão (ver `CLAUDE.md`); commitar não é
-  aplicar.
+- Migração numerada nova se aplica com `python migrar.py` (023), nunca à mão e
+  nunca por `psql -f`: fora do runner ela não entra no livro-razão, e aí o banco
+  fica com o efeito aplicado e sem registro — o silêncio que a 023 existe pra
+  acabar. Commitar continua não sendo aplicar.
 - Escrita em `tentativa`/`progresso`/`simulado`/`edital`/`mesa` em teste vai
   contra usuário DESCARTÁVEL, nunca contra `CLI_USUARIO_EMAIL`.
 - Nunca `DELETE FROM documento` pra reprocessar: usar `reingest.py`.

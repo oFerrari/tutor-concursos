@@ -69,6 +69,7 @@ db/019_material_do_aluno.sql documento.usuario_id + status/erro/chunks_total: bi
 db/020_material_classificado.sql disciplina virou NULLABLE + assunto + classificado_por
 db/021_biblioteca_por_mesa.sql documento.mesa_id + mesa.biblioteca_compartilhada
 db/022_conceito_faltante.sql tentativa.conceito_faltante: o que o aluno CONFUNDE
+db/023_migracao.sql        livro-razão: quais migrações já rodaram NESTE banco
 db/schema.dbml             schema documentado (DBML) — visualização, não fonte de verdade
 core/chunking.py           lei -> chunks por artigo (função pura)
 core/embeddings.py         e5 local, prefixos query:/passage:, cache
@@ -102,6 +103,7 @@ chat.py                    sessão de estudo (CLI, usuário fixo por email)
 api.py                     API HTTP (FastAPI) — mesma lógica de core/, autenticada por JWT
 sincronizar.py             exporta/importa questões e progresso de UM usuário entre máquinas
 semear_demo.py             semeia conta descartável com 3 mesas e 15 dias, pra olhar a TELA
+migrar.py                  aplica as migrações de db/ que faltam (único mecanismo)
 atualizar.sh               instala arquivos baixados do chat
 ```
 
@@ -847,6 +849,46 @@ o modelo escreve um NOME de conceito, não uma frase. Agrupar por similaridade
 (embeddings) seria o conserto de raiz e não vale antes de o agrupamento ruim
 doer.
 
+**Migração tem UM mecanismo, e ele deixa registro (023).** Antes eram dois
+sem registro nenhum: o `docker-entrypoint-initdb.d` (roda tudo, em ordem
+alfabética, uma vez na vida do volume) e a mão humana. `git pull` numa máquina
+já usada não aplicava nada, e o CLAUDE.md compensava isso com uma convenção
+escrita — que é o que se faz quando a ferramenta não resolve.
+
+O mount do initdb SAIU do `docker-compose.yml`, e isso é a parte central do
+desenho, não limpeza. Com os dois vivos, `migrar.py` não teria como distinguir
+"banco novo que o initdb preencheu inteiro" de "máquina atrasada onde só parte
+rodou": os dois estados são indistinguíveis olhando o banco, e adivinhar errado
+significa pular migração calada ou explodir no primeiro `ADD COLUMN`. Matar o
+segundo mecanismo é o que torna a pergunta respondível.
+
+**O estado do meio se RECUSA a supor.** Banco com dados e sem livro-razão
+(toda máquina da era anterior) para e explica, oferecendo `--adotar` ("este
+banco está em dia, registre") ou `down -v`. Quem sabe em que estado o banco
+está é a pessoa; aqui adivinhar errado perde dado, e recusar não é indecisão.
+
+**Transação por migração**, com o registro no livro-razão DENTRO dela — o banco
+nunca fica com a migração aplicada e não registrada, nem o contrário. `core/db.py`
+é `autocommit=True` (certo pro app, inútil aqui): é a armadilha que o
+`reingest.py` documenta, DELETE antes de validar o INSERT e nada pra reverter.
+Provado com migração que falha no meio: a tabela criada na linha 1 não ficou.
+
+**Chave é o NOME do arquivo, não o número:** os 018/019 estão duplicados em
+`db/` (018_edital_cargo + 018_simulado_resumavel, 019_material_do_aluno +
+019_simulado_nome) e chavear por número perderia metade do histórico. A ordem é
+o nome ordenado — a mesma que o initdb usava por SORTE, agora escrita e visível
+em `--listar`.
+
+**Checksum do que foi aplicado, com AVISO se o arquivo mudou depois.** É a lição
+do `documento.hash` do CP, que ficou dias desatualizado porque o corpus mudou
+após a ingestão e nada comparava. Avisa e não corrige: corrigir exigiria
+adivinhar o que a edição pretendia.
+
+Verificado criando um banco descartável e aplicando as 25 do zero: schema
+**idêntico** ao migrado à mão — 140 colunas, 1 view, 52 constraints, zero
+diferença. Que é também a prova de que nenhuma migração foi pulada ou aplicada
+fora de ordem na máquina de trabalho.
+
 ## Invariantes (violação = bug)
 
 - Todo `Art.` do arquivo vira um chunk. `diagnostico.py` verifica.
@@ -1381,16 +1423,16 @@ upload: caminho interno do servidor não é dado do usuário.
   os chunks (ou você não tem certeza), passe `--norma CP` explícito.
 - `.env` e `acervo/` fora do git; `corpus/` e `dados/progresso.json` vão para o git.
   SQL só migrações numeradas.
-- **`docker-entrypoint-initdb.d` só roda em volume novo.** Migração numerada
-  nova (`db/00N_*.sql`) não se aplica sozinha a um container já existente —
-  ela só entra de fato num `docker compose down -v` (perde todos os dados)
-  ou aplicando na mão: `docker exec -i tutor-db psql -U tutor -d tutor -f
-  /docker-entrypoint-initdb.d/00N_nome.sql`. Commitar a migração não é
-  aplicar a migração; um `git pull` na outra máquina tem o mesmo problema se
-  o volume lá já existir. Custou o módulo de Simulados/Estatísticas inteiro
-  rodando contra a view/tabela antiga sem avisar (`chat.py simulado` batendo
-  em tabela inexistente, `stats --json` devolvendo `Decimal` que quebra
-  `json.dumps`) até alguém tentar de verdade.
+- **`python migrar.py` aplica migração; commitar não aplica** (migração 023).
+  Era este o buraco: `git pull` traz os ARQUIVOS e não aplica nenhum, o
+  `docker-entrypoint-initdb.d` só roda em volume NOVO, e nada no banco
+  registrava o que já tinha rodado. O modo de falha é o pior que existe — a
+  aplicação SOBE e quebra depois, num lugar sem relação óbvia com o schema.
+  Custou o módulo de Simulados/Estatísticas inteiro rodando contra a
+  view/tabela antiga sem avisar (`chat.py simulado` batendo em tabela
+  inexistente, `stats --json` devolvendo `Decimal` que quebra `json.dumps`)
+  até alguém tentar de verdade. `./setup.sh` chama o `migrar.py` antes do
+  corpus, então "cheguei na outra máquina" voltou a ser um comando.
 - Ao sair de uma máquina: `python sincronizar.py exportar` antes do commit/push,
   sempre — senão a próxima exportação (de qualquer lado) sobrescreve progresso.
 - Testar qualquer coisa que grave em `tentativa`/`progresso`/`simulado`/`edital`/`mesa`
@@ -1407,13 +1449,25 @@ upload: caminho interno do servidor não é dado do usuário.
   `test_geracao.py` (proveniência e os CHECKs da 012/013),
   `test_conversa.py` (histórico chegando ao prompt) e `test_perfil.py`
   (perfil inválido nunca chegando ao prompt).
-- **Migração numerada nova exige aplicar na mão** (ver a armadilha do
-  `docker-entrypoint-initdb.d` logo abaixo). Da 012 à 020 todas foram
-  aplicadas assim; num banco recriado do zero elas entram sozinhas.
+- **Migração numerada nova entra com `python migrar.py`** (023). Da 012 à 022
+  todas foram aplicadas na mão, na era anterior a isso — o livro-razão deste
+  banco foi preenchido de uma vez com `migrar.py --adotar`. Banco de máquina
+  nova recebe as 25 em ordem, sozinho.
 
 ## Comandos
 
 ```bash
+# CAMINHO NORMAL — de qualquer pasta do repo, sobe banco, schema, API e front:
+./setup.sh                    # máquina nova ou depois de pull que mexeu em dependência
+./setup.sh --subir            # dia a dia: confere o schema e sobe os dois
+./setup.sh --parar            # derruba API e front (o banco fica)
+
+# schema, se quiser rodar isolado
+cd apps/api && python migrar.py            # aplica o que falta
+python migrar.py --listar                  # estado, sem tocar em nada
+python migrar.py --adotar                  # banco JÁ em dia: registra sem executar
+
+# à mão, se preferir
 docker compose up -d          # da raiz do monorepo
 cd apps/api && source .venv/bin/activate
 python ingest.py corpus/cp.txt --disciplina "Direito Penal" --tipo lei --norma CP
