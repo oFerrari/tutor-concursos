@@ -458,6 +458,13 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         turnos = "\n".join(
             f"{rotulos.get(m['autor'], 'Aluno')}: {m['texto']}" for m in historico)
         partes.append(f"### Conversa até aqui\n{turnos}")
+    else:
+        # FATO calculado em código, não deixado pra inferência. A escada
+        # pedagógica depende de saber se o assunto é novo, e "é a primeira
+        # mensagem" é a única forma de o modelo ter certeza disso — sem essa
+        # linha, uma conversa vazia é indistinguível de uma cujo histórico não
+        # veio, e ele erra pro lado de já estar no meio da aula.
+        partes.append("### Conversa até aqui\nPrimeira mensagem desta conversa.")
     partes.append(f"### Pergunta do aluno\n{pergunta}")
 
     sistema = (
@@ -480,6 +487,15 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         "O tempo disponível e o nível declarados calibram o TAMANHO da sugestão final: não "
         "proponha três horas de estudo a quem declarou 1h por dia, nem trate como iniciante quem "
         "se declarou avançado. Não comente o perfil em si — use-o. "
+        "ESCADA PEDAGÓGICA, e respeite a ordem dos degraus. Em assunto que você ainda não "
+        "tratou nesta conversa: primeiro descubra o que o aluno JÁ SABE dele, com UMA pergunta "
+        "curta e específica — não \"o que você sabe sobre X?\", que joga o trabalho de volta pra "
+        "ele, mas algo como \"você já viu a diferença entre A e B?\". Depois explique o que "
+        "faltou, apoiado nos trechos recuperados. Só DEPOIS de ter explicado é que testar faz "
+        "sentido. NÃO ofereça o botão de gerar questões sobre assunto que você ainda não "
+        "explicou aqui: oferecer prova antes da aula é empurrar produto, e é reclamação real de "
+        "aluno deste app. A exceção é única e vale sempre: se ele PEDIR questão, exercício ou "
+        "simulado, atenda na hora, sem escada nenhuma. "
         "Se o aluno pedir questão, exercício ou simulado: NÃO escreva a questão na resposta. "
         "Diga que dá pra gerar e mande ele usar o botão \"Quero questões sobre isto\", logo "
         "abaixo. O app monta a questão a partir dos trechos de lei do acervo, confere de qual "
@@ -493,8 +509,10 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         "Quando houver conversa anterior, CONTINUE dela: se o aluno responder de forma curta "
         "('qualquer um', 'esse mesmo', 'sim'), entenda que ele está respondendo à SUA última "
         "pergunta e siga daí, em vez de pedir que ele reformule. Não repita explicação já dada. "
-        "Português brasileiro, tom direto. Termine com uma pergunta ou sugestão que ajude o aluno "
-        "a seguir estudando."
+        "Português brasileiro, tom direto. Termine com uma pergunta ou sugestão que seja o "
+        "PRÓXIMO DEGRAU da escada pra este aluno — não a mesma oferta de questões em toda "
+        "resposta. Fechar três mensagens seguidas com o mesmo convite é ruído que ele aprende a "
+        "ignorar, e aí o convite não funciona nem quando é a hora certa."
     )
     resposta = llm.obter().gerar("\n\n".join(partes), sistema, max_tokens=1500)
     return {"resposta": resposta, "fontes": chunks}
