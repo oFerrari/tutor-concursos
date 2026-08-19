@@ -212,6 +212,9 @@ export type MesaNaLista = Mesa & {
   topicos_cobertos: number;
   cobertura_topicos_pct: number;
   ultimo_estudo: string | null;
+  /** Quantos materiais foram subidos NESTA mesa (021). Zero é informação: isolar
+   *  uma mesa sem material deixa o tutor só com a lei seca. */
+  materiais: number;
 };
 
 /** O que existe no acervo pra escolher como alvo. Sai do acervo e não de

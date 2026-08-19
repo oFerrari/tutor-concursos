@@ -227,6 +227,13 @@ def listar(usuario_id: int) -> list[dict]:
     """
     mesas = db.query(
         """SELECT m.id, m.nome, m.orgao, m.banca, m.criado_em,
+                  m.biblioteca_compartilhada,
+                  -- Quantos materiais esta mesa subiu (021). O número é o que
+                  -- torna a decisão de isolar informada: "isolar" numa mesa sem
+                  -- material nenhum significa deixar o tutor só com a lei seca,
+                  -- e a pessoa tem que ver isso ANTES de desligar.
+                  (SELECT count(*) FROM documento d
+                    WHERE d.mesa_id = m.id) AS materiais,
                   e.id AS edital_id, e.titulo AS edital_titulo, e.data_prova,
                   COALESCE(e.topicos, 0) AS topicos
              FROM mesa m

@@ -56,12 +56,17 @@ function CartaoMesa({
   onEntrar,
   onEditar,
   onApagar,
+  alternarBiblioteca,
+  salvandoBib,
 }: {
   mesa: MesaNaLista;
   ativa: boolean;
   onEntrar: () => void;
   onEditar: () => void;
   onApagar: () => void;
+  alternarBiblioteca: (m: MesaNaLista) => void;
+  /** Id da mesa cujo interruptor está salvando, pra desabilitar só ele. */
+  salvandoBib: number | null;
 }) {
   // TÓPICOS é a unidade do edital — é assim que o concurseiro pensa a
   // prova ("faltam X tópicos"), e é a mesma conta que a probabilidade de
@@ -143,6 +148,50 @@ function CartaoMesa({
         </div>
       </button>
 
+      {/* Escopo da biblioteca (021), FORA do <button> do cartão: botão dentro de
+          botão não é HTML válido e o clique acabaria entrando na mesa — mesmo
+          motivo que já tira o lápis e a lixeira de lá.
+
+          Fica AQUI, e não em /materiais, porque a decisão é da MESA: é a mesa que
+          declara se quer ler o material das outras, e é neste cartão que ela
+          aparece ao lado de tudo o mais que a define (edital, recorte,
+          progresso). Um controle, um lugar. */}
+      <div className="border-t border-line-soft px-4 py-2.5">
+        <button
+          type="button"
+          onClick={() => alternarBiblioteca(mesa)}
+          disabled={salvandoBib === mesa.id}
+          role="switch"
+          aria-checked={mesa.biblioteca_compartilhada}
+          title={
+            mesa.biblioteca_compartilhada
+              ? "Ligado: o tutor desta mesa lê o material de todas as suas mesas. Desligue pra isolar."
+              : `Desligado: o tutor desta mesa lê só os ${mesa.materiais} materiais subidos aqui (mais os que não têm mesa).`
+          }
+          className="flex w-full items-center gap-1.5 text-left text-[11.5px] transition-colors disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          <span
+            className={`switch ${mesa.biblioteca_compartilhada ? "switch-edital" : "switch-daqui"}`}
+          >
+            <span
+              className={`switch-bolinha ${mesa.biblioteca_compartilhada ? "left-[17px]" : "left-[2px]"}`}
+            />
+          </span>
+          <span className={mesa.biblioteca_compartilhada ? "text-accent-text" : "text-success"}>
+            {mesa.biblioteca_compartilhada
+              ? "usa material de todas as mesas"
+              : "só o material desta mesa"}
+          </span>
+          {/* Zero material numa mesa ISOLADA é o caso que morde: o tutor fica
+              só com a lei seca. O número diz isso antes de a pessoa estranhar. */}
+          {!mesa.biblioteca_compartilhada && (
+            <span className="mono-num ml-auto shrink-0 text-[11px] text-subtle">
+              {mesa.materiais}
+            </span>
+          )}
+        </button>
+      </div>
+
       {/* Fora do <button> de propósito: botão dentro de botão não é HTML
           válido e o clique nestes acabaria entrando na mesa. */}
       <div className="absolute right-2.5 top-3 flex items-center gap-0.5">
@@ -166,6 +215,12 @@ function CartaoMesa({
 }
 
 function ConteudoMesas() {
+  /** Interruptor da biblioteca (021), otimista com reversão: precisa responder
+   *  na hora, e o efeito — o que o tutor passa a ler — não é visível aqui de
+   *  qualquer forma. Guardar o ID e não um booleano desabilita só o cartão
+   *  clicado, em vez de congelar a lista inteira. */
+  const [salvandoBib, setSalvandoBib] = useState<number | null>(null);
+
   const router = useRouter();
   const [usuario, setUsuario] = useState<Usuario | null>(null);
 
@@ -246,6 +301,26 @@ function ConteudoMesas() {
     setBanca(alvoMesa.banca ?? "");
     setAlvo(alvoMesa.disciplinas_manuais ?? []);
   }, [abrirAlvo, mesas]);
+
+  async function alternarBiblioteca(m: MesaNaLista) {
+    if (salvandoBib !== null) return;
+    const desejado = !m.biblioteca_compartilhada;
+    setSalvandoBib(m.id);
+    setMesas((atual) =>
+      (atual ?? []).map((x) => (x.id === m.id ? { ...x, biblioteca_compartilhada: desejado } : x))
+    );
+    try {
+      await atualizarMesa(m.id, { biblioteca_compartilhada: desejado });
+    } catch (e) {
+      // Reverte: interruptor que fica ligado sem ter ligado é pior que erro.
+      setMesas((atual) =>
+        (atual ?? []).map((x) => (x.id === m.id ? { ...x, biblioteca_compartilhada: !desejado } : x))
+      );
+      setErro(e instanceof ErroApi ? e.message : "Não deu pra mudar a biblioteca desta mesa");
+    } finally {
+      setSalvandoBib(null);
+    }
+  }
 
   function entrar(id: number) {
     setMesaAtiva(id);
@@ -367,6 +442,8 @@ function ConteudoMesas() {
             key={m.id}
             mesa={m}
             ativa={ativa === m.id}
+            alternarBiblioteca={alternarBiblioteca}
+            salvandoBib={salvandoBib}
             onEntrar={() => entrar(m.id)}
             onEditar={() => {
               setEditando(m);

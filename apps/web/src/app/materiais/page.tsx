@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Check, ChevronDown, Link2, Pencil, RotateCcw, Trash2, UploadCloud } from "lucide-react";
 import {
   ErroApi,
@@ -9,7 +10,6 @@ import {
   Mesa,
   SugestoesMaterial,
   apagarMaterial,
-  atualizarMesa,
   classificarMaterial,
   getMateriais,
   getMesaAtual,
@@ -262,10 +262,6 @@ export default function PaginaMateriais() {
    *  matérias — ver `podeDoAlvo`. */
   const [doAlvo, setDoAlvo] = useState(false);
 
-  /** Biblioteca isolada por mesa (021). Otimista com reversão em erro: o
-   *  interruptor precisa responder na hora, e o efeito dele — o que o tutor
-   *  passa a ler — não é visível aqui de qualquer forma. */
-  const [salvandoBib, setSalvandoBib] = useState(false);
 
   /** Arraste: qual material está na mão e sobre qual grupo ele está. `sobre`
    *  existe só pra dar o realce do alvo — sem ele o aluno solta no escuro. */
@@ -555,25 +551,6 @@ export default function PaginaMateriais() {
     }
   }
 
-  async function alternarBiblioteca() {
-    if (!mesa || salvandoBib) return;
-    const desejado = !mesa.biblioteca_compartilhada;
-    setErro(null);
-    setSalvandoBib(true);
-    setMesa({ ...mesa, biblioteca_compartilhada: desejado });
-    try {
-      await atualizarMesa(mesa.id, { biblioteca_compartilhada: desejado });
-      // O que o tutor lê mudou; nada da lista muda, mas o cache de outras telas
-      // não depende disso — só o recorte da BUSCA, que não é cacheado aqui.
-    } catch (e) {
-      // Reverte: interruptor que fica ligado sem ter ligado é pior que erro.
-      setMesa({ ...mesa, biblioteca_compartilhada: !desejado });
-      setErro(e instanceof ErroApi ? e.message : "Não deu pra mudar a biblioteca desta mesa");
-    } finally {
-      setSalvandoBib(false);
-    }
-  }
-
   async function remover(m: Material) {
     setErro(null);
     try {
@@ -607,44 +584,22 @@ export default function PaginaMateriais() {
         material.
       </p>
 
-      {/* Interruptor de escopo da biblioteca (021). Fica AQUI e não no editor de
-          mesas porque é aqui que se vê a consequência: a lista de material logo
-          abaixo, com a etiqueta de qual mesa é cada um. Dois controles pro mesmo
-          estado em telas diferentes é como eles divergem. */}
-      {mesa && (
-        <div className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-line bg-surface px-3.5 py-3">
-          <button
-            type="button"
-            onClick={alternarBiblioteca}
-            disabled={salvandoBib}
-            role="switch"
-            aria-checked={mesa.biblioteca_compartilhada}
-            title={
-              mesa.biblioteca_compartilhada
-                ? "Ligado: o tutor desta mesa lê o material de todas as suas mesas. Desligue pra isolar."
-                : `Desligado: o tutor desta mesa lê só o material subido em "${mesa.nome}" (mais o que não tem mesa). Ligue pra usar tudo.`
-            }
-            className="flex items-center gap-1.5 text-[12.5px] transition-colors disabled:cursor-not-allowed disabled:opacity-45"
-          >
-            <span
-              className={`switch ${mesa.biblioteca_compartilhada ? "switch-edital" : "switch-daqui"}`}
-            >
-              <span
-                className={`switch-bolinha ${mesa.biblioteca_compartilhada ? "left-[17px]" : "left-[2px]"}`}
-              />
-            </span>
-            <span
-              className={mesa.biblioteca_compartilhada ? "text-accent-text" : "text-success"}
-            >
-              {mesa.biblioteca_compartilhada ? "usar material de todas as mesas" : "só o material desta mesa"}
-            </span>
-          </button>
-          <span className="text-[12px] text-subtle">
-            {mesa.biblioteca_compartilhada
-              ? `O tutor de ${mesa.nome} pode citar qualquer material seu.`
-              : `O tutor de ${mesa.nome} ignora o material das outras mesas. Nada é movido nem apagado — dá pra religar quando quiser.`}
-          </span>
-        </div>
+      {/* O INTERRUPTOR mudou de lugar: agora vive no cartão da mesa, em /mesas.
+          É lá que a decisão pertence — é a mesa que declara se lê o material das
+          outras, ao lado de tudo o mais que a define. Um controle, um lugar.
+
+          Aqui fica só o ESTADO, em texto, com o caminho até ele: recurso que
+          existe e não aparece em nenhum lugar da tela onde produz efeito é
+          recurso que ninguém encontra. */}
+      {mesa && !mesa.biblioteca_compartilhada && (
+        <p className="mb-5 rounded-xl border border-success-line bg-success-soft px-3.5 py-2.5 text-[12.5px] text-body">
+          <strong className="font-medium text-success">{mesa.nome} está isolada:</strong> o tutor
+          desta mesa lê só o material subido nela (e o que não tem mesa). O material das outras
+          aparece na lista marcado como inativo.{" "}
+          <Link href="/mesas" className="underline underline-offset-2">
+            mudar nas mesas
+          </Link>
+        </p>
       )}
 
       {erro && <p className="callout-danger mb-4 !p-3 text-[13px]">{erro}</p>}
@@ -940,25 +895,31 @@ export default function PaginaMateriais() {
                         {m.classificado_por === "modelo" && (
                           <span className="text-warning"> · eu deduzi, confira</span>
                         )}
-                        {/* De qual mesa é. Só aparece quando é de OUTRA: repetir
-                            o nome da mesa atual em toda linha é ruído. */}
-                        {m.mesa_id !== null && mesa && m.mesa_id !== mesa.id && (
+                      </p>
+                      {/* A etiqueta da mesa em LINHA PRÓPRIA, e não pendurada no
+                          fim da linha de cima: lá ela ficava dentro de um
+                          `truncate` e era engolida pelo nome do arquivo — o
+                          "(inativo aqui)", que é a informação que importa,
+                          simplesmente não chegava à tela. */}
+                      {m.mesa_id !== null && mesa && m.mesa_id !== mesa.id && (
+                        <p className="mt-1">
                           <span
-                            className={
-                              mesa.biblioteca_compartilhada ? " text-subtle" : " text-warning"
-                            }
+                            className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-[10.5px] ${
+                              mesa.biblioteca_compartilhada
+                                ? "border-line-strong text-subtle"
+                                : "border-warning-line bg-warning-soft text-warning"
+                            }`}
                             title={
                               mesa.biblioteca_compartilhada
                                 ? `Subido na mesa ${m.mesa_nome}, e esta mesa usa material de todas.`
-                                : `Subido na mesa ${m.mesa_nome}. Como esta mesa está isolada, o tutor NÃO lê este material aqui.`
+                                : `Subido na mesa ${m.mesa_nome}. Como ${mesa.nome} está isolada, o tutor NÃO lê este material aqui.`
                             }
                           >
-                            {" · "}
                             {m.mesa_nome}
-                            {!mesa.biblioteca_compartilhada && " (inativo aqui)"}
+                            {!mesa.biblioteca_compartilhada && " · inativo aqui"}
                           </span>
-                        )}
-                      </p>
+                        </p>
+                      )}
                     </>
                   )}
                 </div>
