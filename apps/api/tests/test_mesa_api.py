@@ -13,7 +13,7 @@ não como eles foram parseados.
 """
 import pytest
 
-from core import db
+from core import db, scheduler
 
 VERSAO = "test-mesa-v1"
 
@@ -376,15 +376,95 @@ def test_edital_tem_precedencia_sobre_o_manual(client, usuario, duas_disciplinas
     assert ctx["disciplinas"] == [doPdf]
 
 
-def test_disciplina_inexistente_no_acervo_e_recusada(client, usuario):
+def test_disciplina_inexistente_no_acervo_e_recusada(client, usuario, duas_disciplinas):
     """Nome livre viraria filtro que nunca casa nada, e o sintoma seria fila
-    vazia sem explicação — o aluno acharia que o app quebrou."""
+    vazia sem explicação — o aluno acharia que o app quebrou.
+
+    MUDANÇA DE CONTRATO, e ela veio do uso: a versão anterior FILTRAVA o nome
+    inválido e gravava o resto, então a tela dizia "salvo", a lista voltava
+    menor e o aluno não tinha como saber por quê (relatado digitando um nome
+    qualquer no alvo manual). Agora recusa nomeando o que não existe — mesmo
+    princípio de `diagnostico.py` e `candidatos_data_prova`: reportar pro
+    operador conferir, nunca decidir calado."""
+    dentro, _ = duas_disciplinas
     m = _criar_mesa(client, usuario, "Alvo inválido")
     r = client.patch(f"/mesas/{m['id']}",
                      json={"disciplinas": ["Direito Intergaláctico"]},
-                     headers=usuario["headers"]).json()
-    assert r["disciplinas_manuais"] == []
+                     headers=usuario["headers"])
+    assert r.status_code == 400
+    assert "Direito Intergaláctico" in r.json()["detail"]
     assert client.get("/mesa", headers=_cab(usuario, m)).json()["origem_alvo"] == "nenhum"
+
+    # E o lote inteiro é recusado, não gravado pela metade: alvo parcial é
+    # recorte errado sem ninguém saber que está errado.
+    r = client.patch(f"/mesas/{m['id']}",
+                     json={"disciplinas": [dentro, "Direito Intergaláctico"]},
+                     headers=usuario["headers"])
+    assert r.status_code == 400
+    assert client.get("/mesa", headers=_cab(usuario, m)).json()["disciplinas"] is None
+
+
+def test_remover_edital_devolve_a_mesa_ao_alvo_manual(client, usuario, duas_disciplinas):
+    """`DELETE /edital` é o que faz a escolha manual PODER valer.
+
+    O edital vence inteiro quando existe (017), então uma tela de alvo manual
+    sobre mesa com edital estaria pedindo um trabalho que o servidor ignora —
+    e era exatamente o que acontecia: a pessoa escolhia, salvava, e a lista não
+    voltava. Agora ou se corrige o edital (na tela dele) ou se troca o edital
+    por estudo avulso, e trocar significa o edital sair."""
+    manual, doPdf = duas_disciplinas
+    m = _criar_mesa(client, usuario, "Troca de alvo", disciplina=doPdf)
+    cab = _cab(usuario, m)
+    client.patch(f"/mesas/{m['id']}", json={"disciplinas": [manual]},
+                 headers=usuario["headers"])
+    assert client.get("/mesa", headers=cab).json()["origem_alvo"] == "edital"
+
+    r = client.delete("/edital", headers=cab)
+    assert r.status_code == 200, r.text
+    # Devolve O QUE FOI EMBORA: a operação é irreversível pelo servidor (os
+    # bytes do PDF não ficam guardados), e um "ok" esconderia a perda.
+    assert "titulo" in r.json()["removido"] and "topicos" in r.json()["removido"]
+
+    ctx = client.get("/mesa", headers=cab).json()
+    assert ctx["origem_alvo"] == "manual"
+    assert ctx["disciplinas"] == [manual]
+    # Tópico morre pelo CASCADE da 007 — sem limpeza escrita na mão (009).
+    assert db.query("SELECT 1 FROM topico t JOIN edital e ON e.id = t.edital_id "
+                    "WHERE e.mesa_id = %(m)s", {"m": m["id"]}) == []
+
+
+def test_remover_edital_de_mesa_sem_edital_da_404(client, usuario):
+    """404 e não sucesso vazio: "esta mesa não tem edital" é informação, e
+    responder 200 pra um apagar que não apagou nada faria a tela dizer que
+    removeu algo que nunca existiu."""
+    m = _criar_mesa(client, usuario, "Sem edital nenhum")
+    assert client.delete("/edital", headers=_cab(usuario, m)).status_code == 404
+
+
+def test_remover_edital_nao_apaga_o_progresso(client, usuario, duas_disciplinas):
+    """O que o aluno respondeu é DELE, não do edital (mesma decisão da 010 pra
+    `progresso`/`tentativa`). Trocar o alvo não pode zerar aprendizado — seria
+    punir quem corrige o plano no meio do caminho."""
+    manual, doPdf = duas_disciplinas
+    m = _criar_mesa(client, usuario, "Progresso sobrevive", disciplina=doPdf)
+    cab = _cab(usuario, m)
+    fila = client.get("/fila", headers=cab).json()
+    assert fila, "precisa de questão no recorte pra medir"
+    # Registra pelo CORE e não por rota HTTP: `scheduler.registrar` é o ponto
+    # por onde os quatro caminhos de resposta passam (fila, questão avulsa,
+    # desafio, simulado), então é ele que representa "o aluno respondeu". Amarrar
+    # o teste a uma rota específica mediria a rota, não a invariante.
+    scheduler.registrar(usuario["id"], fila[0]["id"], "correta", "resposta do aluno", 0)
+    antes = db.exec1("SELECT count(*) n FROM tentativa WHERE usuario_id = %(u)s",
+                     {"u": usuario["id"]})["n"]
+
+    client.patch(f"/mesas/{m['id']}", json={"disciplinas": [manual]},
+                 headers=usuario["headers"])
+    assert client.delete("/edital", headers=cab).status_code == 200
+
+    depois = db.exec1("SELECT count(*) n FROM tentativa WHERE usuario_id = %(u)s",
+                      {"u": usuario["id"]})["n"]
+    assert depois == antes and antes > 0
 
 
 def test_lista_vazia_limpa_o_alvo(client, usuario, duas_disciplinas):
@@ -404,8 +484,43 @@ def test_lista_vazia_limpa_o_alvo(client, usuario, duas_disciplinas):
 
 
 def test_disciplinas_do_acervo_saem_do_acervo(client, usuario):
-    """Lista fixa mentiria num acervo que cresce (ou que está vazio)."""
+    """Lista fixa mentiria num acervo que cresce (ou que está vazio).
+
+    A comparação é contra o acervo PÚBLICO, não contra `documento` inteiro: a
+    migração 019 pôs material privado na mesma tabela, e o `DISTINCT` cru
+    passaria a devolver a matéria de outro aluno."""
     r = client.get("/disciplinas", headers=usuario["headers"]).json()["disciplinas"]
-    reais = [x["disciplina"] for x in db.query(
-        "SELECT DISTINCT disciplina FROM documento ORDER BY 1")]
-    assert r == reais
+    publicas = [x["disciplina"] for x in db.query(
+        """SELECT DISTINCT disciplina FROM documento
+            WHERE usuario_id IS NULL AND disciplina IS NOT NULL ORDER BY 1""")]
+    assert r == publicas
+
+
+def test_acervo_nao_mostra_a_materia_de_outro_aluno(client, usuario, outro_usuario):
+    """Vazamento REAL da 019: `SELECT DISTINCT disciplina FROM documento` sem
+    predicado de dono mostrava na tela de escolha de alvo o rótulo que OUTRO
+    aluno deu ao material dele — "tcc", "meu resumo do TRT". Mesma classe que
+    `retrieval.DONO` fecha na busca e `material.sugestoes` no seletor.
+
+    O material do próprio aluno CONTINUA aparecendo, e isso é o produto: subir
+    material de uma matéria é justamente como ela passa a existir pra escolher."""
+    corpo = ("meu material particular. " * 40).encode()
+    client.post("/materiais", files={"arquivo": ("meu.txt", corpo, "text/plain")},
+                data={"tipo": "resumo", "disciplina": "Segredo Do Dono"},
+                headers=usuario["headers"])
+    client.post("/materiais", files={"arquivo": ("dele.txt", corpo + b"x", "text/plain")},
+                data={"tipo": "resumo", "disciplina": "Segredo Do Outro"},
+                headers=outro_usuario["headers"])
+
+    meu = client.get("/disciplinas", headers=usuario["headers"]).json()["disciplinas"]
+    assert "Segredo Do Dono" in meu
+    assert "Segredo Do Outro" not in meu
+
+    dele = client.get("/disciplinas", headers=outro_usuario["headers"]).json()["disciplinas"]
+    assert "Segredo Do Outro" in dele and "Segredo Do Dono" not in dele
+
+    # E nunca uma opção VAZIA: `disciplina` é nullable desde a 020, e o
+    # `DISTINCT` cru devolvia uma linha NULL que virava chip em branco na tela.
+    client.post("/materiais", files={"arquivo": ("sem-rotulo.txt", corpo + b"y", "text/plain")},
+                data={"tipo": "resumo"}, headers=usuario["headers"])
+    assert all(d for d in client.get("/disciplinas", headers=usuario["headers"]).json()["disciplinas"])

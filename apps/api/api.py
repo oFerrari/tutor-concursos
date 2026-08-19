@@ -152,7 +152,32 @@ def rota_disciplinas_do_acervo(uid: int = Depends(usuario_atual)):
     ACERVO e não de lista fixa: uma mesa de TI num banco só de Direito
     precisa VER que não há o que escolher, em vez de escolher e receber fila
     vazia sem explicação."""
-    return {"disciplinas": mesa.disciplinas_do_acervo()}
+    # Com `uid`: público MAIS o material do próprio aluno. Sem ele, a rota
+    # mostraria a matéria que OUTRO aluno cadastrou (019) — ver o predicado de
+    # dono em `mesa.disciplinas_do_acervo`.
+    return {"disciplinas": mesa.disciplinas_do_acervo(uid)}
+
+
+@app.delete("/edital")
+def rota_remover_edital(uid: int = Depends(usuario_atual), m: dict = Depends(mesa_atual)):
+    """Tira o edital da mesa — ela volta a ser estudo avulso (017).
+
+    DELETE e não PATCH: não é ajuste de campo, é o alvo da mesa mudando de
+    origem. E é o único jeito de a escolha manual valer, porque o edital vence
+    inteiro quando existe — a alternativa era a tela de alvo manual aceitar um
+    trabalho que o servidor ignora.
+
+    404 e não 400 quando não há edital: "esta mesa não tem edital" é o mesmo
+    estado que o cliente teria acabado de ler em `GET /edital`, e um 4xx que
+    confirma inexistência é mais útil que um sucesso vazio dizendo que apagou
+    algo que nunca existiu.
+
+    Autorizado pela MESA: `mesa_atual` já resolveu a mesa filtrando por
+    `usuario_id`, então pedir o edital de outra pessoa nem chega aqui."""
+    r = edital.remover(m["id"])
+    if not r:
+        raise HTTPException(404, "esta mesa não tem edital pra remover")
+    return {"removido": r}
 
 
 @app.get("/mesas")

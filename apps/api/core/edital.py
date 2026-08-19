@@ -997,6 +997,47 @@ def ajustar_disciplinas(edital_id: int, remover: list[str] | None = None,
     return {"removidas": remover or [], "adicionadas": postos, "topicos_apagados": tirados}
 
 
+def remover(mesa_id: int) -> dict | None:
+    """Tira o edital da mesa — ela volta a ser estudo avulso (017).
+
+    Existe porque o alvo manual NÃO soma ao edital: quando o PDF está lá, ele
+    vence inteiro (é dele que sai a data da prova, e disciplina de um lugar com
+    prazo de outro é o defeito que a 010 evitou). Consequência: a tela de alvo
+    manual só tem como valer se o edital sair, e aceitar a escolha sem tirar o
+    edital era pedir um trabalho que o servidor ignora.
+
+    Devolve O QUE FOI EMBORA (título, data, cargo, contagem de tópicos) porque
+    a operação é irreversível pelo servidor: os bytes do PDF não ficam
+    guardados, só o extraído. Quem chama precisa poder dizer ao aluno o que ele
+    perdeu, e não um "ok" que esconde a perda.
+
+    `topico` desaparece pelo `ON DELETE CASCADE` da 007 — não há limpeza escrita
+    na mão aqui, pelo mesmo motivo da migração 009: lógica de limpeza ad-hoc é
+    onde bug mora. `simulado.mesa_id` não é afetado (aponta pra mesa, não pro
+    edital), então prova já feita continua no histórico.
+
+    Não recebe `usuario_id` de propósito: `edital` não tem essa coluna desde a
+    010 — o edital pertence à MESA e a mesa ao usuário. Quem autoriza é o
+    chamador, resolvendo a mesa por `mesa.obter`/`mesa_atual` (que já filtram
+    por usuario_id). Passar um id aqui seria a denormalização que a 010 tirou.
+    """
+    atual = mais_recente(mesa_id)
+    if not atual:
+        return None
+    # Uma consulta só, e ANTES do delete: depois do CASCADE não há mais tópico
+    # pra contar, e informar "0 tópicos removidos" seria pior que não informar.
+    quantos = db.exec1(
+        "SELECT count(*) AS n FROM topico WHERE edital_id = %(e)s", {"e": atual["id"]})["n"]
+    # Apaga TODOS os editais da mesa, não só o mais recente: `mais_recente`
+    # devolve um, mas nada impede a mesa ter histórico, e deixar um antigo pra
+    # trás faria a mesa continuar com `origem_alvo='edital'` — a tela diria
+    # "removido" e o recorte seguiria vindo do PDF. Falha silenciosa exata que
+    # esta função existe pra não criar.
+    db.query("DELETE FROM edital WHERE mesa_id = %(m)s", {"m": mesa_id})
+    return {"titulo": atual["titulo"], "data_prova": atual["data_prova"],
+            "cargo": atual.get("cargo"), "topicos": quantos}
+
+
 def corrigir_data_prova(edital_id: int, data_prova) -> dict | None:
     """
     Troca a data da prova de um edital já confirmado.

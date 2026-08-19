@@ -133,12 +133,27 @@ def origem_do_alvo(mesa_id: int) -> str:
     return "manual" if (r and r["disciplinas_manuais"]) else "nenhum"
 
 
-def disciplinas_do_acervo() -> list[str]:
+def disciplinas_do_acervo(usuario_id: int | None = None) -> list[str]:
     """O que existe pra escolher. Sai do ACERVO, não de lista fixa: uma mesa
     de TI num banco só de Direito precisa ver que não há o que escolher, em
-    vez de escolher "Informática" e receber fila vazia sem explicação."""
+    vez de escolher "Informática" e receber fila vazia sem explicação.
+
+    O PREDICADO DE DONO não é opcional aqui, e a razão é a migração 019: desde
+    ela `documento` guarda material PRIVADO, então um `SELECT DISTINCT
+    disciplina FROM documento` cru mostra a matéria que OUTRO aluno cadastrou —
+    "tcc", "meu resumo do TRT" — na tela de quem nem sabe que ele existe. É a
+    mesma classe de vazamento que `retrieval.DONO` fecha na busca e
+    `material.sugestoes` fecha no seletor. `usuario_id=None` devolve só público:
+    default seguro, o vazamento exige id explícito e não um esquecimento.
+
+    `IS NOT NULL` porque a 020 deixou `disciplina` nullable: sem isso o
+    `DISTINCT` devolve uma linha NULL, que vira um chip VAZIO na tela e um
+    `None` dentro do conjunto de nomes válidos de `atualizar`."""
     return [r["disciplina"] for r in db.query(
-        "SELECT DISTINCT disciplina FROM documento ORDER BY 1")]
+        """SELECT DISTINCT disciplina FROM documento
+            WHERE disciplina IS NOT NULL
+              AND (usuario_id IS NULL OR usuario_id = %(u)s)
+            ORDER BY 1""", {"u": usuario_id})]
 
 
 # ------------------------------------------------------------------- CRUD
@@ -275,9 +290,23 @@ def atualizar(usuario_id: int, mesa_id: int, nome: str | None = None,
     # que nunca casa nada, e o sintoma seria fila vazia sem explicação — o
     # aluno acharia que o app quebrou, não que escolheu matéria inexistente.
     # `None` preserva o que está lá; `[]` limpa (é como se tira o alvo).
+    #
+    # RECUSA em vez de descartar em silêncio. A versão anterior filtrava o que
+    # não casava e gravava o resto, então a tela dizia "salvo" e a matéria
+    # digitada simplesmente não estava lá — o aluno via a lista voltar menor e
+    # não tinha como saber por quê. Mesmo princípio de `diagnostico.py` e de
+    # `candidatos_data_prova`: reportar pro operador conferir, nunca decidir
+    # calado. Falha alta também protege qualquer chamador futuro (import,
+    # script) de gravar um alvo pela metade achando que gravou inteiro.
     if disciplinas_manuais is not None:
-        validas = set(disciplinas_do_acervo())
-        disciplinas_manuais = sorted({d for d in disciplinas_manuais if d in validas})
+        validas = set(disciplinas_do_acervo(usuario_id))
+        pedidas = [d.strip() for d in disciplinas_manuais if (d or "").strip()]
+        fora = sorted({d for d in pedidas if d not in validas})
+        if fora:
+            raise ErroMesa(
+                "o acervo ainda não tem material de: " + ", ".join(fora)
+                + ". Suba material dessa matéria em Meus materiais e ela aparece aqui.")
+        disciplinas_manuais = sorted(set(pedidas))
 
     return db.exec1(
         f"""UPDATE mesa SET nome = %(n)s,
