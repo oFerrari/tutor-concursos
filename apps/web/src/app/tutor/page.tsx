@@ -89,11 +89,17 @@ export default function PaginaTutor() {
   const [pensando, setPensando] = useState(false);
   const fim = useRef<HTMLDivElement>(null);
 
-  // Última fala do aluno: o assunto corrente da conversa. Serve de tema pra
-  // geração de questão — a busca precisa de um texto pra escolher o artigo,
-  // e o que o aluno perguntou descreve melhor o que ele quer treinar do que
-  // a resposta longa do tutor.
-  const ultimoAssunto = [...mensagens].reverse().find((m) => m.autor === "usuario")?.texto;
+  // O botão aparece quando o aluno já falou alguma coisa — e é só isso que esta
+  // tela decide. QUAL é o assunto da conversa quem responde é o servidor, que
+  // tem a conversa inteira no banco.
+  //
+  // Antes daqui saía `tema = última fala do aluno`, literal. Numa conversa real
+  // a última fala foi "vamos", então o backend rodou `buscar("vamos")` e gerou
+  // questão de CP art. 352 (evasão) e CF art. 200 (SUS) no meio de uma conversa
+  // inteira sobre eficácia das normas constitucionais. O cliente estava
+  // respondendo uma pergunta que não é dele — a mesma razão de a mesa padrão ser
+  // resolvida no servidor e nunca recalculada aqui.
+  const alunoJaFalou = mensagens.some((m) => m.autor === "usuario");
 
   // Mesma guarda de toda outra tela autenticada (/fila, /stats, /questao/[id]
   // etc.) — o /tutor tinha ficado de fora dela, sozinho, antes desta rota
@@ -400,16 +406,14 @@ export default function PaginaTutor() {
             </div>
           ))}
 
-          {/* Treinar o que acabou de ser explicado, sem trocar de tela. O
-              tema é a última pergunta DO ALUNO — é o que ele está estudando
-              agora, e é com ele que a busca escolhe de qual artigo cobrar.
-              Antes, pedir questão no chat recebia "meu acervo não traz itens
-              prontos": verdade sobre a tabela `questao`, e mentira sobre o
-              que o sistema consegue fazer com a lei que já tem. */}
-          {ultimoAssunto && !pensando && (
+          {/* Treinar o que acabou de ser explicado, sem trocar de tela. Só
+              `conversaId` vai daqui: o servidor lê a conversa e decide o assunto
+              (`core/assunto.py`). Antes, pedir questão no chat recebia "meu
+              acervo não traz itens prontos": verdade sobre a tabela `questao`, e
+              mentira sobre o que o sistema consegue fazer com a lei que já tem. */}
+          {alunoJaFalou && !pensando && (
             <div className="mt-2 pl-[42px]">
               <GerarQuestoes
-                tema={ultimoAssunto}
                 quantidade={2}
                 rotulo="Quero questões sobre isto"
                 conversaId={conversaId ?? undefined}

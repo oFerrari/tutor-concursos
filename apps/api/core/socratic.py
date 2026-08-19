@@ -11,9 +11,9 @@ chega a 3, e nesse caso quem imprime é este módulo, não o modelo.
 Segunda decisão: os dois pontos que precisam de JSON declaram `responseSchema`.
 Sem isso, modelo pequeno erra a sintaxe e a sessão de estudo morre no meio.
 """
-from . import llm, retrieval
+from . import assunto, llm, retrieval
 
-VERSAO = "socratic-v31"
+VERSAO = "socratic-v32"
 
 # ------------------------------------------------------------------ schemas
 # Subconjunto OpenAPI aceito pelo Gemini. propertyOrdering importa: o modelo
@@ -378,15 +378,45 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     # em quem chama evita que uma segunda rota esqueça de aplicá-lo: o recorte
     # anda junto do `mesa_` que já chega nesta função.
     mesa_id = mesa_.get("id") if mesa_ and mesa_.get("biblioteca_compartilhada") is False else None
-    chunks = retrieval.buscar(pergunta, n=6, usuario_id=usuario_id, mesa_id=mesa_id)
+
+    # A CONSULTA DE BUSCA NÃO É A MENSAGEM. A 014 deu memória ao MODELO e deixou
+    # o BUSCADOR amnésico: o prompt recebia 8 turnos e `retrieval.buscar` recebia
+    # a frase isolada. Como `hibrida()` é k-vizinhos e não tem piso de
+    # relevância, frase sem assunto não devolve vazio — devolve 6 artigos com
+    # confiança total. Medido: "você deveria perguntar se eu já sei algo do
+    # assunto... melhor me explicar" trouxe CPP 188/190/203/212, os artigos de
+    # INTERROGATÓRIO, no meio de uma conversa sobre eficácia das normas
+    # constitucionais. Ver `core/assunto.py`.
+    #
+    # Citação de dispositivo vai CRUA, e é a exceção que importa: `por_dispositivo`
+    # lê o número da própria string, então enriquecer com histórico deixaria um
+    # "art. 140" de três turnos atrás sequestrar a pergunta nova — e a resposta
+    # viria confiante sobre o artigo errado, que é a pior falha possível aqui.
+    consulta = pergunta if assunto.cita_dispositivo(pergunta) else assunto.em_foco(historico, pergunta)
+
+    # `None` = ninguém nomeou assunto nenhum ainda ("olá", "vamos" como primeira
+    # fala). NÃO buscar é melhor que buscar por isso: seis artigos sorteados no
+    # contexto são um convite pro modelo discorrer sobre eles.
+    chunks = (retrieval.buscar(consulta, n=6, usuario_id=usuario_id, mesa_id=mesa_id)
+              if consulta else [])
     contexto_material = retrieval.formatar_contexto(chunks) if chunks else None
     contexto_desempenho = _resumo_desempenho(usuario_id, disciplinas) if usuario_id else None
     contexto_mesa = _resumo_mesa(mesa_)
     contexto_perfil = _resumo_perfil(perfil)
 
-    if not contexto_material and not contexto_desempenho:
-        return {"resposta": "Não encontrei isso no material, e ainda não tenho nenhum "
-                            "desempenho seu registrado.", "fontes": []}
+    # A guarda considera as QUATRO fontes, não duas. Ela olhava só material e
+    # desempenho, e isso bastava enquanto TODA pergunta buscava — havia sempre
+    # material, ainda que sorteado. Passando a não buscar quando a fala não
+    # nomeia assunto, "por onde começo?" (nenhuma palavra de conteúdo) caía aqui
+    # e recebia resposta enlatada, quando é exatamente a pergunta que o
+    # concurso-alvo e o perfil declarado respondem sem precisar de artigo nenhum.
+    # Regressão pega por `test_perfil.py`, não em uso.
+    if not (contexto_material or contexto_desempenho or contexto_mesa or contexto_perfil):
+        return {"resposta": ("Não encontrei isso no material, e ainda não tenho nenhum "
+                             "desempenho seu registrado.") if consulta else
+                            ("Me diga de que matéria ou assunto você quer tratar — ainda não "
+                             "tenho nada seu registrado pra sugerir por onde começar."),
+                "fontes": []}
 
     # Os rótulos de seção usam "###" e nome comum, não MAIÚSCULA seca. O
     # formato anterior ("DESEMPENHO REAL DO ALUNO (dados do banco):") somado
@@ -401,6 +431,19 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         partes.append(f"### Contexto do aluno\n{bloco}")
     if contexto_material:
         partes.append(f"### Trechos de lei recuperados\n{contexto_material}")
+    else:
+        # A AUSÊNCIA DE MATERIAL É DECLARADA, não omitida. Sem esta seção o
+        # modelo recebe um prompt onde a lei simplesmente não é mencionada, e a
+        # instrução "se os trechos não cobrirem a pergunta, diga isso" fica sem
+        # referente — o convite a responder de memória própria, que é a única
+        # coisa que este tutor não pode fazer.
+        motivo = ("a busca não encontrou nada para esta pergunta." if consulta else
+                  "a mensagem do aluno não nomeia matéria nem assunto, então não houve o "
+                  "que buscar.")
+        partes.append(
+            f"### Trechos de lei recuperados\nNenhum — {motivo} NÃO afirme conteúdo de lei "
+            "sem trecho recuperado: use o contexto do aluno e os números dele, e pergunte de "
+            "que assunto ele quer tratar.")
     if contexto_desempenho:
         partes.append(f"### Números deste aluno no banco\n{contexto_desempenho}")
     if historico:

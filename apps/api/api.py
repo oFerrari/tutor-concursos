@@ -38,8 +38,8 @@ from starlette.concurrency import run_in_threadpool
 
 from pydantic import BaseModel
 
-from core import (auth, conversa, desafio, edital, geracao, material, mesa, questoes, rascunho,
-                  ritmo, scheduler, simulado, socratic)
+from core import (assunto, auth, conversa, desafio, edital, geracao, material, mesa, questoes,
+                  rascunho, ritmo, scheduler, simulado, socratic)
 from core.config import CORS_ORIGINS
 from core.llm import ErroLLM
 
@@ -742,11 +742,32 @@ def rota_gerar_questoes(body: GerarQuestaoBody, uid: int = Depends(usuario_atual
     cota, e é o tipo de custo que aparece na fatura antes de aparecer na tela.
 
     `tema` ausente = "minha fila está vazia, me dá o que estudar desta mesa";
-    com `tema` = "quero questão disto que a gente acabou de conversar".
+    com `conversa_id` = "quero questão disto que a gente acabou de conversar" — e
+    QUAL é esse "disto" é o servidor que decide, não o cliente (ver abaixo).
     """
+    conv = (conversa.obter(uid, body.conversa_id)
+            if body.conversa_id is not None else None)
+
+    # O TEMA VEM DA CONVERSA, E O DONO DESSA REGRA É O SERVIDOR.
+    #
+    # A tela mandava a última fala do aluno como tema. Numa conversa real, a
+    # última fala foi "vamos" — então rodou `buscar("vamos")` e voltaram CP art.
+    # 352 (evasão mediante violência) e CF art. 200 (competências do SUS), no
+    # meio de uma conversa inteira sobre eficácia das normas constitucionais.
+    # Duas questões impecáveis sobre assunto que ninguém pediu.
+    #
+    # "Sobre o que é esta conversa" é regra, e regra com duas cópias divergem —
+    # exatamente o argumento que fez a mesa padrão ser resolvida no servidor e
+    # nunca recalculada no front. O cliente pode MANDAR um tema (é o caso de um
+    # botão que cobra um tópico específico), mas se o que ele mandar não nomear
+    # assunto nenhum, não vale mais que não ter mandado nada.
+    tema = body.tema if (body.tema and assunto.diz_assunto(body.tema)) else None
+    if tema is None and conv:
+        tema = assunto.em_foco(conversa.historico_para_prompt(conv["id"]))
+
     try:
         tipo = body.tipo or geracao.tipo_da_banca(m.get("banca"))
-        r = geracao.sob_demanda(m["disciplinas"], body.tema, body.quantidade, tipo)
+        r = geracao.sob_demanda(m["disciplinas"], tema, body.quantidade, tipo)
     except geracao.SemMaterial as e:
         # 409, não 500: o pedido é válido e o sistema está são — o acervo é
         # que não tem material dessa matéria. A tela precisa distinguir isso
@@ -755,10 +776,10 @@ def rota_gerar_questoes(body: GerarQuestaoBody, uid: int = Depends(usuario_atual
     except ErroLLM as e:
         raise HTTPException(503, f"LLM indisponível: {e}")
 
-    if body.conversa_id is not None and conversa.obter(uid, body.conversa_id) and r["questoes"]:
+    if conv and r["questoes"]:
         temas = ", ".join(q["tema"] for q in r["questoes"])
         conversa.registrar_evento(
-            body.conversa_id,
+            conv["id"],
             f"Você propôs {len(r['questoes'])} questão(ões) sobre {temas}. "
             f"O aluno vai respondê-las agora, dentro desta conversa.")
     return r
