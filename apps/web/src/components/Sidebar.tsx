@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -18,12 +18,14 @@ import {
   Play,
   Plus,
   Rows3,
+  Trash2,
   X,
   type LucideIcon,
 } from "lucide-react";
 import { Marca, MarcaIcone } from "@/components/Marca";
 import { MenuConta } from "@/components/MenuConta";
-import { ConversaNaLista, Mesa, Usuario, getConversas, getMe } from "@/lib/api";
+import { ConversaNaLista, Mesa, Usuario, apagarConversa, getConversas, getMe } from "@/lib/api";
+import { Confirmar } from "@/components/Confirmar";
 
 // Ordem e rótulos do protótipo. "Fila do dia" não existe lá — mas existe
 // como rota real e funcionando aqui, e tirar do menu uma tela que funciona
@@ -99,23 +101,72 @@ export function Sidebar({ recolhida, onAlternar, mesa, drawer = false, onFechar 
   const [recentes, setRecentes] = useState<ConversaNaLista[] | null>(null);
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [espiando, setEspiando] = useState(false);
+  // A conversa esperando confirmação. Guarda o OBJETO e não um booleano pelo
+  // mesmo motivo do cartão de mesa: o diálogo precisa dizer QUAL conversa vai
+  // apagar, e "tem certeza?" sem nome é onde a pessoa apaga a errada.
+  const [aApagar, setAApagar] = useState<ConversaNaLista | null>(null);
+  const [apagando, setApagando] = useState(false);
 
-  useEffect(() => {
-    // "Recentes" agora são CONVERSAS de verdade (migração 014). Antes
-    // mostrava simulados no lugar, porque o diálogo não era persistido —
-    // um rótulo dizendo uma coisa e listando outra. Ordenadas por
-    // atividade: conversa retomada ontem importa mais que uma aberta há um
-    // mês e abandonada.
+  // "Recentes" são CONVERSAS de verdade (migração 014). Antes mostrava
+  // simulados no lugar, porque o diálogo não era persistido — um rótulo
+  // dizendo uma coisa e listando outra. Ordenadas por atividade: conversa
+  // retomada ontem importa mais que uma aberta há um mês e abandonada.
+  const carregarRecentes = useCallback(() => {
     getConversas()
       .then((c) => setRecentes(c.slice(0, 6)))
       .catch(() => setRecentes([]));
+  }, []);
+
+  useEffect(() => {
+    carregarRecentes();
     getMe()
       .then(setUsuario)
       .catch(() => {});
-  }, []);
+  }, [carregarRecentes]);
+
+  // A LISTA PRECISA SABER QUE UMA CONVERSA NASCEU. Relatado em uso: começar um
+  // chat novo e ele não aparecer nos recentes. A causa é que a sidebar buscava
+  // `/conversas` UMA vez, na montagem, e quem cria a conversa é o `POST
+  // /perguntar` da página irmã — que fica em outra árvore de componentes.
+  //
+  // Canal é o mesmo `CustomEvent` que já leva "nova conversa" no sentido
+  // contrário (sidebar -> página): não existe store nem contexto neste app, e
+  // inventar um pra dois sinais seria infraestrutura maior que o problema.
+  // Recarrega a lista inteira em vez de inserir o item na mão — o título e a
+  // contagem de mensagens são calculados pelo servidor, e montar aqui uma
+  // versão local deles é como as duas divergem.
+  useEffect(() => {
+    window.addEventListener("tutor:conversas-mudaram", carregarRecentes);
+    return () => window.removeEventListener("tutor:conversas-mudaram", carregarRecentes);
+  }, [carregarRecentes]);
 
   const aberta = drawer || !recolhida || espiando;
   const nome = nomeDoEmail(usuario?.email);
+
+  async function apagar() {
+    if (!aApagar || apagando) return;
+    const alvo = aApagar;
+    setApagando(true);
+    try {
+      await apagarConversa(alvo.id);
+      // Tira da lista aqui e AVISA a página: se a conversa apagada é a que está
+      // aberta, deixá-la na tela daria um chat que responde num histórico que
+      // não existe mais — o próximo turno abriria conversa nova sem ninguém
+      // pedir, e o aluno acharia que perdeu a mensagem que acabou de escrever.
+      setRecentes((atual) => (atual ?? []).filter((c) => c.id !== alvo.id));
+      window.dispatchEvent(
+        new CustomEvent("tutor:conversa-apagada", { detail: { id: alvo.id } })
+      );
+      setAApagar(null);
+    } catch {
+      // Falhou: recarrega do servidor em vez de adivinhar o estado. Some o
+      // diálogo, a lista volta a ser a verdade.
+      setAApagar(null);
+      carregarRecentes();
+    } finally {
+      setApagando(false);
+    }
+  }
 
   const conteudo = (
     <>
@@ -214,17 +265,42 @@ export function Sidebar({ recolhida, onAlternar, mesa, drawer = false, onFechar 
             <p className="rotulo px-2.5 pb-2">recentes</p>
             <div className="space-y-0.5">
               {recentes.map((c) => (
-                <Link
-                  key={c.id}
-                  href={`/tutor?c=${c.id}`}
-                  onClick={onFechar}
-                  title={c.mesa_nome ? `conversa na mesa ${c.mesa_nome}` : undefined}
-                  className="flex items-center justify-between gap-2 rounded-[10px] px-2.5 py-1.5 text-[13px]
-                             text-subtle transition-colors hover:bg-surface-hover hover:text-foreground"
-                >
-                  <span className="truncate">{c.titulo}</span>
-                  <span className="mono-num shrink-0 text-[11.5px] opacity-70">{c.mensagens}</span>
-                </Link>
+                /* A lixeira é IRMÃ do link, não filha: botão dentro de âncora é
+                   HTML inválido e o clique navegaria antes de apagar — mesma
+                   armadilha do interruptor da biblioteca dentro do cartão de
+                   mesa. Daí o wrapper `relative` e a lixeira posicionada por
+                   cima da borda direita. */
+                <div key={c.id} className="group relative">
+                  <Link
+                    href={`/tutor?c=${c.id}`}
+                    onClick={onFechar}
+                    title={c.mesa_nome ? `conversa na mesa ${c.mesa_nome}` : undefined}
+                    className="flex items-center justify-between gap-2 rounded-[10px] px-2.5 py-1.5 text-[13px]
+                               text-subtle transition-colors hover:bg-surface-hover hover:text-foreground"
+                  >
+                    <span className="truncate">{c.titulo}</span>
+                    {/* A contagem SOME no hover pra a lixeira ocupar o lugar
+                        dela, em vez de as duas disputarem a mesma borda e
+                        empurrarem o título (que é `truncate` e encurtaria a
+                        cada passada de mouse). */}
+                    <span className="mono-num shrink-0 text-[11.5px] opacity-70 group-hover:opacity-0">
+                      {c.mensagens}
+                    </span>
+                  </Link>
+                  <button
+                    onClick={() => setAApagar(c)}
+                    title={`Apagar "${c.titulo}"`}
+                    aria-label={`apagar conversa ${c.titulo}`}
+                    /* `focus-visible` além de `group-hover` porque quem navega
+                       por teclado nunca dispara hover — sem isso a ação
+                       simplesmente não existiria pra essa pessoa. */
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-subtle opacity-0
+                               transition-opacity hover:text-danger focus-visible:opacity-100
+                               group-hover:opacity-100"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               ))}
             </div>
           </div>
@@ -268,6 +344,26 @@ export function Sidebar({ recolhida, onAlternar, mesa, drawer = false, onFechar 
           </MenuConta>
         )}
       </div>
+
+      <Confirmar
+        aberto={aApagar !== null}
+        titulo="Apagar esta conversa?"
+        descricao={
+          <>
+            <span className="font-medium text-foreground">{aApagar?.titulo}</span> e as{" "}
+            {aApagar?.mensagens} mensagens dela saem do histórico. Não tem como desfazer.
+          </>
+        }
+        /* O que NÃO acontece é a parte que tira o medo de clicar — e aqui é
+           verdade estrutural, não conforto: `progresso`, `tentativa` e
+           `erro_caderno` não têm vínculo com `conversa` (decisão da 014, a
+           conversa é etiquetada pela mesa com SET NULL). O SM-2 não sente. */
+        detalhe="As questões que você respondeu e o seu progresso não são afetados."
+        rotuloConfirmar={apagando ? "Apagando…" : "Apagar conversa"}
+        destrutivo
+        onConfirmar={apagar}
+        onCancelar={() => setAApagar(null)}
+      />
     </>
   );
 

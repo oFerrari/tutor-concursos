@@ -578,8 +578,12 @@ export type ConversaNaLista = {
 };
 
 export type MensagemSalva = {
+  /** `"evento"` existe desde a migração 016 e FALTAVA nesta união — por isso o
+   *  TypeScript nunca reclamou de a tela tratar evento como fala do tutor. Tipo
+   *  que mente sobre o backend é pior que tipo ausente: dá a impressão de
+   *  cobertura onde não há. */
+  autor: "aluno" | "tutor" | "evento";
   id: number;
-  autor: "aluno" | "tutor";
   texto: string;
   fontes: Fonte[];
   criada_em: string;

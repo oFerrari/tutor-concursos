@@ -132,6 +132,15 @@ export default function PaginaTutor() {
       // primeiro: sem ele cada pergunta abriria conversa nova e o
       // histórico não voltaria pro modelo.
       setConversaId(r.conversa_id);
+      // AVISA A SIDEBAR. Relatado em uso: "comecei outro chat com ele e ele não
+      // jogou nos recentes". A conversa nasce aqui (o `POST /perguntar` cria
+      // quando não recebe id), e a lista vive noutra árvore de componentes que
+      // buscava `/conversas` só na montagem.
+      //
+      // Dispara em TODO turno, não só no primeiro: o `titulo` e a contagem de
+      // mensagens são calculados pelo servidor, e sem o aviso a linha ficaria
+      // marcando "1" pra sempre numa conversa de vinte mensagens.
+      window.dispatchEvent(new CustomEvent("tutor:conversas-mudaram"));
       // Só o que o modelo de fato citou no texto vira "citado" — o resto do
       // que a busca híbrida recuperou (mas o modelo não usou) vira
       // "consultado". Listar tudo igual como "fonte" mascarava essa
@@ -187,7 +196,22 @@ export default function PaginaTutor() {
           // isso o aluno leria uma resposta que citava a lei e voltaria a
           // ela sem as citações — pior que não ter citação nenhuma.
           setMensagens(
-            conv.mensagens.map((m) =>
+            conv.mensagens
+              // EVENTO (016) NÃO É BALÃO. "Você propôs 2 questões sobre X. O
+              // aluno vai respondê-las agora" caía no `else` deste ternário e
+              // aparecia como fala do TUTOR — inventando na tela uma resposta
+              // que o modelo nunca gerou. É exatamente o erro que a decisão da
+              // 016 evitou no banco (por isso `autor` ganhou um TERCEIRO valor
+              // em vez de reaproveitar os dois existentes) e que voltou aqui
+              // pela porta da frente, porque `MensagemSalva` nem declarava
+              // "evento" e o TypeScript não tinha como avisar.
+              //
+              // Fica FORA da exibição, não reinterpretado: o texto é escrito
+              // PRA O MODELO, em segunda pessoa dirigida ao tutor. Ele continua
+              // fazendo o trabalho dele no prompt (`historico_para_prompt`),
+              // que é onde sempre importou.
+              .filter((m) => m.autor !== "evento")
+              .map((m) =>
               m.autor === "aluno"
                 ? { autor: "usuario" as const, texto: m.texto }
                 : {
@@ -198,6 +222,24 @@ export default function PaginaTutor() {
                       .filter((f) => !m.texto.includes(marca(f)))
                       .map(referencia),
                   }
+            )
+          );
+          // AO REABRIR, CAI NO FIM DA CONVERSA — é onde ela parou, e é o que
+          // qualquer chat faz. Sem isso a tela abria no topo e o aluno rolava
+          // à mão até achar onde tinha ficado.
+          //
+          // `behavior: "auto"` (instantâneo) e não "smooth": animar a rolagem
+          // de uma conversa inteira que acabou de ser injetada demora e parece
+          // travamento. No envio de mensagem o "smooth" faz sentido — ali o
+          // movimento mostra que algo chegou; aqui só atrapalha.
+          //
+          // Dois `requestAnimationFrame` encadeados: o primeiro roda ANTES de o
+          // React ter pintado a lista nova, então `scrollIntoView` mediria uma
+          // altura que ainda não existe e pararia no meio. O segundo já vê o
+          // layout final.
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() =>
+              fim.current?.scrollIntoView({ behavior: "auto", block: "end" })
             )
           );
         })
@@ -221,6 +263,28 @@ export default function PaginaTutor() {
     }
     window.addEventListener("tutor:nova", nova);
     return () => window.removeEventListener("tutor:nova", nova);
+  }, []);
+
+  // Apagou pela lixeira da sidebar a conversa que está ABERTA: a tela tem que
+  // esvaziar. Deixar as mensagens ali daria um chat conversando sobre um
+  // histórico que não existe mais — o próximo turno abriria conversa nova em
+  // silêncio, e o aluno leria isso como "perdi o que escrevi".
+  //
+  // Só reage se o id bater. Apagar uma conversa antiga enquanto se conversa
+  // noutra não pode limpar a tela de quem está no meio de uma frase.
+  useEffect(() => {
+    function apagada(e: Event) {
+      const id = (e as CustomEvent<{ id: number }>).detail?.id;
+      setConversaId((atual) => {
+        if (atual === null || atual !== id) return atual;
+        setMensagens([]);
+        setPergunta("");
+        setGeradas([]);
+        return null;
+      });
+    }
+    window.addEventListener("tutor:conversa-apagada", apagada);
+    return () => window.removeEventListener("tutor:conversa-apagada", apagada);
   }, []);
 
   function enviar(e: React.FormEvent) {

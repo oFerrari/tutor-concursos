@@ -28,7 +28,7 @@ pergunta é honesto e reconhecível na lista.
 """
 from . import db
 
-VERSAO = "conversa-v1"
+VERSAO = "conversa-v2"
 
 JANELA = 8          # turnos (aluno+tutor) devolvidos como histórico
 MAX_TITULO = 60
@@ -69,7 +69,15 @@ def listar(usuario_id: int, limite: int = 12) -> list[dict]:
     material que continua valendo."""
     return db.query(
         """SELECT c.id, c.titulo, c.mesa_id, c.atualizada_em, m.nome AS mesa_nome,
-                  (SELECT count(*) FROM mensagem g WHERE g.conversa_id = c.id) AS mensagens
+                  (SELECT count(*) FROM mensagem g
+                    WHERE g.conversa_id = c.id
+                      -- EVENTO NÃO É MENSAGEM PRA QUEM CONTA (016). Ele é fato
+                      -- da sessão, escrito PRO MODELO e em segunda pessoa
+                      -- dirigida ao tutor — não aparece como balão na tela.
+                      -- Contá-lo faria a sidebar prometer 4 e a conversa
+                      -- reaberta mostrar 3, e número que não confere com o que
+                      -- se vê é o tipo de detalhe que faz duvidar do resto.
+                      AND g.autor <> 'evento') AS mensagens
              FROM conversa c
              LEFT JOIN mesa m ON m.id = c.mesa_id
             WHERE c.usuario_id = %(u)s
