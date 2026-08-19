@@ -22,7 +22,7 @@ import re
 
 from . import chunking, db, embeddings
 
-VERSAO = "material-v1"
+VERSAO = "material-v2"
 
 LOTE = 32
 MIN_CHARS = 200
@@ -108,6 +108,24 @@ class ErroMaterial(Exception):
     aparecendo na tela. Falha de infra não passa por aqui."""
 
 
+# Postgres recusa `\x00` em coluna TEXT ("text fields cannot contain NUL"), e
+# extração de PDF real produz isso: aconteceu com uma aula de curso (a que traz
+# marca d'água por página). Os outros controles C0 não quebram o INSERT, mas
+# entram no `texto` que vira embedding e prompt — lixo invisível que ninguém
+# consegue depurar olhando a tela. Tab, \n e \r ficam: são estrutura do texto.
+_LIXO = {c: None for c in range(0x20) if c not in (0x09, 0x0A, 0x0D)}
+_LIXO[0x7F] = None
+
+
+def _limpar(texto: str) -> str:
+    """Tira o que o banco recusa e o que não é texto.
+
+    Na EXTRAÇÃO, e não na hora de gravar, porque o texto tem três destinos
+    (documento, chunk, classificador) e limpar em cada um deles é a receita
+    para o dia em que um caminho novo esquecer."""
+    return texto.translate(_LIXO)
+
+
 def _extrair(nome: str, dados: bytes) -> str:
     """Bytes -> texto. PDF via pypdf; qualquer outra coisa como texto puro."""
     if nome.lower().endswith(".pdf"):
@@ -120,12 +138,12 @@ def _extrair(nome: str, dados: bytes) -> str:
             # diz ao aluno o que fazer.
             if getattr(reader, "is_encrypted", False):
                 raise ErroMaterial("PDF protegido por senha — remova a proteção e suba de novo")
-            return "\n\n".join((p.extract_text() or "") for p in reader.pages)
+            return _limpar("\n\n".join((p.extract_text() or "") for p in reader.pages))
         except ErroMaterial:
             raise
         except Exception as e:
             raise ErroMaterial(f"não consegui abrir este PDF ({type(e).__name__})")
-    return dados.decode("utf-8", errors="ignore")
+    return _limpar(dados.decode("utf-8", errors="ignore"))
 
 
 # ----------------------------------------------------------------- por link

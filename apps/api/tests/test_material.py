@@ -267,3 +267,46 @@ def test_sugestoes_nao_sao_engolidas_pela_rota_de_id(client, usuario):
     converter "sugestoes" em int. Este teste quebra se alguém reordenar."""
     r = client.get("/materiais/sugestoes", headers=usuario["headers"])
     assert r.status_code == 200 and "disciplinas" in r.json()
+
+
+# ---------------------------------------------------------------------------
+# Sanitização do texto extraído
+# ---------------------------------------------------------------------------
+
+def test_nul_do_pdf_nao_derruba_a_indexacao(client, usuario, llm_falso):
+    """Bug REAL, com nome e sobrenome: uma aula de curso (a que traz marca
+    d'água por página) trouxe `\\x00` na extração e o Postgres recusou —
+    "text fields cannot contain NUL (0x00)" — deixando o material em `falha`
+    depois de o aluno já ter esperado a indexação.
+
+    O nulo é do PDF, não do nosso código: o pypdf devolve o que está lá. Por
+    isso a limpeza fica na EXTRAÇÃO e não em cada INSERT — o texto tem três
+    destinos (documento, chunk, classificador) e limpar em cada um é a receita
+    pro dia em que um caminho novo esquecer."""
+    llm_falso.retorno = "não é json"
+    corpo = ("MEU RESUMO\x00 COM NULO\n\n"
+             "Prazo\x01 recursal\x07 e o mnemônico QUIXOTEBRAVO. " * 12).encode()
+    r = client.post("/materiais", files={"arquivo": ("aula-com-nulo.txt", corpo, "text/plain")},
+                    data={"tipo": "resumo"}, headers=usuario["headers"])
+    assert r.status_code == 201, r.text
+    doc = r.json()
+
+    m = [x for x in client.get("/materiais", headers=usuario["headers"]).json()["materiais"]
+         if x["id"] == doc["id"]][0]
+    assert m["status"] == "pronto", m["erro"]
+    assert m["chunks"] >= 1
+
+    # E o texto gravado não carrega o lixo: ele iria pro embedding e pro prompt,
+    # onde ninguém consegue vê-lo pra depurar.
+    texto = db.exec1("SELECT texto FROM chunk WHERE documento_id = %(d)s LIMIT 1",
+                     {"d": doc["id"]})["texto"]
+    assert "\x00" not in texto and "\x01" not in texto and "\x07" not in texto
+    assert "QUIXOTEBRAVO" in texto
+
+
+def test_limpar_preserva_a_estrutura_do_texto():
+    """Tab, `\\n` e `\\r` NÃO são lixo: são o que separa parágrafo de parágrafo,
+    e é por parágrafo que `chunk_generico` divide o material do aluno. Limpar
+    demais aqui viraria um chunk gigante só."""
+    assert material._limpar("a\x00b\x1fc") == "abc"
+    assert material._limpar("linha1\nlinha2\tcol\r\n") == "linha1\nlinha2\tcol\r\n"
