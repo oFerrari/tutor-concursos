@@ -18,40 +18,31 @@ siga estritamente estas regras de economia de tokens e limite de escopo.**
 3. Só se não souber onde está o arquivo: **no máximo UMA** busca, específica
    (`grep -rn "termo" caminho/`). Proibida varredura ampla.
 
-## PASSO 1.5 — Visão sistêmica, análise cética e proatividade (OBRIGATÓRIO)
+## PASSO 1.5 — Visão Sistêmica, Análise Cética e Proatividade (OBRIGATÓRIO)
 
-Postura de **Engenheiro Sênior + Product Owner**. Antes de escrever código,
-análise mental de **"Pior Cenário"** e de **"Experiência Ideal"**. Nunca
-programar só o Happy Path, e **não devolver ao usuário decisão trivial de
-usabilidade ou segurança** — decidir é o trabalho.
+Sempre que eu pedir QUALQUER alteração, você assumirá a postura de um **Engenheiro de Software Sênior e Product Owner**. Você DEVE fazer uma análise mental de "Pior Cenário" e de "Experiência Ideal" antes de escrever qualquer código. Nunca programe apenas o "Caminho Feliz" (Happy Path) e **não jogue decisões triviais de usabilidade ou segurança para mim**.
 
-Incorporar por iniciativa própria:
+Tome a iniciativa de incorporar as melhores práticas modernas nas seguintes frentes:
 
-**1. Resiliência de dados e segurança (backend/BD)**
-- Todo input (usuário, arquivo, API externa) é **não-confiável e sujo**.
-- Sanitização, tipagem estrita, limites de tamanho, defesa contra injeção e
-  falha de encode — proativos, não sob demanda.
-- Integridade transacional: falha no meio não pode deixar o banco inconsistente.
+1. **Resiliência de Dados e Segurança (Backend/BD):**
+   - Considere TODO input (usuário, arquivos, APIs externas) como não-confiável e sujo.
+   - Aplique proativamente sanitização, tipagem estrita, limites de tamanho (boundaries) e tratamentos contra injeções ou falhas de encode.
+   - Garanta a integridade transacional (se algo falhar no meio, o banco não pode ficar em estado inconsistente).
 
-**2. Performance e saúde do sistema (arquitetura)**
-- Requisição pesada não bloqueia o event loop nem a thread principal.
-- Identificar gargalo (LLM, arquivo, embedding) e isolar em background/fila, ou
-  limitar CPU/memória.
-- Serviço externo falha: timeout e fallback que degradam com graça, sem derrubar
-  a aplicação.
+2. **Performance e Saúde do Sistema (Arquitetura):**
+   - Nenhuma requisição pesada deve bloquear o Event Loop ou a thread principal.
+   - Identifique proativamente gargalos de processamento (ex: chamadas de LLM, manipulação de arquivos) e isole-os em background tasks, filas (workers) ou limite o consumo de CPU/Memória.
+   - Preveja falhas em serviços externos e implemente timeouts e fallbacks gracefully (sem derrubar a aplicação).
 
-**3. Completude de UX/UI e fluxo de negócio (frontend)**
-- Padrão moderno de interface sem precisar pedir.
-- Sem beco sem saída, clique inútil ou redirecionamento confuso.
-- Todos os edge cases visuais: **loading** (esqueleto/spinner), **empty state**
-  convidativo, **erro** claro e acionável.
-- Pensar no negócio: isso faz sentido na jornada? Havendo caminho mais lógico,
-  **implementar a melhoria óbvia e sugerir a estrutural**.
+3. **Completude de UX/UI e Fluxo de Negócio (Frontend):**
+   - Aplique padrões modernos de interface sem que eu precise pedir.
+   - Evite "becos sem saída" (dead ends), cliques inúteis ou redirecionamentos confusos.
+   - Implemente proativamente todos os "Edge Cases" visuais: estados de *Loading* (esqueletos/spinners), *Empty States* (telas vazias convidativas) e tratamentos de *Erro* claros e amigáveis para o usuário final.
+   - Pense no negócio: essa alteração faz sentido na jornada do usuário? Se houver um caminho mais moderno ou lógico, **implemente as melhorias óbvias e sugira as estruturais**.
 
-O PASSO 2 sempre termina com a seção **"Mitigações e proatividade:"** em
-bullets curtos:
-- que falhas de borda foram blindadas;
-- que melhoria de UX ou performance foi embutida por conta própria.
+No **PASSO 2 (Plano de Ação)**, você deve SEMPRE incluir uma seção final chamada **"Mitigações e Proatividade:"**, onde você listará em bullet points curtos:
+- Quais falhas de borda (edge cases) você blindou.
+- Quais melhorias de UX ou performance você já embutiu no código por conta própria para modernizar a entrega.
 
 ## PASSO 2 — Plano de ação e escopo (PARADA OBRIGATÓRIA)
 
