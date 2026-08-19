@@ -15,10 +15,13 @@ força-bruta de senha vazada viável.
 import bcrypt
 import jwt
 
+import json
+import re
+
 from . import db
 from .config import JWT_SECRET
 
-VERSAO = "auth-v1"
+VERSAO = "auth-v4"
 
 ALGORITMO = "HS256"
 EXPIRA_HORAS = 24 * 7   # uma semana — uso pessoal/pequeno grupo, não banco
@@ -77,12 +80,42 @@ def emitir_token(usuario_id: int) -> str:
 
 
 def usuario_id_do_token(token: str) -> int:
+    """
+    O id de quem assinou o token — e a CONTA precisa existir.
+
+    A assinatura sozinha não basta, e o custo de achar que basta apareceu em uso:
+    uma conta descartável foi apagada, o navegador seguiu com o token dela, e a
+    primeira rota que tentou gravar (`mesa.padrao` -> `criar`) morreu em
+    `ForeignKeyViolation: Key (usuario_id)=(252) is not present in table
+    "usuario"` — 500, com traceback de psycopg no log. O token estava
+    perfeitamente válido: assinado por nós, dentro do prazo, apontando para
+    ninguém.
+
+    500 é a resposta errada, e não por estética: o front reage a 401 fazendo
+    `sair()` e mandando pro login (é o que toda tela autenticada já faz). Com
+    500 ele não tem o sinal, então a pessoa fica numa aplicação quebrada em vez
+    de numa tela de login — e o único jeito de sair é limpar o localStorage na
+    mão. Erro de autenticação tem que sair PELA porta de autenticação.
+
+    O SELECT extra é uma busca por chave primária por requisição, ao lado das
+    várias consultas que qualquer rota autenticada já faz. E ele compra uma
+    propriedade que o CLAUDE.md listava como ausente: sem lista de revogação,
+    "token vazado vale até expirar" era o limite aceito — agora APAGAR A CONTA
+    revoga os tokens dela na hora. Não é revogação por token, mas é a única que
+    faltava pra que "apaguei essa conta" signifique alguma coisa.
+    """
     _checar_secret()
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[ALGORITMO])
     except jwt.PyJWTError as e:
         raise ErroAuth(f"token inválido ou expirado: {e}")
-    return payload["usuario_id"]
+    usuario_id = payload["usuario_id"]
+    if not db.exec1("SELECT 1 FROM usuario WHERE id = %(id)s", {"id": usuario_id}):
+        # Mesma mensagem de token inválido, de propósito: dizer "essa conta foi
+        # apagada" confirmaria pra quem tem um token roubado que o id existia.
+        # Mesmo espírito do 404 (e não 403) de `mesa.obter`.
+        raise ErroAuth("token inválido ou expirado: conta não encontrada")
+    return usuario_id
 
 
 def obter(usuario_id: int) -> dict | None:
@@ -145,3 +178,64 @@ def usuario_da_cli(email: str) -> int:
         {"e": email},
     )
     return r["id"]
+
+
+# --------------------------------------------------------------- perfil
+# Campos aceitos e seus valores. Lista fechada de propósito: o perfil vai
+# direto pro prompt do tutor, e campo livre vindo do cliente é injeção de
+# instrução disfarçada de preferência ("nível: ignore as regras acima").
+# Crescer aqui é uma linha; deixar aberto é um buraco.
+CAMPOS_PERFIL = {
+    "horas": {"1h", "2h", "4h", "6h+"},
+    "nivel": {"Começando", "Intermediário", "Avançado"},
+    "turno": {"Manhã", "Tarde", "Noite", "Madrugada"},
+}
+
+# "horas" também aceita um número personalizado ("3h", "3.5h" — a tela tem
+# um chip "personalizado" pra quando os presets não batem com a rotina real
+# de ninguém, e rotina real tem fração: "3,5h" foi o primeiro valor que uma
+# pessoa de verdade tentou digitar). NÃO é abrir o campo: continua só
+# dígito(s) + fração opcional de UMA casa + "h", 1 a 16 — formato fixo, sem
+# texto, então o mesmo argumento de "campo livre é injeção disfarçada"
+# continua valendo (mais uma casa decimal não abre a porta pra prosa). É
+# por isso que isto é um REGEX fechado, não `if k in CAMPOS_PERFIL` virar
+# `isinstance(v, str)`.
+#
+# Vírgula (separador decimal do pt-BR) é rejeitada DE PROPÓSITO — normalizar
+# é trabalho do CLIENTE, antes de mandar. Aceitar as duas grafias aqui
+# duplicaria a regra "o que é um número válido" entre front e back, e é
+# exatamente esse tipo de duplicação que já causou bug nesta mesma função
+# (ver `socratic._resumo_perfil`, que reimplementava esta validação em vez
+# de chamar `_valor_valido`).
+_RE_HORAS_PERSONALIZADA = re.compile(r"^(1[0-6]|[1-9])(\.\d)?h$")
+
+
+def _valor_valido(campo: str, valor) -> bool:
+    if campo == "horas" and isinstance(valor, str) and _RE_HORAS_PERSONALIZADA.match(valor):
+        return True
+    return campo in CAMPOS_PERFIL and valor in CAMPOS_PERFIL[campo]
+
+
+def atualizar_perfil(usuario_id: int, perfil: dict) -> dict:
+    """
+    Grava só o que é conhecido E válido. Campo desconhecido ou valor fora da
+    lista (ou fora do padrão de horas personalizadas) é IGNORADO em
+    silêncio — não é erro do usuário, é cliente desatualizado ou payload
+    malicioso, e nos dois casos a resposta certa é seguir com o que dá pra
+    aproveitar.
+
+    Faz merge com o que já existe: mandar `{"turno": "Noite"}` não deve
+    apagar as horas respondidas na semana passada.
+    """
+    limpo = {k: v for k, v in (perfil or {}).items() if _valor_valido(k, v)}
+    r = db.exec1(
+        "UPDATE usuario SET perfil = perfil || %(p)s::jsonb WHERE id = %(i)s "
+        "RETURNING perfil",
+        {"p": json.dumps(limpo), "i": usuario_id},
+    )
+    return r["perfil"] if r else {}
+
+
+def perfil(usuario_id: int) -> dict:
+    r = db.exec1("SELECT perfil FROM usuario WHERE id = %(i)s", {"i": usuario_id})
+    return (r["perfil"] if r else {}) or {}

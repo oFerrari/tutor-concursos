@@ -1,7 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { TextoAssociado } from "@/components/TextoAssociado";
 import { Avaliacao, ErroApi, Questao, Turno, avaliar, registrarTentativa } from "@/lib/api";
+import { decorridos } from "@/lib/tempo";
+import { Intervencao } from "@/components/Intervencao";
 
 // Mesmas constantes de chat.py — MAX_DICAS/MAX_TENTATIVAS são regra de
 // produto, não capricho de UI, então ficam iguais dos dois lados.
@@ -22,6 +25,10 @@ type Props = {
   /** "sair" no meio: aborta o fluxo inteiro (não é "pular esta e seguir"). Omitir esconde o botão. */
   onSair?: () => void;
   rotuloContinuar?: string;
+  /** Respondida DENTRO de uma conversa do tutor: o resultado entra na linha
+   *  do tempo dela e o modelo passa a considerar essa evolução no turno
+   *  seguinte (migração 016). Ausente = fila, /questao, desafio. */
+  conversaId?: number;
 };
 
 /**
@@ -32,7 +39,13 @@ type Props = {
  * desafio usa exatamente este mesmo loop, só a lista de onde tira a
  * próxima questão é diferente.
  */
-export function DialogoQuestao({ questao, onFechado, onSair, rotuloContinuar = "continuar" }: Props) {
+export function DialogoQuestao({
+  questao,
+  onFechado,
+  onSair,
+  conversaId,
+  rotuloContinuar = "continuar",
+}: Props) {
   const [resposta, setResposta] = useState("");
   const [historico, setHistorico] = useState<Turno[]>([]);
   const [erradas, setErradas] = useState(0);
@@ -46,7 +59,31 @@ export function DialogoQuestao({ questao, onFechado, onSair, rotuloContinuar = "
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  const inicio = useRef<number>(Date.now());
+  // Começa null e recebe a largada no efeito: `useRef(Date.now())` avalia o
+  // relógio a CADA render (só o primeiro valor é usado, mas a chamada
+  // acontece sempre) — impureza de render de verdade, não implicância do
+  // linter.
+  //
+  // `questao.id` na dependência é cinto e suspensório: hoje quem usa este
+  // componente numa sequência remonta a cada questão (`key={q.id}` em
+  // /desafio), então o efeito rodaria uma vez de qualquer jeito. Mas se
+  // alguém tirar o key um dia, o cronômetro continua certo em vez de a
+  // segunda questão herdar o tempo da primeira em silêncio.
+  const inicio = useRef<number | null>(null);
+
+  // O conceito que a última correção apontou como faltando (022). `useRef` e
+  // não `useState` porque `fechar()` roda no MESMO tick em que a avaliação
+  // chega — um `setState` ainda não estaria visível ali, e a tentativa gravaria
+  // o conceito da resposta ANTERIOR. Errar calado é pior que não gravar.
+  //
+  // Guarda o último conceito NÃO VAZIO: o aluno que erra e depois acerta fecha
+  // com veredito "correta" e conceito vazio, e o que interessa registrar é o
+  // que faltou no caminho — foi ali que a caixa deixou de promover.
+  const ultimoConceito = useRef<string | null>(null);
+
+  useEffect(() => {
+    inicio.current = Date.now();
+  }, [questao.id]);
 
   async function fechar(
     veredito: Avaliacao["veredito"],
@@ -57,16 +94,17 @@ export function DialogoQuestao({ questao, onFechado, onSair, rotuloContinuar = "
     // PENALIDADE = errar, não receber dica. Dica automática ao errar já
     // conta como erro; contar as duas juntaria a mesma falha duas vezes.
     const penalidade = erradasFinal + dicasPedidasFinal;
-    const segundos = Math.round((Date.now() - inicio.current) / 1000);
-    const r = await registrarTentativa(questao.id, veredito, respostaFinal, penalidade, segundos);
+    const segundos = decorridos(inicio.current);
+    const r = await registrarTentativa(questao.id, veredito, respostaFinal, penalidade,
+                                      segundos, conversaId, ultimoConceito.current);
     setResultado({
       veredito,
-      // "acertou de primeira" só quando penalidade é 0 — correta na 2ª
+      // "Acertou de primeira" só quando penalidade é 0 — correta na 2ª
       // tentativa (após erro) segue mostrando o que aconteceu, porque foi
       // isso que decidiu se a caixa promoveu ou ficou igual.
       comentario:
         veredito === "correta" && penalidade === 0
-          ? "acertou de primeira"
+          ? "Acertou de primeira"
           : `${erradasFinal} erro(s), ${dicasPedidasFinal} dica(s) pedida(s)`,
       caixa: r.caixa,
       prox_revisao: r.prox_revisao,
@@ -81,6 +119,7 @@ export function DialogoQuestao({ questao, onFechado, onSair, rotuloContinuar = "
     try {
       const av = await avaliar(questao.id, resposta, erradas, historico);
       setUltimaResposta(resposta);
+      if (av.conceito_faltante) ultimoConceito.current = av.conceito_faltante;
 
       if (av.veredito === "correta") {
         setHistorico((h) => [...h, { resposta, comentario: av.comentario, pergunta: "" }]);
@@ -106,7 +145,7 @@ export function DialogoQuestao({ questao, onFechado, onSair, rotuloContinuar = "
         setResposta("");
       }
     } catch (e) {
-      setErro(e instanceof ErroApi ? e.message : "não deu pra conectar com a API");
+      setErro(e instanceof ErroApi ? e.message : "Não deu pra conectar com a API");
     } finally {
       setEnviando(false);
     }
@@ -153,6 +192,7 @@ export function DialogoQuestao({ questao, onFechado, onSair, rotuloContinuar = "
         <button onClick={continuar} className="btn-primary mt-4">
           {viaSair ? "sair" : rotuloContinuar}
         </button>
+        <Intervencao />
       </div>
     );
   }
@@ -167,7 +207,7 @@ export function DialogoQuestao({ questao, onFechado, onSair, rotuloContinuar = "
           <span className="text-muted">{questao.tema}</span>
         </div>
         <div className="flex items-center gap-3">
-          <span className="badge-neutral">caixa {questao.caixa}</span>
+          <span className="badge-neutral">Caixa {questao.caixa}</span>
           {onSair && (
             <button onClick={sair} className="link">
               sair
@@ -175,6 +215,11 @@ export function DialogoQuestao({ questao, onFechado, onSair, rotuloContinuar = "
           )}
         </div>
       </div>
+
+      {/* Discursiva também pode ter texto-base: nada na 013 amarra contexto
+          a item C/E, e uma questão aberta sobre uma situação hipotética é
+          formato legítimo de outras bancas. */}
+      <TextoAssociado texto={questao.contexto} ordem={questao.ordem_no_contexto} />
 
       <div className="card">
         <p className="text-base font-medium leading-relaxed">{questao.enunciado}</p>
@@ -185,7 +230,7 @@ export function DialogoQuestao({ questao, onFechado, onSair, rotuloContinuar = "
           {historico.map((t, i) => (
             <div key={i} className="rounded-xl border border-line bg-surface-hover p-3 text-sm">
               <p className="text-muted">
-                <span className="font-medium text-foreground">você:</span> {t.resposta}
+                <span className="font-medium text-foreground">Você:</span> {t.resposta}
               </p>
               <p className="mt-1">{t.comentario}</p>
               {t.pergunta && <p className="mt-1 text-info">→ {t.pergunta}</p>}
@@ -213,7 +258,7 @@ export function DialogoQuestao({ questao, onFechado, onSair, rotuloContinuar = "
         <div className="callout-success mt-4">
           <p className="text-xs font-medium uppercase tracking-wide">gabarito</p>
           <p className="mt-1 text-sm">{questao.gabarito}</p>
-          <p className="mt-3 text-sm opacity-70">registrando…</p>
+          <p className="mt-3 text-sm opacity-70">Registrando…</p>
         </div>
       ) : (
         <form onSubmit={aoEnviar} className="mt-4 space-y-2">
@@ -222,7 +267,7 @@ export function DialogoQuestao({ questao, onFechado, onSair, rotuloContinuar = "
             onChange={(e) => setResposta(e.target.value)}
             rows={3}
             className="field"
-            placeholder="sua resposta…"
+            placeholder="Sua resposta…"
           />
           {erro && <p className="text-sm text-danger">{erro}</p>}
           <div className="flex items-center justify-between">
@@ -230,7 +275,7 @@ export function DialogoQuestao({ questao, onFechado, onSair, rotuloContinuar = "
               pedir dica ({restamDicas} disponível{restamDicas === 1 ? "" : "eis"})
             </button>
             <button type="submit" disabled={enviando || !resposta.trim()} className="btn-primary">
-              {enviando ? "corrigindo…" : "responder"}
+              {enviando ? "Corrigindo…" : "responder"}
             </button>
           </div>
           <p className="text-xs text-muted">

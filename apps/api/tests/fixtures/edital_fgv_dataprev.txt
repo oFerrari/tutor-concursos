@@ -1,0 +1,124 @@
+4.5.1 O pagamento da taxa de inscrição após o dia 07 de agosto de 2026, a realização de qualquer
+modalidade de pagamento que não seja pela quitação do boleto implicam o cancelamento da inscrição.
+4.5.2 Não será aceito, como comprovação de pagamento de taxa de inscrição, comprovante de
+agendamento bancário. 4.5.3 Não serão aceitos os pagamentos das inscrições por depósito em caixa
+eletrônico. 5.13 Os candidatos que tiverem indeferido seu pedido de isenção poderão apresentar recurso.
+9.17 Para todos os cargos/perfis, será considerado aprovado na Prova Objetiva, o candidato que,
+cumulativamente: a) obtiver, no mínimo, 57,5 pontos na prova objetiva; e b) não zerar nenhuma disciplina.
+10.13.6 Quando do ingresso na sala de aplicação de provas, os candidatos deverão recolher todos os
+equipamentos eletrônicos em envelope porta objetos não reutilizável.
+
+ANEXO I – CONTEÚDO PROGRAMÁTICO
+
+MODULO I - CONHECIMENTOS GERAIS (PARA TODOS OS CARGOS/PERFIS)
+
+LÍNGUA PORTUGUESA: 1 Compreensão e interpretação de textos de gêneros variados. 2 Reconhecimento de
+tipos e gêneros textuais. 3 Domínio da ortografia oficial. 4 Domínio dos mecanismos de coesão textual. 4.1
+Emprego de elementos de referenciação, substituição e repetição, de conectores e de outros elementos de
+sequenciação textual. 4.2 Emprego de tempos e modos verbais. 5 Domínio da estrutura morfossintática do
+período. 5.1 Emprego das classes de palavras. 5.2 Relações de coordenação entre orações e entre termos da
+oração. 5.3 Relações de subordinação entre orações e entre termos da oração. 5.4 Emprego dos sinais de
+pontuação. 5.5 Concordância verbal e nominal. 5.6 Regência verbal e nominal. 5.7 Emprego do sinal indicativo
+de crase. 5.8 Colocação dos pronomes átonos. 6 Reescrita de frases e parágrafos do texto. 6.1 Significação das
+palavras. 6.2 Substituição de palavras ou de trechos de texto. 6.3 Reorganização da estrutura de orações e de
+períodos do texto. 6.4 Reescrita de textos de diferentes gêneros e níveis de formalidade.
+
+LÍNGUA INGLESA: 1 Compreensão de textos em língua inglesa e itens gramaticais relevantes para o
+entendimento dos sentidos dos textos.
+
+RACIOCÍNIO LÓGICO: 1 Estruturas lógicas. 2 Lógica de argumentação: analogias, inferências, deduções e
+conclusões. 3 Lógica sentencial (ou proposicional). 3.1 Proposições simples e compostas. 3.2 Tabelas-verdade.
+3.3 Equivalências. 3.4 Diagramas lógicos. 4 Lógica de primeira ordem. 5 Raciocínio lógico envolvendo
+problemas aritméticos, geométricos e matriciais
+
+ATUALIDADES E INTELIGÊNCIA ARTIFICIAL: 1 Tópicos relevantes e atuais de diversas áreas, tais como
+segurança, transportes, política, economia, sociedade, educação, saúde, cultura, tecnologia, energia, relações
+internacionais, desenvolvimento sustentável e ecologia. 2 Inteligência Artificial: fundamentos e aplicações:
+conceitos de inteligência artificial; aprendizado da máquina; introdução aos modelos generativos e modelos
+de linguagem; ética, governança e privacidade em IA.
+
+LEGISLAÇÃO ACERCA DE SEGURANÇA DA INFORMAÇÃO E PROTEÇÃO DE DADOS: 1 Lei nº 12.527/2011 (Lei
+de Acesso à Informação): capítulos I, II, III, IV e V; Dec. nº 7.724 e nº 7845. 2 Lei nº 12.737/2012 (Lei de Delitos
+Informáticos): art. 2º. 3 Lei nº 12.965/2014 (Marco Civil da Internet): capítulos II, Seção I, e III, Seções I e II. 4
+Lei nº 13.709/2018 (Lei Geral de Proteção de Dados Pessoais – LGPD): capítulos I, II, III, IV, VII, VIII e IX.
+
+DATAPREV | CONCURSO PÚBLICO 2026
+26
+MODULO II - CONHECIMENTOS ESPECÍFICOS:
+
+PERFIL 1: ANÁLISE DE NEGÓCIOS DE TI:
+
+1 Análise de negócios. 2 Gestão por processos e gestão funcional. 2.1 Ciclo PDCA - Plan, Do, Check e Act. 3
+Gerenciamento de Processos de Negócio (BPM CBOK v.4.0). 3.1 Conceitos, modelagem de processos, análise
+de processos, desenho de processos. 4 Notação BPMN. 5 Ferramentas e tecnologias de gerenciamento de
+processos; automação de processos; BPMS. 6 Gerenciamento de indicadores, metas e resultados.
+
+PERFIL 2: ARQUITETURA, ENGENHARIA E SUSTENTAÇÃO TECNOLÓGICA
+
+REDES DE COMPUTADORES: 1 Conceitos de redes de computadores: meios de transmissão, classificação,
+topologia de redes, redes de longa distância, redes locais e redes sem fio. 2 Elementos de interconexão de
+redes de computadores (hubs repetidores, switches, roteadores). VLANs. Cabeamento estruturado. 3 Noções
+dos modelos de referência OSI (Open System Interconnection Reference Model).
+
+BANCO DE DADOS: 1 Banco de dados. 2 Conceitos básicos. 3 Arquitetura. 4 Estrutura de dados. 5 Modelagem
+e normalização de dados. 6 Noções de administração de dados e de banco de dados. 7 SQL (ANSI). 7.1 Oracle
+19C, MySql, Postgresql, MongoDB e MS-SQLSERVER 2019.
+
+SEGURANÇA DA INFORMAÇÃO: 1 Políticas de segurança da informação. 2 Procedimentos de segurança,
+conceitos gerais de gerenciamento. 3 Segurança de redes de computadores, inclusive redes sem fio. 4
+Vulnerabilidades e ataques a sistemas computacionais. 5 Criptografia. 6 Proteção contra softwares maliciosos.
+7 Certificação digital. 9 Conceitos: 9.1 IDS (Intrusion Detection System). 9.2 IPS (Intrusion Prevention System),
+9.3 SIEM (Security Information and Event Management) 10 NIST Cybersecurity Framework version 1.1.
+
+DATAPREV | CONCURSO PÚBLICO 2026
+28
+PLATAFORMA BÁSICA: 1 Arquitetura dos Computadores: Hardware: Conceitos e Funcionamento. 2 Sistemas
+de Proteção de Dados: Backups: Conceitos, Fundamentos, Tipos e Políticas de Backup. 3 Sistemas de
+Armazenamento de Dados: Storages Físicos, Virtualizados e Baseados em Software. 4 Arquitetura de Sistemas
+Operacionais: Processamento, uso de memória, acesso a discos e sistemas de arquivos. 5 Monitoramento:
+Servidores Físicos e Virtuais, Aplicações.
+
+AUTOMAÇÃO: 1 Infraestrutura como código e automação da infraestrutura de TI. 2 Conceitos e princípios de
+DevOps e DevSecOps. 3 Conceitos de computação na nuvem (Cloud Computing). 4 Ferramentas de
+infraestrutura ágil, automatização, gerenciamento de configuração, integração contínua e entrega contínua.
+
+PERFIL 8: CONTABILIDADE
+
+CONTABILIDADE TRIBUTÁRIA: 1. Tributos: conhecimentos básicos. 2. Imposto de Renda das Pessoas Jurídicas:
+2.1 Incidência; 2.2 Base de cálculo: lucro real, lucro presumido, lucro arbitrado; 2.3 Formas de pagamento; 2.4
+LALUR: forma de escrituração fiscal. 3. ECF: escrituração digital de ajustes fiscais. 4 Dedutibilidade. 5 Despesas
+e custos indedutíveis. 6 Alíquota e adicional do Imposto de Renda. 7 Contribuição Social Sobre o Lucro: 7.1
+Incidência; 7.2 Base de cálculo; 7.3 Formas de pagamento. 8. Incentivos fiscais. 9. Ativos e Passivos Fiscais
+Diferidos: tratamento contábil dos ajustes temporários e permanentes. 10. Provisões tributárias (IRPJ – CSLL –
+PIS/Pasep – COFINS). 11. PIS/Pasep e COFINS: Incidência. Base de cálculo. 12. IOF: 12.1 Incidência. 12.2 Base
+de cálculo.
+
+DATAPREV | CONCURSO PÚBLICO 2026
+37
+MATEMÁTICA FINANCEIRA: 1. Matemática Financeira: 1.1 Juros Simples e Compostos; 1.2 Taxas de Juros; 1.3
+Desconto; 1.4 Equivalência de Capitais; 1.5 Anuidades; 1.6 Sistemas de Amortização.
+
+PERFIL 13: ANALISTA DE PROCESSAMENTO
+
+SEGURANÇA DA INFORMAÇÃO: 1 Políticas de segurança da informação. 2 Procedimentos de segurança,
+conceitos gerais de gerenciamento. 3 Segurança de redes de computadores, inclusive redes sem fio. 8
+Conceitos básicos Lei nº 13.709/2018 e suas alterações (Lei Geral de Proteção de Dados Pessoais – LGPD). 9
+Conceitos: 9.1 IDS (Intrusion Detection System). 9.2 IPS (Intrusion Prevention System), 9.3 SIEM (Security
+Information and Event Management) 10 NIST Cybersecurity Framework version 1.1.
+
+DATAPREV | CONCURSO PÚBLICO 2026
+43
+GESTÃO DE SERVIDORES: 1 Sistemas operacionais: fundamentos, gerenciamento de processos,
+gerenciamento de memória, gerenciamento de entrada e saída e gerenciamento de documentos. 2 Instalação,
+configuração e administração de sistemas operacionais Windows Server 2019 e 2022, famílias Linux Red Hat,
+Debian e CentOS. 3 Gerenciamento de configuração de servidores, aprovisionamento, orquestração e
+automação de infraestrutura de TI. 4 Fundamentos, operação e configuração de Sistemas Operacionais.
+
+ANEXO II – REQUISITOS E ATRIBUIÇÕES DO CARGO/PERFIL
+
+CARGO: ANALISTA DE TECNOLOGIA DA INFORMAÇÃO - PERFIL: 1. ANÁLISE DE NEGÓCIOS DE TI
+
+Requisitos: Certificado ou diploma devidamente registrado de conclusão de curso de graduação de nível
+superior, bacharelado ou tecnólogo, em Tecnologia da Informação. 1.1 Modelar soluções tecnológicas.
+1.2 Elaborar propostas de manutenção de negócios. 2.1 Revisar os desenhos de solução. 3.1 Manter o
+Portfólio de soluções da Dataprev. 4.1 Apoiar na elaboração de indicadores.

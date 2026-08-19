@@ -14,6 +14,8 @@ __pycache__/
 acervo/
 
 # transitórios
+# logs e PIDs dos processos que o setup.sh sobe (API e frontend)
+.logs/
 .llm_debug.txt
 *.sql.bak
 apps/api/db/*.sql
@@ -25,3 +27,6 @@ node_modules/
 .turbo/
 .next/
 dist/
+
+# Metadado do Windows/WSL que vem colado em arquivo baixado. Não é dado.
+*:Zone.Identifier

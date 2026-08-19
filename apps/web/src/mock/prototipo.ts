@@ -20,15 +20,25 @@
  * import e apague o bloco correspondente aqui. Quando este arquivo ficar
  * vazio, apague o arquivo — é esse o plano.
  *
- * Rotas que faltam, em ordem de custo:
- *   - GET/POST /materiais   → biblioteca (upload + status de indexação).
- *                             Não exige migração nova: `documento` já existe.
- *   - POST    /onboarding   → 3 respostas da entrevista (horas/nível/turno).
- *                             Exige coluna nova em `usuario` ou tabela `preferencia`.
- *   - GET/POST /mesas       → mesa/workspace. Exige migração de verdade
- *                             (tabela `mesa` + escopo em edital/progresso/
- *                             tentativa), porque hoje o edital pertence ao
- *                             usuário, não a uma mesa.
+ * Rotas que faltam: nenhuma das telas listadas aqui. O que sobrou neste
+ * arquivo é número DECORATIVO (bloco abaixo) e a conversa de exemplo do
+ * tutor, que depende de uma decisão de schema, não de uma rota.
+ *
+ * JÁ SAÍRAM DAQUI (o plano funcionando):
+ *   - biblioteca → migração 019 + GET/POST/DELETE /materiais.
+ *     `MATERIAIS_EXEMPLO` e `StatusMaterial` foram apagados. A migração ERA
+ *     necessária, ao contrário do que este comentário previa: `documento`
+ *     existia mas não tinha DONO, e a tela promete "só você tem acesso" —
+ *     sem `usuario_id` a apostila de um aluno entraria no `retrieval.buscar`
+ *     de todos. Ganhou também estado de processamento, porque o embedding
+ *     roda local na CPU e leva minutos: o "187 de 340" precisa viver no
+ *     banco pra sobreviver a um F5.
+ *   - mesas → migração 010 + GET/POST /mesas. `MESA_ATUAL` e `MESAS_EXEMPLO`
+ *     foram apagados; a tela /mesas, a sidebar e o raio-x leem a API.
+ *   - onboarding → migração 015 + GET/PUT /me/perfil. `ENTREVISTA` mudou de
+ *     dado decorativo pra config de tela real e mudou de arquivo: agora
+ *     mora em `lib/perfil.ts`, usada pelo onboarding E por `/perfil`
+ *     (editar depois que a entrevista inicial já passou).
  * ============================================================================
  */
 
@@ -54,104 +64,6 @@ export const TEMPO_MEDIO = { valor: "1m 48s", nota: "por questão" };
 export const ACERTO_NOTA = "+4 pts vs. mês anterior";
 export const FLASHCARDS_NA_FILA = 28;
 
-/** TODO(backend): mesa não existe no schema (ver cabeçalho). */
-export const MESA_ATUAL = { nome: "Polícia Federal 2026", cargo: "Analista Judiciário — TRF" };
-
-export type MesaExemplo = {
-  id: string;
-  nome: string;
-  banca: string;
-  pct: number;
-  topicos: string;
-  ultimo: string;
-};
-
-/** TODO(backend): trocar por `GET /mesas` quando a tabela `mesa` existir. */
-export const MESAS_EXEMPLO: MesaExemplo[] = [
-  {
-    id: "pf-2026",
-    nome: "Polícia Federal 2026 — Agente",
-    banca: "Cebraspe",
-    pct: 61,
-    topicos: "90 / 148 tópicos",
-    ultimo: "Último estudo há 2 horas",
-  },
-  {
-    id: "trf",
-    nome: "Analista Judiciário — TRF",
-    banca: "Cebraspe",
-    pct: 44,
-    topicos: "52 / 118 tópicos",
-    ultimo: "Último estudo há 3 dias",
-  },
-  {
-    id: "bb",
-    nome: "Banco do Brasil — Escriturário",
-    banca: "FGV",
-    pct: 78,
-    topicos: "71 / 91 tópicos",
-    ultimo: "Último estudo há 12 dias",
-  },
-];
-
-export type StatusMaterial = "ativo" | "processando" | "falha";
-
-export type MaterialExemplo = {
-  arquivo: string;
-  data: string;
-  status: StatusMaterial;
-  rotulo: string;
-  detalhe: string;
-};
-
-/** TODO(backend): trocar por `GET /materiais`. A tabela `documento` já
- *  guarda o que interessa (título, hash, tipo); falta expor contagem de
- *  chunks e um estado de processamento. */
-export const MATERIAIS_EXEMPLO: MaterialExemplo[] = [
-  {
-    arquivo: "Aula_01_Direito_Penal_Estrategia.pdf",
-    data: "12/08/2026",
-    status: "ativo",
-    rotulo: "Vetorizado e ativo",
-    detalhe: "412 trechos",
-  },
-  {
-    arquivo: "Lei_8112_comentada_2026.pdf",
-    data: "12/08/2026",
-    status: "processando",
-    rotulo: "IA lendo e processando…",
-    detalhe: "187 de 340",
-  },
-  {
-    arquivo: "Resumo_RLM_manuscrito.pdf",
-    data: "11/08/2026",
-    status: "ativo",
-    rotulo: "Vetorizado e ativo",
-    detalhe: "96 trechos",
-  },
-  {
-    arquivo: "Jurisprudencia_STF_penal.pdf",
-    data: "09/08/2026",
-    status: "falha",
-    rotulo: "Falha na leitura",
-    detalhe: "PDF protegido",
-  },
-  {
-    arquivo: "planalto.gov.br/decreto-lei-2848",
-    data: "08/08/2026",
-    status: "ativo",
-    rotulo: "Vetorizado e ativo",
-    detalhe: "1.204 trechos",
-  },
-];
-
-/** TODO(backend): trocar por `POST /onboarding`. Hoje as respostas só
- *  vivem no estado do componente e somem ao trocar de rota. */
-export const ENTREVISTA = [
-  { chave: "horas", rotulo: "Horas por dia", opcoes: ["1h", "2h", "4h", "6h+"], padrao: "2h" },
-  { chave: "nivel", rotulo: "Seu nível hoje", opcoes: ["Começando", "Intermediário", "Avançado"], padrao: "Intermediário" },
-  { chave: "turno", rotulo: "Melhor horário", opcoes: ["Manhã", "Tarde", "Noite", "Madrugada"], padrao: "Manhã" },
-] as const;
 
 /**
  * Conversa de exemplo do tutor.

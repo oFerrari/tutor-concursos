@@ -9,7 +9,19 @@ services:
     ports: ["5433:5432"]
     volumes:
       - tutor-pgdata:/var/lib/postgresql/data
-      - ./apps/api/db:/docker-entrypoint-initdb.d:ro
+      # O mount de `docker-entrypoint-initdb.d` SAIU aqui, e é decisão, não
+      # esquecimento. Ele só roda em volume NOVO — volume existente ignora
+      # tudo —, então conviviam dois mecanismos de aplicar schema: o initdb
+      # (que roda TUDO, em ordem alfabética, uma vez na vida do volume) e a
+      # mão humana. Nenhum dos dois deixava registro, e `git pull` numa
+      # máquina já usada não aplicava nada.
+      #
+      # Pior: com os dois vivos, `migrar.py` não teria como distinguir "banco
+      # novo que o initdb preencheu inteiro" de "máquina atrasada onde só
+      # parte rodou". Os dois estados são indistinguíveis olhando o banco, e
+      # adivinhar errado significa pular migração calada ou explodir no
+      # primeiro ADD COLUMN. Um mecanismo só é o que torna a pergunta
+      # respondível — e é `python migrar.py`, que o setup.sh chama.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U tutor"]
       interval: 5s

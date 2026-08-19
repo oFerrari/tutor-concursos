@@ -12,12 +12,15 @@ import { ErroApi, login, setToken } from "@/lib/api";
  * empurraria o formulário pra baixo da dobra, que é o oposto do que uma
  * tela de acesso precisa fazer.
  *
- * O protótipo tem ainda "Continuar com Google" e "Esqueceu a senha?".
- * NÃO ESTÃO AQUI de propósito: o `api.py` só expõe `/auth/login` e
- * `/auth/registrar` (e-mail + senha, JWT). Um botão de Google que não
- * autentica e um link de recuperação que não recupera são pior que a
- * ausência deles — a pessoa clica, nada acontece, e a confiança na tela
- * inteira cai junto. Voltam no dia em que existir OAuth e rota de reset.
+ * O protótipo tem ainda "Continuar com Google". NÃO ESTÁ AQUI de
+ * propósito: o `api.py` só expõe `/auth/login` e `/auth/registrar`
+ * (e-mail + senha, JWT), sem OAuth. Volta no dia em que existir.
+ *
+ * "Esqueceu a senha?" está aqui só como link visual (pedido explícito,
+ * decisão registrada) — `api.py`/`core/auth.py` ainda NÃO têm rota de
+ * reset de senha, então o clique não faz nada. Antes disso o argumento
+ * era o oposto (link morto derruba confiança na tela); implementar de
+ * verdade (token por e-mail + página de reset) segue em aberto.
  */
 export default function PaginaLogin() {
   const router = useRouter();
@@ -37,7 +40,7 @@ export default function PaginaLogin() {
     } catch (e) {
       // ErroApi.message já vem do "detail" do FastAPI — mesma mensagem
       // que auth.py devolve pra email/senha errados ou conta inexistente.
-      setErro(e instanceof ErroApi ? e.message : "não deu pra conectar com a API");
+      setErro(e instanceof ErroApi ? e.message : "Não deu pra conectar com a API");
     } finally {
       setEnviando(false);
     }
@@ -97,9 +100,15 @@ export default function PaginaLogin() {
             </div>
 
             <div>
-              <label htmlFor="senha" className="mb-1.5 block text-[12.5px] text-muted">
-                Senha
-              </label>
+              <div className="mb-1.5 flex items-center justify-between">
+                <label htmlFor="senha" className="block text-[12.5px] text-muted">
+                  Senha
+                </label>
+                {/* Visual só — sem rota de reset ainda, ver comentário no topo do arquivo. */}
+                <span className="cursor-not-allowed text-[12.5px] text-accent-text" title="Ainda não implementado">
+                  Esqueceu a senha?
+                </span>
+              </div>
               <input
                 id="senha"
                 type="password"
@@ -114,13 +123,13 @@ export default function PaginaLogin() {
             {erro && <p className="callout-danger !p-3 text-[13px]">{erro}</p>}
 
             <button type="submit" disabled={enviando} className="btn-primary mt-1 w-full rounded-xl py-3.5 text-[14.5px]">
-              {enviando ? "entrando…" : "Entrar na plataforma"}
+              {enviando ? "Entrando…" : "Entrar na plataforma"}
             </button>
           </div>
 
           <p className="mt-6 text-center text-[13.5px] text-muted">
             Ainda não tem uma conta?{" "}
-            <Link href="/onboarding" className="text-accent-text">
+            <Link href="/cadastro" className="text-accent-text">
               Crie sua mesa de estudo.
             </Link>
           </p>

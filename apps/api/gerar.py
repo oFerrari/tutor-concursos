@@ -32,11 +32,11 @@ import re
 import sys
 import unicodedata
 
-from core import db, llm, socratic
+from core import db, geracao, llm, socratic
 
-VERSAO = "gerar-v16"
+VERSAO = "gerar-v17"
 
-MIN_TEXTO = 140          # abaixo disso é stub, revogado ou remissão
+MIN_TEXTO = geracao.MIN_TEXTO   # mesma régua da geração sob demanda
 ARTIGOS_POR_LOTE = 3     # artigos enviados por chamada
 MAX_FALHAS = 3           # falhas consecutivas antes de desistir
 
@@ -150,39 +150,20 @@ def descobertos(doc_id, secoes_alvo=None, limite=ARTIGOS_POR_LOTE):
     return db.query(SQL_DESCOBERTOS.format(filtro_secao=filtro), params)
 
 
-def _norm_artigo(a):
-    """LC 95/1998: Art. 1º-9º levam ordinal, Art. 10+ não — mas o modelo às
-    vezes devolve sem o ordinal mesmo instruído a preservar (achado gerando
-    pra CF: artigos 5º/6º/8º voltavam como '5'/'6'/'8'). Mesma normalização
-    de retrieval.por_dispositivo(), pro mesmo motivo: sem isso, a questão
-    inteira é descartada por "proveniência não confere" mesmo estando
-    certa, e a seção nunca sai da lista de descobertos."""
-    return re.sub(r"[ºo]$", "", (a or "").strip())
-
-
 def salvar(doc_id, disciplina, questoes, lote):
-    """Grava e devolve quantas foram salvas. fonte_chunks vem do campo artigo."""
-    por_artigo = {_norm_artigo(c["artigo"]): c["id"] for c in lote if c["artigo"]}
-    salvas = 0
-    for q in questoes:
-        art = q.get("artigo")
-        cid = por_artigo.get(_norm_artigo(art))
-        if cid is None:
-            # Sem proveniência confiável a cobertura mentiria: prefiro
-            # descartar a questão a registrar que um artigo foi coberto
-            # quando não foi.
-            print(f"    descartada: artigo {art!r} nao esta no lote enviado")
-            continue
-        db.query(
-            """INSERT INTO questao (documento_id, disciplina, tema, enunciado,
-                                    gabarito, dicas, fonte_chunks)
-               VALUES (%(d)s, %(disc)s, %(t)s, %(e)s, %(g)s, %(dic)s, %(f)s)""",
-            {"d": doc_id, "disc": disciplina, "t": q["tema"], "e": q["enunciado"],
-             "g": q["gabarito"], "dic": json.dumps(q["dicas"]), "f": [cid]},
-        )
-        print(f"    + art {art}: {q['tema'][:52]}")
-        salvas += 1
-    return salvas
+    """Grava pela regra compartilhada (`core.geracao.salvar`) e IMPRIME — a
+    impressão é da CLI, a regra não. Antes esta função tinha a cópia da
+    regra; ter duas é como elas passam a divergir, e a que divergisse seria
+    a que grava proveniência (a invariante do projeto).
+
+    `doc_id`/`disciplina` não são mais usados pra gravar: saem do chunk
+    casado, que é o dado certo quando o lote atravessa normas."""
+    salvas, descartes = geracao.salvar(questoes, lote)
+    for motivo in descartes:
+        print(f"    descartada: {motivo}")
+    for q in salvas:
+        print(f"    + {q['disciplina']}: {q['tema'][:52]}")
+    return len(salvas)
 
 
 def cobrir(doc_id, por_lote, maximo, secao=None):

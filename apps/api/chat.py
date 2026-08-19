@@ -12,6 +12,7 @@ Sessão de estudo no terminal.
     python chat.py stats --json     # mesmo dado, formato que a futura API vai servir
     python chat.py meta                # usa a data do edital ingerido (python edital.py)
     python chat.py meta 2026-11-15     # data manual, sempre vence a do edital
+    python chat.py estudar --mesa "PF Agente"   # recorta pelo edital daquela mesa
 
 Provar o loop aqui antes de escrever uma linha de Next.js. Se a tutoria
 funciona sem interface, o frontend é só apresentação.
@@ -20,6 +21,12 @@ MULTIUSUÁRIO: a CLI não faz login — resolve (ou cria) UM usuário fixo pelo
 email de `CLI_USUARIO_EMAIL` no .env (default: estudante@local, o mesmo
 semeado pela migração 008). Login de verdade com senha só existe pelo
 caminho da API (api.py), pra quem for usar o frontend.
+
+MESA (migração 010): `--mesa NOME` vale para qualquer comando e recorta a
+sessão pelas disciplinas do edital daquela mesa. Sem a flag, usa a mesa
+padrão da conta (a mais antiga, criada na hora se não houver nenhuma) — e
+mesa sem edital não filtra nada, ou seja, o comportamento é o mesmo de
+antes da 010 pra quem nunca criou mesa.
 """
 import json
 import sys
@@ -32,16 +39,55 @@ from rich.panel import Panel
 from rich.table import Table
 
 from core import auth, desafio as desafio_mod
-from core import llm, ritmo, scheduler, simulado as simulado_mod, socratic
+from core import llm, mesa as mesa_mod, ritmo, scheduler, simulado as simulado_mod, socratic
 from core.config import CLI_USUARIO_EMAIL
 
-VERSAO = "chat-v27"
+VERSAO = "chat-v21"
 con = Console()
 MAX_DICAS = 3
+
+# Preenchido por _extrair_flag_mesa() antes do dispatch — a flag é removida
+# de sys.argv ali mesmo porque `simulado [N] [minutos]` lê posicional, e um
+# "--mesa" sobrando no meio viraria int("--mesa").
+_MESA_NOME: str | None = None
 
 
 def _usuario_id() -> int:
     return auth.usuario_da_cli(CLI_USUARIO_EMAIL)
+
+
+def _extrair_flag_mesa() -> None:
+    global _MESA_NOME
+    if "--mesa" not in sys.argv:
+        return
+    i = sys.argv.index("--mesa")
+    _MESA_NOME = sys.argv[i + 1] if i + 1 < len(sys.argv) else None
+    del sys.argv[i:i + 2]
+
+
+def _mesa(uid: int) -> dict:
+    """Mesa da sessão, com as disciplinas já resolvidas. Nome que não existe
+    é ERRO, não fallback silencioso pra padrão: escrever "PF Agente" quando a
+    mesa se chama "PF - Agente" e receber a fila de outro concurso sem aviso
+    é exatamente o tipo de falha calada que este projeto evita em outros
+    lugares (ver `--norma` explícito em reingest.py)."""
+    if not _MESA_NOME:
+        return mesa_mod.contexto(uid)
+    achada = next((m for m in mesa_mod.listar(uid)
+                   if m["nome"].lower() == _MESA_NOME.lower()), None)
+    if not achada:
+        nomes = ", ".join(f'"{m["nome"]}"' for m in mesa_mod.listar(uid)) or "(nenhuma)"
+        con.print(f'[red]mesa "{_MESA_NOME}" não existe.[/] suas mesas: {nomes}')
+        sys.exit(1)
+    return mesa_mod.contexto(uid, achada["id"])
+
+
+def _cabecalho_mesa(m: dict) -> None:
+    """Diz em qual recorte a sessão está rodando. Sem isso, "0 questões na
+    fila" numa mesa filtrada é indistinguível de "acabou o acervo"."""
+    disc = m.get("disciplinas")
+    escopo = ", ".join(disc) if disc else "sem edital — acervo inteiro"
+    con.print(f"[dim]mesa: {m['nome']} · {escopo}[/]")
 
 
 def _dicas(q) -> list[str]:
@@ -54,27 +100,29 @@ MAX_TENTATIVAS = 3      # respostas erradas antes de revelar o gabarito
 
 def estudar() -> None:
     uid = _usuario_id()
-    pendentes = scheduler.fila(uid)
+    m = _mesa(uid)
+    _cabecalho_mesa(m)
+    pendentes = scheduler.fila(uid, disciplinas=m["disciplinas"])
     if not pendentes:
         con.print("[green]Nada pendente hoje.[/] Ingira material novo ou volte amanhã.")
         return
 
-    c = scheduler.carga_hoje(uid)
+    c = scheduler.carga_hoje(uid, m["disciplinas"])
     con.print(f"[bold]{len(pendentes)}[/] questões na fila · "
               f"{c['revisoes']} revisões venceram, {c['ineditas']} inéditas"
               + (f" · [yellow]{c['atraso']} de atraso[/]" if c["atraso"] else "") + "\n")
-    _mostrar_sugestao(uid)
+    _mostrar_sugestao(uid, m["disciplinas"])
 
     _estudar_lista(uid, pendentes)
 
 
-def _mostrar_sugestao(uid: int) -> None:
+def _mostrar_sugestao(uid: int, disciplinas: list[str] | None = None) -> None:
     """
     Intervenção proativa: no máximo UMA sugestão, antes de começar a
     resolver. `core.ritmo` decide o quê (regra, não LLM — ver o porquê em
     ritmo_regras.py); aqui só é exibição.
     """
-    dica = ritmo.sugestao(uid)
+    dica = ritmo.sugestao(uid, disciplinas)
     if dica:
         con.print(f"[cyan]💡 {dica}[/]\n")
 
@@ -104,6 +152,10 @@ def _estudar_lista(uid: int, pendentes: list) -> bool:
         erradas = 0
         inicio = time.monotonic()
         veredito, ultima_resposta = None, ""
+        # O conceito que a última correção apontou como faltando (022).
+        # Lido por `fechar()` como closure, igual `ultima_resposta`: quem sabe
+        # o que faltou é o avaliador, e quem grava é o fechamento.
+        ultimo_conceito = None
         historico = []          # turnos desta questão, para o avaliador seguir o fio
         avisou_contrato = False
 
@@ -114,7 +166,8 @@ def _estudar_lista(uid: int, pendentes: list) -> bool:
             # própria conta, porque aí é ajuda escolhida.
             penalidade = erradas + dicas_pedidas
             r = scheduler.registrar(uid, q["id"], v, ultima_resposta, penalidade,
-                                    int(time.monotonic() - inicio))
+                                    int(time.monotonic() - inicio),
+                                    conceito_faltante=ultimo_conceito)
             motivo = ("acertou de primeira" if v == "correta" and penalidade == 0 else
                       f"{erradas} erro(s), {dicas_pedidas} dica(s) pedida(s)")
             con.print(f"[dim]{v} · {motivo} · caixa {r['caixa']} · "
@@ -154,8 +207,11 @@ def _estudar_lista(uid: int, pendentes: list) -> bool:
             ultima_resposta = resposta
             with con.status("corrigindo…"):
                 try:
-                    av = socratic.avaliar(q["enunciado"], q["gabarito"], resposta,
-                                          erradas, historico)
+                    # Dispatcher, não `avaliar()`: item C/E é corrigido em
+                    # código. A CLI seguia chamando o LLM direto e compararia
+                    # "C" contra a justificativa em prosa — errado e pago.
+                    av = socratic.avaliar_questao(q, resposta, erradas, historico)
+                    ultimo_conceito = av.get("conceito_faltante") or ultimo_conceito
                 except llm.ErroLLM as e:
                     con.print(f"[red]LLM indisponível:[/] {e}")
                     con.print(Panel(q["gabarito"], title="gabarito", border_style="green"))
@@ -204,15 +260,18 @@ def simulado(n: int = simulado_mod.N_PADRAO, minutos: int | None = None,
     podendo repetir questão que já caiu em reincidentes/novas no mesmo dia.
     """
     uid = _usuario_id()
+    m = _mesa(uid)
     if questoes is None:
-        questoes = simulado_mod.selecionar(n)
+        _cabecalho_mesa(m)
+        questoes = simulado_mod.selecionar(n, disciplinas=m["disciplinas"])
         if len(questoes) < n:
-            con.print(f"[dim]só há {len(questoes)} questões no acervo; simulado sai menor.[/]")
+            con.print(f"[dim]só há {len(questoes)} questões no recorte desta mesa; "
+                      f"simulado sai menor.[/]")
     if not questoes:
         con.print("[yellow]Nenhuma questão no acervo ainda.[/]")
         return
 
-    sid = simulado_mod.iniciar(uid, len(questoes), minutos)
+    sid = simulado_mod.iniciar(uid, len(questoes), minutos, m["id"])
     con.print(Panel(
         f"{len(questoes)} questões" + (f" · meta de {minutos} min" if minutos else "") +
         " · sem dica, sem correção durante a prova — gabarito só no final.",
@@ -247,7 +306,9 @@ def simulado(n: int = simulado_mod.N_PADRAO, minutos: int | None = None,
             except llm.ErroLLM as e:
                 con.print(f"[red]LLM indisponível ao corrigir \"{q['tema']}\":[/] {e}")
                 continue
-            scheduler.registrar(uid, q["id"], av["veredito"], resposta, 0, segundos, simulado_id=sid)
+            scheduler.registrar(uid, q["id"], av["veredito"], resposta, 0, segundos,
+                                simulado_id=sid,
+                                conceito_faltante=av.get("conceito_faltante"))
             if av["veredito"] != "correta":
                 pendentes.append((q, resposta, av))
 
@@ -279,7 +340,9 @@ def desafio(n_reincidentes: int = 3, n_novas: int = 5, n_simulado: int = 5) -> N
     estimado a partir do histórico real de `tentativa.segundos`.
     """
     uid = _usuario_id()
-    plano = desafio_mod.montar(uid, n_reincidentes, n_novas, n_simulado)
+    m = _mesa(uid)
+    _cabecalho_mesa(m)
+    plano = desafio_mod.montar(uid, n_reincidentes, n_novas, n_simulado, m["disciplinas"])
     if plano["total_questoes"] == 0:
         con.print("[yellow]Nada para compor um desafio ainda — "
                   "ingira material ou responda algumas questões primeiro.[/]")
@@ -290,7 +353,7 @@ def desafio(n_reincidentes: int = 3, n_novas: int = 5, n_simulado: int = 5) -> N
         f"{len(plano['mini_simulado'])} mini-simulado · "
         f"~{plano['estimativa_minutos']} min estimados",
         title="desafio de hoje", border_style="magenta"))
-    _mostrar_sugestao(uid)
+    _mostrar_sugestao(uid, m["disciplinas"])
 
     if plano["reincidentes"]:
         con.print("\n[bold]bloco 1 — pontos fracos[/]")
@@ -309,7 +372,7 @@ def desafio(n_reincidentes: int = 3, n_novas: int = 5, n_simulado: int = 5) -> N
 
 def simulados() -> None:
     uid = _usuario_id()
-    hist = simulado_mod.historico(uid)
+    hist = simulado_mod.historico(uid, mesa_id=_mesa(uid)["id"])
     if not hist:
         con.print("[dim]nenhum simulado ainda. 'python chat.py simulado' para começar.[/]")
         return
@@ -321,8 +384,9 @@ def simulados() -> None:
 
 
 def perguntar(pergunta: str) -> None:
+    uid = _usuario_id()
     with con.status("consultando o acervo…"):
-        r = socratic.explicar(pergunta, _usuario_id())
+        r = socratic.explicar(pergunta, uid, _mesa(uid)["disciplinas"])
     con.print(Markdown(r["resposta"]))
     if r["fontes"]:
         # Listar tudo que foi recuperado engana: o modelo usa uma fração.
@@ -341,7 +405,7 @@ def perguntar(pergunta: str) -> None:
 def erros() -> None:
     uid = _usuario_id()
     t = Table("tema", "disciplina", "vezes", "último", title="caderno de erros")
-    for e in scheduler.caderno_erros(uid):
+    for e in scheduler.caderno_erros(uid, disciplinas=_mesa(uid)["disciplinas"]):
         t.add_row(e["tema"], e["disciplina"], str(e["vezes"]), str(e["ultima"]))
     con.print(t)
 
@@ -354,7 +418,7 @@ def _barra(pct: float | None, largura: int = 20) -> str:
 
 def stats(como_json: bool = False) -> None:
     uid = _usuario_id()
-    dados = scheduler.desempenho(uid)
+    dados = scheduler.desempenho(uid, _mesa(uid)["disciplinas"])
     if como_json:
         # Mesma função que vai virar endpoint um dia — testar o JSON aqui
         # agora é testar o contrato exato que o frontend vai receber depois.
@@ -379,6 +443,7 @@ def stats(como_json: bool = False) -> None:
 
 
 def main() -> int:
+    _extrair_flag_mesa()
     if len(sys.argv) < 2:
         con.print(__doc__)
         return 1
@@ -407,7 +472,10 @@ def main() -> int:
         # com data: sempre vence a automática — saída de emergência se a
         # extração do PDF errou o dia da prova.
         data = date.fromisoformat(sys.argv[2]) if len(sys.argv) > 2 else None
-        m = scheduler.meta(_usuario_id(), data)
+        uid = _usuario_id()
+        mesa_ctx = _mesa(uid)
+        _cabecalho_mesa(mesa_ctx)
+        m = scheduler.meta(uid, data, mesa_ctx["id"], mesa_ctx["disciplinas"])
         for k, v in m.items():
             if isinstance(v, dict):
                 con.print(f"{k.replace('_', ' ')}:")

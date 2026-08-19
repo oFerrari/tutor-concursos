@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { Focus, Menu } from "lucide-react";
-import { OFENSIVA } from "@/mock/prototipo";
+import { Carga } from "@/lib/api";
 
 /**
  * Cabeçalho fino do protótipo: rastro (breadcrumb) mono à esquerda,
@@ -34,6 +34,7 @@ function rastroDe(pathname: string): string {
 }
 
 type Props = {
+  carga: Carga | null;
   railAberto: boolean;
   railDisponivel: boolean;
   onAlternarRail: () => void;
@@ -41,7 +42,7 @@ type Props = {
   onAbrirMenu: () => void;
 };
 
-export function Header({ railAberto, railDisponivel, onAlternarRail, onEntrarFoco, onAbrirMenu }: Props) {
+export function Header({ carga, railAberto, railDisponivel, onAlternarRail, onEntrarFoco, onAbrirMenu }: Props) {
   const pathname = usePathname();
 
   return (
@@ -54,9 +55,9 @@ export function Header({ railAberto, railDisponivel, onAlternarRail, onEntrarFoc
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
-        {/* Vitrine (ver mock/prototipo.ts): não há sequência de dias no
-            schema. Está aqui porque a decisão foi manter o protótipo. */}
-        <span className="chip cursor-default font-mono text-[12px]">🔥 {OFENSIVA.dias}</span>
+        {/* carga.ofensiva_dias — scheduler.ofensiva_dias(), real desde que
+            os KPIs mock do painel viraram dado medido. */}
+        <span className="chip cursor-default font-mono text-[12px]">🔥 {carga?.ofensiva_dias ?? 0}</span>
 
         {railDisponivel && (
           <button

@@ -23,8 +23,50 @@ import re
 from . import db
 from .embeddings import embed_consulta
 
-VERSAO = "retrieval-v2"
+VERSAO = "retrieval-v3"
 RRF_K = 60  # constante de amortecimento padrão do RRF
+
+# Material `historico` (livro de emendas: "Redação Anterior", múltiplas
+# versões do mesmo artigo) vale MENOS que lei vigente na fusão. Não é
+# exclusão — ele foi ingerido justamente pra estar disponível, e continua
+# ganhando quando é de fato a melhor resposta (pergunta sobre evolução de
+# um dispositivo). É desempate: ele entra por janela de parágrafo, não por
+# artigo, então gera muito mais candidatos parecidos que uma lei — e sem
+# peso ele tomava 4 das 6 vagas de "princípios da administração pública",
+# uma delas uma página de LEGENDA DE SÍMBOLOS. Vaga gasta com índice é
+# contexto que o modelo não tem pra responder.
+#
+# 0.5 medido contra o gabarito de avaliar_retrieval.py: em 0.7 ainda
+# sobravam 2 chunks de histórico no top-6; em 0.5 zeram, e nenhum caso que
+# passava deixou de passar. HONESTIDADE: isto NÃO conserta o art. 37 da CF
+# (ver o docstring de avaliar_retrieval.py) — aquilo é diluição de chunk
+# gigante, problema diferente. Aqui só se ganha qualidade do contexto.
+PESO_HISTORICO = 0.5
+
+# O braço LEXICAL pesa mais que o semântico na fusão. Não é preferência de
+# gosto: é correção de um viés medido contra chunks GRANDES.
+#
+# O art. 37 da CF tem 13.059 caracteres (média do acervo: 1.245) e cobre
+# concurso público, licitação, teto remuneratório e improbidade no mesmo
+# artigo. O embedding é a média disso tudo, então "administração direta e
+# indireta" — que é literalmente o começo do caput — o encontrava em 83º
+# lugar no semântico, contra 3º no lexical. Entrando em uma lista só, o RRF
+# o punha atrás de chunks medianos presentes nas duas, e ele NÃO chegava ao
+# contexto que o tutor lê. Ampliar o pool de candidatos de 30 pra 200 não
+# resolvia (testado): o problema é a posição, não o corte.
+#
+# Casar frase exata é justamente o que o braço lexical faz bem e o vetor
+# médio faz mal em texto longo. 1.5 é o MENOR valor que corrige, medido
+# contra o gabarito de avaliar_retrieval.py: top-6 de 28/32 pra 30/32, sem
+# nenhum caso deixando de passar. Valores maiores (2, 3, 5) não melhoram
+# mais nada — sinal de que 1.5 já basta e o resto seria ajuste fino a um
+# gabarito de 32 casos, que é pouco pra isso.
+#
+# O conserto de RAIZ continua sendo sub-chunk do artigo gigante pro
+# embedding (mantendo o artigo como unidade de citação); isto aqui compra
+# o resultado sem reingestão, e o gabarito agora tem os casos que
+# denunciariam uma regressão.
+PESO_LEXICAL = 1.5
 
 RE_CITACAO = re.compile(r"(?i)\bart(?:igo)?s?\.?\s*(\d+[\-\wºo]*)")
 GENERICOS = {"art", "arts", "artigo", "artigos", "paragrafo", "parágrafo",
@@ -34,24 +76,58 @@ GENERICOS = {"art", "arts", "artigo", "artigos", "paragrafo", "parágrafo",
 CAMPOS = """c.id, c.texto, c.norma, c.artigo, c.paragrafo, c.rubrica, c.secao,
             c.pagina, d.titulo, d.disciplina, d.tipo"""
 
+# DONO DO MATERIAL (migração 019). "O público MAIS o meu", e nada além.
+#
+# Vai DENTRO das CTEs `sem`/`lex`, não só no WHERE final, e a diferença não é
+# estética: as CTEs cortam em LIMIT k ANTES do join com `documento`. Filtrar
+# depois deixaria o material de outros alunos OCUPAR vagas do top-k e ser
+# descartado em seguida — a busca perderia recall silenciosamente, e quanto
+# mais gente subisse apostila, pior ficaria pra todos.
+#
+# `usuario_id = NULL` é NULL (nunca true) em SQL, então quem chama sem
+# identificar o usuário — a CLI, `avaliar_retrieval.py`, o gabarito — vê
+# exatamente o acervo público. O padrão inseguro seria o contrário.
+DONO = "(d.usuario_id IS NULL OR d.usuario_id = %(uid)s)"
+
+# MESA DO MATERIAL (migração 021). Some junto do DONO, dentro das mesmas CTEs, e
+# pelo mesmo motivo: filtrar DEPOIS de rankear faria o material da outra mesa
+# gastar vaga no top-6 e sair da lista — a pergunta perderia contexto sem
+# ninguém ver por quê.
+#
+# Lê-se: "sem mesa pedida, passa tudo; senão público passa sempre e material
+# privado passa se não tiver mesa (pool comum) ou se for desta mesa".
+#
+# A PRIMEIRA guarda (`%(mid)s IS NULL`) é o conserto de um bug que só apareceu
+# medindo: sem ela, chamar com `mesa_id=None` — que significa "não recorte" —
+# EXCLUÍA todo material que tem mesa, porque `d.mesa_id = NULL` é NULL e nunca
+# true em SQL. O caso comum (biblioteca compartilhada, o default) ficava sem ver
+# a própria biblioteca. O `::bigint` é obrigatório: parâmetro sozinho num
+# `IS NULL` estoura IndeterminateDatatype, a mesma armadilha do `::bigint[]` que
+# o reingest.py já precisou e do `%s::text` da 020.
+MESA = ("(%(mid)s::bigint IS NULL OR d.usuario_id IS NULL"
+        " OR d.mesa_id IS NULL OR d.mesa_id = %(mid)s)")
+
 SQL_HIBRIDA = f"""
 WITH sem AS (
-    SELECT id, ROW_NUMBER() OVER (ORDER BY embedding <=> %(emb)s::vector) AS pos
-    FROM chunk
-    WHERE embedding IS NOT NULL
-    ORDER BY embedding <=> %(emb)s::vector
+    SELECT c.id, ROW_NUMBER() OVER (ORDER BY c.embedding <=> %(emb)s::vector) AS pos
+    FROM chunk c JOIN documento d ON d.id = c.documento_id
+    WHERE c.embedding IS NOT NULL AND {DONO} AND {MESA}
+    ORDER BY c.embedding <=> %(emb)s::vector
     LIMIT %(k)s
 ),
 lex AS (
     SELECT c.id, ROW_NUMBER() OVER (ORDER BY ts_rank_cd(c.busca, q) DESC) AS pos
-    FROM chunk c, websearch_to_tsquery('portuguese', %(termos)s) q
-    WHERE c.busca @@ q
+    FROM chunk c
+    JOIN documento d ON d.id = c.documento_id,
+         websearch_to_tsquery('portuguese', %(termos)s) q
+    WHERE c.busca @@ q AND {DONO} AND {MESA}
     ORDER BY ts_rank_cd(c.busca, q) DESC
     LIMIT %(k)s
 )
 SELECT {CAMPOS},
-       COALESCE(1.0 / (%(rrf)s + sem.pos), 0) +
-       COALESCE(1.0 / (%(rrf)s + lex.pos), 0) AS score
+       (COALESCE(1.0 / (%(rrf)s + sem.pos), 0) +
+        COALESCE(%(peso_lexical)s / (%(rrf)s + lex.pos), 0))
+       * CASE WHEN d.tipo = 'historico' THEN %(peso_historico)s ELSE 1 END AS score
 FROM chunk c
 JOIN documento d ON d.id = c.documento_id
 LEFT JOIN sem ON sem.id = c.id
@@ -104,7 +180,8 @@ def _norma_mencionada(pergunta: str) -> str | None:
     return None
 
 
-def por_dispositivo(pergunta: str, n: int = 4) -> list[dict]:
+def por_dispositivo(pergunta: str, n: int = 4, usuario_id: int | None = None,
+                    mesa_id: int | None = None) -> list[dict]:
     """
     Artigos 1º a 9º levam o ordinal "º" por convenção de redação legislativa
     (LC 95/1998); do 10 em diante não. Quase ninguém digita "º" ao perguntar
@@ -123,13 +200,15 @@ def por_dispositivo(pergunta: str, n: int = 4) -> list[dict]:
             WHERE regexp_replace(c.artigo, '[ºo]$', '', 'i')
                   = regexp_replace(%(art)s, '[ºo]$', '', 'i')
               AND (%(norma)s::text IS NULL OR c.norma = %(norma)s)
+              AND {DONO} AND {MESA}
             ORDER BY d.tipo = 'lei' DESC, c.norma, c.ordem
             LIMIT %(n)s""",
-        {"art": m.group(1), "n": n, "norma": norma},
+        {"art": m.group(1), "n": n, "norma": norma, "uid": usuario_id, "mid": mesa_id},
     )
 
 
-def por_rubrica(pergunta: str, n: int = 4) -> list[dict]:
+def por_rubrica(pergunta: str, n: int = 4, usuario_id: int | None = None,
+                mesa_id: int | None = None) -> list[dict]:
     """Nome de crime é o jeito humano de referenciar um tipo penal."""
     return db.query(
         f"""SELECT {CAMPOS}, 1.0 AS score
@@ -137,40 +216,55 @@ def por_rubrica(pergunta: str, n: int = 4) -> list[dict]:
                  websearch_to_tsquery('portuguese', %(t)s) q
             WHERE c.rubrica IS NOT NULL
               AND to_tsvector('portuguese', c.rubrica) @@ q
+              AND {DONO} AND {MESA}
             ORDER BY ts_rank_cd(to_tsvector('portuguese', c.rubrica), q) DESC
             LIMIT %(n)s""",
-        {"t": _termos_lexicais(pergunta), "n": n},
+        {"t": _termos_lexicais(pergunta), "n": n, "uid": usuario_id, "mid": mesa_id},
     )
 
 
-def hibrida(pergunta: str, n: int = 6, k: int = 40) -> list[dict]:
+def hibrida(pergunta: str, n: int = 6, k: int = 40,
+            usuario_id: int | None = None, mesa_id: int | None = None) -> list[dict]:
     return db.query(SQL_HIBRIDA, {
         "emb": embed_consulta(pergunta),
         "termos": _termos_lexicais(pergunta),
+        "uid": usuario_id,
+        "mid": mesa_id,
         "k": k,
         "n": n,
         "rrf": RRF_K,
+        "peso_historico": PESO_HISTORICO,
+        "peso_lexical": PESO_LEXICAL,
     })
 
 
-def buscar(pergunta: str, n: int = 6) -> list[dict]:
+def buscar(pergunta: str, n: int = 6, usuario_id: int | None = None,
+           mesa_id: int | None = None) -> list[dict]:
     """
     Ponto de entrada. Precisão vence recall: quando há acerto exato de
     dispositivo, devolve só ele. Contexto extra não ajuda o modelo a
     responder "o que diz o art. 312" — só o convida a citar outra coisa.
+
+    `usuario_id` abre a biblioteca PRIVADA daquele aluno (migração 019) além
+    do acervo público. Omitir é o padrão SEGURO — só público —, e é por isso
+    que o parâmetro é opcional em vez de obrigatório: a CLI, o `gerar.py` e o
+    `avaliar_retrieval.py` medem contra o acervo compartilhado, e passar a
+    biblioteca de alguém ali mudaria o gabarito de um teste conforme o que um
+    aluno subiu ontem.
     """
-    exatos = por_dispositivo(pergunta, n=n)
+    exatos = por_dispositivo(pergunta, n=n, usuario_id=usuario_id, mesa_id=mesa_id)
     if exatos:
         return exatos
 
-    rubricas = por_rubrica(pergunta, n=3)
+    rubricas = por_rubrica(pergunta, n=3, usuario_id=usuario_id, mesa_id=mesa_id)
     if rubricas:
         # Acerto de rubrica é forte: só 2 vagas de complemento, para permitir
         # comparação entre tipos sem afogar a resposta em artigo parecido.
         vistos = {c["id"] for c in rubricas}
-        extra = [c for c in hibrida(pergunta, n=4) if c["id"] not in vistos][:2]
+        extra = [c for c in hibrida(pergunta, n=4, usuario_id=usuario_id, mesa_id=mesa_id)
+                 if c["id"] not in vistos][:2]
         return rubricas + extra
-    return hibrida(pergunta, n=n)
+    return hibrida(pergunta, n=n, usuario_id=usuario_id, mesa_id=mesa_id)
 
 
 def formatar_contexto(chunks: list[dict]) -> str:

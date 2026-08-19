@@ -11,10 +11,12 @@ import {
   Desempenho,
   EditalAtual,
   ErroCaderno,
+  Mesa,
   Meta,
   getCarga,
   getEdital,
   getErros,
+  getMesaAtual,
   getMeta,
   getStats,
   getToken,
@@ -25,7 +27,7 @@ const CHAVE_RECOLHIDA = "tutor_sidebar_recolhida";
 // Telas de entrada — sem casca nenhuma. No protótipo elas são o "lobby":
 // tela cheia, sem nav, sem cabeçalho, sem rail, porque ainda não há sessão
 // de estudo pra navegar.
-const SEM_CASCA = new Set(["/login", "/mesas", "/onboarding"]);
+const SEM_CASCA = new Set(["/login", "/cadastro", "/mesas", "/onboarding"]);
 
 // O rail só faz sentido onde há contexto pra ele comentar. No protótipo é
 // exatamente isto: panorama e tutor. Numa tela de responder questão ele
@@ -56,6 +58,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [railAberto, setRailAberto] = useState(false);
 
   const [carga, setCarga] = useState<Carga | null>(null);
+  const [mesa, setMesa] = useState<Mesa | null>(null);
   const [meta, setMeta] = useState<Meta | null>(null);
   const [edital, setEdital] = useState<EditalAtual | null>(null);
   const [desempenho, setDesempenho] = useState<Desempenho[] | null>(null);
@@ -71,11 +74,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       setEstreito(window.innerWidth < 1280);
     }
     medir();
+    // O disable cobre os três setState abaixo (a regra reporta uma vez por
+    // efeito): medir a janela EXIGE o browser, e o valor certo só existe
+    // depois do mount — é o caso legítimo que a regra não distingue.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setRecolhida(window.localStorage.getItem(CHAVE_RECOLHIDA) === "1");
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRailAberto(window.innerWidth >= 1280);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMontado(true);
     window.addEventListener("resize", medir);
     return () => window.removeEventListener("resize", medir);
@@ -99,6 +103,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     // conteúdo. Sem edital ingerido, /meta e /edital respondem erro — e a
     // resposta certa é o painel dizer "sem edital", não a página quebrar.
     getCarga().then(setCarga).catch(() => {});
+    // Uma requisição só pro nome da mesa, aqui — nav e rail leem a mesma
+    // resposta. Sem isso os dois pediriam a mesma coisa a cada rota, e
+    // poderiam divergir enquanto uma das duas ainda não voltou.
+    getMesaAtual().then(setMesa).catch(() => setMesa(null));
     getMeta().then(setMeta).catch(() => {});
     getEdital().then(setEdital).catch(() => setEdital(null));
     getStats().then(setDesempenho).catch(() => {});
@@ -138,11 +146,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* ------------------------------------------------------- nav */}
       {!foco && (
         <div className="hidden lg:block">
-          <Sidebar recolhida={recolhida} onAlternar={alternarSidebar} />
+          <Sidebar recolhida={recolhida} onAlternar={alternarSidebar} mesa={mesa} />
         </div>
       )}
       {!foco && menuAberto && (
-        <Sidebar recolhida={false} onAlternar={alternarSidebar} drawer onFechar={() => setMenuAberto(false)} />
+        <Sidebar
+          recolhida={false}
+          onAlternar={alternarSidebar}
+          mesa={mesa}
+          drawer
+          onFechar={() => setMenuAberto(false)}
+        />
       )}
 
       {/* -------------------------------------------------- conteúdo */}
@@ -151,6 +165,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="brilho-topo" />
           {!foco && (
             <Header
+              carga={carga}
               railAberto={railAberto}
               railDisponivel={railDisponivel}
               onAlternarRail={() => setRailAberto((r) => !r)}
@@ -160,16 +175,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           )}
           <main className="relative z-[1] min-h-0 flex-1 overflow-y-auto">{children}</main>
 
-          {/* Saída do foco: o protótipo deixa a dica do atalho visível, e
-              não só o botão — quem entrou em foco sem querer precisa saber
-              como sair sem caçar o canto certo da tela. */}
+          {/* Saída do foco no ALTO E À DIREITA, onde o botão "Foco" estava
+              antes de o cabeçalho sumir: entrar e sair no mesmo canto é o que
+              faz o gesto ser reversível sem procurar. A dica do atalho fica
+              visível junto, e não só o botão — quem entrou sem querer precisa
+              saber como sair. */}
           {foco && (
             <button
               onClick={() => setFoco(false)}
-              className="chip fixed bottom-5 left-1/2 z-40 -translate-x-1/2 font-mono text-[12px]"
+              className="chip fixed right-5 top-4 z-40 font-mono text-[12px]"
             >
               <X className="h-3.5 w-3.5" />
-              sair do modo foco · esc
+              Sair do modo foco · esc
             </button>
           )}
         </section>
@@ -177,6 +194,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* ---------------------------------------------------- rail */}
         {railVisivel && <RaioX
           meta={meta}
+          mesa={mesa}
           edital={edital}
           desempenho={desempenho}
           carga={carga}

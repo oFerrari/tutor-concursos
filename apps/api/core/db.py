@@ -25,3 +25,22 @@ def query(sql: str, params: dict | tuple | None = None) -> list[dict]:
 def exec1(sql: str, params: dict | tuple | None = None) -> dict | None:
     r = query(sql, params)
     return r[0] if r else None
+
+
+def conexao_isolada() -> psycopg.Connection:
+    """Conexão NOVA, independente da global — para trabalho longo em thread.
+
+    `conn()` devolve UMA conexão de módulo, e ela é o certo pro caminho
+    normal: um request curto por vez. Ingestão de material é o oposto disso —
+    o embedding roda local na CPU (ver "Pilha"), um PDF de 800 trechos leva
+    MINUTOS, e o loop grava lote a lote. Usar a conexão global aí a segura
+    durante todo esse tempo: qualquer outro request do app espera na fila
+    atrás de uma indexação.
+
+    Quem abre é responsável por fechar (`with`). `register_vector` também
+    aqui, senão o INSERT do embedding falha nesta conexão mesmo funcionando
+    na outra — o adaptador é registrado por CONEXÃO, não por processo.
+    """
+    c = psycopg.connect(DATABASE_URL, autocommit=True, row_factory=dict_row)
+    register_vector(c)
+    return c

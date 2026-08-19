@@ -4,23 +4,25 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowUp } from "lucide-react";
-import { OFENSIVA, TEMPO_MEDIO } from "@/mock/prototipo";
+import { Kpis } from "@/components/Kpis";
 import {
   Carga,
   Desempenho,
   ErroApi,
   ErroCaderno,
+  Mesa,
   Meta,
   Usuario,
   getCarga,
   getErros,
   getMe,
+  getMesaAtual,
   getMeta,
   getStats,
   getSugestao,
   getToken,
-  limparToken,
 } from "@/lib/api";
+import { sair } from "@/lib/cache";
 
 function saudacao(): string {
   const h = new Date().getHours();
@@ -58,6 +60,9 @@ function corDoPct(pct: number): string {
 export default function PaginaPanorama() {
   const router = useRouter();
   const [usuario, setUsuario] = useState<Usuario | null>(null);
+  // Só pra saber SE há alvo — o número é o mesmo com ou sem, o que muda
+  // é o que ele significa, e o rótulo precisa dizer qual dos dois é.
+  const [mesa, setMesa] = useState<Mesa | null>(null);
   const [carga, setCarga] = useState<Carga | null>(null);
   const [sugestao, setSugestao] = useState<string | null>(null);
   const [meta, setMeta] = useState<Meta | null>(null);
@@ -79,14 +84,15 @@ export default function PaginaPanorama() {
       })
       .catch((e) => {
         if (e instanceof ErroApi && e.status === 401) {
-          limparToken();
+          sair();
           router.push("/login");
           return;
         }
-        setErro(e instanceof ErroApi ? e.message : "não deu pra conectar com a API");
+        setErro(e instanceof ErroApi ? e.message : "Não deu pra conectar com a API");
       });
     // extras — falhar aqui não deve derrubar a tela (ex.: sem edital ingerido)
     getMe().then(setUsuario).catch(() => {});
+    getMesaAtual().then(setMesa).catch(() => {});
     getSugestao().then((r) => setSugestao(r.sugestao)).catch(() => {});
     getMeta().then(setMeta).catch(() => {});
   }, [router]);
@@ -111,44 +117,10 @@ export default function PaginaPanorama() {
   const ordenadas = [...comDado].sort((a, b) => (a.pct_acerto ?? 0) - (b.pct_acerto ?? 0));
   const pior = ordenadas[0] ?? null;
 
-  const tentativas = desempenho.reduce((s, d) => s + d.tentativas, 0);
-  const acertos = desempenho.reduce((s, d) => s + d.acertos, 0);
-  const acertoGeral = tentativas > 0 ? (acertos / tentativas) * 100 : null;
-
   const nome = primeiroNome(usuario?.email);
 
-  // Os quatro KPIs do protótipo, na mesma ordem. Dois são medidos (acerto
-  // geral, revisões hoje) e dois são vitrine (ofensiva, tempo médio) —
-  // ver `mock/prototipo.ts` pro que falta no backend em cada um.
-  const kpis = [
-    {
-      rotulo: "acerto geral",
-      valor: acertoGeral == null ? "—" : `${acertoGeral.toFixed(0)}%`,
-      nota: tentativas > 0 ? `${acertos} de ${tentativas} tentativas` : "sem tentativa ainda",
-      cor: "var(--foreground)",
-    },
-    {
-      rotulo: "ofensiva",
-      valor: `${OFENSIVA.dias} dias`,
-      nota: `recorde: ${OFENSIVA.recorde} dias`,
-      cor: "var(--foreground)",
-    },
-    {
-      rotulo: "revisões hoje",
-      valor: String(carga.revisoes),
-      nota: carga.atraso > 0 ? `${carga.atraso} em atraso` : "fila SM-2 em dia",
-      cor: carga.revisoes > 0 ? "var(--accent-text)" : "var(--foreground)",
-    },
-    {
-      rotulo: "tempo médio",
-      valor: TEMPO_MEDIO.valor,
-      nota: TEMPO_MEDIO.nota,
-      cor: "var(--foreground)",
-    },
-  ];
-
   return (
-    <div className="mx-auto w-full max-w-[1000px] px-6 pb-10 pt-6">
+    <div className="mx-auto flex min-h-full w-full max-w-[1000px] flex-col px-6 pb-10 pt-6">
       <p className="rotulo-accent mb-2.5">
         {`// ${saudacao()}${nome ? `, ${nome.toLowerCase()}` : ""}`}
       </p>
@@ -165,24 +137,25 @@ export default function PaginaPanorama() {
         )}
       </h1>
 
-      {/* --------------------------------------------------------- KPIs */}
-      <div className="mb-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {kpis.map((k) => (
-          <div key={k.rotulo} className="rounded-[14px] border border-line bg-surface px-[18px] py-4">
-            <p className="rotulo mb-2">{k.rotulo}</p>
-            <p className="text-[25px] font-semibold tabular-nums" style={{ color: k.cor }}>
-              {k.valor}
-            </p>
-            <p className="mt-0.5 text-[12.5px] text-muted">{k.nota}</p>
-          </div>
-        ))}
+      {/* KPIs: mesma faixa da tela de desempenho, do mesmo componente —
+          dois cálculos do "acerto geral" divergiriam entre as duas telas. */}
+      <div className="mb-3">
+        <Kpis carga={carga} desempenho={desempenho} />
       </div>
 
       {/* ------------------------------------------------------- split */}
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
         {/* ------------------------------------------ maestria por matéria */}
         <section className="rounded-2xl border border-line bg-surface px-[22px] py-5">
-          <p className="rotulo mb-4">maestria por matéria</p>
+          {/* Mesmo cuidado do raio-x: sem alvo, isto é o histórico inteiro
+              do aluno, não o recorte de uma mesa. O rótulo diz qual dos
+              dois é, porque o número é o mesmo e o significado não. */}
+          <p className="rotulo mb-4">
+            maestria por matéria
+            {mesa?.origem_alvo === "nenhum" && (
+              <span className="opacity-60"> · acervo inteiro</span>
+            )}
+          </p>
           {ordenadas.length === 0 ? (
             <p className="text-sm text-muted">
               nenhuma disciplina com tentativa registrada ainda — responda a fila de hoje e este quadro
@@ -217,7 +190,13 @@ export default function PaginaPanorama() {
         <div className="flex flex-col gap-3">
           <section className="rounded-2xl border border-line bg-surface px-5 py-[18px]">
             <p className="rotulo mb-3">edital fechado</p>
-            {meta ? (
+            {/* GET /meta responde 200 mesmo sem edital nenhum ingerido (só
+                com dias_restantes: null e um aviso) — checar `meta` sozinho
+                nunca cai no branch de baixo, então quem pulou o onboarding
+                ficava sem NENHUM link de volta nesta seção (só um texto
+                pequeno, sem ação). O sinal certo de "tem edital" é
+                dias_restantes, mesmo padrão já usado em RaioX.tsx. */}
+            {meta && meta.dias_restantes != null ? (
               <>
                 <div className="mb-2 flex items-baseline justify-between">
                   <span className="text-[25px] font-semibold tabular-nums">
@@ -262,7 +241,7 @@ export default function PaginaPanorama() {
                 </p>
               )}
               {!sugestao && !pior && carga.atraso === 0 && (
-                <p className="text-muted">nada gritando hoje. Bom sinal.</p>
+                <p className="text-muted">Nada gritando hoje. Bom sinal.</p>
               )}
             </div>
             {erros.length > 0 && (
@@ -277,14 +256,18 @@ export default function PaginaPanorama() {
       {/* ---------------------------------------------------- composer */}
       {/* O protótipo põe a caixa de conversa no rodapé do painel: falar com
           o tutor é a ação primária, e ela fica igual em todas as telas. O
-          texto vai pro /tutor, que é quem tem o `POST /perguntar`. */}
+          texto vai pro /tutor, que é quem tem o `POST /perguntar`.
+          `mt-auto` (num container `flex min-h-full flex-col`) é o que ancora
+          o composer no FIM da página de verdade — sem isso, com pouco
+          conteúdo acima (poucas disciplinas, sem alerta), ele ficava
+          flutuando no meio da tela com um vão vazio embaixo. */}
       <form
         onSubmit={(e) => {
           e.preventDefault();
           const t = pergunta.trim();
           router.push(t ? `/tutor?q=${encodeURIComponent(t)}` : "/tutor");
         }}
-        className="mt-7 rounded-[18px] border border-line-strong bg-surface-input px-3.5 pb-2.5 pt-3.5 shadow-[var(--shadow-float)] focus-within:border-accent"
+        className="mt-auto rounded-[18px] border border-line-strong bg-surface-input px-3.5 pb-2.5 pt-3.5 shadow-[var(--shadow-float)] focus-within:border-accent"
       >
         <input
           value={pergunta}

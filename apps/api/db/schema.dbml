@@ -107,9 +107,28 @@ Table erro_caderno {
   Note: "Derivado de tentativa — resumo materializado, não fonte de verdade."
 }
 
+// ------------------------------------------------------------ mesa (o ALVO)
+// Mesa é FILTRO, não silo: progresso/tentativa/erro_caderno continuam
+// escopados por usuario_id, porque a memória SM-2 é do ALUNO, não do
+// concurso. O que a mesa recorta é O QUE APARECE — as disciplinas do edital
+// dela (derivadas de topico.disciplina, não guardadas em coluna).
+// Ver db/010_mesa.sql e core/mesa.py.
+
+Table mesa {
+  id         bigint      [pk, increment]
+  usuario_id bigint      [not null, ref: > usuario.id]
+  nome       text        [not null, note: "único por usuário"]
+  orgao      text
+  banca      text
+  criado_em  timestamptz [not null, default: `now()`]
+
+  Note: "Um concurso-alvo. A mais antiga da conta é a padrão (sem X-Mesa-Id)."
+}
+
 Table simulado {
   id             bigint      [pk, increment]
   usuario_id     bigint      [not null, ref: > usuario.id]
+  mesa_id        bigint      [ref: > mesa.id, note: "ETIQUETA, não posse: ON DELETE SET NULL — a prova feita sobrevive à mesa apagada"]
   n_questoes     int         [not null]
   minutos_alvo   int         [note: "meta informativa, sem corte forçado"]
   segundos_total int
@@ -118,7 +137,7 @@ Table simulado {
 
 Table edital {
   id         bigint      [pk, increment]
-  usuario_id bigint      [not null, ref: > usuario.id]
+  mesa_id    bigint      [not null, ref: > mesa.id, note: "o edital É o conteúdo da mesa — ON DELETE CASCADE"]
   titulo     text        [not null]
   orgao      text
   banca      text
