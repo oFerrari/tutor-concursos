@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 import { Kpis, agregar } from "@/components/Kpis";
 import {
   Carga,
+  ConceitoFraco,
   Desempenho,
   ErroApi,
   getCarga,
+  getConceitos,
   getStats,
   getToken,
 } from "@/lib/api";
@@ -71,6 +73,9 @@ export default function PaginaStats() {
   const router = useRouter();
   const [dados, setDados] = useState<Desempenho[] | null>(() => lerCache("stats"));
   const [carga, setCarga] = useState<Carga | null>(() => lerCache("carga"));
+  const [conceitos, setConceitos] = useState<ConceitoFraco[] | null>(
+    () => lerCache("conceitos")
+  );
   const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
@@ -97,6 +102,15 @@ export default function PaginaStats() {
       .then((c) => {
         setCarga(c);
         gravarCache("carga", c);
+      })
+      .catch(() => {});
+    // Também contexto, e também tolerante a falha: se esta cair, a tela
+    // continua sendo o desempenho por matéria. O bloco só aparece quando há
+    // conceito reincidente — lista vazia não vira seção vazia.
+    getConceitos()
+      .then((c) => {
+        setConceitos(c);
+        gravarCache("conceitos", c);
       })
       .catch(() => {});
   }, [router]);
@@ -177,6 +191,42 @@ export default function PaginaStats() {
             </div>
           </section>
         </div>
+      )}
+
+      {/* O QUE VOCÊ CONFUNDE — e não "o que você errou", que é o quadro
+          acima. Vem do `conceito_faltante` que a correção já apontava em toda
+          avaliação e que era descartado: gerado, pago, exibido uma vez e
+          esquecido. Só entra conceito que reincidiu (>= 2 vezes): apontado
+          uma vez é observação, e observação afirmada como padrão na tela do
+          aluno é pior que silêncio.
+
+          Some quando não há nada — seção vazia com título faz o aluno achar
+          que o app quebrou, e aqui o vazio é a notícia boa. */}
+      {conceitos && conceitos.length > 0 && (
+        <section className="mt-3 rounded-2xl border border-line bg-surface px-[22px] py-5">
+          <p className="rotulo mb-1">o que você confunde</p>
+          <p className="mb-4 text-sm text-muted">
+            Apontado pela correção das suas respostas, agrupado pelo que se repetiu.
+          </p>
+          <ul className="flex flex-col gap-2.5">
+            {conceitos.map((c) => (
+              <li
+                key={`${c.disciplina}-${c.conceito}`}
+                className="flex items-start justify-between gap-4 border-b border-line pb-2.5 last:border-0 last:pb-0"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm">{c.conceito}</p>
+                  <p className="mt-0.5 text-xs text-subtle">{c.disciplina}</p>
+                </div>
+                {/* tabular-nums pelo mesmo motivo da TabelaPorDisciplina: sem
+                    isso o número muda de largura e a coluna dança. */}
+                <span className="shrink-0 whitespace-nowrap text-xs tabular-nums text-muted">
+                  {c.vezes}x
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
     </div>
   );

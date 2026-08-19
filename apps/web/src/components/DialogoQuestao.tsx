@@ -71,6 +71,16 @@ export function DialogoQuestao({
   // segunda questão herdar o tempo da primeira em silêncio.
   const inicio = useRef<number | null>(null);
 
+  // O conceito que a última correção apontou como faltando (022). `useRef` e
+  // não `useState` porque `fechar()` roda no MESMO tick em que a avaliação
+  // chega — um `setState` ainda não estaria visível ali, e a tentativa gravaria
+  // o conceito da resposta ANTERIOR. Errar calado é pior que não gravar.
+  //
+  // Guarda o último conceito NÃO VAZIO: o aluno que erra e depois acerta fecha
+  // com veredito "correta" e conceito vazio, e o que interessa registrar é o
+  // que faltou no caminho — foi ali que a caixa deixou de promover.
+  const ultimoConceito = useRef<string | null>(null);
+
   useEffect(() => {
     inicio.current = Date.now();
   }, [questao.id]);
@@ -86,7 +96,7 @@ export function DialogoQuestao({
     const penalidade = erradasFinal + dicasPedidasFinal;
     const segundos = decorridos(inicio.current);
     const r = await registrarTentativa(questao.id, veredito, respostaFinal, penalidade,
-                                      segundos, conversaId);
+                                      segundos, conversaId, ultimoConceito.current);
     setResultado({
       veredito,
       // "Acertou de primeira" só quando penalidade é 0 — correta na 2ª
@@ -109,6 +119,7 @@ export function DialogoQuestao({
     try {
       const av = await avaliar(questao.id, resposta, erradas, historico);
       setUltimaResposta(resposta);
+      if (av.conceito_faltante) ultimoConceito.current = av.conceito_faltante;
 
       if (av.veredito === "correta") {
         setHistorico((h) => [...h, { resposta, comentario: av.comentario, pergunta: "" }]);

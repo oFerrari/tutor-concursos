@@ -440,6 +440,17 @@ class RegistrarBody(BaseModel):
     # dela. É o que faz o tutor considerar a evolução em vez de continuar
     # explicando como se nada tivesse acontecido.
     conversa_id: int | None = None
+    # O que a correção apontou como faltando (022) — o cliente devolve o que
+    # `POST /questoes/{qid}/responder` acabou de lhe entregar.
+    #
+    # Vem do cliente porque avaliar e registrar são DUAS chamadas e não há
+    # sessão no servidor pra guardar nada entre elas (mesma razão de o JWT ser
+    # stateless e de a mesa vir no header). O `veredito` já chega por esse mesmo
+    # caminho e com a mesma confiança — quem responde reporta o próprio
+    # resultado. O que protege este campo não é a origem: é `conceito_limpo`
+    # colapsando quebra de linha, o CHECK de 160 no banco e o rótulo de citação
+    # no prompt.
+    conceito_faltante: str | None = None
 
 
 @app.post("/questoes/{qid}/registrar")
@@ -449,7 +460,8 @@ def rota_registrar_tentativa(qid: int, body: RegistrarBody, uid: int = Depends(u
         raise HTTPException(422, "veredito precisa ser correta/parcial/incorreta")
     try:
         r = scheduler.registrar(uid, qid, body.veredito, body.resposta, body.dicas_usadas,
-                                body.segundos, body.simulado_id)
+                                body.segundos, body.simulado_id,
+                                conceito_faltante=body.conceito_faltante)
     except ValueError as e:
         raise HTTPException(404, str(e))
 
@@ -641,6 +653,23 @@ def rota_stats(uid: int = Depends(usuario_atual), m: dict = Depends(mesa_atual))
 @app.get("/erros")
 def rota_erros(uid: int = Depends(usuario_atual), m: dict = Depends(mesa_atual)):
     return scheduler.caderno_erros(uid, disciplinas=m["disciplinas"])
+
+
+@app.get("/conceitos")
+def rota_conceitos(uid: int = Depends(usuario_atual), m: dict = Depends(mesa_atual)):
+    """O que o aluno CONFUNDE, não quais questões ele erra (022).
+
+    Rota separada de `/erros` porque é outra pergunta, não outro formato da
+    mesma: `/erros` agrupa por questão e rotula com `questao.tema` (o índice do
+    material); esta agrupa pelo que faltou na resposta DELE. Vinte questões
+    diferentes podem estar apontando a mesma confusão — e é a confusão que diz o
+    que estudar hoje.
+
+    Somar as duas numa rota mudaria o tipo do `/erros`, que já é consumido como
+    lista simples; e um cliente que só quer o caderno passaria a pagar esta
+    agregação sem pedir.
+    """
+    return scheduler.conceitos_fracos(uid, m["disciplinas"], limite=12)
 
 
 @app.get("/meta")

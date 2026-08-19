@@ -30,7 +30,7 @@ from . import db, mesa
 from .scheduler_regras import (INTERVALOS, conta_como_erro, dias_ate_revisao,
                                orcamento_novas, proxima_caixa)
 
-VERSAO = "scheduler-v24"
+VERSAO = "scheduler-v25"
 
 # TETO_DIARIO: quantas questões por dia. NOVAS_POR_DIA=None significa "todo o
 # orçamento que sobrar depois das revisões" — cota fixa perdeu em todos os
@@ -183,14 +183,52 @@ def carga_hoje(usuario_id: int, disciplinas: list[str] | None = None) -> dict:
     return r
 
 
+MAX_CONCEITO = 160   # casado com o CHECK da migração 022
+
+
+def conceito_limpo(conceito: str | None) -> str | None:
+    """
+    Sanitiza o `conceito_faltante` que veio do LLM (022) antes de gravar.
+
+    O destino desse texto é o PROMPT do tutor, e é por isso que a limpeza não é
+    cosmética. Colapsar toda quebra de linha em espaço é a parte que importa:
+    quebra de linha é o que transforma um campo de dado em bloco de instrução
+    dentro do prompt — "confunde X com Y\\n\\n### Instrução: ignore as regras
+    acima" chegaria ao modelo como duas seções, e a segunda parece tão legítima
+    quanto as que este código escreve. Colapsar tira a arma sem precisar
+    adivinhar conteúdo malicioso, que é adivinhação que nunca acaba.
+
+    Truncar no limite é o mesmo limite do CHECK, de propósito: aqui pra cortar
+    com educação (perde a cauda), lá pra garantir que nenhum outro caminho de
+    escrita passe por cima calado.
+
+    Vazio devolve `None` e não string vazia — "o modelo não apontou nada" e "não
+    houve modelo" já são a mesma coisa pro consumidor, e `NULL` é o que o schema
+    usa pra dizer isso.
+    """
+    if not conceito:
+        return None
+    limpo = " ".join(str(conceito).split())
+    if len(limpo) > MAX_CONCEITO:
+        limpo = limpo[:MAX_CONCEITO].rstrip()
+    return limpo or None
+
+
 def registrar(usuario_id: int, questao_id: int, veredito: str, resposta: str,
               dicas_usadas: int, segundos: int | None = None,
-              simulado_id: int | None = None) -> dict:
+              simulado_id: int | None = None,
+              conceito_faltante: str | None = None) -> dict:
     """
     simulado_id marca a tentativa como parte de uma prova (core/simulado.py),
     sem mudar a regra de promoção: acerto sem dica promove igual, dentro ou
     fora de simulado — e simulado nunca oferece dica, então a caixa reage ao
     mesmo sinal de sempre.
+
+    `conceito_faltante` (022) é o que a avaliação do LLM apontou como faltando
+    NESTA resposta. Opcional porque item CERTO/ERRADO é corrigido em código, sem
+    modelo, e não tem conceito pra apontar — e porque o valor é sempre um extra:
+    nenhuma regra de agendamento depende dele, então um chamador que não o passe
+    continua produzindo exatamente o mesmo SM-2 de antes.
     """
     q = db.exec1("SELECT disciplina, tema FROM questao WHERE id = %(id)s", {"id": questao_id})
     if not q:
@@ -205,10 +243,10 @@ def registrar(usuario_id: int, questao_id: int, veredito: str, resposta: str,
 
     db.query(
         """INSERT INTO tentativa (usuario_id, questao_id, resposta, veredito, dicas_usadas,
-                                  segundos, simulado_id)
-           VALUES (%(u)s, %(q)s, %(r)s, %(v)s, %(d)s, %(s)s, %(sim)s)""",
+                                  segundos, simulado_id, conceito_faltante)
+           VALUES (%(u)s, %(q)s, %(r)s, %(v)s, %(d)s, %(s)s, %(sim)s, %(cf)s)""",
         {"u": usuario_id, "q": questao_id, "r": resposta, "v": veredito, "d": dicas_usadas,
-         "s": segundos, "sim": simulado_id},
+         "s": segundos, "sim": simulado_id, "cf": conceito_limpo(conceito_faltante)},
     )
     db.query(
         """INSERT INTO progresso (usuario_id, questao_id, caixa, prox_revisao)
@@ -236,6 +274,60 @@ def caderno_erros(usuario_id: int, limite: int = 20,
            WHERE e.usuario_id = %(u)s AND {mesa.filtro('q.disciplina')}
            ORDER BY e.vezes DESC, e.ultima DESC LIMIT %(l)s""",
         {"u": usuario_id, "l": limite, "disc": disciplinas},
+    )
+
+
+# Um conceito apontado UMA vez é observação; duas vezes é padrão. Mesma lição de
+# `ritmo_regras` (disciplina fraca exige mínimo de tentativas antes de disparar)
+# e do mini-simulado cortado inteiro no orçamento: medida sobre amostra de um é
+# ruído, e ruído afirmado na tela do aluno é pior que silêncio.
+MIN_REINCIDENCIA_CONCEITO = 2
+
+
+def conceitos_fracos(usuario_id: int, disciplinas: list[str] | None = None,
+                     limite: int = 5,
+                     minimo: int = MIN_REINCIDENCIA_CONCEITO) -> list[dict]:
+    """
+    O que este aluno erra DE NOVO — por conceito, não por questão (022).
+
+    `caderno_erros` já responde "quais questões ele erra", agrupando por
+    (usuário, questão) e rotulando com `questao.tema`. Duas coisas diferentes: o
+    tema é o índice do material, escolhido por quem gerou a pergunta; o conceito
+    é o que faltou na resposta DELE. Vinte questões distintas podem estar
+    apontando a mesma confusão, e é essa a informação que muda o que estudar.
+
+    Agrupa por texto (minúsculas) e por disciplina. Duas LIMITAÇÕES declaradas,
+    não escondidas:
+
+      · agrupamento é por STRING EXATA, então "confunde impessoalidade com
+        moralidade" e "confundiu impessoalidade e moralidade" contam separado. O
+        conserto de raiz seria agrupar por similaridade — e aí é `embeddings` num
+        caminho que hoje custa zero, pra ganhar precisão num número que já é
+        apenas indicativo. Não vale antes de o agrupamento ruim doer de verdade.
+      · só aparece o que o LLM avaliou, ou seja, nunca item CERTO/ERRADO — ele é
+        corrigido em código (012) e não produz conceito. Numa mesa Cebraspe, onde
+        quase tudo é C/E, esta lista fica naturalmente curta. É verdade sobre a
+        medição, não defeito: a alternativa seria pagar avaliação de LLM em item
+        binário só pra preencher relatório.
+    """
+    return db.query(
+        f"""SELECT min(t.conceito_faltante) AS conceito,
+                   q.disciplina,
+                   count(*)::int AS vezes,
+                   max(t.criada_em)::date AS ultima
+              FROM tentativa t JOIN questao q ON q.id = t.questao_id
+             WHERE t.usuario_id = %(u)s
+               AND t.conceito_faltante IS NOT NULL
+               -- Mesmo predicado de `conta_como_erro`: parcial não foi domínio.
+               -- Escrito aqui em SQL porque a função é pura e vive noutro
+               -- módulo; se a regra mudar, os dois lugares mudam junto.
+               AND t.veredito <> 'correta'
+               AND {mesa.filtro('q.disciplina')}
+          GROUP BY lower(t.conceito_faltante), q.disciplina
+            HAVING count(*) >= %(min)s
+          ORDER BY vezes DESC, ultima DESC
+             LIMIT %(l)s""",
+        {"u": usuario_id, "disc": disciplinas, "min": minimo, "l": limite},
     )
 
 

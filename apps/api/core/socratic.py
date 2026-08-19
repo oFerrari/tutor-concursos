@@ -315,6 +315,26 @@ def _resumo_desempenho(usuario_id: int, disciplinas: list[str] | None = None) ->
     if erros:
         linhas.append("Temas que mais reincidem em erro: " +
                       ", ".join(f"{e['tema']} ({e['vezes']}x)" for e in erros))
+
+    # O CONCEITO, e não só o tema (022). "Temas que reincidem" nomeia a
+    # PERGUNTA errada; isto nomeia a confusão. Sem essa linha o resumo já dizia
+    # "peculato (3x)" e o modelo tinha de adivinhar o que exatamente falha ali —
+    # e adivinhar é o que ele faz de melhor e de pior.
+    #
+    # ENTRA ROTULADO COMO CITAÇÃO DO PRÓPRIO MODELO, entre aspas e com autoria
+    # ("apontado pela sua própria correção"), e isso não é estilo. Este texto foi
+    # ESCRITO POR UM LLM e está voltando pro prompt de um LLM: apresentá-lo como
+    # fato do sistema, no meio de números que vêm do banco, é o que permitiria
+    # uma frase inventada num turno virar premissa no turno seguinte. Mesmo
+    # cuidado da 016 com `[fato da sessão]` — a fonte de cada linha do prompt
+    # precisa ser legível pra quem lê o prompt.
+    conceitos = scheduler.conceitos_fracos(usuario_id, disciplinas, limite=5)
+    if conceitos:
+        linhas.append(
+            "Conceitos que ele erra de novo, apontado pela sua própria correção nas "
+            "tentativas dele: " +
+            ", ".join(f"\"{c['conceito']}\" ({c['vezes']}x, {c['disciplina']})"
+                      for c in conceitos))
     return "\n".join(linhas)
 
 

@@ -152,6 +152,10 @@ def _estudar_lista(uid: int, pendentes: list) -> bool:
         erradas = 0
         inicio = time.monotonic()
         veredito, ultima_resposta = None, ""
+        # O conceito que a última correção apontou como faltando (022).
+        # Lido por `fechar()` como closure, igual `ultima_resposta`: quem sabe
+        # o que faltou é o avaliador, e quem grava é o fechamento.
+        ultimo_conceito = None
         historico = []          # turnos desta questão, para o avaliador seguir o fio
         avisou_contrato = False
 
@@ -162,7 +166,8 @@ def _estudar_lista(uid: int, pendentes: list) -> bool:
             # própria conta, porque aí é ajuda escolhida.
             penalidade = erradas + dicas_pedidas
             r = scheduler.registrar(uid, q["id"], v, ultima_resposta, penalidade,
-                                    int(time.monotonic() - inicio))
+                                    int(time.monotonic() - inicio),
+                                    conceito_faltante=ultimo_conceito)
             motivo = ("acertou de primeira" if v == "correta" and penalidade == 0 else
                       f"{erradas} erro(s), {dicas_pedidas} dica(s) pedida(s)")
             con.print(f"[dim]{v} · {motivo} · caixa {r['caixa']} · "
@@ -206,6 +211,7 @@ def _estudar_lista(uid: int, pendentes: list) -> bool:
                     # código. A CLI seguia chamando o LLM direto e compararia
                     # "C" contra a justificativa em prosa — errado e pago.
                     av = socratic.avaliar_questao(q, resposta, erradas, historico)
+                    ultimo_conceito = av.get("conceito_faltante") or ultimo_conceito
                 except llm.ErroLLM as e:
                     con.print(f"[red]LLM indisponível:[/] {e}")
                     con.print(Panel(q["gabarito"], title="gabarito", border_style="green"))
@@ -300,7 +306,9 @@ def simulado(n: int = simulado_mod.N_PADRAO, minutos: int | None = None,
             except llm.ErroLLM as e:
                 con.print(f"[red]LLM indisponível ao corrigir \"{q['tema']}\":[/] {e}")
                 continue
-            scheduler.registrar(uid, q["id"], av["veredito"], resposta, 0, segundos, simulado_id=sid)
+            scheduler.registrar(uid, q["id"], av["veredito"], resposta, 0, segundos,
+                                simulado_id=sid,
+                                conceito_faltante=av.get("conceito_faltante"))
             if av["veredito"] != "correta":
                 pendentes.append((q, resposta, av))
 

@@ -170,7 +170,8 @@ def responder_uma(simulado_id: int, usuario_id: int, questao_id: int,
         )
     else:
         scheduler.registrar(usuario_id, questao_id, av["veredito"], resposta, 0,
-                            segundos_pergunta, simulado_id=simulado_id)
+                            segundos_pergunta, simulado_id=simulado_id,
+                            conceito_faltante=av.get("conceito_faltante"))
 
     atualizar_tempo(simulado_id, usuario_id, segundos_acumulados)
     return {"ok": True, "ja_respondida": existente is not None}

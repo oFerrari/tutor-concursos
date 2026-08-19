@@ -67,6 +67,8 @@ db/015_perfil.sql          usuario.perfil (JSONB): horas/nível/turno declarados
 db/018_edital_cargo.sql    edital.cargo: o plano diz PARA QUEM ele é (17 cargos no da PF)
 db/019_material_do_aluno.sql documento.usuario_id + status/erro/chunks_total: biblioteca privada
 db/020_material_classificado.sql disciplina virou NULLABLE + assunto + classificado_por
+db/021_biblioteca_por_mesa.sql documento.mesa_id + mesa.biblioteca_compartilhada
+db/022_conceito_faltante.sql tentativa.conceito_faltante: o que o aluno CONFUNDE
 db/schema.dbml             schema documentado (DBML) — visualização, não fonte de verdade
 core/chunking.py           lei -> chunks por artigo (função pura)
 core/embeddings.py         e5 local, prefixos query:/passage:, cache
@@ -79,6 +81,7 @@ core/mesa.py               mesa de estudo (o concurso-alvo) e o predicado de rec
 core/rascunho.py           curadoria do edital: extrai pra rascunho, pessoa escolhe o cargo, confirma
 core/geracao.py            gera questão do ACERVO sob demanda e grava com proveniência
 core/conversa.py           conversa persistida do tutor + janela de histórico pro prompt
+core/assunto.py            o assunto em foco da conversa — a consulta que vai à BUSCA (PURO)
 core/scheduler_regras.py   regras de promoção — FUNÇÕES PURAS
 core/scheduler.py          fila, registro, caderno de erros, meta — tudo por usuario_id
 core/simulado.py           prova sob condição de exame: sem dica, corrige no final
@@ -762,6 +765,88 @@ arbitrária se ninguém olhar. `material.baixar` resolve o nome, exige
 domínio. Endereço público que serve conteúdo hostil continua aceito, e a tela
 diz o limite ANTES de a pessoa colar e falhar.
 
+**A consulta de busca não é a mensagem: a 014 deu memória ao MODELO e deixou
+o BUSCADOR amnésico (`core/assunto.py`).** O prompt passou a receber 8 turnos;
+`retrieval.buscar` continuou recebendo a frase isolada. E `hibrida()` é
+k-vizinhos, sem piso de relevância — frase sem assunto não devolve vazio,
+devolve 6 artigos com confiança total. Relatado com log de conversa real: o
+aluno conversou a sessão inteira sobre eficácia das normas constitucionais,
+escreveu "vamos", clicou em "quero questões sobre isto", e recebeu CP art. 352
+(evasão mediante violência) e CF art. 200 (SUS) — porque a tela mandava a
+ÚLTIMA FALA como tema e rodou `buscar("vamos")`. Reproduzido byte a byte antes
+de consertar.
+
+O mesmo cano no chat: no turno em que ele escreveu "você deveria perguntar se
+eu já sei algo do assunto... melhor me explicar", voltaram CPP 188/190/203/212
+— os artigos de INTERROGATÓRIO. A busca acertou as palavras e errou a matéria.
+E a prova de que o retriever está são está no mesmo log: no turno com "eficácia
+limitada existem 2 tipos" ele trouxe a apostila certa seis vezes. **Turno com
+assunto acerta; turno curto ou meta devolve lixo** — por isso `retrieval.py`
+NÃO foi tocado e o gabarito do `avaliar_retrieval.py` segue valendo.
+
+`em_foco()` é REGRA, não LLM (mesma escolha de `ritmo_regras`): extrair tema
+por modelo custaria a cota mais escassa e 1-2s em TODO turno, e resposta de
+modelo não se trava em teste. Enriquece ENQUANTO a consulta está fraca e para ao
+ter assunto (`CONTEUDO_SUFICIENTE`) — contar turnos não serve pros dois casos:
+"queria saber como a fgv cobra" precisa de dois reforços pra alcançar "eficácia
+limitada", e dois reforços numa conversa que migrou de Penal pra Constitucional
+trazem PECULATO de volta. Citação de dispositivo vai CRUA, e é a exceção que
+mais importa: `por_dispositivo` lê o número da própria string, então enriquecer
+deixaria um "art. 140" de três turnos atrás sequestrar a pergunta nova.
+`MIN_CONTEUDO = 1` por assimetria de erro — exigir 2 descartaria "matar alguém"
+da consulta inteira. Ficam FORA de `VAZIAS`, de propósito, "direito", "penal",
+"norma", "prazo", "pena" e "tipo": parecem genéricas e são o nome de metade das
+disciplinas.
+
+O tema da geração é derivado NO SERVIDOR (`POST /questoes/gerar` já recebia
+`conversa_id`): "sobre o que é esta conversa" é regra, e regra com duas cópias
+diverge — mesmo argumento que fez a mesa padrão ser resolvida no servidor.
+
+**A escada pedagógica é ORDEM no prompt, não intenção.** Relatado no mesmo log:
+o tutor empurrou "Quero questões sobre isto" nas três primeiras respostas e o
+aluno teve de pedir aula. Nada mandava vender — mas "termine com uma pergunta ou
+sugestão que ajude o aluno" somado a um parágrafo enfático sobre COMO oferecer o
+botão produz isso: a instrução de formato mais específica ganha do objetivo
+vago. Agora o prompt diz descobrir -> explicar -> testar, com exceção permanente
+se o aluno PEDIR questão, e o fecho é o PRÓXIMO DEGRAU em vez da mesma oferta
+(três mensagens com o mesmo convite é ruído que se aprende a ignorar — mesma
+lição de `ritmo` mostrar UMA sugestão por sessão). "Assunto novo" virou FATO
+calculado em código: conversa sem histórico entra como "Primeira mensagem desta
+conversa", senão conversa vazia é indistinguível de histórico que não veio.
+
+**O que o aluno CONFUNDE não é o que ele erra (migração 022).**
+`ESQUEMA_AVALIACAO` pedia `conceito_faltante` ao modelo desde sempre, o Gemini
+preenchia em toda avaliação, o campo atravessava a API e estava tipado no front
+— e era DESCARTADO. Já pago e jogado fora. `erro_caderno.tema` não substitui:
+guarda `questao.tema`, o rótulo da PERGUNTA escolhido por quem gerou a questão.
+É a diferença entre "errou a questão de peculato culposo" e "confunde extinção
+da punibilidade" — medido com o modelo real, nas duas linhas do mesmo prompt.
+
+Vai em `tentativa` e não em `erro_caderno` porque `tentativa` é o FATO e
+`erro_caderno` o agregado: a mesma questão errada duas vezes pode faltar coisa
+diferente em cada uma, e é essa mudança que mostra evolução. NULLABLE porque
+item C/E é corrigido em código (012) e não produz conceito — `DEFAULT ''` faria
+"não houve modelo" ficar igual a "o modelo não achou nada".
+
+**Texto de LLM voltando pro prompt de LLM é input sujo, e a defesa é em código.**
+Lista fechada não cabe (conceito é livre por natureza), então: `conceito_limpo`
+COLAPSA quebra de linha — é a quebra que transforma campo de dado em bloco de
+instrução dentro do prompt (`confunde X` + linha em branco + `### Instrução:
+ignore as regras acima` chegaria como duas seções) —, CHECK de 160 no banco pra
+que um segundo caminho de escrita não passe calado, e no prompt ele entra ENTRE
+ASPAS e com autoria ("apontado pela sua própria correção"), nunca como fato do
+sistema no meio de números do banco. E **nunca** vai pro `usuario.perfil`: esse
+campo é lido inteiro e literal pelo prompt, e fechar esse laço deixaria o modelo
+instruir a si mesmo no turno seguinte. Há teste que trava isso.
+
+Agrupamento por string exata (minúsculas) + disciplina, com mínimo de 2
+ocorrências — apontado uma vez é observação, e a lição de `ritmo_regras` sobre
+amostra pequena vale aqui igual. Medido: duas avaliações reais da MESMA questão
+devolveram a MESMA string ("Extinção da punibilidade"), porque o campo é curto e
+o modelo escreve um NOME de conceito, não uma frase. Agrupar por similaridade
+(embeddings) seria o conserto de raiz e não vale antes de o agrupamento ruim
+doer.
+
 ## Invariantes (violação = bug)
 
 - Todo `Art.` do arquivo vira um chunk. `diagnostico.py` verifica.
@@ -773,6 +858,10 @@ diz o limite ANTES de a pessoa colar e falhar.
   de uma sessão não é motivo pra afrouxar a regra.
 - Item `certo_errado` tem `gabarito_ce` não-nulo e `resposta_livre` tem
   `gabarito_ce` nulo. Não é convenção — é CHECK no banco (012).
+- `tentativa.conceito_faltante` nunca passa de 160 caracteres e nunca contém
+  quebra de linha. CHECK no banco (022) + `scheduler.conceito_limpo`.
+- Nenhum texto gerado por LLM é escrito em `usuario.perfil`. O prompt lê esse
+  campo inteiro e literal; a lista fechada da 015 existe por isso.
 - Questão com `contexto_id` tem `ordem_no_contexto`, e vice-versa (CHECK, 013).
 - Item C/E nunca recebe veredito `parcial`: metade de um booleano não é nada,
   e `parcial` desce uma caixa.
@@ -1081,6 +1170,26 @@ upload: caminho interno do servidor não é dado do usuário.
   nem ficam no servidor (só o nome, em `documento.origem`), então a outra
   máquina precisa subir os arquivos de novo.
 
+- `conceitos_fracos` agrupa por STRING EXATA: "confunde impessoalidade com
+  moralidade" e "confundiu impessoalidade e moralidade" contam separado. Na
+  prática o modelo devolve nome curto de conceito e isso quase não dói (medido),
+  mas é limite real — agrupar por similaridade exigiria embeddings num caminho
+  que hoje custa zero.
+- Conceito só existe onde o LLM avaliou, ou seja NUNCA em item CERTO/ERRADO
+  (corrigido em código, 012). Numa mesa Cebraspe a lista fica curta de propósito:
+  a alternativa seria pagar avaliação de LLM em item binário pra preencher
+  relatório.
+- `sincronizar.py` não exporta `tentativa.conceito_faltante`.
+- `buscar()` não tem piso de relevância NENHUM: quando o acervo não cobre o
+  assunto, devolve os 6 vizinhos mais próximos do ruído com confiança total, e
+  `geracao` gera a partir deles. Medido depois da 022: "aplicabilidade e eficácia
+  das normas constitucionais" (doutrina, não lei seca) devolve CP art. 9º
+  "Eficácia de sentença estrangeira" por colisão lexical. O tutor consegue
+  EXPLICAR o assunto (a apostila do aluno cobre) e o gerador estruturalmente não
+  consegue COBRÁ-LO, porque `geracao` só usa acervo público (008). Consertar
+  exige piso de relevância, e o gabarito do `avaliar_retrieval.py` deve receber
+  esse caso ANTES do código.
+
 ## Aberto
 
 - **Múltipla escolha** (FGV, Vunesp): exige tabela de alternativas. O
@@ -1380,6 +1489,9 @@ curl -s -X POST localhost:8000/materiais/link -H "Authorization: Bearer $TOKEN" 
      -H 'content-type: application/json' -d '{"url":"https://exemplo.org/lei.pdf"}'
 # o que alimenta o seletor da tela: só os rótulos DESTE aluno
 curl -s localhost:8000/materiais/sugestoes -H "Authorization: Bearer $TOKEN"
+
+# o que o aluno CONFUNDE (022) — agregado do conceito_faltante das tentativas
+curl -s localhost:8000/conceitos -H "Authorization: Bearer $TOKEN"
 
 # editar o alvo DEPOIS de o edital estar valendo, sem subir o PDF de novo
 curl -s -X PATCH localhost:8000/edital/disciplinas -H "Authorization: Bearer $TOKEN" \

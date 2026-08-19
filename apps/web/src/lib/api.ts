@@ -915,6 +915,20 @@ export function ingerirEdital(
   return chamarFormData<ResultadoIngestaoEdital>("/edital", form);
 }
 
+/** O que o aluno CONFUNDE (022) — agregado do `conceito_faltante` que a própria
+ *  correção do modelo apontou nas tentativas dele. Diferente do caderno de
+ *  erros, que agrupa por questão e rotula com o tema do material. */
+export type ConceitoFraco = {
+  conceito: string;
+  disciplina: string;
+  vezes: number;
+  ultima: string;
+};
+
+export function getConceitos(): Promise<ConceitoFraco[]> {
+  return chamar<ConceitoFraco[]>("/conceitos");
+}
+
 export type Registro = { caixa: number; prox_revisao: string };
 
 export function registrarTentativa(
@@ -926,7 +940,12 @@ export function registrarTentativa(
   /** Respondida DENTRO de uma conversa: o resultado entra na linha do tempo
    *  dela, e o tutor considera isso no próximo turno em vez de continuar
    *  explicando como se nada tivesse acontecido. */
-  conversaId?: number
+  conversaId?: number,
+  /** O `conceito_faltante` que `avaliar()` acabou de devolver (022). Devolvido
+   *  ao servidor porque avaliar e registrar são duas chamadas e não existe
+   *  sessão no servidor pra guardar nada entre elas — o `veredito` já viaja por
+   *  este mesmo caminho. Sem isso o campo é gerado, pago, exibido e descartado. */
+  conceitoFaltante?: string | null
 ): Promise<Registro> {
   return chamar<Registro>(`/questoes/${questaoId}/registrar`, {
     method: "POST",
@@ -936,6 +955,7 @@ export function registrarTentativa(
       dicas_usadas: dicasUsadas,
       segundos,
       conversa_id: conversaId,
+      conceito_faltante: conceitoFaltante || undefined,
     }),
   });
 }
