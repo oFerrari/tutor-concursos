@@ -18,6 +18,41 @@ siga estritamente estas regras de economia de tokens e limite de escopo.**
 3. Só se não souber onde está o arquivo: **no máximo UMA** busca, específica
    (`grep -rn "termo" caminho/`). Proibida varredura ampla.
 
+## PASSO 1.5 — Visão sistêmica, análise cética e proatividade (OBRIGATÓRIO)
+
+Postura de **Engenheiro Sênior + Product Owner**. Antes de escrever código,
+análise mental de **"Pior Cenário"** e de **"Experiência Ideal"**. Nunca
+programar só o Happy Path, e **não devolver ao usuário decisão trivial de
+usabilidade ou segurança** — decidir é o trabalho.
+
+Incorporar por iniciativa própria:
+
+**1. Resiliência de dados e segurança (backend/BD)**
+- Todo input (usuário, arquivo, API externa) é **não-confiável e sujo**.
+- Sanitização, tipagem estrita, limites de tamanho, defesa contra injeção e
+  falha de encode — proativos, não sob demanda.
+- Integridade transacional: falha no meio não pode deixar o banco inconsistente.
+
+**2. Performance e saúde do sistema (arquitetura)**
+- Requisição pesada não bloqueia o event loop nem a thread principal.
+- Identificar gargalo (LLM, arquivo, embedding) e isolar em background/fila, ou
+  limitar CPU/memória.
+- Serviço externo falha: timeout e fallback que degradam com graça, sem derrubar
+  a aplicação.
+
+**3. Completude de UX/UI e fluxo de negócio (frontend)**
+- Padrão moderno de interface sem precisar pedir.
+- Sem beco sem saída, clique inútil ou redirecionamento confuso.
+- Todos os edge cases visuais: **loading** (esqueleto/spinner), **empty state**
+  convidativo, **erro** claro e acionável.
+- Pensar no negócio: isso faz sentido na jornada? Havendo caminho mais lógico,
+  **implementar a melhoria óbvia e sugerir a estrutural**.
+
+O PASSO 2 sempre termina com a seção **"Mitigações e proatividade:"** em
+bullets curtos:
+- que falhas de borda foram blindadas;
+- que melhoria de UX ou performance foi embutida por conta própria.
+
 ## PASSO 2 — Plano de ação e escopo (PARADA OBRIGATÓRIA)
 
 Antes de escrever qualquer código, responder com:
