@@ -10,8 +10,8 @@ import {
   getCarga,
   getStats,
   getToken,
-  limparToken,
 } from "@/lib/api";
+import { gravarCache, lerCache, sair } from "@/lib/cache";
 
 /**
  * Desempenho — a mesma faixa de KPIs do panorama, e abaixo dela o detalhe
@@ -68,8 +68,8 @@ function Linha({
 
 export default function PaginaStats() {
   const router = useRouter();
-  const [dados, setDados] = useState<Desempenho[] | null>(null);
-  const [carga, setCarga] = useState<Carga | null>(null);
+  const [dados, setDados] = useState<Desempenho[] | null>(() => lerCache("stats"));
+  const [carga, setCarga] = useState<Carga | null>(() => lerCache("carga"));
   const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
@@ -78,10 +78,13 @@ export default function PaginaStats() {
       return;
     }
     getStats()
-      .then(setDados)
+      .then((d) => {
+        setDados(d);
+        gravarCache("stats", d);
+      })
       .catch((e) => {
         if (e instanceof ErroApi && e.status === 401) {
-          limparToken();
+          sair();
           router.push("/login");
           return;
         }
@@ -89,7 +92,12 @@ export default function PaginaStats() {
       });
     // A carga é contexto (ofensiva, revisões, tempo médio): se ela falhar, a
     // tela ainda tem o que mostrar — some a faixa, fica o detalhe.
-    getCarga().then(setCarga).catch(() => {});
+    getCarga()
+      .then((c) => {
+        setCarga(c);
+        gravarCache("carga", c);
+      })
+      .catch(() => {});
   }, [router]);
 
   const geral = agregar(dados);

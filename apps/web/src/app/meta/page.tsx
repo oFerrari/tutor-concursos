@@ -13,8 +13,8 @@ import {
   getEdital,
   getMeta,
   getToken,
-  limparToken,
 } from "@/lib/api";
+import { sair } from "@/lib/cache";
 
 export default function PaginaMeta() {
   const router = useRouter();
@@ -71,7 +71,7 @@ export default function PaginaMeta() {
       setMeta(await getMeta());
     } catch (e) {
       if (e instanceof ErroApi && e.status === 401) {
-        limparToken();
+        sair();
         router.push("/login");
         return;
       }

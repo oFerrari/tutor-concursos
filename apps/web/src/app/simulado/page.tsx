@@ -15,8 +15,8 @@ import {
   getSimulados,
   getToken,
   iniciarSimulado,
-  limparToken,
 } from "@/lib/api";
+import { sair } from "@/lib/cache";
 
 export default function PaginaSimulado() {
   const router = useRouter();
@@ -68,7 +68,7 @@ export default function PaginaSimulado() {
       setFinalizado(false);
     } catch (e) {
       if (e instanceof ErroApi && e.status === 401) {
-        limparToken();
+        sair();
         router.push("/login");
         return;
       }

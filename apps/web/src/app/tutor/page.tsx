@@ -15,9 +15,9 @@ import {
   getConversa,
   getFila,
   getToken,
-  limparToken,
   perguntar,
 } from "@/lib/api";
+import { sair } from "@/lib/cache";
 import { ABERTURA_TUTOR, FLASHCARD_EXEMPLO, ROTA_DO_DIA } from "@/mock/prototipo";
 
 /**
@@ -107,7 +107,7 @@ export default function PaginaTutor() {
       .then((fila) => setQuestao(fila[0] ?? null))
       .catch((e) => {
         if (e instanceof ErroApi && e.status === 401) {
-          limparToken();
+          sair();
           router.push("/login");
           return;
         }
@@ -141,7 +141,7 @@ export default function PaginaTutor() {
       ]);
     } catch (err) {
       if (err instanceof ErroApi && err.status === 401) {
-        limparToken();
+        sair();
         router.push("/login");
         return;
       }

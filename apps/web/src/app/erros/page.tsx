@@ -3,11 +3,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ErroApi, ErroCaderno, getErros, getToken, limparToken } from "@/lib/api";
+import { ErroApi, ErroCaderno, getErros, getToken } from "@/lib/api";
+import { gravarCache, lerCache, sair } from "@/lib/cache";
 
 export default function PaginaErros() {
   const router = useRouter();
-  const [erros, setErros] = useState<ErroCaderno[] | null>(null);
+  // Do cache primeiro: o caderno visto nesta sessão aparece na hora.
+  const [erros, setErros] = useState<ErroCaderno[] | null>(() => lerCache("erros"));
   const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
@@ -16,10 +18,13 @@ export default function PaginaErros() {
       return;
     }
     getErros()
-      .then(setErros)
+      .then((e) => {
+        setErros(e);
+        gravarCache("erros", e);
+      })
       .catch((e) => {
         if (e instanceof ErroApi && e.status === 401) {
-          limparToken();
+          sair();
           router.push("/login");
           return;
         }

@@ -15,8 +15,8 @@ import {
   getPerfil,
   getToken,
   iniciarSimuladoComIds,
-  limparToken,
 } from "@/lib/api";
+import { sair } from "@/lib/cache";
 
 type Bloco = "plano" | "reincidentes" | "novas" | "simulado" | "fim";
 const ORCAMENTOS = [10, 20, 30, null] as const;
@@ -68,7 +68,7 @@ export default function PaginaDesafio() {
         .then(setPlano)
         .catch((e) => {
           if (e instanceof ErroApi && e.status === 401) {
-            limparToken();
+            sair();
             router.push("/login");
             return;
           }

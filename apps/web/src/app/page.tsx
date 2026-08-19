@@ -21,8 +21,8 @@ import {
   getStats,
   getSugestao,
   getToken,
-  limparToken,
 } from "@/lib/api";
+import { sair } from "@/lib/cache";
 
 function saudacao(): string {
   const h = new Date().getHours();
@@ -84,7 +84,7 @@ export default function PaginaPanorama() {
       })
       .catch((e) => {
         if (e instanceof ErroApi && e.status === 401) {
-          limparToken();
+          sair();
           router.push("/login");
           return;
         }

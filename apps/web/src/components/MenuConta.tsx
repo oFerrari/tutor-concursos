@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { LayoutGrid, LogOut, SlidersHorizontal, Trash2 } from "lucide-react";
-import { Usuario, limparToken } from "@/lib/api";
+import { Usuario } from "@/lib/api";
+import { sair } from "@/lib/cache";
 import { ExcluirConta } from "@/components/ExcluirConta";
 
 /**
@@ -118,7 +119,7 @@ export function MenuConta({
             <div className="mx-1 my-1.5 h-px bg-line-soft" />
             <button
               onClick={() => {
-                limparToken();
+                sair();
                 router.push("/login");
               }}
               className="item-menu !text-danger"
@@ -159,7 +160,7 @@ export function MenuConta({
         <ExcluirConta
           onCancelar={() => setExcluindo(false)}
           onExcluida={() => {
-            limparToken();
+            sair();
             router.push("/login");
           }}
         />

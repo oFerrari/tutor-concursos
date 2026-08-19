@@ -6,12 +6,15 @@ import { AvisoAcervo } from "@/components/AvisoAcervo";
 import { GerarQuestoes } from "@/components/GerarQuestoes";
 import { useRouter } from "next/navigation";
 import { Sugestao } from "@/components/Sugestao";
-import { Carga, ErroApi, Questao, getCarga, getFila, getToken, limparToken } from "@/lib/api";
+import { Carga, ErroApi, Questao, getCarga, getFila, getToken } from "@/lib/api";
+import { gravarCache, lerCache, sair } from "@/lib/cache";
 
 export default function PaginaFila() {
   const router = useRouter();
-  const [questoes, setQuestoes] = useState<Questao[] | null>(null);
-  const [carga, setCarga] = useState<Carga | null>(null);
+  // Semeado do cache: a fila que você já viu nesta sessão volta na hora e
+  // revalida por baixo, em vez de piscar "Carregando…" a cada navegação.
+  const [questoes, setQuestoes] = useState<Questao[] | null>(() => lerCache("fila"));
+  const [carga, setCarga] = useState<Carga | null>(() => lerCache("carga"));
   const [erro, setErro] = useState<string | null>(null);
 
   // Em `useCallback` porque quem gera questão precisa recarregar a fila
@@ -22,11 +25,13 @@ export default function PaginaFila() {
       .then(([f, c]) => {
         setQuestoes(f);
         setCarga(c);
+        gravarCache("fila", f);
+        gravarCache("carga", c);
       })
       .catch((e) => {
         // 401 = token expirado/invalido — mesma UX de "precisa logar de novo".
         if (e instanceof ErroApi && e.status === 401) {
-          limparToken();
+          sair();
           router.push("/login");
           return;
         }
