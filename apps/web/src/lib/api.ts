@@ -664,6 +664,24 @@ export type EditalAtual = {
   cobertura: CoberturaDisciplina[];
 };
 
+/**
+ * Tira o edital da mesa — ela volta a ser estudo avulso (017).
+ *
+ * É o único jeito de a escolha manual de matérias VALER: quando o PDF está lá,
+ * ele vence inteiro (é dele que sai a data da prova), então uma tela de alvo
+ * manual sobre uma mesa com edital estaria pedindo um trabalho que o servidor
+ * ignora.
+ *
+ * IRREVERSÍVEL pelo servidor: os bytes do PDF não ficam guardados, só o
+ * extraído. Devolve o que foi embora justamente pra quem chama poder dizer ao
+ * aluno o que ele perdeu, em vez de um "ok" que esconde a perda.
+ */
+export function removerEdital(): Promise<{
+  removido: { titulo: string; data_prova: string | null; cargo: string | null; topicos: number };
+}> {
+  return chamar("/edital", { method: "DELETE" });
+}
+
 /** Tira ou acrescenta matéria num edital JÁ confirmado, sem subir o PDF de
  *  novo. A curadoria acontecia uma vez só; o aluno muda de ideia no MEIO do
  *  estudo, que é quando ele sabe o que está sobrando. */

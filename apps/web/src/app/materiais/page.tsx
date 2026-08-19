@@ -856,6 +856,36 @@ export default function PaginaMateriais() {
             ))}
           </div>
         ))}
+
+        {/* Zona de soltar "Outros" que só existe DURANTE o arraste, e só quando
+            não há grupo sem matéria pra receber. Sem ela, desfazer a
+            classificação era impossível justamente no caso normal — todos os
+            materiais com rótulo, nenhum grupo "Outros" na tela, nada pra onde
+            arrastar. Aparece no arraste e some depois porque alvo de drop
+            parado numa tela sem nada sendo arrastado é ruído. */}
+        {arrastando !== null && !grupos.some(([k]) => k === SEM_DISCIPLINA) && (
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              setSobre(SEM_DISCIPLINA);
+            }}
+            onDragLeave={() => setSobre((s) => (s === SEM_DISCIPLINA ? null : s))}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (arrastando !== null) mover(arrastando, SEM_DISCIPLINA);
+            }}
+            className={`rounded-2xl border border-dashed px-5 py-6 text-center transition-colors ${
+              sobre === SEM_DISCIPLINA
+                ? "border-accent bg-accent-soft text-accent-text"
+                : "border-line-stronger text-muted"
+            }`}
+          >
+            <p className="text-[13.5px] font-medium">Outros — tirar a matéria</p>
+            <p className="mt-0.5 text-[12px] text-subtle">
+              solte aqui pra deixar sem matéria; o assunto continua
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
