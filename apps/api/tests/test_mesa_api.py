@@ -524,3 +524,110 @@ def test_acervo_nao_mostra_a_materia_de_outro_aluno(client, usuario, outro_usuar
     client.post("/materiais", files={"arquivo": ("sem-rotulo.txt", corpo + b"y", "text/plain")},
                 data={"tipo": "resumo"}, headers=usuario["headers"])
     assert all(d for d in client.get("/disciplinas", headers=usuario["headers"]).json()["disciplinas"])
+
+
+# ---------------------------------------------------------------------------
+# Edital declarado à mão (POST /edital/manual)
+# ---------------------------------------------------------------------------
+
+def test_edital_manual_com_so_a_data_ja_da_prazo_a_meta(client, usuario):
+    """A decisão de fundo: um edital declarado à mão É um edital.
+
+    A alternativa era guardar "data prevista" numa coluna nova da mesa e ensinar
+    `scheduler.meta` a olhar em dois lugares — e aí o recorte viria de uma fonte
+    e o prazo de outra, o defeito que a 010 evitou ao fazer disciplina e data
+    saírem do MESMO último edital. Criando um `edital` de verdade, a data cai
+    onde a meta já procura.
+
+    Só data, sem matéria, é caso REAL: "a prova deve ser em novembro", programa
+    ainda não publicado."""
+    m = _criar_mesa(client, usuario, "Só o prazo")
+    cab = _cab(usuario, m)
+    r = client.post("/edital/manual", json={"data_prova": "2027-03-15"}, headers=cab)
+    assert r.status_code == 201, r.text
+    assert r.json()["data_prova"] == "2027-03-15" and r.json()["disciplinas"] == []
+    # Sem matéria não há recorte, e isso é o estado "nenhum" da 017 — a mesa
+    # segue utilizável mostrando o acervo inteiro.
+    assert client.get("/mesa", headers=cab).json()["disciplinas"] is None
+    assert client.get("/meta", headers=cab).json()["dias_restantes"] > 0
+
+
+def test_edital_manual_recusa_so_o_vazio_completo(client, usuario):
+    """Cada combinação parcial é um caso real de quem estuda antes do edital
+    sair (só matérias, só data, só nome), então exigir os três transformaria um
+    chute legítimo em bloqueio. O que não se aceita é gravar uma linha que não
+    diz nada.
+
+    O CUIDADO que custou um teste: a guarda tem que olhar pro que a PESSOA
+    pediu, não pro que o servidor preencheu por ela. Com o fallback de título
+    (herdar o nome da mesa) aplicado antes da checagem, um `POST {}` criava um
+    edital chamado como a mesa — medido, e corrigido."""
+    m = _criar_mesa(client, usuario, "Nada declarado")
+    cab = _cab(usuario, m)
+    assert client.post("/edital/manual", json={}, headers=cab).status_code == 400
+    assert client.post("/edital/manual", json={"titulo": "   "}, headers=cab).status_code == 400
+    assert client.post("/edital/manual", json={"disciplinas": ["", "  "]},
+                       headers=cab).status_code == 400
+    # E nada foi gravado no caminho.
+    assert client.get("/edital", headers=cab).status_code == 404
+
+
+def test_edital_manual_limpa_o_nome_da_materia_e_recusa_colagem(client, usuario):
+    """`mesa.filtro` compara o nome com ILIKE contra o acervo: espaço duplo e
+    quebra de linha colada de PDF fariam o filtro não casar nada, e o sintoma
+    seria fila vazia sem explicação. Normaliza na escrita, uma vez.
+
+    O teto de matérias existe pra recusar colagem de um documento inteiro no
+    campo, não pra limitar concurso real — o pior edital que passou por aqui (o
+    da Dataprev, treze perfis) tem 52."""
+    m = _criar_mesa(client, usuario, "Entrada suja")
+    cab = _cab(usuario, m)
+    r = client.post("/edital/manual", headers=cab, json={
+        "disciplinas": ["  Direito   Penal \n", "direito penal", "", "Contabilidade Pública"]})
+    assert r.status_code == 201
+    # Espaço colapsado, vazio fora, duplicata ignorando caixa fora.
+    assert r.json()["disciplinas"] == ["Direito Penal", "Contabilidade Pública"]
+
+    r = client.post("/edital/manual", headers=cab,
+                    json={"disciplinas": [f"Materia {i}" for i in range(61)]})
+    assert r.status_code == 400 and "limite" in r.json()["detail"]
+
+    r = client.post("/edital/manual", headers=cab, json={"titulo": "X" * 400})
+    assert len(r.json()["titulo"]) == 200
+
+
+def test_edital_manual_substitui_e_nunca_acumula(client, usuario, duas_disciplinas):
+    """SUBSTITUI e não soma: duas fontes de recorte é o que 010/017 recusam.
+
+    E a ORDEM é à prova de falha — cria o novo ANTES de apagar o antigo, porque
+    `db` roda em autocommit e não tem rollback (CLAUDE.md, "Armadilhas de
+    método"). Apagando primeiro, uma falha no meio deixaria a mesa SEM edital
+    nenhum, pior do que começou. `mais_recente` ordena por criado_em/id DESC,
+    então o novo já vence no instante em que entra."""
+    manual, doPdf = duas_disciplinas
+    m = _criar_mesa(client, usuario, "Substituição", disciplina=doPdf)
+    cab = _cab(usuario, m)
+    assert client.get("/mesa", headers=cab).json()["disciplinas"] == [doPdf]
+
+    r = client.post("/edital/manual", headers=cab,
+                    json={"titulo": "Declarado à mão", "disciplinas": [manual]})
+    assert r.status_code == 201 and r.json()["substituiu"] == 1
+    assert db.exec1("SELECT count(*) n FROM edital WHERE mesa_id = %(m)s",
+                    {"m": m["id"]})["n"] == 1
+    ctx = client.get("/mesa", headers=cab).json()
+    assert ctx["origem_alvo"] == "edital" and ctx["disciplinas"] == [manual]
+    # O manual antigo é limpo: deixá-lo pra trás criaria um alvo fantasma, que
+    # ressuscitaria se este edital fosse removido depois.
+    assert ctx["disciplinas_manuais"] == []
+
+
+def test_edital_manual_aceita_data_no_passado(client, usuario):
+    """Quem estuda por edital vencido esperando o próximo é caso corrente (o da
+    PF em corpus/ é de 2025). Quem avisa é a TELA; o banco recusar transformaria
+    uma situação normal em erro."""
+    m = _criar_mesa(client, usuario, "Espera o próximo")
+    cab = _cab(usuario, m)
+    r = client.post("/edital/manual", headers=cab,
+                    json={"titulo": "Vai reabrir", "data_prova": "2020-01-01"})
+    assert r.status_code == 201 and r.json()["data_prova"] == "2020-01-01"
+    assert client.get("/meta", headers=cab).json()["dias_restantes"] == 0

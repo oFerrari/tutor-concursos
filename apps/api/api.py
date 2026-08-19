@@ -158,6 +158,50 @@ def rota_disciplinas_do_acervo(uid: int = Depends(usuario_atual)):
     return {"disciplinas": mesa.disciplinas_do_acervo(uid)}
 
 
+class EditalManualBody(BaseModel):
+    """Tudo opcional — cada combinação é um caso real de quem estuda antes do
+    edital sair (só matérias, só data prevista, só o nome do concurso). O que o
+    core recusa é o vazio completo."""
+    titulo: str | None = None
+    data_prova: date | None = None
+    disciplinas: list[str] = []
+
+
+@app.post("/edital/manual", status_code=201)
+def rota_edital_manual(body: EditalManualBody, uid: int = Depends(usuario_atual),
+                       m: dict = Depends(mesa_atual)):
+    """Edital declarado à MÃO, sem PDF.
+
+    Um edital declarado à mão É um edital: em vez de uma segunda fonte de data
+    (coluna nova na mesa + `scheduler.meta` olhando em dois lugares), cria-se um
+    `edital` de verdade e todo o encanamento existente serve — a data, a
+    cobertura, o recorte e o /meta. Guardar o prazo fora do edital faria o
+    recorte vir de uma fonte e o prazo de outra, que é o defeito que a 010
+    evitou.
+
+    SUBSTITUI o edital anterior da mesa, e não soma: duas fontes de recorte é
+    exatamente o que 010/017 recusam. `criar_manual` cria antes de apagar, então
+    falha no meio nunca deixa a mesa sem edital.
+
+    Limpa `disciplinas_manuais` no fim porque a mesma escolha passa a viver no
+    edital: deixar a lista antiga pra trás criaria um alvo fantasma, que
+    ressuscitaria se o edital fosse removido depois. Falha aqui é inofensiva —
+    o edital vence de qualquer forma — então não derruba a resposta.
+
+    400 e não 422 pro vazio completo: não é o formato do corpo que está errado,
+    é o pedido que não diz nada."""
+    try:
+        novo = edital.criar_manual(m["id"], body.titulo, body.data_prova,
+                                   body.disciplinas, nome_da_mesa=m.get("nome"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    try:
+        mesa.atualizar(uid, m["id"], disciplinas_manuais=[])
+    except Exception:
+        pass
+    return {**novo, "cobertura": edital.cobertura(novo["id"], uid)}
+
+
 @app.delete("/edital")
 def rota_remover_edital(uid: int = Depends(usuario_atual), m: dict = Depends(mesa_atual)):
     """Tira o edital da mesa — ela volta a ser estudo avulso (017).

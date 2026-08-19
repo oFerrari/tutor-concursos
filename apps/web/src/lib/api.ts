@@ -665,6 +665,35 @@ export type EditalAtual = {
 };
 
 /**
+ * Cria um edital declarado à MÃO, sem PDF, e substitui o anterior da mesa.
+ *
+ * Um edital declarado à mão É um edital: guardar "data prevista" fora dele faria
+ * o recorte vir de uma fonte e o prazo de outra, que é o defeito que a 010
+ * evitou. Assim a data cai onde `scheduler.meta` já procura, e /meta, cobertura
+ * e recorte funcionam sem nada novo.
+ *
+ * Tudo opcional, porque cada combinação é um caso real de quem estuda antes do
+ * edital sair: só matérias (avulso sem prazo), só data ("a prova deve ser em
+ * novembro"), só nome. O servidor recusa apenas o vazio completo.
+ */
+export function criarEditalManual(dados: {
+  titulo?: string;
+  /** `AAAA-MM-DD` ou ausente. Data no passado é aceita — quem estuda por edital
+   *  vencido esperando o próximo é caso corrente, e quem avisa é a tela. */
+  data_prova?: string | null;
+  disciplinas?: string[];
+}): Promise<{
+  id: number;
+  titulo: string | null;
+  data_prova: string | null;
+  disciplinas: string[];
+  /** Quantos editais anteriores saíram — a tela usa pra dizer o que aconteceu. */
+  substituiu: number;
+}> {
+  return chamar("/edital/manual", { method: "POST", body: JSON.stringify(dados) });
+}
+
+/**
  * Tira o edital da mesa — ela volta a ser estudo avulso (017).
  *
  * É o único jeito de a escolha manual de matérias VALER: quando o PDF está lá,

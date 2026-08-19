@@ -997,6 +997,103 @@ def ajustar_disciplinas(edital_id: int, remover: list[str] | None = None,
     return {"removidas": remover or [], "adicionadas": postos, "topicos_apagados": tirados}
 
 
+# Limites de escrita. Não são estética: o `titulo` vai pro cabeçalho de várias
+# telas e pro prompt do tutor, e `disciplina` é o que `mesa.filtro` compara com
+# ILIKE contra o acervo. Texto colado de PDF chega com centenas de caracteres e
+# quebra de linha no meio; sem teto, um "edital" declarado à mão viraria uma
+# parede de texto em todo lugar que o exibe.
+MAX_TITULO = 200
+MAX_DISCIPLINA = 120
+# 60 é folgado pro pior edital real que já passou por aqui (o da Dataprev tem 52
+# disciplinas somando os treze perfis). O teto existe pra recusar colagem
+# acidental de um documento inteiro, não pra limitar concurso de verdade.
+MAX_DISCIPLINAS = 60
+
+
+def criar_manual(mesa_id: int, titulo: str | None = None, data_prova=None,
+                 disciplinas: list[str] | None = None,
+                 nome_da_mesa: str | None = None) -> dict:
+    """Edital declarado à MÃO — sem PDF (017).
+
+    A decisão que sustenta isto: **um edital declarado à mão É um edital**. A
+    alternativa era guardar "data prevista" numa coluna nova da mesa e ensinar
+    `scheduler.meta` a olhar em dois lugares — e aí o recorte viria de uma fonte
+    e o prazo de outra, que é exatamente o defeito que a 010 evitou ao fazer
+    disciplina e data saírem do MESMO "último edital". Criando um `edital` de
+    verdade, todo o encanamento existente serve sem reescrita: `mais_recente`
+    acha a data, `cobertura` conta, `mesa.disciplinas` recorta, `/meta` mostra.
+
+    Um `topico` por disciplina, com o próprio nome como texto — o mesmo que a
+    curadoria (011) já faz quando o extrator não detalhou os tópicos daquela
+    matéria. Sem essa linha a escolha não entraria no recorte, porque é de
+    `topico.disciplina` que `mesa.disciplinas()` sai.
+
+    TUDO É OPCIONAL de propósito, e cada combinação é um caso real de quem
+    estuda antes do edital sair:
+      · só matérias      -> estudo avulso sem prazo
+      · só data          -> "a prova deve ser em novembro", ainda sem programa
+      · só título        -> a mesa ganha nome de concurso no cabeçalho
+    Exigir os três transformaria um chute legítimo em bloqueio. O que NÃO se
+    aceita é o vazio completo — criar um edital sem título, sem data e sem
+    matéria é gravar uma linha que não diz nada.
+
+    Data no PASSADO é aceita: quem estuda por um edital vencido esperando o
+    próximo é caso corrente, e `scheduler.meta` já sabe dizer que o prazo passou
+    (é a tela que avisa, não o banco que recusa).
+    """
+    # O que a PESSOA pediu, antes de qualquer fallback: a guarda de "vazio
+    # completo" tem que olhar pro pedido, não pro que o servidor preencheu por
+    # ela. Medido: com o fallback aplicado primeiro, um `POST {}` criava um
+    # edital chamado como a mesa — a linha que não diz nada que esta função
+    # existe pra recusar.
+    pediu_titulo = (titulo or "").strip()
+    # Nome de matéria é comparado com ILIKE contra o acervo: espaço duplo e
+    # quebra de linha colada de PDF fariam o filtro não casar nada, e o sintoma
+    # seria fila vazia sem explicação. Normaliza aqui, uma vez, na escrita.
+    limpas, vistas = [], set()
+    for d in (disciplinas or []):
+        nome = " ".join((d or "").split())[:MAX_DISCIPLINA]
+        if nome and nome.lower() not in vistas:
+            vistas.add(nome.lower())
+            limpas.append(nome)
+    if len(limpas) > MAX_DISCIPLINAS:
+        raise ValueError(
+            f"são {len(limpas)} matérias, e o limite é {MAX_DISCIPLINAS}. "
+            "Se você colou um documento inteiro no campo, escolha só os nomes das matérias.")
+    if not pediu_titulo and not data_prova and not limpas:
+        raise ValueError("dê um nome, uma data prevista ou pelo menos uma matéria")
+    # Só agora o fallback: título vazio herda o nome da mesa, porque o cabeçalho
+    # de /meta precisa de algo pra exibir e "sem título" é pior que o nome que a
+    # pessoa já deu ao concurso quando criou a mesa.
+    titulo = pediu_titulo[:MAX_TITULO] or (nome_da_mesa or "").strip()[:MAX_TITULO]
+
+    # ORDEM À PROVA DE FALHA: cria o novo ANTES de apagar o antigo. `db` roda em
+    # autocommit e não tem rollback (ver "Armadilhas de método" no CLAUDE.md), e
+    # `mais_recente` ordena por criado_em/id DESC — então o novo já vence no
+    # instante em que entra. Apagando primeiro, uma falha aqui deixaria a mesa
+    # SEM edital nenhum, pior do que começou.
+    novo = db.exec1(
+        """INSERT INTO edital (mesa_id, titulo, data_prova, arquivo)
+           VALUES (%(m)s, %(t)s, %(d)s, NULL)
+        RETURNING id, titulo, orgao, banca, data_prova, cargo""",
+        {"m": mesa_id, "t": titulo or None, "d": data_prova or None})
+    for i, nome in enumerate(limpas):
+        db.exec1(
+            """INSERT INTO topico (edital_id, disciplina, ordem, texto)
+               VALUES (%(e)s, %(d)s, %(o)s, %(d)s) RETURNING id""",
+            {"e": novo["id"], "d": nome, "o": i})
+    # Só agora os anteriores saem. `topico` deles morre pelo CASCADE da 007.
+    antigos = db.query(
+        "SELECT id FROM edital WHERE mesa_id = %(m)s AND id <> %(n)s",
+        {"m": mesa_id, "n": novo["id"]})
+    if antigos:
+        db.query("DELETE FROM edital WHERE mesa_id = %(m)s AND id <> %(n)s",
+                 {"m": mesa_id, "n": novo["id"]})
+    novo["disciplinas"] = limpas
+    novo["substituiu"] = len(antigos)
+    return novo
+
+
 def remover(mesa_id: int) -> dict | None:
     """Tira o edital da mesa — ela volta a ser estudo avulso (017).
 
