@@ -260,6 +260,11 @@ export default function PaginaMateriais() {
    *  matérias — ver `podeDoAlvo`. */
   const [doAlvo, setDoAlvo] = useState(false);
 
+  /** Arraste: qual material está na mão e sobre qual grupo ele está. `sobre`
+   *  existe só pra dar o realce do alvo — sem ele o aluno solta no escuro. */
+  const [arrastando, setArrastando] = useState<number | null>(null);
+  const [sobre, setSobre] = useState<string | null>(null);
+
   /** Linha em edição de rótulo. Inline porque corrigir o palpite é um ajuste de
    *  duas palavras — abrir modal pra isso é mais clique que conteúdo. */
   const [editando, setEditando] = useState<number | null>(null);
@@ -437,6 +442,37 @@ export default function PaginaMateriais() {
     }
   }
 
+  /**
+   * Solta o material no grupo de destino.
+   *
+   * Reusa `PATCH /materiais/{id}` — arrastar é a MESMA correção de rótulo que o
+   * lápis faz, só com outro gesto; rota nova aqui seria um segundo caminho de
+   * escrita pra mesma regra, e é assim que as duas divergem.
+   *
+   * Otimista: a linha pula de grupo antes da resposta, porque um arraste que
+   * "não fez nada" por 200ms parece ter falhado e a pessoa arrasta de novo.
+   * Erro devolve a lista do servidor, que é a verdade.
+   */
+  async function mover(id: number, destino: string) {
+    const disciplina = destino === SEM_DISCIPLINA ? "" : destino;
+    setArrastando(null);
+    setSobre(null);
+    setMateriais(
+      (atual) =>
+        atual?.map((m) =>
+          m.id === id ? { ...m, disciplina: disciplina || null, classificado_por: "aluno" } : m
+        ) ?? null
+    );
+    setErro(null);
+    try {
+      await classificarMaterial(id, { disciplina });
+      await carregarSugestoes();
+    } catch (e) {
+      setErro(e instanceof ErroApi ? e.message : "Não deu pra mover este material");
+      await carregar();
+    }
+  }
+
   async function remover(m: Material) {
     setErro(null);
     try {
@@ -499,17 +535,18 @@ export default function PaginaMateriais() {
               role="switch"
               aria-checked={usandoAlvo}
             >
-              {/* O RÓTULO é fixo e diz o que o controle faz; quem diz se está
-                  ligado é a bolinha. Rótulo que trocava de texto ("de meu
-                  edital" / "da biblioteca") obrigava a pessoa a adivinhar se
-                  aquilo era o estado atual ou o que o clique ia fazer. */}
-              <span className={`switch ${usandoAlvo ? "switch-ligado" : ""}`}>
+              {/* O rótulo TROCA junto com a cor, e é a cor que resolve a
+                  ambiguidade de um texto que muda: rubro está usando o edital,
+                  verde está usando a biblioteca. Sem a cor, "usar meu edital"
+                  poderia ser lido como o estado atual OU como o que o clique
+                  vai fazer — foi por isso que o rótulo fixo veio antes. */}
+              <span className={`switch ${usandoAlvo ? "switch-edital" : "switch-daqui"}`}>
                 <span
                   className={`switch-bolinha ${usandoAlvo ? "left-[17px]" : "left-[2px]"}`}
                 />
               </span>
-              <span className={usandoAlvo ? "text-accent-text" : "text-subtle"}>
-                usar {nomeDoAlvo}
+              <span className={usandoAlvo ? "text-accent-text" : "text-success"}>
+                {usandoAlvo ? `usar ${nomeDoAlvo}` : "usar sugestões daqui"}
               </span>
             </button>
           </span>
@@ -633,7 +670,17 @@ export default function PaginaMateriais() {
         Só endereço público (o servidor recusa IP interno). PDF ou página; o texto é extraído.
       </p>
 
-      <p className="rotulo mb-2.5 mt-7">processamento</p>
+      <div className="mb-2.5 mt-7 flex items-baseline justify-between gap-3">
+        <p className="rotulo">processamento</p>
+        {/* Arraste é gesto invisível: quem não souber que existe nunca tenta.
+            A dica só aparece com mais de um grupo, porque com um só não há
+            para onde mover. */}
+        {grupos.length > 1 && (
+          <p className="text-[12px] text-subtle">
+            errou a matéria? arraste o material para outro grupo
+          </p>
+        )}
+      </div>
 
       {materiais === null && <p className="text-[13.5px] text-muted">Carregando sua biblioteca...</p>}
       {materiais?.length === 0 && (
@@ -645,13 +692,36 @@ export default function PaginaMateriais() {
 
       <div className="flex flex-col gap-4">
         {grupos.map(([disc, itens]) => (
-          <div key={disc} className="overflow-hidden rounded-2xl border border-line bg-surface">
+          <div
+            key={disc}
+            onDragOver={(e) => {
+              // `preventDefault` é o que AUTORIZA o soltar: sem ele o navegador
+              // recusa o drop e o gesto morre sem explicação.
+              if (arrastando === null) return;
+              e.preventDefault();
+              setSobre(disc);
+            }}
+            onDragLeave={() => setSobre((s) => (s === disc ? null : s))}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (arrastando !== null) mover(arrastando, disc);
+            }}
+            className={`overflow-hidden rounded-2xl border bg-surface transition-colors ${
+              sobre === disc && arrastando !== null ? "border-accent" : "border-line"
+            }`}
+          >
             <div className="flex items-baseline justify-between gap-3 border-b border-line-soft bg-surface-raised px-5 py-2.5">
+              {/* "Identificando" é PROMESSA: só vale enquanto alguma linha do
+                  grupo ainda está processando. Terminado o classificador, o que
+                  sobrou sem rótulo é "Outros" — dizer que ainda está
+                  identificando seria esperar por algo que não vai acontecer. */}
               <p className="text-[13.5px] font-medium">
-                {disc === SEM_DISCIPLINA ? (
+                {disc !== SEM_DISCIPLINA ? (
+                  disc
+                ) : itens.some((m) => m.status === "processando") ? (
                   <span className="text-muted">Identificando a matéria...</span>
                 ) : (
-                  disc
+                  <span className="text-muted">Outros</span>
                 )}
               </p>
               <p className="font-mono text-[11px] text-label">
@@ -662,7 +732,24 @@ export default function PaginaMateriais() {
             {itens.map((m) => (
               <div
                 key={m.id}
-                className="grid grid-cols-[minmax(0,1fr)_100px_180px_74px] items-center gap-3 border-b border-line-soft px-5 py-3.5 transition-colors last:border-b-0 hover:bg-surface-raised max-md:grid-cols-[minmax(0,1fr)_64px_100px_66px]"
+                // Não arrastável durante a edição inline: arrastar um campo de
+                // texto selecionaria a linha em vez de deixar escrever nela.
+                draggable={editando !== m.id}
+                onDragStart={(e) => {
+                  setArrastando(m.id);
+                  e.dataTransfer.effectAllowed = "move";
+                  // Firefox exige algum payload pra iniciar o arraste; o id vai
+                  // como texto, mas quem manda é o estado (o payload não
+                  // sobrevive a tudo entre navegadores).
+                  e.dataTransfer.setData("text/plain", String(m.id));
+                }}
+                onDragEnd={() => {
+                  setArrastando(null);
+                  setSobre(null);
+                }}
+                className={`grid grid-cols-[minmax(0,1fr)_100px_180px_74px] items-center gap-3 border-b border-line-soft px-5 py-3.5 transition-colors last:border-b-0 hover:bg-surface-raised max-md:grid-cols-[minmax(0,1fr)_64px_100px_66px] ${
+                  editando === m.id ? "" : "cursor-grab active:cursor-grabbing"
+                } ${arrastando === m.id ? "opacity-40" : ""}`}
               >
                 <div className="min-w-0">
                   {editando === m.id ? (

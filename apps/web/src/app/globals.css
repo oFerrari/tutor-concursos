@@ -515,16 +515,28 @@ input[type="number"] {
            border-line-strong bg-surface-raised transition-colors;
   }
 
-  .switch-ligado {
+  /* DUAS cores, não ligado/apagado: os dois estados são escolhas válidas (a
+     matéria vem do edital ou da biblioteca), não "com" e "sem" recurso. Cinza
+     de um lado leria como desabilitado — e desabilitado é o terceiro estado,
+     que já existe e significa outra coisa (a mesa não declarou matérias). */
+  .switch-edital {
     @apply border-accent bg-accent-soft;
   }
 
-  .switch-bolinha {
-    @apply absolute top-[2px] h-[12px] w-[12px] rounded-full bg-subtle transition-all;
+  .switch-daqui {
+    @apply border-success-line bg-success-soft;
   }
 
-  .switch-ligado .switch-bolinha {
+  .switch-bolinha {
+    @apply absolute top-[2px] h-[12px] w-[12px] rounded-full transition-all;
+  }
+
+  .switch-edital .switch-bolinha {
     @apply bg-accent-text;
+  }
+
+  .switch-daqui .switch-bolinha {
+    @apply bg-success;
   }
 
   /* Alternativa de múltipla escolha (A/B/C do tutor socrático). */
