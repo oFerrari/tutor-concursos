@@ -889,6 +889,31 @@ Verificado criando um banco descartável e aplicando as 25 do zero: schema
 diferença. Que é também a prova de que nenhuma migração foi pulada ou aplicada
 fora de ordem na máquina de trabalho.
 
+**Token válido de conta que não existe é 401, não 500 (auth-v4).** Relatado em
+uso, com traceback: uma conta descartável foi apagada, o navegador seguiu com o
+token dela, e a primeira rota que tentou gravar (`mesa.padrao` -> `criar`) morreu
+em `ForeignKeyViolation: Key (usuario_id)=(252) is not present in table
+"usuario"`. O token estava perfeitamente válido — assinado por nós, dentro do
+prazo, apontando pra ninguém.
+
+O contrato antigo era pior que errado, era INCONSISTENTE: `/me` devolvia 404 (só
+porque aquela rota por acaso busca o usuário) e todas as outras estouravam 500. E
+nenhum dos dois leva a pessoa ao login, porque o front reage a **401** fazendo
+`sair()` + redirect — com 404 ou 500 ela fica presa numa aplicação quebrada, e o
+único jeito de sair é limpar o `localStorage` na mão.
+
+A guarda mora em `usuario_id_do_token`, que é o gargalo por onde TODA rota
+autenticada passa — não num `except ForeignKeyViolation` por rota, que é como
+metade delas ficaria de fora. Custa uma busca por chave primária por requisição,
+ao lado das várias que qualquer rota autenticada já faz. A mensagem é a mesma de
+token inválido, de propósito: dizer "essa conta foi apagada" confirmaria pra quem
+tem um token roubado que o id existia (mesmo espírito do 404-e-não-403 de
+`mesa.obter`).
+
+Havia um teste fixando o 404, e ele foi reescrito COM O MOTIVO no corpo — não
+silenciosamente. É a segunda vez que um teste deste projeto guardava um contrato
+que o uso real provou errado (a primeira foi `test_mesa_api.py` na 021).
+
 ## Invariantes (violação = bug)
 
 - Todo `Art.` do arquivo vira um chunk. `diagnostico.py` verifica.
@@ -1144,8 +1169,11 @@ upload: caminho interno do servidor não é dado do usuário.
 - Multiusuário desde a migração 008 — acervo compartilhado, progresso pessoal
   (ver Decisões). `sincronizar.py` continua pensado pra alternância de UM
   usuário entre duas máquinas, não pra distribuir contas.
-- JWT sem revogação: token vazado vale até expirar (uma semana, `core/auth.py`).
-  Aceitável pra uso pessoal/pequeno grupo; revisar se isso crescer.
+- JWT sem revogação POR TOKEN: token vazado vale até expirar (uma semana,
+  `core/auth.py`). Aceitável pra uso pessoal/pequeno grupo; revisar se isso
+  crescer. O que passou a valer (auth-v4) é que **apagar a conta revoga os
+  tokens dela na hora** — `usuario_id_do_token` confere se o usuário existe, e
+  antes disso "conta apagada" não invalidava nada.
 - PDF escaneado exige OCR antes (`ocrmypdf`).
 - Múltipla escolha não existe: só `resposta_livre` e `certo_errado` (012).
   Alternativas exigem tabela própria (texto, ordem, qual é a correta), não

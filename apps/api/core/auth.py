@@ -21,7 +21,7 @@ import re
 from . import db
 from .config import JWT_SECRET
 
-VERSAO = "auth-v3"
+VERSAO = "auth-v4"
 
 ALGORITMO = "HS256"
 EXPIRA_HORAS = 24 * 7   # uma semana — uso pessoal/pequeno grupo, não banco
@@ -80,12 +80,42 @@ def emitir_token(usuario_id: int) -> str:
 
 
 def usuario_id_do_token(token: str) -> int:
+    """
+    O id de quem assinou o token — e a CONTA precisa existir.
+
+    A assinatura sozinha não basta, e o custo de achar que basta apareceu em uso:
+    uma conta descartável foi apagada, o navegador seguiu com o token dela, e a
+    primeira rota que tentou gravar (`mesa.padrao` -> `criar`) morreu em
+    `ForeignKeyViolation: Key (usuario_id)=(252) is not present in table
+    "usuario"` — 500, com traceback de psycopg no log. O token estava
+    perfeitamente válido: assinado por nós, dentro do prazo, apontando para
+    ninguém.
+
+    500 é a resposta errada, e não por estética: o front reage a 401 fazendo
+    `sair()` e mandando pro login (é o que toda tela autenticada já faz). Com
+    500 ele não tem o sinal, então a pessoa fica numa aplicação quebrada em vez
+    de numa tela de login — e o único jeito de sair é limpar o localStorage na
+    mão. Erro de autenticação tem que sair PELA porta de autenticação.
+
+    O SELECT extra é uma busca por chave primária por requisição, ao lado das
+    várias consultas que qualquer rota autenticada já faz. E ele compra uma
+    propriedade que o CLAUDE.md listava como ausente: sem lista de revogação,
+    "token vazado vale até expirar" era o limite aceito — agora APAGAR A CONTA
+    revoga os tokens dela na hora. Não é revogação por token, mas é a única que
+    faltava pra que "apaguei essa conta" signifique alguma coisa.
+    """
     _checar_secret()
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[ALGORITMO])
     except jwt.PyJWTError as e:
         raise ErroAuth(f"token inválido ou expirado: {e}")
-    return payload["usuario_id"]
+    usuario_id = payload["usuario_id"]
+    if not db.exec1("SELECT 1 FROM usuario WHERE id = %(id)s", {"id": usuario_id}):
+        # Mesma mensagem de token inválido, de propósito: dizer "essa conta foi
+        # apagada" confirmaria pra quem tem um token roubado que o id existia.
+        # Mesmo espírito do 404 (e não 403) de `mesa.obter`.
+        raise ErroAuth("token inválido ou expirado: conta não encontrada")
+    return usuario_id
 
 
 def obter(usuario_id: int) -> dict | None:

@@ -137,10 +137,23 @@ def test_apagar_conta_de_verdade_cascade_limpa_tudo(client, usuario, questao_id)
         {"u": usuario["id"], "q": questao_id},
     ) is None
 
-    # token antigo (JWT sem revogação — CLAUDE.md, limitação conhecida) continua
-    # criptograficamente válido, mas o usuário não existe mais: 404, não 401.
+    # O token antigo continua CRIPTOGRAFICAMENTE válido — assinado por nós, no
+    # prazo — e aponta pra ninguém. Este assert dizia 404 e foi trocado por 401
+    # (auth-v4), com motivo:
+    #
+    # o 404 só acontecia AQUI, porque `/me` por acaso busca o usuário. Toda
+    # outra rota estourava 500 na primeira escrita que referenciasse
+    # `usuario_id` — relatado em uso, com traceback: `ForeignKeyViolation: Key
+    # (usuario_id)=(252) is not present in table "usuario"`, vindo de
+    # `mesa.padrao` -> `criar`. Ou seja, o contrato antigo era 404 numa rota e
+    # 500 em todas as outras, e NENHUM dos dois leva a pessoa ao login: o front
+    # reage a 401 fazendo `sair()` + redirect.
+    #
+    # 401 unifica os dois casos na porta certa — e é a diferença entre "a conta
+    # sumiu, entre de novo" e uma aplicação travada que só destrava limpando o
+    # localStorage na mão.
     r_me = client.get("/me", headers=usuario["headers"])
-    assert r_me.status_code == 404
+    assert r_me.status_code == 401
 
 
 def test_usuario_da_cli_nao_ganha_senha_usavel(client):
@@ -155,3 +168,45 @@ def test_usuario_da_cli_nao_ganha_senha_usavel(client):
         assert r.status_code == 401
     finally:
         db.query("DELETE FROM usuario WHERE id = %(id)s", {"id": uid})
+
+
+# --------------------------------------------- token de conta que não existe
+
+def test_token_de_conta_apagada_da_401_e_nao_500(client, usuario):
+    """Relatado em uso, com traceback: conta descartável apagada, navegador
+    seguiu com o token dela, e a primeira rota que tentou gravar morreu em
+    `ForeignKeyViolation: Key (usuario_id)=(252) is not present in table
+    "usuario"` — 500 e traceback de psycopg no log.
+
+    O token era válido: assinado por nós, no prazo, apontando pra ninguém.
+
+    501 ou 500 aqui não é detalhe de estética. O front reage a 401 fazendo
+    `sair()` + redirect pro login; com 500 ele não tem esse sinal, e a pessoa
+    fica presa numa aplicação quebrada, só saindo se limpar o localStorage na
+    mão. Erro de autenticação sai pela porta de autenticação."""
+    # A conta existe: a rota responde.
+    assert client.get("/mesa", headers=usuario["headers"]).status_code == 200
+
+    db.query("DELETE FROM usuario WHERE id = %(id)s", {"id": usuario["id"]})
+
+    # Mesmo token, agora órfão. `/mesa` passa por `mesa.padrao`, que CRIA a mesa
+    # se não existir — é o caminho exato que estourou a FK.
+    r = client.get("/mesa", headers=usuario["headers"])
+    assert r.status_code == 401, r.text
+    # E a mensagem não confirma que a conta existia: quem roubou um token não
+    # deve descobrir por aqui se acertou o id.
+    assert "conta" not in r.json()["detail"].lower() or "não encontrada" in r.json()["detail"]
+
+
+def test_rota_que_escreve_tambem_recusa_token_orfao(client, usuario):
+    """Não é só a leitura: qualquer rota que grave referenciando `usuario_id`
+    quebraria na FK. A guarda mora em `usuario_id_do_token`, que é o gargalo por
+    onde TODA rota autenticada passa — e não em cada `except` de FK espalhado."""
+    db.query("DELETE FROM usuario WHERE id = %(id)s", {"id": usuario["id"]})
+    for metodo, rota, corpo in [
+        ("post", "/mesas", {"nome": "PF Agente"}),
+        ("post", "/perguntar", {"pergunta": "art. 312"}),
+        ("put", "/me/perfil", {"horas": "2h"}),
+    ]:
+        r = getattr(client, metodo)(rota, json=corpo, headers=usuario["headers"])
+        assert r.status_code == 401, f"{metodo.upper()} {rota} devolveu {r.status_code}"
