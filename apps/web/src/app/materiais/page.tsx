@@ -313,6 +313,81 @@ export default function PaginaMateriais() {
       .catch(() => setMesa(null));
   }, [router, carregar, carregarSugestoes]);
 
+  /**
+   * Rolagem automática enquanto arrasta perto da borda.
+   *
+   * Com biblioteca grande, o grupo de destino simplesmente não está na tela: o
+   * arraste nativo não rola nada, então mover um material pra um grupo lá
+   * embaixo era impossível sem soltar, rolar e recomeçar.
+   *
+   * `dragover` no window (o `dragover` de elemento não dispara em toda a área) e
+   * `requestAnimationFrame` pro movimento: um `setInterval` daria passo irregular
+   * e um `scrollBy` por evento daria velocidade dependente da taxa de eventos do
+   * navegador. Velocidade PROPORCIONAL à profundidade na zona — perto da borda
+   * corre, na beirada da zona vai devagar; velocidade fixa passa do alvo.
+   *
+   * O rAF é cancelado quando o arraste acaba (o effect depende de `arrastando`),
+   * senão sobraria um loop de animação vivo pelo resto da sessão.
+   */
+  useEffect(() => {
+    if (arrastando === null) return;
+    const ZONA = 120; // px de cada borda onde a rolagem começa
+    const MAX = 24; // px por frame no encostado na borda
+    let velocidade = 0;
+    let raf = 0;
+    const mirar = (e: DragEvent) => {
+      const y = e.clientY;
+      const h = window.innerHeight;
+      if (y < ZONA) velocidade = -MAX * (1 - y / ZONA);
+      else if (y > h - ZONA) velocidade = MAX * (1 - (h - y) / ZONA);
+      else velocidade = 0;
+    };
+    const passo = () => {
+      if (velocidade !== 0) window.scrollBy(0, velocidade);
+      raf = requestAnimationFrame(passo);
+    };
+    window.addEventListener("dragover", mirar);
+    raf = requestAnimationFrame(passo);
+    return () => {
+      window.removeEventListener("dragover", mirar);
+      cancelAnimationFrame(raf);
+    };
+  }, [arrastando]);
+
+  /**
+   * Soltar FORA de qualquer bloco = tirar a matéria.
+   *
+   * É o gesto rápido: quem quer desclassificar não deveria ter que acertar uma
+   * caixa. `dragover` global com `preventDefault` porque sem isso o navegador
+   * recusa o drop fora dos alvos declarados e o gesto morre sem explicação.
+   *
+   * `defaultPrevented` é o que impede o duplo tratamento: quando um grupo (ou a
+   * área de subir arquivo) já cuidou do drop, ele chamou `preventDefault`, e o
+   * React despacha no container raiz — que fica DENTRO do body, então este
+   * ouvinte de window roda depois e vê a marca. Sem essa checagem, soltar num
+   * grupo também contaria como "Outros" e desfaria o que a pessoa acabou de
+   * fazer.
+   */
+  useEffect(() => {
+    if (arrastando === null) return;
+    const permitir = (e: DragEvent) => e.preventDefault();
+    const soltar = (e: DragEvent) => {
+      if (e.defaultPrevented) return;
+      e.preventDefault();
+      mover(arrastando, SEM_DISCIPLINA);
+    };
+    window.addEventListener("dragover", permitir);
+    window.addEventListener("drop", soltar);
+    return () => {
+      window.removeEventListener("dragover", permitir);
+      window.removeEventListener("drop", soltar);
+    };
+    // `mover` é estável o bastante pro efeito (só depende de setState e das
+    // funções de carregar): re-registrar a cada render trocaria o ouvinte no
+    // meio do gesto.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [arrastando]);
+
   // Só faz polling ENQUANTO há algo em curso: numa biblioteca parada isso seria
   // consulta a cada 3s pra sempre.
   const emCurso = materiais?.some((m) => m.status === "processando") ?? false;
@@ -677,7 +752,7 @@ export default function PaginaMateriais() {
             para onde mover. */}
         {grupos.length > 1 && (
           <p className="text-[12px] text-subtle">
-            errou a matéria? arraste o material para outro grupo
+            errou a matéria? arraste para outro grupo — ou solte fora deles pra tirar
           </p>
         )}
       </div>
