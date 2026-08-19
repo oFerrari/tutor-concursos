@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { AlertTriangle, CalendarClock, Check, FolderOpen, Plus, X } from "lucide-react";
+import { AlertTriangle, CalendarClock, Check, FolderOpen, Plus } from "lucide-react";
 import {
   EditalAtual,
   ErroApi,
@@ -14,6 +14,8 @@ import {
   getMesaAtual,
   getToken,
 } from "@/lib/api";
+import { Carregando } from "@/components/Carregando";
+import { ListaDisciplinas } from "@/components/ListaDisciplinas";
 import { limparCache } from "@/lib/cache";
 
 /**
@@ -55,7 +57,6 @@ export default function PaginaAlvo() {
   const [titulo, setTitulo] = useState("");
   const [data, setData] = useState("");
   const [escolhidas, setEscolhidas] = useState<string[]>([]);
-  const [nova, setNova] = useState("");
 
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
@@ -112,17 +113,11 @@ export default function PaginaAlvo() {
   const temAlgo = titulo.trim() !== "" || data !== "" || escolhidas.length > 0;
   const carregando = mesa === null && erro === null;
 
-  function acrescentar() {
-    const nome = nova.trim().replace(/\s+/g, " ");
-    if (!nome) return;
+  function acrescentar(nome: string) {
     // Duplicata ignorando caixa: "direito penal" e "Direito Penal" são a mesma
     // matéria, e duas linhas iguais na lista fariam o recorte parecer errado.
-    if (escolhidas.some((d) => d.toLowerCase() === nome.toLowerCase())) {
-      setNova("");
-      return;
-    }
+    if (escolhidas.some((d) => d.toLowerCase() === nome.toLowerCase())) return;
     setEscolhidas([...escolhidas, nome]);
-    setNova("");
   }
 
   async function salvar() {
@@ -162,14 +157,7 @@ export default function PaginaAlvo() {
 
       {erro && <p className="callout-danger mb-4 !p-3 text-[13px]">{erro}</p>}
 
-      {carregando && (
-        <div className="animate-pulse">
-          <div className="mb-3 h-11 rounded-xl bg-surface-raised" />
-          <div className="mb-3 h-11 w-1/2 rounded-xl bg-surface-raised" />
-          <div className="mb-2 h-11 rounded-xl bg-surface-raised" />
-          <div className="h-11 w-2/3 rounded-xl bg-surface-raised" />
-        </div>
-      )}
+      {carregando && <Carregando linhas={4} titulo />}
 
       {mesa !== null && (
         <>
@@ -226,37 +214,27 @@ export default function PaginaAlvo() {
             matérias · {escolhidas.length} {escolhidas.length === 1 ? "escolhida" : "escolhidas"}
           </p>
 
-          {escolhidas.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-line-stronger px-4 py-6 text-center text-[13.5px] text-muted">
-              Nenhuma ainda. Escolha abaixo, ou digite as do seu concurso.
-            </p>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {escolhidas.map((d) => (
-                <li
-                  key={d}
-                  className="flex items-center gap-3 rounded-xl border border-line bg-surface px-3.5 py-2.5"
-                >
-                  <span className="min-w-0 flex-1 truncate text-[14px]">{d}</span>
-                  {semMaterial.includes(d) && (
-                    <span
-                      className="shrink-0 rounded-md border border-warning-line bg-warning-soft px-1.5 py-0.5 text-[10.5px] text-warning"
-                      title="Entra no seu plano e aparece no raio-x, mas o acervo ainda não tem material dela — então não gera questão. Suba material em Meus materiais."
-                    >
-                      sem material
-                    </span>
-                  )}
-                  <button
-                    onClick={() => setEscolhidas(escolhidas.filter((x) => x !== d))}
-                    aria-label={`tirar ${d}`}
-                    className="shrink-0 rounded-lg p-1 text-subtle transition-colors hover:bg-surface-hover hover:text-danger"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+          <ListaDisciplinas
+            linhas={escolhidas.map((d) => ({
+              nome: d,
+              selo: semMaterial.includes(d)
+                ? {
+                    texto: "sem material",
+                    titulo:
+                      "Entra no seu plano e aparece no raio-x, mas o acervo ainda não tem material dela — então não gera questão. Suba material em Meus materiais.",
+                  }
+                : undefined,
+            }))}
+            aoTirar={(i) => setEscolhidas(escolhidas.filter((_, j) => j !== i))}
+            aoAdicionar={acrescentar}
+            placeholderNovo="Outra matéria que vai cair na sua prova"
+            desabilitado={salvando}
+            vazio={
+              <p className="rounded-xl border border-dashed border-line-stronger px-4 py-6 text-center text-[13.5px] text-muted">
+                Nenhuma ainda. Escolha abaixo, ou digite as do seu concurso.
+              </p>
+            }
+          />
 
           {semMaterial.length > 0 && (
             <p className="mt-2.5 text-[12.5px] text-warning">
@@ -296,28 +274,6 @@ export default function PaginaAlvo() {
             </div>
           )}
 
-          {/* Digitar é legítimo aqui: o caminho do edital não exige que a matéria
-              exista no acervo, e edital real traz matéria que o acervo não tem.
-              O preço está dito no selo da linha, não escondido. */}
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              acrescentar();
-            }}
-            className="mt-5 flex gap-2"
-          >
-            <input
-              value={nova}
-              onChange={(e) => setNova(e.target.value)}
-              maxLength={120}
-              placeholder="Outra matéria que vai cair na sua prova"
-              className="field flex-1"
-            />
-            <button type="submit" disabled={!nova.trim()} className="btn-ghost shrink-0">
-              <Plus className="h-4 w-4" />
-              adicionar
-            </button>
-          </form>
 
           {/* --------------------------------------------- confirmar */}
           <div className="mt-8 border-t border-line pt-6">

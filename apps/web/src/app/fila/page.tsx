@@ -7,6 +7,7 @@ import { GerarQuestoes } from "@/components/GerarQuestoes";
 import { useRouter } from "next/navigation";
 import { Sugestao } from "@/components/Sugestao";
 import { Carga, ErroApi, Questao, getCarga, getFila, getToken } from "@/lib/api";
+import { Carregando } from "@/components/Carregando";
 import { gravarCache, lerCache, sair } from "@/lib/cache";
 
 export default function PaginaFila() {
@@ -58,7 +59,7 @@ export default function PaginaFila() {
   if (!questoes || !carga) {
     return (
       <div className="mx-auto max-w-2xl p-6 md:p-10">
-        <p className="text-sm text-muted">Carregando…</p>
+        <Carregando linhas={3} />
       </div>
     );
   }

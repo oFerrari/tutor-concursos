@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Check, Plus, X } from "lucide-react";
+import { Check } from "lucide-react";
 import { Voltar } from "@/components/Voltar";
 import {
   DisciplinaEdital,
@@ -13,6 +13,7 @@ import {
   getRascunho,
   getToken,
 } from "@/lib/api";
+import { ListaDisciplinas } from "@/components/ListaDisciplinas";
 
 /**
  * Curadoria do edital — a tela entre "a IA leu o PDF" e "o sistema passou
@@ -45,7 +46,6 @@ export default function PaginaCuradoria() {
   const [erro, setErro] = useState<string | null>(null);
   const [cargo, setCargo] = useState<string | null>(null);
   const [disciplinas, setDisciplinas] = useState<DisciplinaEdital[]>([]);
-  const [nova, setNova] = useState("");
   const [titulo, setTitulo] = useState("");
   const [orgao, setOrgao] = useState("");
   const [banca, setBanca] = useState("");
@@ -291,59 +291,27 @@ export default function PaginaCuradoria() {
             não o que a leitura achou.
           </p>
 
-          <ul className="space-y-1.5">
-            {disciplinas.map((d, i) => (
-              <li
-                key={`${d.disciplina}-${i}`}
-                className="flex items-center gap-3 rounded-xl border border-line bg-surface px-3.5 py-2.5"
-              >
-                <span className="min-w-0 flex-1 truncate text-[14px]">{d.disciplina}</span>
-                {suspeito(d.topicos.length) && (
-                  <span
-                    className="shrink-0 rounded-md border border-warning-line bg-warning-soft px-1.5 py-0.5 text-[10.5px] text-warning"
-                    title="Muito mais tópicos que as outras matérias — pode ser um cabeçalho que a leitura não reconheceu, fazendo esta matéria engolir os tópicos da anterior. Vale conferir no PDF."
-                  >
-                    confira
-                  </span>
-                )}
-                <span className="mono-num shrink-0 text-[12px] text-subtle">
-                  {d.topicos.length || "—"}
-                </span>
-                <button
-                  onClick={() => setDisciplinas(disciplinas.filter((_, j) => j !== i))}
-                  aria-label={`tirar ${d.disciplina}`}
-                  className="shrink-0 rounded-lg p-1 text-subtle transition-colors hover:bg-surface-hover hover:text-danger"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </li>
-            ))}
-          </ul>
-
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const nome = nova.trim();
-              if (!nome) return;
-              // topicos vazio é legítimo: a pessoa quer a matéria mesmo sem
-              // o edital detalhar. O backend cria a linha de tópico com o
-              // próprio nome, senão a escolha não entraria no recorte.
-              setDisciplinas([...disciplinas, { disciplina: nome, topicos: [] }]);
-              setNova("");
-            }}
-            className="mt-3 flex gap-2"
-          >
-            <input
-              value={nova}
-              onChange={(e) => setNova(e.target.value)}
-              placeholder="Acrescentar disciplina que faltou"
-              className="field flex-1"
-            />
-            <button type="submit" disabled={!nova.trim()} className="btn-ghost shrink-0">
-              <Plus className="h-4 w-4" />
-              adicionar
-            </button>
-          </form>
+          <ListaDisciplinas
+            linhas={disciplinas.map((d) => ({
+              nome: d.disciplina,
+              contagem: d.topicos.length,
+              selo: suspeito(d.topicos.length)
+                ? {
+                    texto: "confira",
+                    titulo:
+                      "Muito mais tópicos que as outras matérias — pode ser um cabeçalho que a leitura não reconheceu, fazendo esta matéria engolir os tópicos da anterior. Vale conferir no PDF.",
+                  }
+                : undefined,
+            }))}
+            aoTirar={(i) => setDisciplinas(disciplinas.filter((_, j) => j !== i))}
+            // topicos vazio é legítimo: a pessoa quer a matéria mesmo sem o
+            // edital detalhar. O backend cria a linha de tópico com o próprio
+            // nome, senão a escolha não entraria no recorte.
+            aoAdicionar={(nome) =>
+              setDisciplinas([...disciplinas, { disciplina: nome, topicos: [] }])
+            }
+            placeholderNovo="Acrescentar disciplina que faltou"
+          />
         </div>
       )}
 

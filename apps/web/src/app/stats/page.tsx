@@ -11,6 +11,7 @@ import {
   getStats,
   getToken,
 } from "@/lib/api";
+import { Carregando } from "@/components/Carregando";
 import { gravarCache, lerCache, sair } from "@/lib/cache";
 
 /**
@@ -132,7 +133,7 @@ export default function PaginaStats() {
         <Kpis carga={carga} desempenho={dados} />
       </div>
 
-      {!erro && !dados && <p className="text-sm text-muted">Carregando…</p>}
+      {!erro && !dados && <Carregando linhas={4} titulo />}
 
       {dados && dados.length === 0 && (
         <p className="callout-info">

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Upload, X } from "lucide-react";
+import { Plus, Upload } from "lucide-react";
 import {
   EditalAtual,
   ErroApi,
@@ -14,6 +14,7 @@ import {
   getMeta,
   getToken,
 } from "@/lib/api";
+import { TabelaPorDisciplina } from "@/components/TabelaPorDisciplina";
 import { sair } from "@/lib/cache";
 
 export default function PaginaMeta() {
@@ -107,6 +108,13 @@ export default function PaginaMeta() {
   // funciona e evita fuso: "2025-07-27" < "2026-08-18" lexicograficamente.
   const hoje = new Date().toISOString().slice(0, 10);
   const provaVencida = !!edital?.data_prova && edital.data_prova < hoje;
+  /** Nunca houve data. É o caso do edital declarado à mão sem prazo (017) e do
+   *  PDF de que a extração não tirou data nenhuma — e era BECO SEM SAÍDA: o
+   *  aviso do servidor manda "informe a data" e o campo só existia quando havia
+   *  uma data VENCIDA pra corrigir. Quem nunca teve data lia a instrução e não
+   *  tinha onde cumpri-la. */
+  const semData = !!edital && !edital.data_prova;
+  const precisaDeData = provaVencida || semData;
 
   return (
     <div className="mx-auto max-w-2xl p-6 md:p-10">
@@ -117,13 +125,28 @@ export default function PaginaMeta() {
 
       {erro && <p className="mb-4 callout-danger">{erro}</p>}
 
-      {provaVencida && (
+      {precisaDeData && (
         <div className="callout-warning mb-4">
+          {/* Dois textos, porque são duas situações diferentes: corrigir uma data
+              que passou e informar uma que nunca existiu. Um texto genérico pros
+              dois faria o segundo caso soar como erro do aluno. */}
           <p className="mb-2.5 text-[13px]">
-            <strong className="font-semibold">A data deste edital já passou</strong> (
-            {edital?.data_prova}). Sem uma data futura eu não consigo medir sua meta: dias
-            restantes, ritmo necessário e probabilidade de fechamento todos dependem do prazo.
-            Se você estuda por este edital esperando o próximo, informe a data provável.
+            {provaVencida ? (
+              <>
+                <strong className="font-semibold">A data deste edital já passou</strong> (
+                {edital?.data_prova}). Sem uma data futura eu não consigo medir sua meta: dias
+                restantes, ritmo necessário e probabilidade de fechamento todos dependem do
+                prazo. Se você estuda por este edital esperando o próximo, informe a data
+                provável.
+              </>
+            ) : (
+              <>
+                <strong className="font-semibold">Este edital não tem data de prova.</strong> É
+                normal quando o edital ainda não saiu ou quando você montou o plano na mão — mas
+                sem prazo eu não consigo calcular dias restantes, ritmo necessário nem
+                probabilidade de fechamento. Informe a data provável; dá pra trocar depois.
+              </>
+            )}
           </p>
           <form
             onSubmit={(e) => {
@@ -201,36 +224,16 @@ export default function PaginaMeta() {
               {editando ? "concluir" : "editar matérias"}
             </button>
           </div>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-line text-left text-muted">
-                <th className="py-1.5">Disciplina</th>
-                <th className="py-1.5 text-right">Tópicos</th>
-                <th className="py-1.5 text-right">Cobertura</th>
-              </tr>
-            </thead>
-            <tbody>
-              {edital.cobertura.map((c) => (
-                <tr key={c.disciplina} className="border-b border-line">
-                  <td className="py-1.5">{c.disciplina}</td>
-                  <td className="py-1.5 text-right tabular-nums">{c.topicos_no_edital}</td>
-                  <td className="py-1.5 text-right tabular-nums">{c.cobertura_pct}%</td>
-                  {editando && (
-                    <td className="w-8 py-1.5 text-right">
-                      <button
-                        onClick={() => ajustar({ remover: [c.disciplina] })}
-                        disabled={ajustando}
-                        title={`Tirar ${c.disciplina} do edital`}
-                        className="text-subtle transition-colors hover:text-danger"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <TabelaPorDisciplina
+            colunas={["Tópicos", "Cobertura"]}
+            linhas={edital.cobertura.map((c) => ({
+              disciplina: c.disciplina,
+              a: c.topicos_no_edital,
+              b: `${c.cobertura_pct}%`,
+            }))}
+            aoRemover={editando ? (d) => ajustar({ remover: [d] }) : undefined}
+            removendo={ajustando}
+          />
 
           {editando && (
             <form

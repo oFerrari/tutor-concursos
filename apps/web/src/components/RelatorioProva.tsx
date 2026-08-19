@@ -1,4 +1,5 @@
 import { RelatorioDisciplina, ResultadoSimulado, ErroSimulado } from "@/lib/api";
+import { TabelaPorDisciplina } from "@/components/TabelaPorDisciplina";
 
 export type RelatorioSimulado = {
   resultado: ResultadoSimulado;
@@ -46,26 +47,16 @@ export function RelatorioProva({ relatorio, segundosTotal, rotuloAcao, onAcao }:
       </div>
 
       {porDisciplina.length > 0 && (
-        <table className="mt-4 w-full text-sm">
-          <thead>
-            <tr className="border-b border-line text-left text-muted">
-              <th className="py-1.5">Disciplina</th>
-              <th className="py-1.5 text-right">Acertos</th>
-              <th className="py-1.5 text-right">%</th>
-            </tr>
-          </thead>
-          <tbody>
-            {porDisciplina.map((r) => (
-              <tr key={r.disciplina} className="border-b border-line">
-                <td className="py-1.5">{r.disciplina}</td>
-                <td className="py-1.5 text-right tabular-nums">
-                  {r.acertos}/{r.questoes}
-                </td>
-                <td className="py-1.5 text-right tabular-nums">{r.pct.toFixed(0)}%</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="mt-4">
+          <TabelaPorDisciplina
+            colunas={["Acertos", "%"]}
+            linhas={porDisciplina.map((r) => ({
+              disciplina: r.disciplina,
+              a: `${r.acertos}/${r.questoes}`,
+              b: `${r.pct}%`,
+            }))}
+          />
+        </div>
       )}
 
       {erros.length > 0 && (

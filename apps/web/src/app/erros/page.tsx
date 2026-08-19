@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ErroApi, ErroCaderno, getErros, getToken } from "@/lib/api";
+import { Carregando } from "@/components/Carregando";
 import { gravarCache, lerCache, sair } from "@/lib/cache";
 
 export default function PaginaErros() {
@@ -40,7 +41,7 @@ export default function PaginaErros() {
       </div>
 
       {erro && <p className="callout-danger">{erro}</p>}
-      {!erro && !erros && <p className="text-sm text-muted">Carregando…</p>}
+      {!erro && !erros && <Carregando linhas={4} />}
       {erros && erros.length === 0 && (
         <p className="text-muted">Nenhuma reincidência ainda — bom sinal.</p>
       )}
