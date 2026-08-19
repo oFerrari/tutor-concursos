@@ -44,16 +44,42 @@ No **PASSO 2 (Plano de Ação)**, você deve SEMPRE incluir uma seção final ch
 - Quais falhas de borda (edge cases) você blindou.
 - Quais melhorias de UX ou performance você já embutiu no código por conta própria para modernizar a entrega.
 
-## PASSO 2 — Plano de ação e escopo (PARADA OBRIGATÓRIA)
+## PASSO 2 — Plano de ação e escopo (PARADA CONDICIONAL)
 
-Antes de escrever qualquer código, responder com:
+**Para tarefas de arquitetura nova ou escopo ambíguo, pare e apresente um plano de
+ação. Para tarefas claramente delimitadas, correções de bugs ou escopos já
+alinhados, execute o código diretamente sem pedir permissão.**
+
+### Quando PARAR (plano antes do código)
+
+Responder com:
 
 - a **classificação** da tarefa;
 - os **arquivos/rotas exatos** que serão alterados;
 - **o que será feito**, em 1 ou 2 frases;
+- a seção **"Mitigações e Proatividade:"** exigida pelo PASSO 1.5;
 - e a pergunta: **"Posso prosseguir?"**
 
 Nada de código antes da aprovação.
+
+### Quando EXECUTAR direto
+
+Sem plano, sem pergunta. A análise do PASSO 1.5 continua obrigatória — ela só
+deixa de ser publicada antes e passa a ser publicada depois: o **relatório de
+entrega** carrega a seção **"Mitigações e Proatividade:"** no lugar do plano.
+Isso não é dispensa da análise; é a mesma análise, entregue junto do resultado.
+
+Em caso de dúvida sobre em qual lado a tarefa cai, o critério é **o custo de
+errar**, não o tamanho: se executar errado significa refazer trabalho, apagar
+dado ou mexer no que não foi pedido, pare e pergunte. Se significa um ajuste de
+uma linha, execute.
+
+O que **sempre** para, independente de parecer delimitado:
+
+- migração de banco que **apaga** coluna, tabela ou dado;
+- qualquer coisa fora do escopo pedido, mesmo que pareça melhoria óbvia;
+- ação irreversível ou que sai da máquina (push, deploy, envio a serviço
+  externo).
 
 ## PASSO 3 — Execução restrita (gatilho rígido)
 
