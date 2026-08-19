@@ -107,6 +107,9 @@ sincronizar.py             exporta/importa questões e progresso de UM usuário 
 semear_demo.py             semeia conta descartável com 3 mesas e 15 dias, pra olhar a TELA
 migrar.py                  aplica as migrações de db/ que faltam (único mecanismo)
 atualizar.sh               instala arquivos baixados do chat
+Dockerfile (apps/api)      backend containerizado — torch CPU-only, modelo DENTRO da imagem
+render.yaml (raiz)         Blueprint do serviço web; deploy passa a ser git push
+subir-vercel.sh (raiz)     prepara a nuvem (imagem, banco, schema, corpus) · --tunel · --status
 ```
 ## Onde está o resto
 
@@ -247,6 +250,14 @@ python chat.py erros | stats | stats --json
 python chat.py meta                 # usa a data do edital ingerido
 python chat.py meta 2026-11-15      # data manual, sempre vence a do edital
 python chat.py perguntar "art. 312"
+
+# backend na nuvem (frontend na Vercel): prepara e VERIFICA tudo o que não
+# exige credencial; para no login dizendo o comando que falta
+export DATABASE_URL='postgresql://...'   # Postgres com pgvector (Neon/Supabase)
+./subir-vercel.sh                        # imagem + pgvector + schema + corpus
+./subir-vercel.sh --tunel                # atalho de DEV: expõe esta máquina
+./subir-vercel.sh --status               # o que está de pé, aqui e lá
+API_PUBLICA=https://sua-api ./subir-vercel.sh --status
 
 # ao sair de uma máquina
 python sincronizar.py exportar && git add -A && git commit -m "progresso" && git push

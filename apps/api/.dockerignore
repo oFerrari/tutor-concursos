@@ -1,0 +1,25 @@
+# O que NÃO entra na imagem. Este arquivo é o que decide se a imagem tem 900 MB
+# ou 4 GB — sem ele o `.venv` local (1,4 GB) e o cache do modelo (1,1 GB) viajam
+# junto, duplicando exatamente o que o Dockerfile instala de novo lá dentro.
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Segredo. Nunca na imagem: as variáveis vêm do ambiente do provedor, e
+# `.env` copiado pra dentro é chave de API dentro de um artefato que se
+# distribui e se versiona em registry.
+.env
+
+# Material PAGO do aluno (decisão de "corpus/ vai pro git; acervo/ não").
+# `corpus/` FICA — é lei do Planalto, sem direito autoral, e é o que a
+# ingestão precisa ler.
+acervo/
+
+# Testes e fixtures não rodam em produção, e o fixture do edital da TRANSPETRO
+# sozinho tem 35 KB de PDF extraído.
+tests/
+
+# Logs e transitórios
+.llm_debug.txt
+*.log

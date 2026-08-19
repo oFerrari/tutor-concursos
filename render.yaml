@@ -1,0 +1,64 @@
+# Blueprint do backend. Fica no repositório de propósito: o deploy passa a ser
+# "git push", e o que está no ar é descrito por um arquivo versionado em vez de
+# por cliques que ninguém lembra depois.
+#
+# O QUE ESTE ARQUIVO NÃO FAZ: criar o banco. `DATABASE_URL` entra como segredo
+# (`sync: false`), apontando pro Postgres com pgvector que você escolher — Neon,
+# Supabase ou o Postgres gerenciado do próprio provedor. Separar tem uma razão
+# prática: o banco é o único componente cujo dado você não pode perder num
+# redeploy, e amarrá-lo ao ciclo de vida do serviço web é como um `down -v`
+# acidental leva o progresso embora.
+#
+# pgvector NÃO é assumido, é VERIFICADO: `./subir-vercel.sh` roda
+# `CREATE EXTENSION IF NOT EXISTS vector` contra a URL antes de qualquer coisa,
+# e para com mensagem clara se o provedor não tiver a extensão. Descobrir isso
+# depois de 20 minutos de build é o tipo de falha que este projeto já pagou.
+services:
+  - type: web
+    name: tutor-api
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: ./apps/api
+
+    # O modelo de embeddings ocupa ~1 GB de RAM e o torch soma o dele. Plano de
+    # 512 MB NÃO roda isto — o processo morre no carregamento do modelo, e o
+    # sintoma é health check falhando sem log de erro da aplicação. Confira a
+    # RAM do plano no painel antes de subir; o nome do plano muda com o tempo,
+    # a exigência de ~2 GB não.
+    plan: standard
+
+    # A raiz responde rápido e sem tocar no banco. `/docs` também serviria, mas
+    # ele monta o Swagger inteiro a cada chamada de health check.
+    healthCheckPath: /openapi.json
+
+    envVars:
+      # Segredos: `sync: false` faz o painel PEDIR o valor em vez de guardá-lo
+      # aqui. Nenhum deles pode viver no git.
+      - key: DATABASE_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: JWT_SECRET
+        # Gerado pelo provedor: chave de assinatura que passa por copiar-e-colar
+        # é chave que acaba num histórico de shell. Trocar este valor invalida
+        # todo token emitido antes (todo mundo precisa logar de novo).
+        generateValue: true
+
+      # CORS: sem o domínio da Vercel aqui, o navegador bloqueia a resposta
+      # ANTES do JS ver — dá erro de rede genérico no fetch, não um 403
+      # explicável. É o primeiro obstáculo silencioso ao ligar o front publicado.
+      # Troque pelo domínio real do seu projeto na Vercel.
+      - key: CORS_ORIGINS
+        sync: false
+
+      - key: LLM_PROVIDER
+        value: gemini
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash-lite
+      - key: EMBEDDING_MODEL
+        value: intfloat/multilingual-e5-base
+      # A CLI não roda aqui, mas `auth.usuario_da_cli` lê esta variável se
+      # alguém chamar um script pelo shell do container. Valor explícito evita
+      # que um comando de manutenção crie conta com email vazio.
+      - key: CLI_USUARIO_EMAIL
+        value: manutencao@local

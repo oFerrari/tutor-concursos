@@ -72,6 +72,32 @@ cp apps/web/.env.local.example apps/web/.env.local
 depois `git add -A && git commit && git push` — sem isso, a próxima
 exportação (de qualquer lado) sobrescreve o que ficou de fora.
 
+Na prática nada disso precisa ser digitado: `./setup.sh` faz os cinco passos
+acima e sobe API e frontend, de qualquer pasta do repositório. `./setup.sh
+--subir` é o do dia a dia (confere o schema e sobe, sem reinstalar nada).
+
+## Backend na nuvem, frontend na Vercel
+
+A Vercel hospeda o `apps/web` e **não pode** hospedar o `apps/api`: função
+serverless tem teto de 250 MB descompactados, e só o torch — que vem junto dos
+embeddings locais — passa de 750 MB. Então o backend vai pra um container:
+
+```bash
+export DATABASE_URL='postgresql://...'   # Postgres COM pgvector (Neon, Supabase)
+./subir-vercel.sh                        # imagem + pgvector + schema + corpus
+```
+
+O script faz tudo o que não exige credencial e **verifica** em vez de supor:
+constrói a imagem localmente antes de gastar build no provedor, confirma que o
+pgvector existe, aplica as migrações e ingere o corpus contra o banco da nuvem.
+Depois para no ponto do login imprimindo o comando que falta — token de
+infraestrutura não passa por script. `render.yaml` na raiz descreve o serviço,
+então a partir da primeira conexão o deploy é `git push`.
+
+`./subir-vercel.sh --tunel` continua existindo como atalho de dev (expõe a API
+desta máquina por uma URL pública efêmera), e `--status` diz o que está de pé,
+aqui e lá.
+
 ## Por que monorepo desde o início, mesmo sem frontend no primeiro commit
 
 `apps/web` e `apps/mobile` iam precisar consumir a mesma API — decidir a
