@@ -32,12 +32,16 @@ TRÊS ESTADOS, E O DO MEIO SE RECUSA A SUPOR
 -------------------------------------------
   · sem `documento`     -> banco vazio. Aplica tudo, do 001 em diante.
   · com `documento`,
-    sem livro-razão     -> máquina da era anterior a este script. PARA e
-                           explica. Marcar tudo como aplicado seria catastrófico
-                           num banco atrasado (pularia a 021 e a 022 caladas);
-                           tentar aplicar tudo explode no primeiro ADD COLUMN.
-                           Quem sabe em que estado o banco está é a pessoa, e é
-                           ela que decide, com `--adotar` ou `down -v`.
+    sem livro-razão     -> máquina da era anterior a este script. MEDE o schema
+                           (bloco SONDAS): registra o que o banco comprovadamente
+                           já tem e aplica só o resto. Antes ele parava aqui e
+                           mandava a pessoa escolher entre `--adotar` (que pularia
+                           migração de verdade num banco atrasado) e `down -v`
+                           (que perde mesa, edital e conversa, nada disso viaja
+                           no `sincronizar.py`) — duas respostas erradas pro caso
+                           real, que era um banco atrasado E com dados. A recusa
+                           a supor continua: medir não é supor. Só volta a
+                           perguntar se faltar sonda pra alguma migração.
   · com livro-razão     -> caminho normal: aplica o que falta.
 
 Recusar-se a adivinhar não é indecisão: aqui, adivinhar errado perde dado.
@@ -62,7 +66,7 @@ from psycopg.rows import dict_row
 
 from core.config import DATABASE_URL
 
-VERSAO = "migrar-v1"
+VERSAO = "migrar-v2"
 
 DIR = Path(__file__).parent / "db"
 
@@ -133,6 +137,109 @@ def _avisar_editadas(registradas: dict[str, str], todos: list[Path]) -> None:
                   f"(banco: {antigo}, arquivo: {checksum(p)})")
             print("    o efeito da edição NÃO está neste banco. Se ela importa, "
                   "faça uma migração nova.")
+
+
+# ---------------------------------------------------------------- sondas
+# Cada migração da ERA ANTERIOR ao livro-razão tem aqui uma pergunta que o
+# banco sabe responder: "o efeito principal deste arquivo está presente?".
+#
+# É isto que substitui o "decida você" que este script imprimia no estado do
+# meio. A recusa a SUPOR continua de pé — o que mudou é que existe uma terceira
+# saída além de supor e de perguntar: MEDIR. Um banco de 2026 não precisa que
+# ninguém lembre se rodou a 021 na mão; a coluna está lá ou não está.
+#
+# A sonda é conservadora e checa o efeito PRINCIPAL, não todos. Errar pro lado
+# de "não aplicada" é barato: o DDL explode no ADD COLUMN duplicado, a
+# transação inteira volta e o script diz o que houve. Errar pro lado de
+# "aplicada" é o caro (pula calada), e por isso a sonda aponta pro objeto que a
+# migração existe pra criar, nunca pra um detalhe periférico.
+#
+# Arquivo NOVO não precisa entrar aqui: a partir da 023 o livro-razão responde
+# sozinho, e este mapa só é consultado em banco que ainda não tem livro-razão
+# nenhum. Migração sem sonda NESSE banco é justamente o caso em que o script
+# volta a parar e perguntar — porque aí ele realmente não sabe.
+COLUNA = ("SELECT 1 FROM information_schema.columns "
+          "WHERE table_name = %s AND column_name = %s")
+TABELA = "SELECT 1 WHERE to_regclass(%s) IS NOT NULL"
+CHECK_COM = ("SELECT 1 FROM pg_constraint WHERE conname = %s "
+             "AND pg_get_constraintdef(oid) LIKE %s")
+FK_CASCADE = "SELECT 1 FROM pg_constraint WHERE conname = %s AND confdeltype = 'c'"
+
+SONDAS: dict[str, tuple[str, tuple]] = {
+    "001_schema.sql":                (TABELA, ("documento",)),
+    "002_rubrica_secao.sql":         (COLUNA, ("chunk", "rubrica")),
+    "003_embedding_cache.sql":       (TABELA, ("embedding_cache",)),
+    "004_simulado.sql":              (TABELA, ("simulado",)),
+    "005_desempenho_json.sql":       (COLUNA, ("v_desempenho_disciplina", "cobertura_pct")),
+    "006_tipo_historico.sql":        (CHECK_COM, ("documento_tipo_check", "%historico%")),
+    "007_edital.sql":                (TABELA, ("edital",)),
+    "008_usuario.sql":               (TABELA, ("progresso",)),
+    "009_cascade_usuario.sql":       (FK_CASCADE, ("tentativa_usuario_id_fkey",)),
+    "010_mesa.sql":                  (TABELA, ("mesa",)),
+    "011_edital_rascunho.sql":       (TABELA, ("edital_rascunho",)),
+    "012_questao_tipo.sql":          (COLUNA, ("questao", "gabarito_ce")),
+    "013_contexto.sql":              (TABELA, ("contexto",)),
+    "014_conversa.sql":              (TABELA, ("conversa",)),
+    "015_perfil.sql":                (COLUNA, ("usuario", "perfil")),
+    "016_mensagem_evento.sql":       (CHECK_COM, ("mensagem_autor_check", "%evento%")),
+    "017_mesa_disciplinas.sql":      (COLUNA, ("mesa", "disciplinas_manuais")),
+    "018_edital_cargo.sql":          (COLUNA, ("edital", "cargo")),
+    "018_simulado_resumavel.sql":    (COLUNA, ("simulado", "questao_ids")),
+    "019_material_do_aluno.sql":     (COLUNA, ("documento", "usuario_id")),
+    "019_simulado_nome.sql":         (COLUNA, ("simulado", "nome")),
+    "020_material_classificado.sql": (COLUNA, ("documento", "assunto")),
+    "021_biblioteca_por_mesa.sql":   (COLUNA, ("documento", "mesa_id")),
+    "022_conceito_faltante.sql":     (COLUNA, ("tentativa", "conceito_faltante")),
+    "023_migracao.sql":              (TABELA, ("migracao",)),
+}
+
+
+def _ja_aplicada(cur, nome: str) -> bool | None:
+    """True/False pela sonda; None quando não existe sonda pra este arquivo."""
+    sonda = SONDAS.get(nome)
+    if sonda is None:
+        return None
+    sql, params = sonda
+    cur.execute(sql, params)
+    return cur.fetchone() is not None
+
+
+def adotar_por_medicao(cur, todos: list[Path]) -> list[Path] | None:
+    """
+    Estado do meio, resolvido MEDINDO: registra o que o banco comprovadamente
+    já tem e devolve o resto pra ser aplicado pelo caminho normal.
+
+    Devolve None quando alguma migração não tem sonda — aí o script volta a
+    parar e perguntar, que é a resposta honesta pra pergunta que ele não sabe
+    responder.
+    """
+    sem_sonda = [p.name for p in todos if p.name not in SONDAS]
+    if sem_sonda:
+        print("não sei medir estas migrações (faltam em SONDAS):")
+        for n in sem_sonda:
+            print(f"  {n}")
+        return None
+
+    # Medir ANTES de criar o livro-razão, e a ordem é o ponto: a sonda da 023 é
+    # a existência da tabela `migracao`, e criá-la primeiro faria ela medir o
+    # que este próprio script acabou de fazer — 023 sempre "já aplicada", e o
+    # COMMENT do arquivo nunca rodaria. Peguei rodando o teste C, não lendo.
+    presentes = [p for p in todos if _ja_aplicada(cur, p.name)]
+    faltando = [p for p in todos if p not in presentes]
+    cur.execute(DDL_LIVRO)
+
+    print("livro-razão ausente — MEDINDO o schema em vez de supor:\n")
+    for p in todos:
+        print(f"  [{'ja no banco' if p in presentes else 'FALTA':>11}] {p.name}")
+    for p in presentes:
+        cur.execute(
+            "INSERT INTO migracao (nome, checksum) VALUES (%s, %s) "
+            "ON CONFLICT (nome) DO NOTHING",
+            (p.name, checksum(p)),
+        )
+    print(f"\n{len(presentes)} registrada(s) como já aplicada(s) · "
+          f"{len(faltando)} a aplicar agora.\n")
+    return faltando
 
 
 def listar() -> int:
@@ -216,27 +323,28 @@ def aplicar() -> int:
         tem_schema = _existe(cur, SENTINELA)
         tem_livro = _existe(cur, "migracao")
 
-        # O estado do meio: banco usado, era anterior a este script. Não supõe.
+        # O estado do meio: banco usado, era anterior a este script. Ele não
+        # supõe — MEDE (ver o bloco de sondas). Só volta a parar e perguntar
+        # quando a medição não cobre alguma migração, que é o único caso em que
+        # a pergunta é mesmo da pessoa.
         if tem_schema and not tem_livro:
-            print("Este banco tem dados mas nunca foi controlado por migrar.py.\n")
-            print("Não vou adivinhar o que já rodou: marcar tudo como aplicado")
-            print("pularia migração de verdade num banco atrasado, e aplicar tudo")
-            print("quebra no primeiro ALTER TABLE de coluna que já existe.\n")
-            print("Escolha um caminho:\n")
-            print("  banco EM DIA (é a máquina onde você vem trabalhando):")
-            print("    python migrar.py --adotar\n")
-            print("  banco ATRASADO ou você não tem certeza (recria do zero,")
-            print("  PERDE os dados locais — o progresso volta pelo git):")
-            print("    docker compose down -v && docker compose up -d")
-            print("    python migrar.py && python sincronizar.py importar\n")
-            print("  ver o que existe antes de decidir:")
-            print("    python migrar.py --listar")
-            return 2
-
-        cur.execute(DDL_LIVRO)
-        registradas = _registradas(cur)
-        _avisar_editadas(registradas, todos)
-        pendentes = [p for p in todos if p.name not in registradas]
+            pendentes = adotar_por_medicao(cur, todos)
+            if pendentes is None:
+                print("\nEste banco tem dados mas nunca foi controlado por migrar.py,")
+                print("e eu não consigo medir tudo. Escolha um caminho:\n")
+                print("  banco EM DIA:   python migrar.py --adotar")
+                print("  banco ATRASADO: docker compose down -v && docker compose up -d")
+                print("                  python migrar.py && python sincronizar.py importar")
+                print("  ver o estado:   python migrar.py --listar")
+                return 2
+            c.commit()
+            registradas = _registradas(cur)
+            _avisar_editadas(registradas, todos)
+        else:
+            cur.execute(DDL_LIVRO)
+            registradas = _registradas(cur)
+            _avisar_editadas(registradas, todos)
+            pendentes = [p for p in todos if p.name not in registradas]
 
         if not pendentes:
             print(f"banco em dia · {len(registradas)} migração(ões) aplicada(s), "

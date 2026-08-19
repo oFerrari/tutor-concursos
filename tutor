@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Roda qualquer comando do backend com o venv certo, de qualquer pasta:
+#
+#   ./tutor migrar.py --listar
+#   ./tutor chat.py estudar
+#   ./tutor pytest -q
+#
+# É o irmão do `source ativar.sh` pra quem não quer mudar o shell. Os dois
+# existem pelo mesmo motivo: o venv e os scripts moram em apps/api, e lembrar
+# disso a cada comando é atrito que o projeto pode absorver.
+set -euo pipefail
+RAIZ=$(git rev-parse --show-toplevel 2>/dev/null) || RAIZ=$(cd "$(dirname "$0")" && pwd)
+cd "$RAIZ/apps/api"
+if [ ! -d .venv ]; then
+  echo "não há venv ainda — rode ./setup.sh primeiro." >&2
+  exit 1
+fi
+source .venv/bin/activate
+[ $# -eq 0 ] && { echo "uso: ./tutor <comando> [args]   ex.: ./tutor migrar.py --listar"; exit 1; }
+# `.py` vira `python arquivo.py`; qualquer outra coisa (pytest, uvicorn) roda
+# direto do venv. Sem isso, `./tutor migrar.py` cairia no shebang e no python
+# do sistema, que é justamente o erro que este script existe pra evitar.
+case "$1" in
+  *.py) exec python "$@" ;;
+  *)    exec "$@" ;;
+esac

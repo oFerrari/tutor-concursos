@@ -115,6 +115,9 @@ fi
 # inteiro. E é o passo que faltava neste script: `git pull` traz os ARQUIVOS de
 # migração e não aplica nenhum, então o código novo conversava com o schema
 # velho e a aplicação SUBIA pra quebrar depois, num lugar sem relação óbvia.
+# Banco da era anterior ao livro-razão não para mais aqui: `migrar.py` MEDE o
+# schema (bloco SONDAS) e aplica só o que falta. Este passo voltou a ser um
+# comando em vez de uma conversa — que era o ponto do script.
 echo "== 4/7 schema (migrações pendentes) =="
 if ! python migrar.py; then
   echo
@@ -226,6 +229,10 @@ tudo de pé:
 
   aplicação   http://localhost:3000
   API (docs)  http://localhost:8000/docs
+
+Pra rodar comando do backend noutro terminal, sem decorar caminho:
+  cd $RAIZ && source ativar.sh      (ativa o venv e te deixa em apps/api)
+  ./tutor migrar.py --listar        (roda um comando só, sem mudar o shell)
 
 Antes de sair desta máquina, sempre:
   cd apps/api && python sincronizar.py exportar && cd "$RAIZ" && git add -A && git commit -m progresso && git push
