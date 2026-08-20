@@ -23,7 +23,7 @@ import re
 from . import db
 from .embeddings import embed_consulta
 
-VERSAO = "retrieval-v3"
+VERSAO = "retrieval-v4"
 RRF_K = 60  # constante de amortecimento padrão do RRF
 
 # Material `historico` (livro de emendas: "Redação Anterior", múltiplas
@@ -275,14 +275,22 @@ def formatar_contexto(chunks: list[dict]) -> str:
     rotulá-lo como "§1º" porque contém um parágrafo faz o modelo atribuir
     ao §1º o que está no caput. Errar dispositivo é grave para concurseiro.
     """
-    partes = []
-    for c in chunks:
-        ref = c["titulo"]
-        if c.get("artigo"):
-            ref += f", art. {c['artigo']}"
-            if c.get("rubrica"):
-                ref += f" — {c['rubrica']}"
-        elif c.get("pagina"):
-            ref += f", p. {c['pagina']}"
-        partes.append(f"[{ref}]\n{c['texto']}")
-    return "\n\n---\n\n".join(partes)
+    return "\n\n---\n\n".join(f"[{referencia(c)}]\n{c['texto']}" for c in chunks)
+
+
+def referencia(c: dict) -> str:
+    """O rótulo que acompanha o trecho no prompt — e a ÚNICA fonte que o tutor
+    está autorizado a citar.
+
+    Saiu de dentro de `formatar_contexto` pra ter um dono só: quem confere se
+    uma citação da resposta tem trecho por trás (`socratic.limpar_citacoes`)
+    precisa da MESMA regra de formação, e duas cópias divergem — mesma decisão
+    de `RE_CITACAO` ser importada em vez de copiada em `core/assunto.py`."""
+    ref = c["titulo"]
+    if c.get("artigo"):
+        ref += f", art. {c['artigo']}"
+        if c.get("rubrica"):
+            ref += f" — {c['rubrica']}"
+    elif c.get("pagina"):
+        ref += f", p. {c['pagina']}"
+    return ref

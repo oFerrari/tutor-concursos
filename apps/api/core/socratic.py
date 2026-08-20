@@ -11,9 +11,12 @@ chega a 3, e nesse caso quem imprime é este módulo, não o modelo.
 Segunda decisão: os dois pontos que precisam de JSON declaram `responseSchema`.
 Sem isso, modelo pequeno erra a sintaxe e a sessão de estudo morre no meio.
 """
+import re
+import unicodedata
+
 from . import assunto, llm, retrieval
 
-VERSAO = "socratic-v34"
+VERSAO = "socratic-v35"
 
 # ------------------------------------------------------------------ schemas
 # Subconjunto OpenAPI aceito pelo Gemini. propertyOrdering importa: o modelo
@@ -366,6 +369,133 @@ def _resumo_mesa(mesa_: dict | None) -> str | None:
     return "\n".join(linhas)
 
 
+# ------------------------------------------------------- citação com fonte
+
+# Toda citação que o tutor escreve. O formato é o de `retrieval.referencia`,
+# porque é dele que o modelo copia: colchete, norma, vírgula, "art. N".
+RE_CITADA = re.compile(r"\[([^\[\]\n]{1,160})\]")
+
+# Conectores que ficariam pendurados se a citação saísse sozinha do meio da
+# frase ("conforme [Lei X, art. 5º], o vínculo..." viraria "conforme , o
+# vínculo"). Saem junto com ela. Lista curta e fechada: nas seis citações medidas
+# em resposta real, todas vinham no fim da oração, onde apagar só a citação
+# basta — estes existem pro caso que a medição não viu, não pro comum.
+RE_CONECTOR = re.compile(
+    r"(?:,\s*)?\b(?:conforme|segundo|previsto[s]?\s+(?:em|n[oa])|nos\s+termos\s+d[oae]|"
+    r"de\s+acordo\s+com|com\s+base\s+n[oa]|na\s+forma\s+d[oae]|"
+    r"consta\s+(?:em|n[oa])|est[aá]\s+(?:em|n[oa]))\s*$",
+    re.IGNORECASE)
+
+RE_NUMERO_ART = re.compile(r"\bart\w*\.?\s*(\d+)", re.IGNORECASE)
+RE_TOKEN = re.compile(r"[0-9]+|[^\W\d_]+", re.UNICODE)
+
+
+def _tokens(texto: str) -> tuple[str, ...]:
+    nfkd = unicodedata.normalize("NFKD", (texto or "").lower())
+    limpo = "".join(c for c in nfkd if not unicodedata.combining(c))
+    return tuple(RE_TOKEN.findall(limpo))
+
+
+def _identidade(citada: str) -> tuple[tuple[str, ...], str | None]:
+    """(tokens da norma, número do artigo) de uma citação ou de uma referência.
+
+    A norma é o que vem ANTES da primeira vírgula, e o artigo é o primeiro
+    número depois de "art" — as duas escolhas saem de medição, não de gosto. O
+    modelo acrescenta detalhe que o trecho não tem: escreveu "[CF, art. 37,
+    XVI]" para a referência "[cf, art. 37]" e "[cp, art. 316, § 1º]" para "[cp,
+    art. 316 — Concussão]". Exigir a citação inteira igual reprovaria as duas;
+    exigir que TODO número bata reprovaria a segunda (o "1" do parágrafo). Quem
+    identifica a fonte é norma + artigo; o resto é refinamento que o modelo fez
+    por cima do que leu, e refinamento não é invenção."""
+    if "," in citada:
+        norma = citada.split(",")[0]
+    else:
+        norma = re.split(r"\bart\w*\.?", citada, maxsplit=1, flags=re.IGNORECASE)[0]
+    achado = RE_NUMERO_ART.search(citada)
+    return _tokens(norma), (achado.group(1) if achado else None)
+
+
+def com_fonte(citada: str, chunks: list[dict]) -> bool:
+    """A citação tem trecho recuperado por trás?
+
+    Aceita o `titulo` E a `norma` do chunk como identidade da fonte: o mesmo
+    acervo se apresenta das duas formas ("Código de Processo Penal" e "CPP",
+    "Lei 8.112/1990" e "L8112"), e as duas são dado que já está na linha — não
+    tabela de apelidos escrita por mim, que é o tipo de coisa que envelhece
+    calada. Chunk sem artigo (material do aluno, `historico`) casa por nome só:
+    é o que a referência dele tem."""
+    tokens, artigo = _identidade(citada)
+    if not tokens:
+        return False
+    for c in chunks or []:
+        if tokens not in {_tokens(c.get("titulo") or ""), _tokens(c.get("norma") or "")}:
+            continue
+        digitos = "".join(ch for ch in str(c.get("artigo") or "") if ch.isdigit())
+        if artigo is None or not digitos or artigo == digitos:
+            return True
+    return False
+
+
+def limpar_citacoes(resposta: str, chunks: list[dict]) -> str:
+    """Apaga da resposta as citações que nenhum trecho recuperado sustenta.
+
+    É REGRA EM CÓDIGO, e pelo motivo de sempre neste projeto: o prompt já manda
+    "cite SOMENTE as referências que acompanham cada trecho", e instrução vaza —
+    mesma lição da retenção do gabarito. Medido em conversa real: o tutor
+    escreveu "[Lei Maria da Penha, art. 5º]" sem nenhum trecho dessa lei, que
+    NEM ESTÁ no acervo. O conteúdo estava certo; a fonte era inverificável — e é
+    a verificabilidade que dá valor ao colchete. Um colchete que o aluno não pode
+    conferir contamina os verdadeiros da mesma resposta.
+
+    Apagar em vez de avisar: "(fora do acervo)" na cara do aluno é vocabulário do
+    sistema aparecendo na aula, proibido no mesmo prompt. A afirmação continua —
+    sem o carimbo de fonte que ela não tem.
+
+    E apagar na SAÍDA fecha o cano na origem: a resposta filtrada é a que vai pro
+    banco (014), então o histórico deixa de ensinar o modelo a citar lei fora do
+    acervo — era daí que esta vinha, dos turnos anteriores DELE mesmo. Mensagem
+    já gravada não é reescrita: filtro de borda vale do ponto em que existe pra
+    frente.
+
+    Não toca em nada quando não há o que apagar. Uma resposta sem citação
+    inverificável sai byte por byte como o modelo escreveu, porque `_costurar`
+    mexe em espaço e pontuação, e mexer nisso sem motivo é risco sem prêmio."""
+    texto = resposta or ""
+    saida, fim, apagou = [], 0, False
+    for m in RE_CITADA.finditer(texto):
+        antes = texto[fim:m.start()]
+        if com_fonte(m.group(1), chunks):
+            saida.append(antes + m.group(0))
+        else:
+            saida.append(RE_CONECTOR.sub("", antes))
+            apagou = True
+        fim = m.end()
+    saida.append(texto[fim:])
+    return _costurar("".join(saida)) if apagou else resposta
+
+
+def _costurar(texto: str) -> str:
+    """A cicatriz de onde a citação saiu: espaço duplo, espaço antes de
+    pontuação, vírgula abrindo frase. Sem isto a resposta fica com "protetiva ?",
+    "cargo  público" ou ", o vínculo de afeto basta" — e defeito de pontuação lê
+    como app quebrado, não como filtro funcionando.
+
+    A vírgula órfã e a maiúscula só aparecem no caminho do conector, que é
+    DEFENSIVO: nas seis citações medidas em resposta real, todas vinham no fim da
+    oração, e ali apagar o colchete não deixa cicatriz nenhuma."""
+    texto = re.sub(r"[ \t]{2,}", " ", texto)
+    texto = re.sub(r"[ \t]+([,.;:!?])", r"\1", texto)
+    texto = re.sub(r",\s*,", ",", texto)
+    texto = re.sub(r"\A[\s,]+", "", texto)
+    texto = re.sub(r"\n[ \t]*,[ \t]*", "\n", texto)
+    texto = re.sub(r"[ \t]+\n", "\n", texto)
+    # Frase que perdeu o conector inicial começa em minúscula. Só início de
+    # texto e de parágrafo: depois de ponto no meio da frase, "etc. isso" e
+    # "art. peculato" existem, e trocar letra ali é mexer no que não quebrou.
+    return re.sub(r"(\A|\n)([a-zà-ÿ])",
+                  lambda m: m.group(1) + m.group(2).upper(), texto.strip())
+
+
 def explicar(pergunta: str, usuario_id: int | None = None,
              disciplinas: list[str] | None = None,
              mesa_: dict | None = None,
@@ -580,7 +710,7 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         "ignorar, e aí o convite não funciona nem quando é a hora certa."
     )
     resposta = llm.obter().gerar("\n\n".join(partes), sistema, max_tokens=1500)
-    return {"resposta": resposta, "fontes": chunks}
+    return {"resposta": limpar_citacoes(resposta, chunks), "fontes": chunks}
 
 
 def gerar_questoes(chunks: list[dict], quantidade: int = 5,
