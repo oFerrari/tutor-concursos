@@ -706,6 +706,104 @@ O tema da geração é derivado NO SERVIDOR (`POST /questoes/gerar` já recebia
 `conversa_id`): "sobre o que é esta conversa" é regra, e regra com duas cópias
 diverge — mesmo argumento que fez a mesa padrão ser resolvida no servidor.
 
+**Quem tem a INICIATIVA do turno decide o assunto, e contar palavras não decide
+nada (`assunto-v3`).** O `CONTEUDO_SUFICIENTE` acima resolveu o "vamos" e
+produziu o pior resultado que este produto já deu, relatado com log real: uma
+conversa de dez minutos INTEIRA sobre Lei Maria da Penha gerou duas questões de
+Direito Administrativo — L8112 art. 55 (ajuda de custo) e art. 94 (mandato
+eletivo). A consulta era
+
+    'dependencia? não impede sim desde que haja vinculo ou afeto'
+
+as três últimas respostas do aluno costuradas. Quatro palavras de conteúdo, a
+contagem parou porque tinha quatro — e as quatro caem em pensão e ajuda de custo
+do estatuto do servidor. **A contagem estava certa; o que ela contava não era
+assunto.** "Lei Maria da Penha" estava no SEGUNDO turno e nunca entrou.
+
+Limiar de tamanho não conserta, e isso foi MEDIDO nas duas direções: com
+`FRAGMENTO = 3`, "me explica eficácia limitada" (2 palavras de conteúdo) é
+classificada como fragmento e o tutor arrasta assunto abandonado de volta; com
+`FRAGMENTO = 2`, "vinculo afeto" passa por assunto e o defeito continua.
+`eficácia limitada` e `vinculo afeto` têm o MESMO tamanho, um é assunto e o
+outro não — não existe ponto de corte entre eles. Duas tentativas, as duas
+trocando uma falha por outra, as duas revertidas.
+
+O que separa é ESTRUTURAL e a 014 já guardava de graça: num diálogo socrático o
+aluno RESPONDE em pedaços, e o assunto é dito uma vez, no começo. A pergunta
+certa não é "esta fala é grande?", é "esta fala é INICIATIVA ou RESPOSTA?". O
+tutor detém a iniciativa enquanto está perguntando; o aluno a retoma com um
+pedido explícito (`pede_assunto`: citação de dispositivo ou verbo da lista
+`PEDIDO`). Sendo resposta, a consulta é o turno do TUTOR — que é onde o assunto
+está escrito por extenso.
+
+**Novidade lexical foi tentada primeiro e é a ideia que mais parecia certa:** "é
+eco se não acrescenta nenhuma palavra de conteúdo além das que o tutor acabou de
+usar" — sem limiar, sem lista, puro. Cai em 3 das 6 respostas do log real
+('dependencia?' traz `dependencia`, 'sim desde que haja vinculo ou afeto' traz
+`vinculo`/`afeto`). O motivo é óbvio depois de ver: **responder a uma pergunta
+de conhecimento É dizer a palavra que o tutor não disse** — era exatamente o que
+ele estava perguntando ("qual o critério, além da coabitação e do vínculo de
+afeto?"). Novidade lexical mede ACERTO do aluno, não iniciativa.
+
+E a condição estrutural não pode ir sozinha, embora seja a mais limpa: o prompt
+manda o tutor terminar TODA resposta com pergunta, então quase todo turno do
+aluno vem depois de uma, e tratar todos como resposta tira dele a capacidade de
+trocar de assunto — o defeito oposto, igualmente ruim, travado em
+`test_aluno_retoma_a_iniciativa_e_troca_de_assunto`. A lista `PEDIDO` é a
+ESCAPATÓRIA, não a regra: quem carrega a decisão é a estrutura do turno.
+
+Uma armadilha de método no meio disto, que vale mais que o conserto: a primeira
+validação "passou" nos sete turnos porque eu comparei cada fala do aluno com o
+turno do tutor **seguinte** — o que repete a resposta de volta ("Exato, a unidade
+doméstica ou a **dependência econômica**..."). Circular, e indisponível na hora
+de decidir. As falas literais viraram fixture (`MARIA_DA_PENHA` em
+`tests/test_assunto.py`), lidas do próprio banco, não reescritas de memória.
+
+**A citação de fonte do tutor não pode ir pra busca (`_sem_citacao`).** Defeito
+que só apareceu DEPOIS de o primeiro ser consertado, e mediu-se pior que ele: o
+tutor fecha a resposta com "[Lei Maria da Penha, art. 5º, II e III]" — lei que
+NÃO está no acervo — e citação dentro da consulta faz `retrieval.buscar` trocar
+busca semântica por dispositivo EXATO. Voltou o art. 5º de tudo o que existe:
+ADCT, CF, territorialidade do CP, inquérito do CPP, requisitos de investidura da
+8.112. Cinco artigos sem nada em comum além do número, e com cara de acerto
+porque o número bate. Vale só no caminho herdado: citação escrita pelo ALUNO
+continua indo crua, porque ali ela É o pedido. Com o conserto, a mesma conversa
+devolve crimes contra a família, crimes contra a liberdade individual e CF art.
+226 — o acervo não tem a Maria da Penha, e isto é o mais perto que ele chega.
+
+**CEMITÉRIO DE IDEIAS: piso de relevância vetorial não funciona neste acervo sem
+cross-encoder.** A causa-raiz dos dois defeitos acima é uma só: `hibrida()`
+devolve 6 chunks SEMPRE, então consulta sem assunto vem com confiança total. A
+correção óbvia é a que qualquer um proporia — distância de cosseno máxima na
+query do pgvector, e `[]` quando o melhor vizinho estiver além do limiar. Foi
+medida contra um gabarito de casos cobertos e não cobertos pelo acervo, e NÃO
+FUNCIONA. Números, pra ninguém ter que repetir:
+
+| método | coberto pelo acervo | NÃO coberto |
+|---|---|---|
+| distância absoluta do 1º vizinho | 0,1101 – 0,1797 | 0,1382 – 0,2013 |
+| razão d1/d20 (achatamento da vizinhança) | mín 0,5213 · p50 0,8817 · máx 0,9694 | mín 0,8732 · p50 0,9400 · máx 0,9599 |
+
+As faixas se SOBREPÕEM nos dois métodos. Pior: "violência doméstica contra a
+mulher" (0,1382), que o acervo não cobre, fica MAIS PERTO que "peculato"
+(0,1797), que ele cobre em cheio — qualquer corte que barre a primeira barra a
+segunda. A razão d1/d20 separa as MEDIANAS e não as faixas; dos 3 casos cobertos
+acima de 0,94, dois são citação de dispositivo (respondidos por
+`por_dispositivo`, que nunca chega em `hibrida`) e o terceiro é o art. 5º da CF,
+o artigo monstro que o gabarito já sinaliza. Sobra separação para 1 caso.
+
+O motivo é o modelo, não o corte: `multilingual-e5-base` comprime texto do mesmo
+domínio: lei brasileira contra lei brasileira fica tudo perto, e a distância
+absoluta quase não carrega sinal de COBERTURA. Quem resolveria é um
+cross-encoder reordenando os 20 primeiros — outro modelo, outro custo de CPU por
+turno, e decisão que não se toma sem medir latência. **Enquanto isso, a defesa é
+a consulta ser boa, não o corte ser bom** — foi por isso que o conserto foi em
+`assunto.py` e `retrieval.py` não foi tocado.
+
+Se alguém for reabrir isto: o gabarito e o script de medição são reprodutíveis
+por `avaliar_retrieval.py` + a lista de casos não cobertos; derrubar esta decisão
+exige MEDIÇÃO nova, não argumento (regra da casa).
+
 **A escada pedagógica é ORDEM no prompt, não intenção.** Relatado no mesmo log:
 o tutor empurrou "Quero questões sobre isto" nas três primeiras respostas e o
 aluno teve de pedir aula. Nada mandava vender — mas "termine com uma pergunta ou

@@ -99,9 +99,18 @@ medição.
   das normas constitucionais" (doutrina, não lei seca) devolve CP art. 9º
   "Eficácia de sentença estrangeira" por colisão lexical. O tutor consegue
   EXPLICAR o assunto (a apostila do aluno cobre) e o gerador estruturalmente não
-  consegue COBRÁ-LO, porque `geracao` só usa acervo público (008). Consertar
-  exige piso de relevância, e o gabarito do `avaliar_retrieval.py` deve receber
-  esse caso ANTES do código.
+  consegue COBRÁ-LO, porque `geracao` só usa acervo público (008).
+
+  **E o piso de relevância — o conserto óbvio — foi MEDIDO e não funciona neste
+  acervo** (números e gabarito em Decisões, "CEMITÉRIO DE IDEIAS"): as faixas de
+  distância de cosseno de coberto e não coberto se sobrepõem (0,110–0,180 contra
+  0,138–0,201), e "violência doméstica contra a mulher", que o acervo não tem,
+  fica MAIS PERTO que "peculato", que ele cobre em cheio. A razão d1/d20 separa
+  medianas, não faixas. Quem resolveria é um cross-encoder reordenando os 20
+  primeiros — outro modelo e outro custo de CPU por turno. Enquanto isso a defesa
+  é a CONSULTA ser boa (`core/assunto.py`), não o corte: conversa inteira sobre
+  Lei Maria da Penha gerando questão de ajuda de custo era consulta ruim, não
+  piso ausente.
 
 - O extrator lê o Cesgranrio, e não perfeitamente: **cabeçalho de disciplina que
   quebra de linha ainda é perdido ou truncado** (`III- DADOS E BASES DE\nDADOS`
