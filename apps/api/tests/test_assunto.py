@@ -208,3 +208,139 @@ def test_sem_nada_devolve_none():
     assert assunto.em_foco([], None) is None
     assert assunto.em_foco([], "   ") is None
     assert assunto.em_foco(_turnos(["", "   "]), "ok") is None
+
+
+# ------------------------------------------------- a prova de fogo (log real)
+
+# As falas LITERAIS da conversa 465, a pior que o produto já produziu: dez
+# minutos inteiros sobre Lei Maria da Penha terminando em duas questões de
+# Direito Administrativo — L8112 art. 55 (ajuda de custo) e art. 94 (mandato
+# eletivo). Os turnos do tutor estão inteiros de propósito: é a citação de fonte
+# no fim deles ("[Lei Maria da Penha, art. 5º]") que trava o segundo defeito.
+MARIA_DA_PENHA = [
+    ("aluno", "boa noite"),
+    ("tutor", "Boa noite! Por onde você quer começar hoje? Temos Direito"
+              " Administrativo, Direito Constitucional, Direito Penal e Legislação"
+              " Penal Extravagante, entre outras matérias do seu edital."),
+    ("aluno", "queria estudar lei maria da penha"),
+    ("tutor", "A Lei Maria da Penha cai forte na sua prova dentro de Direito Penal"
+              " e Legislação Penal Extravagante pela FGV, cobrando muito a definição"
+              " de violência doméstica e os mecanismos de proteção à mulher. Antes de"
+              " entrarmos nos detalhes que a banca mais exige, você já sabe me dizer"
+              " qual é a natureza da ação penal nos crimes de lesão corporal leve"
+              " praticados no âmbito dessa lei?"),
+    ("aluno", "não sei não quais são?"),
+    ("tutor", "Na Lei Maria da Penha, a regra geral trazida pelo STF é que a ação"
+              " penal nos crimes de lesão corporal leve praticados contra a mulher em"
+              " âmbito doméstico é pública incondicionada. Se uma mulher sofreu lesão"
+              " corporal leve praticada pelo companheiro e no dia seguinte diz que"
+              " quer retirar a queixa, o Ministério Público pode arquivar o caso?"),
+    ("aluno", "não"),
+    ("tutor", "Exato! Como a ação penal é pública incondicionada, a vontade da vítima"
+              " de retirar a queixa não tem valor para parar o processo. Qual é a"
+              " única hipótese em que a ação penal nesses casos de lesão corporal"
+              " seria pública condicionada à representação, segundo o STF?"),
+    ("aluno", "quando nao for crime realizado em ambito doméstico?"),
+    ("tutor", "Não exatamente. Fora do âmbito doméstico ou familiar, a lesão corporal"
+              " leve já segue a regra geral do Código Penal, mas o ponto central da"
+              " Lei Maria da Penha é justamente o âmbito doméstico. A restrição vale"
+              " para qualquer crime de lesão corporal leve praticado no âmbito"
+              " doméstico ou familiar contra a mulher, certo?"),
+    ("aluno", "sim"),
+    ("tutor", "Ótimo! Você sabe me dizer se a proteção da Lei Maria da Penha se"
+              " estende a relações de namoro em que o casal não mora na mesma casa?"),
+    ("aluno", "sim desde que haja vinculo ou afeto"),
+    ("tutor", "Exato! O STJ tem entendimento pacificado de que o vínculo de afeto,"
+              " mesmo sem coabitação, é suficiente para configurar o âmbito doméstico"
+              " e familiar [Lei Maria da Penha, art. 5º]. Você sabe se o fato de o"
+              " casal já ter terminado o relacionamento impede a aplicação da lei"
+              " caso ocorra uma agressão motivada pelo término?"),
+    ("aluno", "não impede"),
+    ("tutor", "Exato! O STJ entende que a relação íntima de afeto anterior — mesmo"
+              " após o término — atrai a incidência da lei, desde que a agressão"
+              " decorra dessa relação [Lei Maria da Penha, art. 5º]. Você lembra qual"
+              " é o critério principal trazido pelo art. 5º da Lei Maria da Penha"
+              " para definir se a agressão configura violência doméstica ou familiar,"
+              " além da coabitação e do vínculo de afeto?"),
+    ("aluno", "dependencia?"),
+    ("tutor", "Exato, a unidade doméstica ou a dependência econômica entre o agressor"
+              " e a vítima também configuram o âmbito da violência doméstica, mesmo"
+              " sem coabitação ou vínculo de afeto amoroso, como ocorre entre parentes"
+              " que moram juntos ou empregada e patrão que residam no mesmo local"
+              " [Lei Maria da Penha, art. 5º, II e III]. Você já viu como a lei trata"
+              " a exigência de convivência sob o mesmo teto?"),
+]
+
+LOG = [{"autor": a, "texto": t} for a, t in MARIA_DA_PENHA]
+
+
+def test_conversa_inteira_sobre_um_assunto_nao_sai_dele():
+    """O defeito, pelo caminho do BOTÃO ("quero questões sobre isto").
+
+    Sem fala nova do aluno, `em_foco` costurava as três últimas respostas dele e
+    a consulta virava
+
+        'dependencia? não impede sim desde que haja vinculo ou afeto'
+
+    quatro palavras de conteúdo, nenhuma delas assunto, e todas as quatro caindo
+    em pensão e ajuda de custo do estatuto do servidor. A busca devolveu L8112
+    55/94/222/198 e as questões saíram de Direito Administrativo. Medido depois
+    da correção, a mesma conversa devolve crimes contra a família, crimes contra
+    a liberdade individual e CF art. 226 — o acervo não tem a Maria da Penha
+    (`docs/LIMITACOES.md`), e isto é o mais perto que ele chega."""
+    foco = assunto.em_foco(LOG, None)
+    assert foco is not None
+    assert "doméstica" in foco.lower()
+    # E os fragmentos de diálogo que viraram a consulta ficam FORA dela.
+    for fragmento in ("não impede", "vinculo ou afeto", "dependencia?"):
+        assert fragmento not in foco.lower()
+
+
+def test_citacao_do_tutor_nao_sequestra_a_busca():
+    """Segundo defeito, que só apareceu depois de o primeiro ser consertado.
+
+    O tutor fecha a resposta com a FONTE — "[Lei Maria da Penha, art. 5º, II e
+    III]" — e uma citação dentro da consulta faz `retrieval.buscar` trocar busca
+    semântica por dispositivo EXATO. O resultado medido foi o art. 5º de tudo o
+    que existe no acervo: ADCT, CF, territorialidade do CP, inquérito do CPP e
+    requisitos de investidura da 8.112. Cinco artigos sem nada em comum além do
+    número — e com cara de acerto, porque o número bate."""
+    foco = assunto.em_foco(LOG, None)
+    assert not assunto.cita_dispositivo(foco)
+    assert "[" not in foco
+
+
+def test_resposta_ao_tutor_herda_o_assunto_do_tutor():
+    """As falas em que contar palavras (e novidade lexical) falhava.
+
+    "dependencia?" e "sim desde que haja vinculo ou afeto" são RESPOSTAS que
+    acrescentam palavra nova — responder a uma pergunta de conhecimento é
+    exatamente isso. Nenhuma das duas pode virar consulta sozinha: "dependência"
+    e "vínculo" moram em ajuda de custo e pensão no acervo que existe."""
+    for i, m in enumerate(MARIA_DA_PENHA):
+        if m[0] != "aluno":
+            continue
+        anteriores, fala = LOG[:i], m[1]
+        if not assunto.e_eco(fala, anteriores):
+            continue
+        foco = (assunto.em_foco(anteriores, fala) or "").lower()
+        # A consulta é a fala do TUTOR — e não precisa conter "Maria da Penha"
+        # pra estar no assunto: "ação penal, lesão corporal, representação" é
+        # consulta boa. Exigir as palavras seria proxy ruim, e reprovava um
+        # acerto. O que precisa valer é a ORIGEM da consulta.
+        do_tutor = [x[1].lower()[:40] for x in MARIA_DA_PENHA if x[0] == "tutor"]
+        assert any(foco.startswith(inicio) for inicio in do_tutor), fala
+        assert not foco.startswith(fala.lower()), fala
+
+
+def test_aluno_retoma_a_iniciativa_e_troca_de_assunto():
+    """A escapatória, e por que ela não pode faltar: o prompt manda o tutor
+    terminar TODA resposta com pergunta, então quase toda fala do aluno vem
+    depois de uma. Sem `pede_assunto`, "agora quero controle de
+    constitucionalidade" seria lida como resposta e o aluno ficaria preso na
+    Maria da Penha — o defeito oposto, e igualmente ruim."""
+    troca = "agora quero controle de constitucionalidade"
+    assert not assunto.e_eco(troca, LOG)
+    foco = assunto.em_foco(LOG, troca).lower()
+    assert foco.startswith("agora quero controle")
+    assert "penha" not in foco and "doméstic" not in foco

@@ -42,6 +42,62 @@ falar"). E resposta de modelo não se trava em teste; isto aqui se trava.
 É HEURÍSTICA, e declarada como tal (mesmo espírito de `core/edital.py`): fala
 curta demais pra nomear um assunto é descartada e a anterior assume o foco.
 Erra pra MENOS — deixa de enriquecer a consulta — em vez de errar pra mais.
+
+A INICIATIVA DO TURNO, E POR QUE ELA SUBSTITUIU CONTAR PALAVRAS
+---------------------------------------------------------------
+A versão anterior olhava só as palavras da fala. Isso levou o produto ao pior
+resultado que ele já deu: uma conversa de dez minutos INTEIRA sobre Lei Maria da
+Penha gerou duas questões de Direito Administrativo (L8112 art. 55, "ajuda de
+custo", e art. 94, "mandato eletivo"). A consulta era
+
+    'dependencia? não impede sim desde que haja vinculo ou afeto'
+
+Nenhuma palavra de "lei maria da penha" — e ela estava na conversa, no SEGUNDO
+turno. `CONTEUDO_SUFICIENTE` parou de enriquecer ao juntar 4 palavras de
+conteúdo, e as quatro eram fragmentos de diálogo (dependencia, impede, vinculo,
+afeto) que caem exatamente em pensão e ajuda de custo do estatuto do servidor. A
+contagem estava certa; o que ela contava não era assunto.
+
+Tentei consertar por limiar de tamanho e MEDI que não dá: com `FRAGMENTO = 3`,
+"me explica eficácia limitada" (2 palavras de conteúdo) é classificada como
+fragmento e o tutor arrasta assunto abandonado de volta; com `FRAGMENTO = 2`,
+"vinculo afeto" passa por assunto e o defeito continua. `eficácia limitada` e
+`vinculo afeto` têm o MESMO tamanho e um é assunto e o outro não — contagem de
+palavras não separa os dois, em nenhum ponto de corte.
+
+O que separa é ESTRUTURAL, e o banco já guarda de graça desde a 014: num diálogo
+socrático o aluno RESPONDE em pedaços e o assunto é dito uma vez, no começo, e
+nunca mais. Então a pergunta certa não é "esta fala é grande?", é "esta fala é
+INICIATIVA ou RESPOSTA?".
+
+O teste disso está em `e_eco`, e é o TURNO que decide: o tutor detém a iniciativa
+enquanto está perguntando, e o aluno a retoma com um pedido explícito. Sendo
+resposta, a consulta é o turno do TUTOR — que é onde o assunto está escrito por
+extenso, e não em pedaços.
+
+A IDEIA QUE PARECIA MELHOR QUE ESSA, E MORREU MEDIDA
+----------------------------------------------------
+Antes de chegar em `pede_assunto` eu escrevi (e este docstring afirmou, por um
+patch) que bastava NOVIDADE LEXICAL: "é eco se não acrescenta nenhuma palavra de
+conteúdo além das que o tutor acabou de usar". Sem limiar, sem lista, elegante —
+e ERRADA. Ela "passou" nas sete falas do log porque eu comparei cada fala do
+aluno com o turno do tutor SEGUINTE, o que repete a resposta dele de volta
+("Exato, a unidade doméstica ou a **dependência econômica**..."). Circular, e
+indisponível na hora de decidir. Pareando com o turno ANTERIOR — o único que
+existe quando a decisão é tomada — ela cai em 3 das 6 respostas:
+
+    ECO                          <- 'não'
+    ECO                          <- 'não impede'
+    NOVAS ['dependencia']        <- 'dependencia?'
+    NOVAS ['afeto','vinculo']    <- 'sim desde que haja vinculo ou afeto'
+    NOVAS ['ambito','crime',…]   <- 'quando nao for crime realizado em ambito
+                                     doméstico?'
+
+O motivo é óbvio depois de ver: RESPONDER a uma pergunta de conhecimento É dizer
+a palavra que o tutor não disse — era exatamente o que ele estava perguntando
+("qual o critério, além da coabitação e do vínculo de afeto?" → "dependencia?").
+Novidade lexical mede ACERTO do aluno, não iniciativa. Fica registrado porque a
+próxima pessoa vai ter a mesma ideia, e ela é boa o bastante pra convencer.
 """
 import re
 import unicodedata
@@ -52,7 +108,7 @@ import unicodedata
 # caminho e não no outro.
 from .retrieval import RE_CITACAO
 
-VERSAO = "assunto-v2"
+VERSAO = "assunto-v3"
 
 # Teto da consulta. Embedding é MÉDIA do que entra: parede de texto dilui o
 # assunto exatamente como o art. 37 (13.059 caracteres) já se dilui no próprio
@@ -88,6 +144,17 @@ CONTEUDO_SUFICIENTE = 4
 # lista `VAZIAS`, não do limiar.
 MIN_CONTEUDO = 1
 MIN_LETRAS = 3
+
+# Verbos com que o aluno RETOMA a iniciativa. Casada contra a fala crua, não
+# contra `palavras_de_conteudo` — várias delas são (corretamente) palavras
+# vazias pra efeito de busca. Fechada e curta de propósito: quem carrega a
+# decisão é a estrutura do turno, não esta lista (ver `e_eco`).
+PEDIDO = set("""
+quero queria gostaria pode podia poderia explica explique explicar explicame
+fala fale falar diga dizer ensina ensine ensinar mostra mostre mostrar
+estudar estuda ver vermos vamos comecar iniciar entender entenda aprender
+duvida pergunta perguntar sobre assunto materia
+""".split())
 
 # Estruturais + o vocabulário de CONVERSA e de META-conversa. Não é lista de
 # stopwords de linguística: é a lista do que aparece quando o aluno fala SOBRE o
@@ -180,6 +247,131 @@ def diz_assunto(texto: str) -> bool:
     return len(palavras_de_conteudo(texto)) >= MIN_CONTEUDO
 
 
+def pede_assunto(fala: str | None) -> bool:
+    """O aluno TOMA a iniciativa nesta fala — cita dispositivo ou pede algo?
+
+    É o único ponto textual do classificador, e ele é a ESCAPATÓRIA, não a
+    regra: existe pra que "agora quero controle de constitucionalidade", dito no
+    meio de um assunto, troque o assunto em vez de ser lido como resposta. Errar
+    aqui pra menos custa uma consulta enriquecida com o turno anterior; errar
+    pra mais custa o aluno preso num assunto que ele abandonou."""
+    if not fala:
+        return False
+    if cita_dispositivo(fala):
+        return True
+    cruas = {_sem_acento(x) for x in RE_PALAVRA.findall(fala.lower())}
+    return bool(PEDIDO & cruas)
+
+
+def _falas_antes(turnos: list[dict], pergunta: str | None) -> list[dict]:
+    """Os turnos que ANTECEDEM a fala atual do aluno.
+
+    Os dois caminhos que chamam `em_foco` diferem justo aqui, e ignorar isso foi
+    o que me fez "validar" a regra errada: no CHAT a fala atual é `pergunta` e
+    não está na lista, então tudo antecede; no BOTÃO ("quero questões sobre
+    isto") não existe fala nova — a última do aluno já está dentro de `turnos`,
+    seguida da resposta do tutor. Comparar a fala com o turno do tutor que veio
+    DEPOIS dela é circular: esse turno repete a resposta do aluno de volta
+    ("Exato, a unidade doméstica ou a dependência econômica...")."""
+    if pergunta and pergunta.strip():
+        return turnos
+    for i in range(len(turnos) - 1, -1, -1):
+        if turnos[i].get("autor") == "aluno":
+            return turnos[:i]
+    return turnos
+
+
+def e_eco(pergunta: str | None, turnos: list[dict] | None) -> bool:
+    """
+    A fala atual RESPONDE ao tutor, em vez de propor assunto?
+
+    Duas condições, as duas necessárias:
+
+      1. o último turno antes dela é do TUTOR e contém pergunta ("?") — o tutor
+         detém a iniciativa;
+      2. a fala não retoma a iniciativa (`pede_assunto`).
+
+    O QUE EU TENTEI ANTES E MEDI QUE NÃO FUNCIONA, pra ninguém repetir: usar
+    novidade lexical na condição 2 — "é eco se não acrescenta nenhuma palavra de
+    conteúdo além das que o tutor acabou de usar". Parece a regra perfeita, sem
+    limiar nenhum, e cai em 3 das 6 respostas do log real:
+
+        ECO                          <- 'não'
+        ECO                          <- 'não impede'
+        NOVAS ['dependencia']        <- 'dependencia?'
+        NOVAS ['afeto','vinculo']    <- 'sim desde que haja vinculo ou afeto'
+        NOVAS ['ambito','crime',…]   <- 'quando nao for crime realizado em ambito
+                                         doméstico?'
+
+    O motivo é óbvio depois de ver: RESPONDER a uma pergunta de conhecimento É
+    dizer a palavra que o tutor não disse. Era exatamente o que o tutor estava
+    perguntando ("qual o critério, além da coabitação e do vínculo de afeto?" →
+    "dependencia?"). Novidade lexical mede acerto do aluno, não iniciativa.
+
+    Por que a condição 1 não pode ser usada sozinha, embora seja a mais limpa: o
+    prompt manda o tutor TERMINAR toda resposta com pergunta, então quase todo
+    turno do aluno vem depois de uma — e tratar todos como resposta tira dele a
+    capacidade de trocar de assunto, que é o defeito oposto e igualmente ruim
+    (`test_recencia_lidera_e_assunto_abandonado_nao_volta`).
+    """
+    fala = pergunta
+    turnos = turnos or []
+    if not (fala and fala.strip()):
+        fala = next((t.get("texto") for t in reversed(turnos)
+                     if t.get("autor") == "aluno"), None)
+    if pede_assunto(fala):
+        return False
+    anteriores = [t for t in _falas_antes(turnos, pergunta)
+                  if t.get("autor") in ("aluno", "tutor")]
+    if not anteriores:
+        return False
+    ultimo = anteriores[-1]
+    return ultimo.get("autor") == "tutor" and "?" in (ultimo.get("texto") or "")
+
+
+def _com_assunto(falas: list[str], disciplinas: list[str] | None) -> list[str]:
+    """
+    Falas que nomeiam algo ALÉM do nome da disciplina, mais recente primeiro.
+
+    O filtro por disciplina existe porque a resposta do tutor a um "boa noite" é
+    "por onde você quer começar, Direito Constitucional ou Direito Penal?" —
+    curta e certa. Sem o filtro, "direito/constitucional/penal" contava como
+    assunto e a busca devolvia artigo sorteado DENTRO da matéria (CPP art. 2º pra
+    quem não pediu nada): errado de um jeito pior que vazio, porque tem cara de
+    acerto. Disciplina é a GAVETA, não o que a pessoa quer estudar — e o prompt
+    já a recebe pelo "Contexto do aluno".
+    """
+    vazias_extra = set()
+    for d in disciplinas or []:
+        vazias_extra.update(_sem_acento(x) for x in palavras_de_conteudo(d))
+    return [
+        f for f in reversed(falas)
+        if diz_assunto(f) and [x for x in palavras_de_conteudo(f)
+                               if _sem_acento(x) not in vazias_extra]
+    ]
+
+
+RE_FONTE = re.compile(r"\[[^\]]*\]")
+
+
+def _sem_citacao(trecho: str) -> str:
+    """Tira do texto HERDADO DO TUTOR as citações de dispositivo.
+
+    Necessário, e descoberto medindo: o tutor fecha a resposta com a fonte
+    ("[Lei Maria da Penha, art. 5º, II e III]"), e `retrieval.buscar` lê citação
+    na consulta como pedido de dispositivo EXATO. Com a citação dentro, a busca
+    deixava de ser semântica e devolvia o art. 5º de tudo o que existe no acervo
+    — ADCT, CF, territorialidade do CP, inquérito do CPP, requisitos da 8.112 —
+    cinco artigos sem relação entre si além do número. Pior que a falha que eu
+    estava consertando, porque cada acerto de número parece acerto de assunto.
+
+    Só vale no caminho do ECO. Citação escrita pelo ALUNO continua intocada e
+    continua indo crua à busca: ali ela É o pedido (ver `cita_dispositivo`)."""
+    limpo = RE_FONTE.sub(" ", trecho or "")
+    limpo = RE_CITACAO.sub(" ", limpo)
+    return " ".join(limpo.split())
+
+
 def _truncar(trecho: str) -> str:
     """Corta na última palavra inteira que cabe. Meia palavra ("adm") não casa
     lexicalmente com nada e ainda entra no vetor como ruído."""
@@ -232,6 +424,17 @@ def em_foco(turnos: list[dict] | None = None, pergunta: str | None = None,
     def falas_de(autor: str) -> list[str]:
         return [t.get("texto") or "" for t in (turnos or []) if t.get("autor") == autor]
 
+    # ECO: quem detém a iniciativa é o tutor, e a fala do aluno é resposta. O
+    # assunto é o que o TUTOR está perguntando — costurar as últimas respostas do
+    # aluno é o que fez uma conversa INTEIRA sobre Lei Maria da Penha gerar
+    # questão de ajuda de custo (L8112 art. 55) e mandato eletivo (art. 94).
+    if e_eco(pergunta, turnos):
+        candidatas = _com_assunto(falas_de("tutor"), disciplinas)[:1]
+        if not candidatas:
+            return None
+        herdado = _sem_citacao(candidatas[0])
+        return _truncar(herdado) or None
+
     do_aluno = falas_de("aluno")
     if pergunta:
         do_aluno.append(pergunta)
@@ -255,14 +458,7 @@ def em_foco(turnos: list[dict] | None = None, pergunta: str | None = None,
         # é o que a pessoa quer estudar, é a gaveta. Sem assunto de verdade, o
         # certo é NÃO buscar — e aí o tutor pergunta de que assunto se trata, que
         # é o que a instrução de "nenhum trecho recuperado" manda fazer.
-        vazias_extra = set()
-        for d in disciplinas or []:
-            vazias_extra.update(_sem_acento(p) for p in palavras_de_conteudo(d))
-        candidatas = [
-            f for f in reversed(falas_de("tutor"))
-            if diz_assunto(f) and [p for p in palavras_de_conteudo(f)
-                                   if _sem_acento(p) not in vazias_extra]
-        ][:1]
+        candidatas = _com_assunto(falas_de("tutor"), disciplinas)[:1]
     if not candidatas:
         return None
 

@@ -792,7 +792,13 @@ def rota_gerar_questoes(body: GerarQuestaoBody, uid: int = Depends(usuario_atual
     # assunto nenhum, não vale mais que não ter mandado nada.
     tema = body.tema if (body.tema and assunto.diz_assunto(body.tema)) else None
     if tema is None and conv:
-        tema = assunto.em_foco(conversa.historico_para_prompt(conv["id"]))
+        # As disciplinas da mesa vão como palavras vazias: quando o assunto vem
+        # herdado do TUTOR, a fala dele pode ser a lista de matérias ("Temos
+        # Direito Administrativo, Direito Constitucional..."), e buscar por nome
+        # de matéria devolve artigo sorteado DENTRO dela — errado com cara de
+        # acerto. `socratic.explicar` já passava isto; este caminho não.
+        tema = assunto.em_foco(conversa.historico_para_prompt(conv["id"]),
+                               disciplinas=m["disciplinas"])
 
     try:
         tipo = body.tipo or geracao.tipo_da_banca(m.get("banca"))
