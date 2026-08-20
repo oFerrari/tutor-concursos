@@ -209,13 +209,66 @@ export default function PaginaTutor() {
       irAoFim(true);
     }
   }, [router, conversaId, irAoFim]);
+  // Reabrir uma conversa gravada (014). Num `useCallback` porque agora tem DOIS
+  // gatilhos: o `?c=` de quem chega de outra tela, e o evento de quem clica no
+  // recente já estando aqui.
+  const abrirConversa = useCallback((id: number) => {
+    getConversa(id)
+      .then((conv) => {
+        setConversaId(conv.id);
+        // O que foi gravado volta como veio: as fontes de cada turno ficaram
+        // salvas justamente pra reabrir a conversa ancorada. Sem isso o aluno
+        // leria uma resposta que citava a lei e voltaria a ela sem as citações —
+        // pior que não ter citação nenhuma.
+        setMensagens(
+          conv.mensagens
+            // EVENTO (016) NÃO É BALÃO. "Você propôs 2 questões sobre X" caía no
+            // `else` do ternário abaixo e aparecia como fala do TUTOR —
+            // inventando na tela uma resposta que o modelo nunca gerou. É o erro
+            // que a decisão da 016 evitou NO BANCO (foi por isso que `autor`
+            // ganhou um terceiro valor) e que voltou pela porta da frente do
+            // front. O texto é escrito PRA O MODELO, em segunda pessoa dirigida
+            // ao tutor; ele segue trabalhando em `historico_para_prompt`.
+            .filter((m) => m.autor !== "evento")
+            .map((m) => {
+              if (m.autor === "aluno") {
+                return { autor: "usuario" as const, texto: m.texto };
+              }
+              // SET, não array: o mesmo documento aparece em mais de um chunk, e
+              // `referencia()` devolve só o título quando não há artigo (material
+              // do aluno, tipo `historico`) — então a mesma etiqueta repetia. O
+              // React reclamou disso no log, com a chave literal:
+              // "Encountered two children with the same key,
+              // `curso-392722-aula-04-2787-completo`". O caminho AO VIVO já
+              // deduplicava com Set; só o de reabrir não, e a divergência entre
+              // os dois é que deixou passar.
+              const citadas = new Set<string>();
+              const consultadas = new Set<string>();
+              for (const f of m.fontes) {
+                (m.texto.includes(marca(f)) ? citadas : consultadas).add(referencia(f));
+              }
+              return {
+                autor: "tutor" as const,
+                texto: m.texto,
+                citadas: [...citadas],
+                consultadas: [...consultadas],
+              };
+            })
+        );
+        // AO REABRIR, CAI NO FIM — é onde a conversa parou. `irAoFim` mexe no
+        // scrollTop do container certo; `scrollIntoView` escolhia sozinho entre
+        // os dois scrollers aninhados e não funcionava na tela.
+        irAoFim();
+      })
+      .catch(() => {});
+  }, [irAoFim]);
 
   // Dois parâmetros, lidos de `window.location` num efeito e não com
-  // `useSearchParams` — o hook obrigaria envolver a página inteira num
-  // <Suspense> só pra ler algo opcional.
+  // `useSearchParams` — o hook obrigaria envolver a página num <Suspense> só pra
+  // ler algo opcional.
   //
   //   ?q=  o composer do panorama manda a pergunta pra cá
-  //   ?c=  a sidebar reabre uma conversa antiga (migração 014)
+  //   ?c=  a sidebar reabre uma conversa antiga, vindo de OUTRA tela
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const q = params.get("q");
@@ -223,51 +276,7 @@ export default function PaginaTutor() {
 
     if (Number.isInteger(c) && c > 0) {
       window.history.replaceState(null, "", "/tutor");
-      getConversa(c)
-        .then((conv) => {
-          setConversaId(conv.id);
-          // O que foi gravado volta como veio: as fontes de cada turno
-          // ficaram salvas justamente pra reabrir a conversa ancorada. Sem
-          // isso o aluno leria uma resposta que citava a lei e voltaria a
-          // ela sem as citações — pior que não ter citação nenhuma.
-          setMensagens(
-            conv.mensagens
-              // EVENTO (016) NÃO É BALÃO. "Você propôs 2 questões sobre X. O
-              // aluno vai respondê-las agora" caía no `else` deste ternário e
-              // aparecia como fala do TUTOR — inventando na tela uma resposta
-              // que o modelo nunca gerou. É exatamente o erro que a decisão da
-              // 016 evitou no banco (por isso `autor` ganhou um TERCEIRO valor
-              // em vez de reaproveitar os dois existentes) e que voltou aqui
-              // pela porta da frente, porque `MensagemSalva` nem declarava
-              // "evento" e o TypeScript não tinha como avisar.
-              //
-              // Fica FORA da exibição, não reinterpretado: o texto é escrito
-              // PRA O MODELO, em segunda pessoa dirigida ao tutor. Ele continua
-              // fazendo o trabalho dele no prompt (`historico_para_prompt`),
-              // que é onde sempre importou.
-              .filter((m) => m.autor !== "evento")
-              .map((m) =>
-              m.autor === "aluno"
-                ? { autor: "usuario" as const, texto: m.texto }
-                : {
-                    autor: "tutor" as const,
-                    texto: m.texto,
-                    citadas: m.fontes.filter((f) => m.texto.includes(marca(f))).map(referencia),
-                    consultadas: m.fontes
-                      .filter((f) => !m.texto.includes(marca(f)))
-                      .map(referencia),
-                  }
-            )
-          );
-          // AO REABRIR, CAI NO FIM DA CONVERSA — é onde ela parou, e é o que
-          // qualquer chat faz. Antes isto era `fim.current?.scrollIntoView()`, e
-          // NÃO funcionava na tela: há dois scrollers aninhados (o <main> do
-          // AppShell e o desta página), e `scrollIntoView` escolhe sozinho qual
-          // ancestral mover. Relatado: "quando eu clico no histórico ele já
-          // deveria ir lá pra baixo". `irAoFim` mexe no container certo.
-          irAoFim();
-        })
-        .catch(() => {});
+      abrirConversa(c);
       return;
     }
 
@@ -275,7 +284,29 @@ export default function PaginaTutor() {
       window.history.replaceState(null, "", "/tutor");
       perguntarAoTutor(q.trim());
     }
-  }, [perguntarAoTutor, irAoFim]);
+  }, [perguntarAoTutor, abrirConversa]);
+
+  // CLICAR NO RECENTE ESTANDO JÁ NO /tutor. O efeito acima só funciona na
+  // MONTAGEM: ele lê `window.location.search` e depende de
+  // `[perguntarAoTutor, abrirConversa]` — ir de /tutor?c=1 pra /tutor?c=413 não
+  // remonta a rota nem muda essas dependências, então ele nunca reroda. E o
+  // `replaceState` ainda apaga a query, então nem dependência nova resolveria.
+  // Relatado: "não tá mais funcionando o recentes, ele não tá recuperando a
+  // conversa" — com `GET /tutor?c=413 200` no log, porque a navegação acontecia
+  // e a leitura não.
+  //
+  // É o TERCEIRO botão deste app com o mesmo defeito (nova conversa, pausar e
+  // entender, e agora este), e o padrão de conserto já existe: CustomEvent da
+  // sidebar pra cá.
+  useEffect(() => {
+    function abrir(e: Event) {
+      const id = (e as CustomEvent<{ id: number }>).detail?.id;
+      if (Number.isInteger(id) && id > 0) abrirConversa(id);
+    }
+    window.addEventListener("tutor:abrir-conversa", abrir);
+    return () => window.removeEventListener("tutor:abrir-conversa", abrir);
+  }, [abrirConversa]);
+
 
   // "Nova conversa" (sidebar) zera a tela sem trocar de rota. Ver o
   // comentário no botão: o Next não remonta /tutor pra ele mesmo.

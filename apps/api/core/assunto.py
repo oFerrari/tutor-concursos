@@ -52,7 +52,7 @@ import unicodedata
 # caminho e não no outro.
 from .retrieval import RE_CITACAO
 
-VERSAO = "assunto-v1"
+VERSAO = "assunto-v2"
 
 # Teto da consulta. Embedding é MÉDIA do que entra: parede de texto dilui o
 # assunto exatamente como o art. 37 (13.059 caracteres) já se dilui no próprio
@@ -123,7 +123,18 @@ algo alguem algum alguma alguns algumas nenhum nenhuma tudo nada mesmo mesma
 outro outra outros outras cada qualquer oferecer oferece oferecendo seja sejam
 fosse fossem sendo sido tratar trata trate tratando art artigo artigos ok
 beleza entao ai ta tao pouca quase bastante primeiro segundo terceiro
+noite dia tarde manha ola oi opa bora saudacoes testar testa teste testando
+testes treinar treino treinando praticar pratica praticando revisar revisao
+revisando
 """.split())
+
+# ESTA LISTA NUNCA VAI ESTAR COMPLETA, e é importante não se enganar sobre isso:
+# ela cresceu duas vezes atrás de casos reais ("vamos", depois "boa noite /
+# podemos testar / bora"), e vai crescer de novo — não existe enumeração de todas
+# as formas de dizer "vamos lá". O que garante o resultado NÃO é ela: é o
+# fallback pra fala do TUTOR em `em_foco`, que funciona mesmo quando a lista
+# falha, porque o assunto passa a vir de onde ele foi nomeado. A lista é conforto
+# (consulta mais limpa quando acerta); o fallback é a garantia.
 
 
 def _sem_acento(palavra: str) -> str:
@@ -179,26 +190,79 @@ def _truncar(trecho: str) -> str:
     return (cortado[:espaco] if espaco > 0 else cortado).strip()
 
 
-def em_foco(turnos: list[dict] | None = None, pergunta: str | None = None) -> str | None:
+def em_foco(turnos: list[dict] | None = None, pergunta: str | None = None,
+            disciplinas: list[str] | None = None) -> str | None:
     """
     A consulta de busca desta conversa: a fala atual mais os turnos do aluno
     que ainda dizem do que se trata. `None` quando ninguém nomeou assunto
     nenhum — e aí quem chama deve cair no recorte da mesa, NUNCA buscar por
     "vamos".
 
-    Só falas do ALUNO. A prosa do tutor tem centenas de palavras e dominaria a
-    consulta com o vocabulário da RESPOSTA anterior, prendendo a busca no que já
-    foi dito em vez do que está sendo perguntado. Os eventos ("respondeu e
-    errou") ficam fora pelo motivo inverso: são fatos da sessão, não pedido —
-    entram no prompt (016) e não deveriam decidir de qual artigo se cobra.
+    PREFERE a fala do ALUNO, e cai na do TUTOR quando nenhuma fala do aluno nomeia
+    assunto. Essa segunda metade foi acrescentada depois, por um caso real que a
+    primeira versão errava inteiro:
+
+        aluno:  "boa noite"
+        tutor:  "...você já domina a diferença entre os direitos sociais de
+                 eficácia plena e as normas de eficácia limitada?"
+        aluno:  "podemos testar eu nao sei se ja estou bom"
+
+    Nenhuma das duas falas do aluno nomeia matéria. A consulta virou "podemos
+    testar eu nao sei se ja estou bom boa noite", a busca devolveu lixo e as
+    questões geradas foram CF art. 200 (SUS) e CP art. 94 (reabilitação) — no meio
+    de uma conversa sobre eficácia das normas constitucionais. O MESMO estrago do
+    "vamos", por outra fresta.
+
+    A lição não é "faltou palavra na lista `VAZIAS`". Nenhuma lista cobre toda
+    forma de dizer "vamos lá" — o defeito era estrutural: quando o aluno não
+    nomeia o assunto, quem nomeou foi o TUTOR, e a proposta dele É o assunto da
+    conversa. Excluir o tutor sempre transformava "o aluno aceitou o convite" em
+    "ninguém falou de nada".
+
+    A razão original de excluí-lo continua de pé onde ela vale: a prosa do tutor
+    tem centenas de palavras e, quando o aluno JÁ disse do que quer falar,
+    dominaria a consulta com o vocabulário da resposta anterior, prendendo a busca
+    no que já foi dito. Por isso é FALLBACK e não fonte de igual peso — só entra
+    quando não há nada do aluno.
+
+    Os eventos ("respondeu e errou") ficam fora dos dois casos: são fatos da
+    sessão, não pedido — entram no prompt (016) e não deveriam decidir de qual
+    artigo se cobra.
     """
-    falas = [t.get("texto") or "" for t in (turnos or [])
-             if t.get("autor") == "aluno"]
+    def falas_de(autor: str) -> list[str]:
+        return [t.get("texto") or "" for t in (turnos or []) if t.get("autor") == autor]
+
+    do_aluno = falas_de("aluno")
     if pergunta:
-        falas.append(pergunta)
+        do_aluno.append(pergunta)
 
     # Recência primeiro: é o que o aluno quer AGORA.
-    candidatas = [f for f in reversed(falas) if diz_assunto(f)][:1 + TURNOS_EXTRA]
+    candidatas = [f for f in reversed(do_aluno) if diz_assunto(f)][:1 + TURNOS_EXTRA]
+    if not candidatas:
+        # Só a ÚLTIMA fala do tutor, e uma só: as anteriores são assuntos que a
+        # conversa já deixou para trás, e trazê-las é o "arrastar peculato de
+        # volta" que `CONTEUDO_SUFICIENTE` existe pra evitar.
+        #
+        # E NOME DE DISCIPLINA NÃO CONTA como assunto aqui. Apareceu ao consertar
+        # o tom do tutor: com o prompt novo, a primeira resposta a um "boa noite"
+        # é "por onde você quer começar, Direito Constitucional ou Direito
+        # Penal?" — curta e certa. Só que aí o fallback achava "assunto" nela
+        # ("direito", "constitucional", "penal") e a busca por isso devolvia
+        # artigo sorteado DENTRO da matéria: CPP art. 2º pra quem não pediu nada.
+        # Errado de um jeito pior que vazio, porque tem cara de acerto.
+        #
+        # Nome de disciplina o prompt já recebe pelo "Contexto do aluno"; ele não
+        # é o que a pessoa quer estudar, é a gaveta. Sem assunto de verdade, o
+        # certo é NÃO buscar — e aí o tutor pergunta de que assunto se trata, que
+        # é o que a instrução de "nenhum trecho recuperado" manda fazer.
+        vazias_extra = set()
+        for d in disciplinas or []:
+            vazias_extra.update(_sem_acento(p) for p in palavras_de_conteudo(d))
+        candidatas = [
+            f for f in reversed(falas_de("tutor"))
+            if diz_assunto(f) and [p for p in palavras_de_conteudo(f)
+                                   if _sem_acento(p) not in vazias_extra]
+        ][:1]
     if not candidatas:
         return None
 

@@ -169,6 +169,75 @@ teste e não na tela. `irAoFim` escreve `scrollTop` do container certo, com dois
 `scrollHeight` ainda é o de antes). Rola ao MANDAR também, não só ao receber: o
 balão do aluno mais o "pensando" já empurram o fim pra fora da tela.
 
+**O prompt vazou o próprio andaime, e a culpa é do rótulo.** O bloco de ordem de
+ensino começava com "ESCADA PEDAGÓGICA" em maiúsculas, e o modelo passou a
+NARRAR o método: uma resposta real abriu com "Perfeito, vamos voltar um degrau
+na escada pedagógica". É o mesmo defeito do `[DESEMPENHO REAL DO ALUNO]` citado
+como fonte, pela mesma causa — nome próprio dentro do prompt vira vocabulário do
+modelo. A instrução perdeu o nome, e a proibição de nomear passou a ser
+explícita (nada de "escada", "degrau", "método socrático", "diagnóstico",
+"trechos recuperados", "acervo"): o aluno veio estudar Direito, não ler o manual
+do app.
+
+Junto entraram duas regras de tom, as duas de reclamação real: **responder no
+TAMANHO da pergunta** (um "boa noite" recebia um parágrafo sobre eficácia das
+normas; agora recebe uma linha e uma pergunta aberta citando as disciplinas do
+edital) e **um micro-tópico por resposta** (explicar direitos sociais e emendar
+competência concorrente no parágrafo seguinte confunde em vez de ensinar).
+
+**A "metralhadora de assuntos" não era só tom — era a busca sem assunto.** No
+turno do "boa noite" a busca devolveu CP art. 150, CPP art. 569 e Lei 8.112 art.
+75, e o modelo falou do que apareceu no prato dele. Instrução de foco trata o
+sintoma; a causa era a consulta.
+
+**E a consulta amnésica escapou por outra fresta: `em_foco` excluía o TUTOR.**
+Conversa real: aluno "boa noite" → tutor propõe eficácia plena × limitada →
+aluno "podemos testar eu nao sei se ja estou bom". Nenhuma fala do ALUNO nomeia
+matéria, então a consulta virou "podemos testar eu nao sei se ja estou bom boa
+noite" e as questões geradas foram CF art. 200 (SUS) e CP art. 94
+(reabilitação) — o mesmo estrago do "vamos".
+
+A lição NÃO é "faltou palavra na lista `VAZIAS`". Nenhuma enumeração cobre toda
+forma de dizer "vamos lá", e a lista já cresceu duas vezes atrás de caso real. O
+defeito era estrutural: **quando o aluno não nomeia o assunto, quem nomeou foi o
+tutor**, e a proposta dele É o assunto da conversa. Excluí-lo sempre
+transformava "o aluno aceitou o convite" em "ninguém falou de nada". Agora é
+FALLBACK (não fonte de igual peso — a razão original de excluí-lo continua
+valendo quando o aluno JÁ disse do que quer falar), e há teste separando os dois
+casos.
+
+**E NOME DE DISCIPLINA não conta como assunto no fallback.** Isso apareceu ao
+consertar o tom: com o prompt novo, a resposta a um "boa noite" é "por onde você
+quer começar, Direito Constitucional ou Direito Penal?" — curta e certa. Só que
+o fallback achava "assunto" ali ("direito", "constitucional", "penal") e a busca
+devolvia artigo sorteado DENTRO da matéria: CPP art. 2º pra quem não pediu nada.
+Errado de um jeito pior que vazio, porque tem cara de acerto. Disciplina é a
+gaveta, não o que a pessoa quer estudar — o prompt já a recebe pelo "Contexto do
+aluno". Sem assunto de verdade, o certo é NÃO buscar, e aí a instrução de
+"nenhum trecho recuperado" manda o tutor perguntar de que assunto se trata.
+
+Lido nos três turnos reais depois da mudança: "boa noite" → uma linha e pergunta
+aberta, zero busca; "podemos testar" → pergunta de diagnóstico, zero busca, zero
+lei afirmada sem fonte; "quero eficácia das normas constitucionais" → pergunta
+certa sobre aplicabilidade imediata × dependente de lei. Nenhum vocabulário de
+sistema em nenhuma das três.
+
+**O terceiro botão com o mesmo defeito de rota.** Clicar num recente estando JÁ
+no /tutor não recuperava a conversa: o efeito que lê `?c=` roda na MONTAGEM, e ir
+de `/tutor?c=1` pra `/tutor?c=413` não remonta a rota nem muda as dependências
+dele — e o `replaceState` ainda apaga a query, então nem dependência nova
+resolveria. O log mostrava `GET /tutor?c=413 200`: a navegação acontecia, a
+leitura não. Depois de "Nova conversa" e "Pausar e entender isto", é a terceira
+vez — o padrão de conserto (CustomEvent da sidebar pra página irmã) já era
+conhecido, e agora `abrirConversa` tem os dois gatilhos.
+
+**Fonte repetida virava chave repetida no React.** O caminho AO VIVO deduplicava
+as fontes com `Set`; o de REABRIR não, e o mesmo documento aparece em vários
+chunks — `referencia()` devolve só o título quando não há artigo (material do
+aluno, tipo `historico`), então a etiqueta repetia. O React reclamou no log com
+a chave literal (`curso-392722-aula-04-2787-completo`). Dois caminhos para a
+mesma coisa é como um deles fica sem a regra do outro.
+
 ## Invariantes (violação = bug)
 
 - Todo `Art.` do arquivo vira um chunk. `diagnostico.py` verifica.

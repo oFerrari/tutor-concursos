@@ -273,7 +273,20 @@ export function Sidebar({ recolhida, onAlternar, mesa, drawer = false, onFechar 
                 <div key={c.id} className="group relative">
                   <Link
                     href={`/tutor?c=${c.id}`}
-                    onClick={onFechar}
+                    onClick={(e) => {
+                      onFechar?.();
+                      // ESTANDO JÁ NO /tutor, o Link não resolve: o Next não
+                      // remonta a rota pra ela mesma, e o efeito que lê `?c=`
+                      // depende da montagem. O clique navegava (o log mostrava
+                      // `GET /tutor?c=413 200`) e a conversa não voltava.
+                      // Mesmo padrão do "Nova conversa" logo acima.
+                      if (pathname === "/tutor") {
+                        e.preventDefault();
+                        window.dispatchEvent(
+                          new CustomEvent("tutor:abrir-conversa", { detail: { id: c.id } })
+                        );
+                      }
+                    }}
                     title={c.mesa_nome ? `conversa na mesa ${c.mesa_nome}` : undefined}
                     className="flex items-center justify-between gap-2 rounded-[10px] px-2.5 py-1.5 text-[13px]
                                text-subtle transition-colors hover:bg-surface-hover hover:text-foreground"

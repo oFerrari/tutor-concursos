@@ -90,11 +90,58 @@ def test_ignora_acento_ausente():
 
 # --------------------------------------------------------------- quem entra
 
-def test_so_a_fala_do_aluno_entra():
-    """A prosa do tutor tem centenas de palavras e dominaria a consulta com o
-    vocabulário da RESPOSTA anterior — prendendo a busca no que já foi dito."""
-    turnos = _turnos(["peculato é a apropriação de dinheiro público"], autor="tutor")
-    assert assunto.em_foco(turnos, "vamos") is None
+def test_fala_do_tutor_nao_atropela_a_do_aluno():
+    """A prosa do tutor tem centenas de palavras e, quando o aluno JÁ disse do que
+    quer falar, dominaria a consulta com o vocabulário da RESPOSTA anterior —
+    prendendo a busca no que já foi dito em vez do que está sendo perguntado."""
+    turnos = (_turnos(["me explica eficácia limitada"])
+              + _turnos(["peculato é a apropriação de dinheiro público"], autor="tutor"))
+    foco = assunto.em_foco(turnos, "vamos")
+    assert "eficácia limitada" in foco.lower()
+    assert "peculato" not in foco.lower()
+
+
+def test_tutor_e_o_FALLBACK_quando_o_aluno_nunca_nomeou_assunto():
+    """Este teste dizia o oposto — que fala de tutor NUNCA entra — e um caso real
+    provou o contrário:
+
+        aluno:  "boa noite"
+        tutor:  "...você já domina a diferença entre os direitos sociais de
+                 eficácia plena e as normas de eficácia limitada?"
+        aluno:  "podemos testar eu nao sei se ja estou bom"
+
+    Nenhuma fala do ALUNO nomeia matéria. A consulta virou "podemos testar eu nao
+    sei se ja estou bom boa noite", a busca devolveu lixo, e as questões geradas
+    foram CF art. 200 (SUS) e CP art. 94 (reabilitação) — no meio de uma conversa
+    sobre eficácia das normas. O mesmo estrago do "vamos", por outra fresta.
+
+    A lição NÃO é "faltou palavra na lista VAZIAS": nenhuma lista cobre toda forma
+    de dizer "vamos lá". Quando o aluno não nomeia o assunto, quem nomeou foi o
+    TUTOR — e a proposta dele É o assunto da conversa. Excluí-lo sempre
+    transformava "o aluno aceitou o convite" em "ninguém falou de nada"."""
+    tutor = ("Boa noite! Quando você pensa nas questões de Direito Constitucional, "
+             "você já domina a diferença entre os direitos sociais de eficácia plena "
+             "e as normas de eficácia limitada?")
+    turnos = _turnos(["boa noite"]) + _turnos([tutor], autor="tutor")
+    foco = assunto.em_foco(turnos, "podemos testar eu nao sei se ja estou bom")
+    assert foco is not None
+    assert "eficácia limitada" in foco.lower()
+    # E a saudação/meta não entra: era ela que estava virando a consulta.
+    assert "boa noite" not in foco.lower().replace(tutor.lower(), "")
+
+
+def test_saudacao_e_convite_nao_dizem_assunto():
+    """As falas exatas do caso acima, e as vizinhas que iam pelo mesmo caminho.
+
+    Este teste é CONFORTO, não garantia, e a distinção importa: a lista `VAZIAS`
+    já cresceu duas vezes atrás de caso real e vai crescer de novo, porque não
+    existe enumeração de todas as formas de dizer "vamos lá". Quem garante o
+    resultado é `test_tutor_e_o_FALLBACK_...` acima — ele passa mesmo quando esta
+    lista falha."""
+    for fala in ("boa noite", "bom dia", "boa tarde", "oi", "opa",
+                 "podemos testar eu nao sei se ja estou bom",
+                 "vamos treinar", "quero praticar", "bora revisar"):
+        assert not assunto.diz_assunto(fala), fala
 
 
 def test_evento_da_sessao_nao_decide_de_onde_cobrar():
