@@ -112,6 +112,23 @@ medição.
   Lei Maria da Penha gerando questão de ajuda de custo era consulta ruim, não
   piso ausente.
 
+  **O que SOBRA disso, e é assunto não coberto virando desvio na pergunta
+  final.** Com a consulta certa e o filtro de citação valendo, o corpo da
+  resposta fica no assunto e declara a ausência — mas o fecho puxa o instituto
+  vizinho que TEM trecho: numa conversa sobre Lei Maria da Penha, três de três
+  rodadas terminaram perguntando sobre abandono material (CP art. 244). Faz
+  sentido do lado dele: precisa terminar com pergunta e só tem material de outro
+  assunto na mão.
+
+  Tentei consertar por prompt — uma cláusula mandando a pergunta final ser do
+  assunto da conversa e perguntar SEM citar quando não houver trecho. Medido em
+  três rodadas: o desvio continuou 3/3, e o único efeito foi o modelo largar a
+  citação legítima em 2 das 3. Perda líquida, revertida. Gravidade é outra que a
+  do defeito original (o corpo está certo, a citação é real, e a matéria é do
+  edital do aluno), e o conserto de raiz é COBERTURA de acervo, não texto de
+  prompt: o gerador continua estruturalmente incapaz de cobrar doutrina e lei
+  extravagante, porque só usa acervo público (008).
+
 - O extrator lê o Cesgranrio, e não perfeitamente: **cabeçalho de disciplina que
   quebra de linha ainda é perdido ou truncado** (`III- DADOS E BASES DE\nDADOS`
   vira "Dados"), então a ênfase de Administração sai com 5 das ~14 matérias que o
