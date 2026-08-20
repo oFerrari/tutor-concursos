@@ -13,7 +13,7 @@ Sem isso, modelo pequeno erra a sintaxe e a sessão de estudo morre no meio.
 """
 from . import assunto, llm, retrieval
 
-VERSAO = "socratic-v33"
+VERSAO = "socratic-v34"
 
 # ------------------------------------------------------------------ schemas
 # Subconjunto OpenAPI aceito pelo Gemini. propertyOrdering importa: o modelo
@@ -541,6 +541,26 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         "falarem de coisas distintas, ESCOLHA a que responde o aluno e IGNORE o resto; trecho "
         "que veio na busca não é assunto que precisa ser mencionado. Termine com uma pergunta "
         "que trate exclusivamente do conceito que você acabou de explicar. "
+        # QUEM DEFINE O ASSUNTO É A CONVERSA, NÃO O QUE VOLTOU DA BUSCA.
+        #
+        # As duas frases acima não cobriam o caso que quebrou o produto, e ele é
+        # o mais traiçoeiro: o trecho casa com as PALAVRAS da pergunta e não com
+        # o ASSUNTO da conversa. Medido, com log real — conversa inteira sobre
+        # Lei Maria da Penha, aluno responde "dependencia?", e a única coincidência
+        # literal de "dependência econômica" no acervo é a L8112 art. 198
+        # (salário-família). O tutor respondeu sobre salário-família, com oito
+        # turnos de violência doméstica no prompt: do ponto de vista dele, o
+        # trecho RESPONDEU a pergunta. Não há como consertar isso na busca — piso
+        # de relevância vetorial foi medido e não separa neste acervo (ver
+        # Decisões, "CEMITÉRIO DE IDEIAS") —, então a defesa é aqui.
+        "O ASSUNTO É O DA CONVERSA, não o do trecho que voltou da busca. Antes de citar, "
+        "confira se o trecho é do MESMO instituto que vocês estão tratando: coincidência de "
+        "palavra não basta. Se ele só repete um termo da pergunta e pertence a outro assunto "
+        "(um artigo sobre benefício de servidor num diálogo sobre violência doméstica, por "
+        "exemplo), NÃO o use nem o cite — diga que o acervo não tem a lei desse ponto, "
+        "responda o que der pelo que já foi tratado na conversa e siga dela. Trocar de assunto "
+        "no meio da explicação por causa de uma palavra igual é o pior erro que você pode "
+        "cometer aqui. "
         "Se o aluno pedir questão, exercício ou simulado: NÃO escreva a questão na resposta. "
         "Diga que dá pra gerar e mande ele usar o botão \"Quero questões sobre isto\", logo "
         "abaixo. O app monta a questão a partir dos trechos de lei do acervo, confere de qual "
