@@ -128,6 +128,47 @@ histórico do projeto mora em `docs/`, e vale mais que qualquer resumo dele:
 Regra que vale pros dois: decisão registrada com MEDIÇÃO só se derruba com
 outra medição, não com opinião.
 
+**A última dica não sai automática (regra de produto, não número).** O prompt do
+gerador manda a terceira dica "quase entregar", e ela entrega mesmo — medido no
+dado real: gabarito "A reparação do dano que precede à sentença irrecorrível
+extingue a punibilidade do agente" contra dica 3 "Antes da irrecorribilidade
+extingue-se a punibilidade". A dica cumpriu o papel dela; o defeito era ela
+aparecer SOZINHA a cada erro, entregando a resposta a quem não pediu — e ainda
+pontuando por isso. Relatado como "na última dica ele me deu a resposta".
+
+Detectar por texto se a dica vazou o gabarito foi considerado e recusado:
+calibrado contra esse caso, "extingue a punibilidade" × "extingue-se a
+punibilidade" não casa por substring, e por sobreposição de palavras de conteúdo
+a dica LEGÍTIMA (que é próxima por desenho) cai junto. `DICAS_AUTOMATICAS =
+MAX_DICAS - 1` é regra, e regra não erra — é a mesma decisão central de
+`socratic.py`, a retenção do gabarito imposta em código e não confiada ao
+prompt. A dica continua acessível: quem quiser pede, e aí conta como PEDIDA,
+entrando na penalidade. Vale nas duas interfaces (`DialogoQuestao.tsx` e
+`chat.py`), porque MAX_DICAS/MAX_TENTATIVAS sempre foram regra compartilhada.
+
+**O rótulo do resultado contava a coisa errada.** "3 erro(s), 1 dica(s)
+pedida(s)" foi lido como contagem quebrada, com razão: o aluno tinha VISTO três
+dicas e o texto falava de uma. Dica pedida e dica mostrada são números
+diferentes de propósito (só a pedida entra na penalidade), mas esconder o
+segundo faz o primeiro parecer defeito. Agora sai "3 erros · 3 dicas vistas (1
+pedida)", e o que não existe não é mencionado.
+
+**"Pausar e entender isto" era um clique sem efeito.** `<Intervencao>` fazia
+`router.push("/tutor?q=...")`, e o caso mais comum é a intervenção aparecer
+DENTRO do /tutor (a questão que gerou os 3 erros costuma ser a embutida no chat)
+— e o Next não remonta a rota pra ela mesma. É o mesmo defeito que o botão "Nova
+conversa" da sidebar já tinha tido, e a saída é a mesma: CustomEvent pra página
+irmã. Manda pra conversa ATUAL em vez de abrir uma nova, porque "entender ISTO"
+só quer dizer algo com o que acabou de acontecer na tela.
+
+**A rolagem do chat mexe no CONTAINER, não em `scrollIntoView`.** Há dois
+scrollers aninhados (o `<main>` do AppShell e o da página), e `scrollIntoView`
+escolhe sozinho qual ancestral mover — foi por isso que a rolagem passou no meu
+teste e não na tela. `irAoFim` escreve `scrollTop` do container certo, com dois
+`requestAnimationFrame` (o primeiro roda antes de o React pintar, e aí
+`scrollHeight` ainda é o de antes). Rola ao MANDAR também, não só ao receber: o
+balão do aluno mais o "pensando" já empurram o fim pra fora da tela.
+
 ## Invariantes (violação = bug)
 
 - Todo `Art.` do arquivo vira um chunk. `diagnostico.py` verifica.

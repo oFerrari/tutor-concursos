@@ -88,6 +88,37 @@ export default function PaginaTutor() {
   const [geradas, setGeradas] = useState<Questao[]>([]);
   const [pensando, setPensando] = useState(false);
   const fim = useRef<HTMLDivElement>(null);
+  // O CONTAINER que rola, não o `window`. Há DOIS scrollers aninhados aqui (o
+  // <main> do AppShell e este), e `scrollIntoView` decide sozinho qual ancestral
+  // mexer — foi por isso que a rolagem "funcionava" no meu teste e não na tela.
+  // Mexer no scrollTop do container certo é determinístico.
+  const scroller = useRef<HTMLDivElement>(null);
+  const campo = useRef<HTMLTextAreaElement>(null);
+
+  // `suave` só quando o movimento COMUNICA algo (chegou resposta). Ao reabrir uma
+  // conversa inteira, animar a rolagem demora e parece travamento.
+  const irAoFim = useCallback((suave = false) => {
+    const el = scroller.current;
+    if (!el) return;
+    // Dois quadros: o primeiro roda antes de o React pintar o conteúdo novo, e
+    // aí `scrollHeight` ainda é o de antes — a rolagem para no meio.
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() =>
+        el.scrollTo({ top: el.scrollHeight, behavior: suave ? "smooth" : "auto" })
+      )
+    );
+  }, []);
+
+  // TEXTAREA QUE CRESCE COM O TEXTO, como em qualquer chat moderno. Era
+  // `rows={1}` fixo: quem escrevia três linhas via uma. `auto` antes de medir
+  // porque `scrollHeight` não DIMINUI enquanto a altura fixa anterior o segura —
+  // sem o reset, o campo cresce e nunca volta ao apagar texto.
+  useEffect(() => {
+    const el = campo.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [pergunta]);
 
   // O botão aparece quando o aluno já falou alguma coisa — e é só isso que esta
   // tela decide. QUAL é o assunto da conversa quem responde é o servidor, que
@@ -126,6 +157,10 @@ export default function PaginaTutor() {
     if (!texto) return;
     setMensagens((m) => [...m, { autor: "usuario", texto }]);
     setPensando(true);
+    // Rola JÁ ao mandar, não só ao receber: o balão do aluno mais o "pensando"
+    // já empurram o fim da conversa pra fora da tela, e era aí que começava o
+    // "tenho que ficar scrollando pra baixo".
+    irAoFim(true);
     try {
       const r = await perguntar(texto, conversaId ?? undefined);
       // Guardar o id é o que faz o SEGUNDO turno ter memória do
@@ -171,9 +206,9 @@ export default function PaginaTutor() {
       ]);
     } finally {
       setPensando(false);
-      requestAnimationFrame(() => fim.current?.scrollIntoView({ behavior: "smooth" }));
+      irAoFim(true);
     }
-  }, [router, conversaId]);
+  }, [router, conversaId, irAoFim]);
 
   // Dois parâmetros, lidos de `window.location` num efeito e não com
   // `useSearchParams` — o hook obrigaria envolver a página inteira num
@@ -225,23 +260,12 @@ export default function PaginaTutor() {
             )
           );
           // AO REABRIR, CAI NO FIM DA CONVERSA — é onde ela parou, e é o que
-          // qualquer chat faz. Sem isso a tela abria no topo e o aluno rolava
-          // à mão até achar onde tinha ficado.
-          //
-          // `behavior: "auto"` (instantâneo) e não "smooth": animar a rolagem
-          // de uma conversa inteira que acabou de ser injetada demora e parece
-          // travamento. No envio de mensagem o "smooth" faz sentido — ali o
-          // movimento mostra que algo chegou; aqui só atrapalha.
-          //
-          // Dois `requestAnimationFrame` encadeados: o primeiro roda ANTES de o
-          // React ter pintado a lista nova, então `scrollIntoView` mediria uma
-          // altura que ainda não existe e pararia no meio. O segundo já vê o
-          // layout final.
-          requestAnimationFrame(() =>
-            requestAnimationFrame(() =>
-              fim.current?.scrollIntoView({ behavior: "auto", block: "end" })
-            )
-          );
+          // qualquer chat faz. Antes isto era `fim.current?.scrollIntoView()`, e
+          // NÃO funcionava na tela: há dois scrollers aninhados (o <main> do
+          // AppShell e o desta página), e `scrollIntoView` escolhe sozinho qual
+          // ancestral mover. Relatado: "quando eu clico no histórico ele já
+          // deveria ir lá pra baixo". `irAoFim` mexe no container certo.
+          irAoFim();
         })
         .catch(() => {});
       return;
@@ -251,7 +275,7 @@ export default function PaginaTutor() {
       window.history.replaceState(null, "", "/tutor");
       perguntarAoTutor(q.trim());
     }
-  }, [perguntarAoTutor]);
+  }, [perguntarAoTutor, irAoFim]);
 
   // "Nova conversa" (sidebar) zera a tela sem trocar de rota. Ver o
   // comentário no botão: o Next não remonta /tutor pra ele mesmo.
@@ -287,6 +311,20 @@ export default function PaginaTutor() {
     return () => window.removeEventListener("tutor:conversa-apagada", apagada);
   }, []);
 
+  // "Pausar e entender isto" (`<Intervencao>`), quando a questão que gerou os 3
+  // erros está EMBUTIDA nesta conversa. O botão fazia
+  // `router.push("/tutor?q=...")` e o Next não remonta a rota pra ela mesma:
+  // clique sem efeito nenhum, relatado assim mesmo. Aqui a pergunta entra na
+  // conversa ATUAL, que é o que "entender ISTO" quer dizer.
+  useEffect(() => {
+    function perguntarDeFora(e: Event) {
+      const q = (e as CustomEvent<{ pergunta: string }>).detail?.pergunta?.trim();
+      if (q) perguntarAoTutor(q);
+    }
+    window.addEventListener("tutor:perguntar", perguntarDeFora);
+    return () => window.removeEventListener("tutor:perguntar", perguntarDeFora);
+  }, [perguntarAoTutor]);
+
   function enviar(e: React.FormEvent) {
     e.preventDefault();
     const texto = pergunta.trim();
@@ -297,7 +335,7 @@ export default function PaginaTutor() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-2 pt-6">
+      <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-5 pb-2 pt-6">
         <div className="mx-auto flex max-w-[720px] flex-col gap-[18px]">
           <p className="text-center font-mono text-[11px] uppercase tracking-[1.5px] text-[#45454d]">
             {ABERTURA_TUTOR.horario}
@@ -498,9 +536,15 @@ export default function PaginaTutor() {
       <div className="shrink-0 px-5 pb-5 pt-3">
         <form
           onSubmit={enviar}
-          className="mx-auto max-w-[720px] rounded-[18px] border border-line-strong bg-surface-input px-3.5 pb-2.5 pt-3.5 shadow-[var(--shadow-float)] focus-within:border-accent"
+          /* SEM `focus-within:border-accent`: o vermelho da marca em volta do
+             campo enquanto se digita foi relatado como desagradável, e ele
+             também gasta a cor de ÊNFASE no estado mais comum da tela. O anel
+             de foco fica discreto (borda mais clara), que é o que qualquer chat
+             faz — o vermelho continua reservado pro que é ação. */
+          className="mx-auto max-w-[720px] rounded-[18px] border border-line-strong bg-surface-input px-3.5 pb-2.5 pt-3.5 shadow-[var(--shadow-float)] transition-colors focus-within:border-line-stronger"
         >
           <textarea
+            ref={campo}
             rows={1}
             value={pergunta}
             onChange={(e) => setPergunta(e.target.value)}
@@ -511,7 +555,7 @@ export default function PaginaTutor() {
               }
             }}
             placeholder="Pergunte sobre a lei — ex.: art. 312 do CP"
-            className="max-h-40 w-full resize-none bg-transparent text-[15px] leading-relaxed text-foreground outline-none placeholder:text-subtle"
+            className="max-h-40 w-full resize-none overflow-y-auto bg-transparent text-[15px] leading-relaxed text-foreground outline-none placeholder:text-subtle"
           />
           <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2.5">
             <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">

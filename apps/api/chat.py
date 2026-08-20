@@ -45,6 +45,14 @@ from core.config import CLI_USUARIO_EMAIL
 VERSAO = "chat-v21"
 con = Console()
 MAX_DICAS = 3
+# A ÚLTIMA DICA NÃO SAI AUTOMÁTICA. Regra de produto, igual na tela
+# (`DialogoQuestao.tsx`), e pelo mesmo motivo medido: o prompt manda a terceira
+# dica "quase entregar", e ela entrega — gabarito "A reparação do dano que
+# precede à sentença irrecorrível extingue a punibilidade" contra dica 3 "Antes
+# da irrecorribilidade extingue-se a punibilidade". Mostrá-la sozinha a cada
+# erro dava a resposta a quem não pediu, e ainda pontuava por isso. Quem quiser
+# pede — e aí conta como dica PEDIDA, entrando na penalidade.
+DICAS_AUTOMATICAS = MAX_DICAS - 1
 
 # Preenchido por _extrair_flag_mesa() antes do dispatch — a flag é removida
 # de sys.argv ali mesmo porque `simulado [N] [minutos]` lê posicional, e um
@@ -239,7 +247,7 @@ def _estudar_lista(uid: int, pendentes: list) -> bool:
                     avisou_contrato = True
             # Dica automática a cada erro: errar já é a penalidade, então
             # entregar a pista de graça não cobra nada a mais.
-            if dicas_mostradas < min(MAX_DICAS, len(dicas)):
+            if dicas_mostradas < min(DICAS_AUTOMATICAS, len(dicas)):
                 con.print(f"[dim]dica {dicas_mostradas + 1}: {dicas[dicas_mostradas]}[/]")
                 dicas_mostradas += 1
             if erradas >= MAX_TENTATIVAS:

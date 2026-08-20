@@ -9,6 +9,49 @@ import { Intervencao } from "@/components/Intervencao";
 // Mesmas constantes de chat.py — MAX_DICAS/MAX_TENTATIVAS são regra de
 // produto, não capricho de UI, então ficam iguais dos dois lados.
 const MAX_DICAS = 3;
+
+// A ÚLTIMA DICA NÃO SAI AUTOMÁTICA, e isso é regra de produto, não ajuste de
+// número. O prompt do gerador manda a terceira "quase entregar" — e ela entrega
+// mesmo: num caso real, gabarito "A reparação do dano que precede à sentença
+// irrecorrível extingue a punibilidade" e dica 3 "Antes da irrecorribilidade
+// extingue-se a punibilidade". Ela cumpre o papel dela.
+//
+// O defeito era ela aparecer sozinha a cada erro: quem errou três vezes recebia
+// a resposta de graça, sem pedir, e AINDA era pontuado por isso. Relatado como
+// "na última dica ele me deu a resposta".
+//
+// A saída é a mesma decisão central de `socratic.py` — a retenção do gabarito é
+// imposta em CÓDIGO, não confiada ao prompt. Detectar por texto se a dica vazou
+// o gabarito seria adivinhar (calibrei contra o caso real: "extingue a
+// punibilidade" × "extingue-se a punibilidade" não casa por substring, e por
+// sobreposição de palavras a dica LEGÍTIMA cai junto). Já não mostrar a última
+// sem pedido é regra, e regra não erra.
+//
+// Ela continua acessível: quem quiser pede, e aí conta como dica PEDIDA — entra
+// na penalidade, que é o preço honesto de receber quase a resposta.
+const DICAS_AUTOMATICAS = MAX_DICAS - 1;
+
+/**
+ * O resumo do que aconteceu na questão, em uma linha.
+ *
+ * Existe porque o texto anterior — "3 erro(s), 1 dica(s) pedida(s)" — foi lido
+ * como contagem errada, e com razão: o aluno tinha VISTO três dicas e o rótulo
+ * falava de uma. Não era bug de contagem, era rótulo contando a coisa errada.
+ * Dica PEDIDA e dica MOSTRADA são números diferentes de propósito (a dica sai
+ * automática a cada erro; só a pedida por iniciativa própria entra na
+ * penalidade — ver `fechar`), mas esconder o segundo faz o primeiro parecer
+ * defeito.
+ *
+ * Então mostra os dois, e só o que existe: sem dica nenhuma, nem se fala nela.
+ */
+export function resumoDaTentativa(erros: number, vistas: number, pedidas: number): string {
+  const partes = [`${erros} ${erros === 1 ? "erro" : "erros"}`];
+  if (vistas > 0) {
+    const dica = `${vistas} ${vistas === 1 ? "dica vista" : "dicas vistas"}`;
+    partes.push(pedidas > 0 ? `${dica} (${pedidas} pedida${pedidas === 1 ? "" : "s"})` : dica);
+  }
+  return partes.join(" · ");
+}
 const MAX_TENTATIVAS = 3;
 
 export type ResultadoQuestao = {
@@ -89,7 +132,11 @@ export function DialogoQuestao({
     veredito: Avaliacao["veredito"],
     respostaFinal: string,
     erradasFinal: number,
-    dicasPedidasFinal: number
+    dicasPedidasFinal: number,
+    // Passado por parâmetro, não lido do estado: `fechar` é chamado no MESMO
+    // tick em que `setDicasMostradas` roda, e o estado ainda não refletiu — o
+    // rótulo mostraria uma dica de menos. Mesmo motivo do `useRef` do conceito.
+    dicasVistasFinal = 0
   ) {
     // PENALIDADE = errar, não receber dica. Dica automática ao errar já
     // conta como erro; contar as duas juntaria a mesma falha duas vezes.
@@ -105,7 +152,7 @@ export function DialogoQuestao({
       comentario:
         veredito === "correta" && penalidade === 0
           ? "Acertou de primeira"
-          : `${erradasFinal} erro(s), ${dicasPedidasFinal} dica(s) pedida(s)`,
+          : resumoDaTentativa(erradasFinal, dicasVistasFinal, dicasPedidasFinal),
       caixa: r.caixa,
       prox_revisao: r.prox_revisao,
     });
@@ -123,7 +170,7 @@ export function DialogoQuestao({
 
       if (av.veredito === "correta") {
         setHistorico((h) => [...h, { resposta, comentario: av.comentario, pergunta: "" }]);
-        await fechar("correta", resposta, erradas, dicasPedidas);
+        await fechar("correta", resposta, erradas, dicasPedidas, dicasMostradas);
         return;
       }
 
@@ -133,14 +180,14 @@ export function DialogoQuestao({
       if (av.pergunta) setAvisouContrato(true);
 
       let novasDicasMostradas = dicasMostradas;
-      if (dicasMostradas < Math.min(MAX_DICAS, questao.dicas.length)) {
+      if (dicasMostradas < Math.min(DICAS_AUTOMATICAS, questao.dicas.length)) {
         novasDicasMostradas = dicasMostradas + 1;
         setDicasMostradas(novasDicasMostradas);
       }
 
       if (av.revelar_gabarito) {
         setGabaritoRevelado(true);
-        await fechar(av.veredito, resposta, novasErradas, dicasPedidas);
+        await fechar(av.veredito, resposta, novasErradas, dicasPedidas, novasDicasMostradas);
       } else {
         setResposta("");
       }
@@ -163,7 +210,7 @@ export function DialogoQuestao({
     if (!onSair) return;
     if (ultimaResposta && !resultado) {
       setViaSair(true);
-      await fechar("incorreta", ultimaResposta, erradas, dicasPedidas);
+      await fechar("incorreta", ultimaResposta, erradas, dicasPedidas, dicasMostradas);
       return;
     }
     onSair();

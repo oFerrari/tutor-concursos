@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Hand } from "lucide-react";
 import { Intervencao as Dados, getSugestao } from "@/lib/api";
 
@@ -25,6 +25,7 @@ import { Intervencao as Dados, getSugestao } from "@/lib/api";
  */
 export function Intervencao() {
   const router = useRouter();
+  const pathname = usePathname();
   const [dados, setDados] = useState<Dados | null>(null);
   const [dispensado, setDispensado] = useState(false);
 
@@ -44,12 +45,31 @@ export function Intervencao() {
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
         <button
-          onClick={() =>
+          onClick={() => {
             // Leva a pergunta PRONTA: pedir pro aluno formular "o que estou
             // errando?" no momento em que ele acabou de errar três vezes é
             // exigir energia justamente de quem já está sem ela.
-            router.push(`/tutor?q=${encodeURIComponent(dados.pergunta)}`)
-          }
+            //
+            // ESTANDO JÁ NO /tutor, `router.push("/tutor?q=...")` NÃO FAZ NADA:
+            // o Next não remonta a rota pra ela mesma. E é o caso mais comum —
+            // a questão que gerou os 3 erros costuma ser a que está embutida no
+            // chat (`BalaoQuestao` -> `DialogoQuestao` -> este componente).
+            // Relatado assim: "cliquei em pausar e entender isso e ele não fez
+            // nada". É o mesmo defeito que o botão "Nova conversa" da sidebar já
+            // tinha, e a saída é a mesma: CustomEvent pra página irmã.
+            //
+            // Mandar pra conversa ATUAL, e não abrir uma nova, é melhor de
+            // propósito: "pausar e entender ISTO" só quer dizer algo com o que
+            // acabou de acontecer na tela.
+            if (pathname === "/tutor") {
+              window.dispatchEvent(
+                new CustomEvent("tutor:perguntar", { detail: { pergunta: dados.pergunta } })
+              );
+              setDispensado(true);
+            } else {
+              router.push(`/tutor?q=${encodeURIComponent(dados.pergunta)}`);
+            }
+          }}
           className="btn-primary"
         >
           Pausar e entender isto
