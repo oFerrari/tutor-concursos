@@ -13,6 +13,13 @@ __pycache__/
 #   acervo/  PDF de cursinho, material pago → NÃO vai pro git.
 acervo/
 
+# estado de estudo: viaja no ref `estado`, NÃO no branch de código.
+# Versioná-lo aqui foi a primeira tentativa e tem dois custos que o ref
+# próprio não tem: conflito de merge a cada pull (JSON de 700 KB reescrito
+# inteiro dos dois lados) e um commit obrigatório pra levar o dado. Ver
+# .githooks/_comum.sh.
+apps/api/dados/progresso.json
+
 # transitórios
 # logs e PIDs dos processos que o setup.sh sobe (API e frontend)
 .logs/

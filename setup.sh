@@ -25,6 +25,16 @@ RAIZ=$(git rev-parse --show-toplevel 2>/dev/null) \
   || RAIZ=$(cd "$(dirname "$0")" && pwd)
 cd "$RAIZ"
 
+# ------------------------------------------------------------------- hooks
+# Uma vez por máquina, e é o que faz "push em casa / pull aqui" levar o
+# ESTADO junto sem ninguém digitar nada (ver .githooks/_comum.sh).
+# `core.hooksPath` é config LOCAL, não viaja no clone: por isso mora aqui, no
+# script que toda máquina roda, e não numa instrução de README que a gente
+# lembra de seguir na primeira máquina e esquece na segunda.
+if [ -d "$RAIZ/.githooks" ] && [ "$(git config --get core.hooksPath 2>/dev/null)" != ".githooks" ]; then
+  git config core.hooksPath .githooks && echo "hooks de sincronismo instalados (.githooks)"
+fi
+
 LOGS="$RAIZ/.logs"
 mkdir -p "$LOGS"
 PID_API="$LOGS/api.pid"
@@ -84,6 +94,11 @@ if [ "$MODO" = "--subir" ]; then
     exit 1
   fi
   cd "$RAIZ"
+  # Rede de segurança: se o pull veio de uma máquina sem os hooks instalados,
+  # o estado ainda não entrou. Importar duas vezes é inofensivo (união
+  # idempotente), então vale sempre conferir.
+  . "$RAIZ/.githooks/_comum.sh"
+  estado_receber origin
 else
 
 # ------------------------------------------------------- 2/7 venv + requisitos
@@ -135,8 +150,13 @@ python ingest.py corpus/cpp.txt     --disciplina "Direito Processual Penal"  --t
 python ingest.py corpus/lei8112.txt --disciplina "Direito Administrativo"   --tipo lei --norma L8112 --titulo "Lei 8.112/1990"
 python ingest.py corpus/CF88_Livro_EC91_2016.pdf --disciplina "Direito Constitucional" --tipo historico
 
-echo "== 6/7 questões + progresso (veio pelo git em dados/progresso.json) =="
-python sincronizar.py importar
+echo "== 6/7 estado (contas, mesas, editais, questões, progresso, conversas) =="
+# O estado NÃO está no branch de código — vem do ref `estado`, que o hook de
+# pre-push mantém. Aqui é o caso da máquina nova, que ainda não tem o ref.
+cd "$RAIZ"
+. "$RAIZ/.githooks/_comum.sh"
+estado_receber origin
+cd apps/api
 
 # ---------------------------------------------------------------- 7/7 frontend
 echo "== 7/7 frontend (dependências) =="

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Depois de `git pull`: aplica migração pendente e importa o estado do remoto.
+[ -n "$TUTOR_HOOK" ] && exit 0
+. "$(git rev-parse --show-toplevel)/.githooks/_comum.sh"
+estado_receber origin
+exit 0

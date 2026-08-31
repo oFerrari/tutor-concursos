@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# `git pull --rebase` não dispara post-merge — dispara este. Mesmo trabalho.
+[ -n "$TUTOR_HOOK" ] && exit 0
+[ "$1" = "rebase" ] || exit 0
+. "$(git rev-parse --show-toplevel)/.githooks/_comum.sh"
+estado_receber origin
+exit 0

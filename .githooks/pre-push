@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Antes de enviar qualquer coisa: manda o estado de estudo junto.
+# Vale inclusive quando não há commit de código nenhum ("só estudei hoje").
+[ -n "$TUTOR_HOOK" ] && exit 0
+. "$(git rev-parse --show-toplevel)/.githooks/_comum.sh"
+estado_enviar "${1:-origin}"
+exit 0

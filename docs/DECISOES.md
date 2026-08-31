@@ -948,6 +948,82 @@ sinal, não sobre simulado: teste que afirma um NEGATIVO (404, recusa, lista
 vazia) precisa bater numa rota que existe, senão ele confirma a própria
 ausência.
 
+**SINCRONISMO TOTAL: o estado viaja num ref próprio, e o git chama os dois
+lados sozinho.** O pedido era "push em casa, pull aqui, e o sistema vem 100%,
+sem rodar mais nada". O que existia (`sincronizar-v2`) levava três tabelas
+(`questao`, `progresso`, `tentativa`) de UM usuário, e o passo manual não era
+detalhe: ninguém rodou `exportar` antes do push, o pacote no repositório era de
+dez dias antes, e o `importar` reaplicou o estado velho sem nada errado
+acontecer. Automação que depende de lembrar não é automação.
+
+Três decisões, e as três foram tomadas depois de MEDIR em repositório de teste
+— nenhuma é preferência de estilo:
+
+1. **O pacote passou a ser multiusuário.** O v2 exportava o
+   `CLI_USUARIO_EMAIL`, e o caso real é a CLI usar um email e a TELA outro: as
+   três mesas, 51 progressos e 188 tentativas da conta do frontend nunca
+   viajaram, e o `importar` escrevia num terceiro usuário. Agora toda linha
+   pessoal aponta pro EMAIL do dono, e cada referência viaja por identidade
+   natural (mesa pelo nome dentro da conta, documento pelo hash do arquivo,
+   simulado e conversa pelo instante, questão pelo sha do enunciado). Nenhum
+   id sequencial atravessa — é a mesma armadilha que `(norma, artigo)` já
+   resolvia pra `fonte_chunks`, aplicada ao resto.
+
+2. **O estado NÃO vai no branch de código; vai em `refs/heads/estado`.** A
+   primeira versão commitava `dados/progresso.json` no `develop`, e dois
+   defeitos apareceram no teste:
+
+   · push sem commit de código não levava nada — e esse é o caso mais comum de
+     todos, porque você estudou, não programou. O hook precisa CRIAR um
+     commit, e commit criado dentro do `pre-push` não entra no push em
+     andamento: o git já resolveu os refs antes de chamar o hook.
+   · empurrar o mesmo ref por dentro do hook mata o push original com
+     `cannot lock ref 'refs/heads/main' / failed to push some refs`. Vermelho
+     na cara de quem só queria enviar código. Reproduzido, não suposto.
+
+   Num ref separado os dois desaparecem: o `pre-push` monta o commit de estado
+   com `hash-object` + `mktree` + `commit-tree` e empurra `estado:estado`, o
+   push de código segue intacto, e o JSON não existe no branch de trabalho —
+   então nunca dá conflito de merge, que era o outro custo previsível (700 KB
+   reescritos dos dois lados a cada pull). O push interno leva `--no-verify`:
+   sem isso ele chama este mesmo hook, e o teste travou até o timeout.
+
+3. **O `importar` do hook é dividido em duas fases, e a razão é tempo de
+   relógio.** Import inteiro numa transação: **1m21s → 4,0s**. O gasto não era
+   CPU (1,9s de `user` contra 20s de `sys`) — era um fsync por insert, porque
+   a conexão do projeto é autocommit e são ~1100 inserts pequenos. E o
+   embedding do material do aluno passa de **2 minutos** pra 240 trechos, que
+   é inaceitável dentro de um `git pull`: fase 1 é o dado relacional e volta em
+   segundos, fase 2 vai pro background com log em `.logs/estado.log`, e o
+   material fica `processando` — estado que a biblioteca já sabe desenhar.
+   Automação que trava o terminal por dois minutos é automação que a pessoa
+   desliga na terceira vez.
+
+**Importar é UNIÃO, nunca substituição** — é isso que torna seguro rodar a cada
+pull: identidade natural em todo insert, então rodar duas vezes não duplica
+(medido: segunda passada dá 0 novas, 0 tentativas, material já em dia) e o que
+existe só de um lado não é apagado. Onde os dois lados podem discordar, o local
+ganha e o pacote só completa o vazio: senha trocada aqui não é sobrescrita,
+perfil preenchido aqui não é sobrescrito, mesa editada na tela não perde
+`orgao`/`banca`. A única exceção é `erro_caderno`, que é DERIVADO das
+tentativas e por isso é recalculado por usuário — nunca copiado.
+
+**O material do aluno viaja como TEXTO, e isso é uma troca declarada.**
+`acervo/` está fora do git por direito autoral, e `documento.origem` guarda só
+o nome do arquivo — então material do aluno só poderia viajar levando o PDF
+(contra a decisão do `.gitignore`) ou levando os chunks já extraídos. Vão os
+chunks: é o que o RAG usa, e a outra máquina recalcula o embedding em CPU local
+sem precisar do arquivo. A consequência tem que estar dita: o TEXTO do material
+passa a ficar no repositório (privado). Quem não quiser:
+`exportar --sem-material`, e aí a linha do documento chega marcada `falha` em
+vez de mentir que está indexada. Chunk de LEI continua não viajando — é
+derivável de `corpus/`, que está no git, e o `ingest.py` recria igual.
+
+**`core.hooksPath` é config LOCAL: não viaja no clone.** Por isso quem instala é
+o `setup.sh`, que toda máquina roda de qualquer jeito, e não uma instrução de
+README — que a gente segue na primeira máquina e esquece na segunda. É a mesma
+lição da migração 023 (commitar não aplica), agora aplicada ao hook.
+
 ## Armadilhas do corpus (Planalto)
 
 - Quebra de linha no meio da frase; `normalizar_lei()` remonta.
