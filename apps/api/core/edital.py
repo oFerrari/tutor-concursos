@@ -49,7 +49,7 @@ from pathlib import Path
 
 from . import db, mesa as mesa_mod
 
-VERSAO = "edital-v6"
+VERSAO = "edital-v7"
 
 MESES = {"janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5,
          "junho": 6, "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10,
@@ -336,10 +336,28 @@ def limpar_paginacao(texto: str) -> str:
     disciplina que se repete entre perfis ("BANCO DE DADOS: 1 Modelagem...")
     de ser confundido com rodapé.
     """
+    # MOBÍLIA TEM DE TER MAIS DE UMA PALAVRA, e isto não é refinamento: sem a
+    # regra, um PDF que extrai UMA PALAVRA POR LINHA faz o filtro comer o edital.
+    #
+    # Medido no `Edital PC-PR 2026.pdf` (pypdf devolve "Histórico\n \nimportância
+    # \n \npara\n \no\n \nDireito."): das 245 linhas que a regra antiga
+    # classificava como mobília, 245 eram de uma palavra só — "de" (360x), "e"
+    # (343x), e também CONTEÚDO: "Lei" (93x), "Crimes" (47x), "Direitos" (43x),
+    # "Polícia" (27x). Nenhum cabeçalho ou rodapé de verdade no meio.
+    #
+    # O estrago aparecia lá na frente, disfarçado: o tópico "8.1.2 Histórico e
+    # importância para o Direito" virava "8.1.2 Histórico importância Direito", e
+    # o 8.4.1 sumia inteiro. Total de tópicos continuava plausível — o pior
+    # formato de erro, o mesmo que o docstring acima já descreve pra disciplina.
+    #
+    # Rodapé real é multipalavra ("Página 3 de 106", "PODER JUDICIÁRIO"); número
+    # solto já sai por `RE_SO_NUMERO`. Exigir duas palavras não afrouxa nada que
+    # a regra pegava antes e devolve o texto que ela não devia ter tocado.
     linhas = texto.splitlines()
     repetidas = Counter(l.strip() for l in linhas if l.strip())
     mobilia = {t for t, n in repetidas.items()
-               if n >= 4 and len(t) <= 60 and not t.endswith(":")}
+               if n >= 4 and len(t) <= 60 and not t.endswith(":")
+               and len(t.split()) > 1}
     return "\n".join(l for l in linhas
                      if not RE_SO_NUMERO.match(l) and l.strip() not in mobilia)
 

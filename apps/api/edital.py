@@ -30,13 +30,20 @@ def main() -> int:
     ap.add_argument("--orgao")
     ap.add_argument("--banca")
     ap.add_argument("--mesa", help="nome da mesa de estudo (criada se não existir)")
+    # Sem isto, o script só sabia gravar em CLI_USUARIO_EMAIL — e o AGENTS.md
+    # manda testar QUALQUER coisa que escreva em edital/mesa contra um usuário
+    # descartável. A convenção existia e o comando não deixava obedecer, que é o
+    # jeito mais garantido de a convenção ser ignorada.
+    ap.add_argument("--email", default=CLI_USUARIO_EMAIL,
+                    help="conta em que a mesa/edital são criados (padrão: a da CLI). "
+                         "Use uma descartável pra experimentar um edital novo.")
     a = ap.parse_args()
 
     if not a.arquivo.exists():
         print(f"arquivo não encontrado: {a.arquivo}", file=sys.stderr)
         return 1
 
-    usuario_id = auth.usuario_da_cli(CLI_USUARIO_EMAIL)
+    usuario_id = auth.usuario_da_cli(a.email)
     if a.mesa:
         m = next((x for x in mesa_mod.listar(usuario_id)
                   if x["nome"].lower() == a.mesa.lower()), None)

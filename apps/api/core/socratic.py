@@ -14,9 +14,9 @@ Sem isso, modelo pequeno erra a sintaxe e a sessão de estudo morre no meio.
 import re
 import unicodedata
 
-from . import assunto, llm, retrieval
+from . import assunto, llm, mesa as mesa_mod, retrieval
 
-VERSAO = "socratic-v35"
+VERSAO = "socratic-v39"
 
 # ------------------------------------------------------------------ schemas
 # Subconjunto OpenAPI aceito pelo Gemini. propertyOrdering importa: o modelo
@@ -297,6 +297,49 @@ def _resumo_perfil(perfil: dict | None) -> str | None:
             + ", ".join(partes) + ".")
 
 
+def _programa_em_foco(mesa_: dict | None, pergunta: str,
+                      historico: list[dict] | None) -> str | None:
+    """O programa do edital DA DISCIPLINA que a conversa nomeou, na ordem dele.
+
+    POR QUE ISTO NÃO CONTRADIZ `_resumo_mesa`. Aquele docstring decidiu, com
+    razão, que a lista de tópicos NUNCA entra: o edital da Dataprev tem 1015, e
+    despejá-los em todo prompt queima cota pra repetir o que a tela mostra
+    melhor. A decisão continua de pé — o que muda é o RECORTE. Aqui entra UMA
+    disciplina, e só quando a conversa a nomeou: Ciências Forenses da PC-PR são
+    ~30 linhas, com teto de 40 em `mesa.MAX_TOPICOS_NO_PROMPT`.
+
+    O QUE FALHAVA SEM ISTO, medido no cenário `forense_do_zero`: o aluno pediu
+    "quero aprender ciências forenses do zero" e depois "na ordem do edital da
+    PC-PR". O tutor respondeu que "o ponto de partida é a preservação do local e
+    o início do rastreamento do vestígio" — inventado a partir do que a BUSCA
+    devolveu (cadeia de custódia), enquanto o edital abre em "8.1.1 Conceito e
+    divisão da Medicina Legal". O dado estava no banco, em ordem, e não chegava
+    a quem responde.
+
+    Olha a pergunta atual E o histórico porque "na ordem do edital" costuma vir
+    no turno SEGUINTE ao que nomeou a matéria — foi exatamente assim no log."""
+    if not mesa_ or not mesa_.get("id"):
+        return None
+    disc = mesa_.get("disciplinas")
+    if not disc:
+        return None
+    falas = [pergunta] + [m.get("texto", "") for m in reversed(historico or [])
+                          if m.get("autor") == "aluno"]
+    alvo = next((d for f in falas if (d := assunto.disciplina_citada(f, disc))), None)
+    if not alvo:
+        return None
+    topicos = mesa_mod.topicos_da_disciplina(mesa_["id"], alvo)
+    if not topicos:
+        return None
+    linhas = "\n".join(f"{i}. {t}" for i, t in enumerate(topicos, 1))
+    return (f"### Programa de {alvo} no edital deste aluno, NA ORDEM\n{linhas}\n"
+            "Esta é a ordem oficial. Se ele pedir para começar do zero ou seguir o edital, "
+            "siga ESTA lista e diga em que ponto dela vocês estão — não invente outro ponto "
+            "de partida a partir dos trechos de lei recuperados. Tópico para o qual não houver "
+            "trecho recuperado: diga que ainda não tem esse material aqui e siga para o "
+            "próximo, sem explicá-lo de memória.")
+
+
 def _resumo_desempenho(usuario_id: int, disciplinas: list[str] | None = None) -> str | None:
     """
     Texto curto e pronto pra virar contexto de prompt — o modelo só LÊ este
@@ -553,6 +596,7 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     contexto_material = retrieval.formatar_contexto(chunks) if chunks else None
     contexto_desempenho = _resumo_desempenho(usuario_id, disciplinas) if usuario_id else None
     contexto_mesa = _resumo_mesa(mesa_)
+    contexto_programa = _programa_em_foco(mesa_, pergunta, historico)
     contexto_perfil = _resumo_perfil(perfil)
 
     # A guarda considera as QUATRO fontes, não duas. Ela olhava só material e
@@ -562,7 +606,8 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     # e recebia resposta enlatada, quando é exatamente a pergunta que o
     # concurso-alvo e o perfil declarado respondem sem precisar de artigo nenhum.
     # Regressão pega por `test_perfil.py`, não em uso.
-    if not (contexto_material or contexto_desempenho or contexto_mesa or contexto_perfil):
+    if not (contexto_material or contexto_desempenho or contexto_mesa or contexto_perfil
+            or contexto_programa):
         return {"resposta": ("Não encontrei isso no material, e ainda não tenho nenhum "
                              "desempenho seu registrado.") if consulta else
                             ("Me diga de que matéria ou assunto você quer tratar — ainda não "
@@ -580,6 +625,8 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     if contexto_mesa or contexto_perfil:
         bloco = "\n".join(x for x in (contexto_mesa, contexto_perfil) if x)
         partes.append(f"### Contexto do aluno\n{bloco}")
+    if contexto_programa:
+        partes.append(contexto_programa)
     if contexto_material:
         partes.append(f"### Trechos de lei recuperados\n{contexto_material}")
     else:
@@ -665,6 +712,57 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         "citando no máximo as disciplinas do edital dele pra escolher. NÃO abra matéria densa "
         "antes de ele escolher o rumo: despejar um parágrafo sobre eficácia das normas em cima "
         "de um \"boa noite\" cansa e é reclamação real. "
+        # PEDIDO DE EXPOSIÇÃO, E POR QUE ELE PRECISA ESTAR AQUI.
+        #
+        # Reclamação direta do dono: "nem sempre eu quero ficar respondendo
+        # perguntas, às vezes eu quero ler sobre o assunto e entender". O prompt
+        # não tinha essa saída — mandava descobrir-explicar-testar e TERMINAR COM
+        # PERGUNTA, sempre. Medido no cenário `forense_do_zero`: os quatro turnos
+        # terminaram com pergunta, inclusive o que respondia a "começa pelo
+        # primeiro tópico então", que é pedido de aula e não de sabatina.
+        #
+        # A ordem descobrir-explicar-testar NÃO cai: ela vale quando é o TUTOR que
+        # conduz. O que muda é que o aluno pode pedir a condução de volta.
+        "O ALUNO PODE PEDIR PRA LER, EM VEZ DE RESPONDER. Quando ele disser que quer "
+        "entender, ler, ver o assunto, ou que não quer pergunta agora: EXPLIQUE corrido, sem "
+        "devolver pergunta de diagnóstico, e feche oferecendo continuar (\"quer que eu siga "
+        "para X?\") em vez de interrogar. Volte a perguntar quando ele pedir, ou quando a "
+        "explicação daquele ponto tiver acabado. "
+        # A RESSALVA QUE FALTAVA NA PRIMEIRA VERSÃO DESTA REGRA, e ela é a mais
+        # importante do bloco. Sem dizê-la, "explique corrido" foi lido como
+        # licença pra ensinar de memória: medido no cenário `quero_ler` já com
+        # esta regra ativa, o tutor afirmou "o art. 37, § 1º, da Constituição
+        # proíbe..." tendo recebido L8112 153, CP 321 e CP 337-O — nenhuma linha
+        # de CF. Explicar corrido muda o FORMATO da resposta, nunca a fonte dela.
+        # A REGRA DIZIA "CONTEÚDO DE LEI", E O MODELO LEU LITERALMENTE. Medido na
+        # bateria com esta regra já ativa: perguntado "o que o STJ diz sobre
+        # peculato de uso?", ele respondeu "o entendimento consolidado do STJ é
+        # de que não há tipificação" — jurisprudência inventada, sem uma linha
+        # de STJ no acervo. E perguntado pelos pontos que mais caem em Direito
+        # Administrativo, escreveu a própria lista TENDO recebido o programa do
+        # edital no prompt. Proibir "afirmar lei" deixou de fora doutrina,
+        # jurisprudência, súmula e classificação — que é quase tudo o que uma
+        # aula tem. Por isso agora a proibição enumera, e diz o que o acervo É.
+        "MAS EXPLICAR CORRIDO NÃO AUTORIZA EXPLICAR DE MEMÓRIA. Isto não vale só para o texto "
+        "da lei: NADA de conteúdo de matéria sai de você — nem doutrina, nem classificação, "
+        "nem entendimento de tribunal, nem \"o que a banca costuma cobrar\" — se não estiver "
+        "nos trechos recuperados ou no programa do edital acima. "
+        "VOCÊ NÃO TEM JURISPRUDÊNCIA. O material aqui é lei seca mais o que o próprio aluno "
+        "subiu. Se ele pedir STF, STJ, súmula ou \"entendimento dos tribunais\", diga em uma "
+        "linha que isso não está no material que você tem, e ofereça o que a LEI diz sobre o "
+        "ponto. Nunca descreva a posição de um tribunal, nem para dizer que ela é pacífica. "
+        "Se os trechos não cobrirem o que ele pediu, diga em uma linha que não tem esse "
+        "material aqui e trate do que tem — nunca preencha o vazio com o que você sabe de fora. "
+        "\"QUAIS OS PONTOS QUE MAIS CAEM\" é pedido de MAPA, não de aula: liste os pontos "
+        "principais daquele assunto em ordem de importância para a banca dele, curto, um por "
+        "linha, e ofereça aprofundar um deles. Não transforme isso numa explicação longa. "
+        "HAVENDO programa do edital acima, o mapa É ELE: use aqueles itens, com as palavras "
+        "deles, e diga que é o que o edital dele cobra. Sem programa e sem trecho, NÃO invente "
+        "a lista — diga que não tem como afirmar o que mais cai sem o material. "
+        "ESGOTE UM ASSUNTO ANTES DE IR PARA OUTRO. Enquanto ele demonstrar dúvida no ponto "
+        "atual, fique nele e ataque a dúvida por outro ângulo — não avance de tópico nem "
+        "ofereça assunto novo. Só troque quando ele pedir, ou quando o ponto estiver claramente "
+        "resolvido; e ao trocar, diga em uma linha que está trocando. "
         "UM MICRO-TÓPICO POR RESPOSTA. Não misture dois assuntos diferentes na mesma mensagem — "
         "explicar direitos sociais e emendar competência concorrente no parágrafo seguinte "
         "confunde em vez de ensinar, e também é reclamação real. Se os trechos recuperados "
@@ -687,16 +785,28 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         "confira se o trecho é do MESMO instituto que vocês estão tratando: coincidência de "
         "palavra não basta. Se ele só repete um termo da pergunta e pertence a outro assunto "
         "(um artigo sobre benefício de servidor num diálogo sobre violência doméstica, por "
-        "exemplo), NÃO o use nem o cite — diga que o acervo não tem a lei desse ponto, "
+        # A PALAVRA PROIBIDA NÃO PODE ESTAR NA INSTRUÇÃO. Estas duas frases diziam
+        # "diga que o ACERVO não tem a lei desse ponto" e "o app monta a questão a
+        # partir dos trechos de lei do ACERVO" — trinta linhas depois de a lista de
+        # proibições incluir "acervo". Instrução vence proibição, e o resultado
+        # medido foi o tutor abrindo resposta com "O acervo disponível no momento
+        # não aborda...", em 3 de 3 rodadas de `avaliar_chat.py`.
+        #
+        # É a QUARTA vez que este projeto vê o mesmo mecanismo: `[DESEMPENHO REAL
+        # DO ALUNO]` citado como fonte, "escada pedagógica" narrada, e agora esta.
+        # A lição é sempre a mesma e vale escrever de novo: nome próprio dentro do
+        # prompt vira vocabulário do modelo, e proibir sem TIRAR da instrução não
+        # funciona. A lista de proibições fica (ela precisa nomear pra proibir),
+        # mas nada mais no prompt manda usar a palavra.
+        "exemplo), NÃO o use nem o cite — diga que não localizou a lei desse ponto, "
         "responda o que der pelo que já foi tratado na conversa e siga dela. Trocar de assunto "
         "no meio da explicação por causa de uma palavra igual é o pior erro que você pode "
         "cometer aqui. "
         "Se o aluno pedir questão, exercício ou simulado: NÃO escreva a questão na resposta. "
         "Diga que dá pra gerar e mande ele usar o botão \"Quero questões sobre isto\", logo "
-        "abaixo. O app monta a questão a partir dos trechos de lei do acervo, confere de qual "
-        "artigo ela saiu e a grava na fila de revisão — questão escrita solta no chat não passa "
-        "por nenhuma dessas três coisas e some quando a conversa rola. Nunca diga que não tem "
-        "como gerar. "
+        "abaixo. A questão sai de lá com o artigo conferido e entra na fila de revisão dele — "
+        "questão escrita solta no chat não passa por nenhuma dessas duas coisas e some quando a "
+        "conversa rola. Nunca diga que não tem como gerar. "
         "Linhas marcadas como [fato da sessão] são o que o aluno FEZ (respondeu uma questão, "
         "acertou, errou) — não são fala sua nem dele. Use-as: errar a questão que você acabou de "
         "propor vale mais que qualquer coisa que ele diga sobre entender ou não, e a próxima "

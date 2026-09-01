@@ -79,6 +79,32 @@ def contar_questoes(disciplinas_: list[str] | None) -> int:
     return r["n"] if r else 0
 
 
+# Teto de tópicos que podem ir ao prompt de uma vez. Ciências Forenses da PC-PR
+# tem ~30; a decisão de `_resumo_mesa` (nunca despejar o programa inteiro) segue
+# valendo — o edital da Dataprev tem 1015 tópicos. O que muda é o recorte: UMA
+# disciplina, a que a conversa nomeou, em vez de todas ou nenhuma.
+MAX_TOPICOS_NO_PROMPT = 40
+
+
+def topicos_da_disciplina(mesa_id: int | None, disciplina: str,
+                          limite: int = MAX_TOPICOS_NO_PROMPT) -> list[str]:
+    """O programa DAQUELA disciplina, na ordem do edital.
+
+    A ordem é o produto aqui: "quero ciências forenses do zero, na ordem do
+    edital" é pedido literal de aluno, e sem isto o tutor inventava um ponto de
+    partida a partir do que a busca devolveu — respondeu "começa pela preservação
+    do local" quando o edital abre em "8.1.1 Conceito e divisão da Medicina
+    Legal"."""
+    if not mesa_id or not disciplina:
+        return []
+    linhas = db.query(
+        """SELECT t.texto FROM topico t JOIN edital e ON e.id = t.edital_id
+            WHERE e.mesa_id = %(m)s AND t.disciplina = %(d)s
+            ORDER BY t.ordem LIMIT %(l)s""",
+        {"m": mesa_id, "d": disciplina, "l": limite})
+    return [l["texto"] for l in linhas]
+
+
 def disciplinas(mesa_id: int | None) -> list[str] | None:
     """
     O alvo desta mesa. Três respostas possíveis, e as três dizem coisas

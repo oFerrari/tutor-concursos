@@ -1024,6 +1024,45 @@ o `setup.sh`, que toda máquina roda de qualquer jeito, e não uma instrução d
 README — que a gente segue na primeira máquina e esquece na segunda. É a mesma
 lição da migração 023 (commitar não aplica), agora aplicada ao hook.
 
+**RODAPÉ SE DETECTA POR REPETIÇÃO, MAS MOBÍLIA TEM DE TER MAIS DE UMA PALAVRA.**
+`_tirar_mobilia` apagava toda linha repetida 4+ vezes com até 60 caracteres — a
+heurística certa para cabeçalho e rodapé, que mudam a cada banca e não se
+detectam por conteúdo. O que ela não previa é PDF que extrai **uma palavra por
+linha**, e o `Edital PC-PR 2026.pdf` é assim (pypdf devolve `Histórico\n \n
+importância\n \npara\n \no\n \nDireito.`).
+
+Medido: das 245 linhas classificadas como mobília nesse edital, **245 eram de uma
+palavra só** — "de" (360x), "e" (343x), e também conteúdo puro: "Lei" (93x),
+"Crimes" (47x), "Direitos" (43x), "Polícia" (27x). Nenhum rodapé de verdade no
+meio. O filtro estava comendo o vocabulário do edital.
+
+O estrago só aparecia lá na frente, disfarçado de extração plausível: o tópico
+`8.1.2 Histórico e importância para o Direito` virava `8.1.2 Histórico
+importância Direito`, quatro tópicos se colavam numa linha só e o `8.4.1 Lesões e
+suas classificações` sumia inteiro. Total continuava parecendo razoável — é o
+mesmo formato de erro que o docstring da função já descrevia para disciplina, e
+que ele mesmo sofreu.
+
+Conserto: mobília precisa de duas palavras. Rodapé real é multipalavra ("Página 3
+de 106"); número solto já saía por `RE_SO_NUMERO`. **317 → 487 tópicos** no
+mesmo PDF, com o programa de Ciências Forenses inteiro e em ordem. Não afrouxa
+nada que a regra pegava antes.
+
+**O PROGRAMA DO EDITAL PASSA A CHEGAR AO PROMPT — UMA disciplina por vez.**
+`_resumo_mesa` decidiu, e continua certo, que a lista de tópicos NUNCA entra
+inteira: o edital da Dataprev tem 1015. Só que isso deixava "quero ciências
+forenses do zero, na ordem do edital da PC-PR" sem resposta possível — medido no
+cenário `forense_do_zero`, o tutor respondeu que "o ponto de partida é a
+preservação do local e o rastreamento do vestígio", inventado a partir do que a
+BUSCA devolveu (cadeia de custódia), enquanto o edital abre em `8.1.1 Conceito e
+divisão da Medicina Legal`. O dado estava no banco, em ordem, e não chegava a
+quem responde.
+
+O que muda é o RECORTE, não a decisão: `_programa_em_foco` manda os tópicos da
+disciplina que a conversa NOMEOU (`assunto.disciplina_citada`, regra pura), com
+teto de 40 (`mesa.MAX_TOPICOS_NO_PROMPT`). Ciências Forenses da PC-PR são ~30
+linhas. Sem disciplina nomeada, não vai nada.
+
 ## Armadilhas do corpus (Planalto)
 
 - Quebra de linha no meio da frase; `normalizar_lei()` remonta.

@@ -108,7 +108,7 @@ import unicodedata
 # caminho e não no outro.
 from .retrieval import RE_CITACAO
 
-VERSAO = "assunto-v3"
+VERSAO = "assunto-v5"
 
 # Teto da consulta. Embedding é MÉDIA do que entra: parede de texto dilui o
 # assunto exatamente como o art. 37 (13.059 caracteres) já se dilui no próprio
@@ -226,6 +226,33 @@ def palavras_de_conteudo(texto: str) -> list[str]:
             if len(p) >= MIN_LETRAS and _sem_acento(p) not in VAZIAS]
 
 
+def disciplina_citada(texto: str, disciplinas: list[str] | None) -> str | None:
+    """Qual disciplina do EDITAL esta fala nomeia, se alguma.
+
+    Existe pra responder "na ordem do edital": o `topico` guarda o programa
+    inteiro, em ordem, e sem saber DE QUAL disciplina se trata não há como
+    mandar o pedaço certo ao prompt sem mandar os 487 tópicos.
+
+    Casa por todas as palavras de conteúdo do nome, sem acento: "quero ciências
+    forenses do zero" acha "Ciências Forenses". Prefere o nome MAIS LONGO que
+    casar, senão "Direito Penal" ganharia de "Direito Penal e Legislação Penal
+    Extravagante" no edital da PC-PR, que tem as duas.
+
+    NÃO contradiz `_com_assunto`, que descarta nome de disciplina como assunto de
+    BUSCA. São perguntas diferentes: lá é "o que procurar no acervo" (e a gaveta
+    não é o que a pessoa quer estudar); aqui é "de que gaveta ela está falando",
+    que é exatamente o que o programa do edital indexa."""
+    if not texto or not disciplinas:
+        return None
+    palavras = {_sem_acento(p) for p in RE_PALAVRA.findall(texto.lower())}
+    achadas = []
+    for d in disciplinas:
+        alvo = {_sem_acento(x) for x in palavras_de_conteudo(d)}
+        if alvo and alvo <= palavras:
+            achadas.append(d)
+    return max(achadas, key=len) if achadas else None
+
+
 def cita_dispositivo(texto: str) -> bool:
     """"art. 312", "artigo 5º" — a pergunta aponta um dispositivo específico.
 
@@ -261,6 +288,37 @@ def pede_assunto(fala: str | None) -> bool:
         return True
     cruas = {_sem_acento(x) for x in RE_PALAVRA.findall(fala.lower())}
     return bool(PEDIDO & cruas)
+
+
+# O aluno PEDINDO exposição em vez de sabatina. Lista fechada e curta, como
+# `PEDIDO`, e pela mesma razão: quem carrega a decisão não é ela.
+EXPOSICAO = (
+    "explica", "explique", "explicar", "explicame", "me explique", "detalha", "detalhe",
+    "resume", "resuma", "resumo", "aprofunda", "aprofunde", "desenvolve", "desenvolva",
+    "quero ler", "so me explica", "só me explica", "sem pergunta", "sem perguntas",
+    "nao quero responder", "não quero responder", "nao quero pergunta",
+    "não quero pergunta", "me ensina", "me ensine", "fala sobre", "discorre",
+    "visao geral", "visão geral", "pontos principais", "o que mais cai", "que mais caem",
+    "mais cobrado", "mais cobrados", "mais cai",
+)
+
+
+def pede_exposicao(fala: str | None) -> bool:
+    """O aluno pediu pra LER/entender, em vez de responder pergunta?
+
+    Existe pra que o avaliador não contradiga o prompt. A regra "responda no
+    tamanho da pergunta" tem exceção declarada — quando ele pede explicação, a
+    resposta longa é o acerto —, e sem esta função a checagem de tamanho
+    apontava como defeito exatamente o comportamento pedido: medido em
+    "não quero responder pergunta agora, só me explica o assunto", que virou
+    aviso de "742 caracteres para uma fala que não nomeia assunto".
+
+    Casa contra a fala CRUA, sem acento, porque metade destas palavras é
+    (corretamente) vazia para efeito de busca."""
+    if not fala:
+        return False
+    baixo = _sem_acento(fala.lower())
+    return any(_sem_acento(e) in baixo for e in EXPOSICAO)
 
 
 def _falas_antes(turnos: list[dict], pergunta: str | None) -> list[dict]:
