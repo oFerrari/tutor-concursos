@@ -23,7 +23,18 @@ from .config import (GEMINI_API_KEY, GEMINI_MODEL, LLM_PROVIDER,
 # 120s nao bastava no plano gratuito. Configuravel via LLM_TIMEOUT no .env.
 TIMEOUT = httpx.Timeout(float(os.getenv("LLM_TIMEOUT", "240")))
 DEBUG_FILE = Path(".llm_debug.txt")
-VERSAO = "llm-v15"
+VERSAO = "llm-v16"
+
+# Temperatura padrão de TODA chamada do produto. Era um literal repetido nos dois
+# adaptadores; virou constante quando o `temperatura=` apareceu, porque dois
+# lugares com o mesmo número é o começo de dois números diferentes.
+#
+# 0.3 é do tutor e está certa pra ele: resposta idêntica a cada turno soa robô.
+# Quem pede outra é o juiz de `avaliar_chat.py`, que passa 0 — uma fonte de
+# variação a menos, de graça. Sem promessa exagerada: MEDIDO que isso não torna
+# a nota repetível (o mesmo transcript deu 86 e 100 a temperatura 0), porque
+# Gemini não é determinístico nem em 0.
+TEMPERATURA_PADRAO = 0.3
 ESPERA = (3, 10, 25)   # backoff entre tentativas, em segundos
 
 
@@ -33,17 +44,19 @@ class ErroLLM(RuntimeError):
 
 class LLM:
     def gerar(self, prompt: str, sistema: str = "", json_mode: bool = False,
-              max_tokens: int = 1200, schema: dict | None = None) -> str:
+              max_tokens: int = 1200, schema: dict | None = None,
+              temperatura: float | None = None) -> str:
         raise NotImplementedError
 
     def gerar_json(self, prompt: str, sistema: str = "",
                    max_tokens: int = 1200, schema: dict | None = None,
-                   tentativas: int = 2):
+                   tentativas: int = 2, temperatura: float | None = None):
         """Gera e parseia JSON. Repete uma vez se o modelo escorregar."""
         ultimo = None
         for i in range(tentativas):
             bruto = self.gerar(prompt, sistema, json_mode=True,
-                               max_tokens=max_tokens, schema=schema)
+                               max_tokens=max_tokens, schema=schema,
+                               temperatura=temperatura)
             try:
                 return _parse_json(bruto)
             except ErroLLM as e:
@@ -84,10 +97,12 @@ def _post(url, params, corpo, tentativas=3):
 class Gemini(LLM):
     BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 
-    def gerar(self, prompt, sistema="", json_mode=False, max_tokens=1200, schema=None):
+    def gerar(self, prompt, sistema="", json_mode=False, max_tokens=1200, schema=None,
+              temperatura=None):
         if not GEMINI_API_KEY:
             raise ErroLLM("GEMINI_API_KEY ausente no .env")
-        cfg = {"temperature": 0.3, "maxOutputTokens": max_tokens}
+        cfg = {"temperature": TEMPERATURA_PADRAO if temperatura is None else temperatura,
+               "maxOutputTokens": max_tokens}
         if json_mode or schema:
             cfg["responseMimeType"] = "application/json"
         if schema:
@@ -131,10 +146,13 @@ class Gemini(LLM):
 class Ollama(LLM):
     """Caminho 100% local. Mesma interface, zero mudança no resto do código."""
 
-    def gerar(self, prompt, sistema="", json_mode=False, max_tokens=1200, schema=None):
+    def gerar(self, prompt, sistema="", json_mode=False, max_tokens=1200, schema=None,
+              temperatura=None):
         corpo = {"model": OLLAMA_MODEL, "prompt": prompt, "system": sistema,
                  "stream": False,
-                 "options": {"temperature": 0.3, "num_predict": max_tokens}}
+                 "options": {
+                     "temperature": TEMPERATURA_PADRAO if temperatura is None else temperatura,
+                     "num_predict": max_tokens}}
         if schema:
             corpo["format"] = schema      # Ollama aceita JSON Schema aqui
         elif json_mode:

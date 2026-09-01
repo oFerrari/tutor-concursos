@@ -96,7 +96,8 @@ class _LLMFalso(llm.LLM):
         self.excecao: Exception | None = None
         self.chamadas: list[dict] = []
 
-    def gerar(self, prompt, sistema="", json_mode=False, max_tokens=1200, schema=None):
+    def gerar(self, prompt, sistema="", json_mode=False, max_tokens=1200, schema=None,
+              temperatura=None):
         self.chamadas.append({"prompt": prompt, "sistema": sistema, "json_mode": json_mode})
         if self.excecao:
             raise self.excecao

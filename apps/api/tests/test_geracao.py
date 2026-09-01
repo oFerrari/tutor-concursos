@@ -22,7 +22,26 @@ import pytest
 
 from core import db, geracao
 
-VERSAO = "test-geracao-v1"
+VERSAO = "test-geracao-v2"
+
+# COMO O DUPLÊ LÊ O ARTIGO DO PROMPT, e por que o `—` está na exclusão.
+#
+# `retrieval.referencia()` monta "cp, art. 85 — Especificações das condições"
+# quando o chunk tem rubrica. Capturando até o `]`, o duplê devolvia
+# "85 — Especificações das condições" como número de artigo, e `salvar()`
+# corretamente o descartava por proveniência: a rodada terminava com zero
+# questão gravada e o teste falhava dizendo "geradas está vazio", como se a
+# GERAÇÃO estivesse quebrada. Estava quebrado o duplê.
+#
+# Ficou latente enquanto o documento sorteado por acaso não tinha rubrica.
+# Uma constante só, e não três cópias, porque foi exatamente a terceira cópia
+# desta regex que segurou o defeito escondido.
+RE_ART_DO_PROMPT = re.compile(r"\[[^\]]*?art\. ([^\]—]+)")
+
+
+def _artigos_do_prompt(prompt: str) -> list[str]:
+    """Os artigos que o material do prompt realmente contém, na ordem."""
+    return list(dict.fromkeys(a.strip() for a in RE_ART_DO_PROMPT.findall(prompt)))
 
 
 def _chunk_real(norma: str = "L8112"):
@@ -36,6 +55,51 @@ def _chunk_real(norma: str = "L8112"):
     if not c:
         pytest.skip(f"acervo sem chunks de {norma}")
     return c
+
+
+def _disciplina_do_acervo(historico: bool = False, sem_questao: bool = False) -> str:
+    """Uma disciplina do acervo PÚBLICO que tenha chunk gerável.
+
+    O `usuario_id IS NULL` não é detalhe: era
+    `SELECT disciplina FROM documento WHERE tipo <> 'historico' LIMIT 1`, sem
+    `ORDER BY` e sem filtro de dono, e o que ele devolvia dependia da ordem
+    física da tabela. Bastou o banco de desenvolvimento ter material PRIVADO de
+    aluno (um `test_material.py` anterior deixou três documentos e duas contas
+    `@integracao.local` para trás) pra `LIMIT 1` cair num documento de dono, com
+    disciplina "Segredo Do Dono" — que `_por_disciplina` corretamente não
+    enxerga, porque material privado não é acervo público. Cinco testes
+    quebravam com `SemMaterial`, todos por dado de teste alheio.
+
+    Alfabeticamente `test_geracao` roda ANTES de `test_material`, então a suíte
+    passava na primeira execução e falhava na SEGUNDA, no mesmo banco. Esse é o
+    pior formato de teste frágil: quem roda uma vez não vê, e quem vê não
+    entende por quê.
+
+    O `EXISTS` fecha o resto: disciplina cujo documento não tem chunk utilizável
+    também dá `SemMaterial`, e por motivo que nada tem a ver com o que estes
+    testes afirmam.
+
+    `sem_questao` é para o teste da mesa VAZIA, que precisa de documento ainda
+    sem questão nenhuma. Ele tinha uma consulta própria, com o mesmo defeito e
+    mais um `LIMIT 1` sem `ORDER BY` — virou parâmetro em vez de segunda cópia,
+    porque a regra "o que conta como acervo público utilizável" tem de ter um
+    dono só. Foi assim que `referencia()` saiu de dentro de `formatar_contexto`."""
+    op = "=" if historico else "<>"
+    filtro_questao = ("AND NOT EXISTS (SELECT 1 FROM questao q WHERE q.documento_id = d.id)"
+                      if sem_questao else "")
+    d = db.exec1(
+        f"""SELECT d.disciplina FROM documento d
+             WHERE d.tipo {op} 'historico' AND d.usuario_id IS NULL
+               AND d.disciplina IS NOT NULL
+               AND EXISTS (SELECT 1 FROM chunk c WHERE c.documento_id = d.id)
+               {filtro_questao}
+             ORDER BY d.id LIMIT 1"""
+    )
+    if not d:
+        pytest.skip("acervo público sem documento "
+                    f"{'' if historico else 'não '}histórico"
+                    f"{' e sem questão' if sem_questao else ''}")
+    return d["disciplina"]
 
 
 def _questao_do_modelo(artigo: str) -> dict:
@@ -54,9 +118,10 @@ def _modelo_que_responde_sobre_o_lote(fake):
     caminho feliz. Aqui o duplê imita o único comportamento do modelo real do
     qual a gravação depende: devolver o artigo QUE ESTAVA no material.
     """
-    def gerar(prompt, sistema="", json_mode=False, max_tokens=1200, schema=None):
-        arts = re.findall(r"\[[^\]]*?art\. ([^\]]+)\]", prompt)
-        return json.dumps([_questao_do_modelo(a) for a in dict.fromkeys(arts)])
+    def gerar(prompt, sistema="", json_mode=False, max_tokens=1200, schema=None,
+              temperatura=None):
+        arts = _artigos_do_prompt(prompt)
+        return json.dumps([_questao_do_modelo(a) for a in arts])
     fake.gerar = gerar
     return fake
 
@@ -108,13 +173,7 @@ def test_sob_demanda_enche_a_fila_de_uma_mesa_vazia(client, usuario, llm_falso):
     que TEM material no acervo e ZERO questão. Antes disso, fila vazia pra
     sempre — o material estava lá e ninguém o transformava em pergunta."""
     _modelo_que_responde_sobre_o_lote(llm_falso)
-    disc = db.exec1(
-        """SELECT d.disciplina FROM documento d
-            WHERE NOT EXISTS (SELECT 1 FROM questao q WHERE q.documento_id = d.id)
-            LIMIT 1""")
-    if not disc:
-        pytest.skip("todo documento do acervo já tem questão")
-    d = disc["disciplina"]
+    d = _disciplina_do_acervo(sem_questao=True)
 
     m = client.post("/mesas", json={"nome": "Mesa vazia"}, headers=usuario["headers"]).json()
     eid = db.exec1("INSERT INTO edital (mesa_id, titulo) VALUES (%(m)s,'e') RETURNING id",
@@ -162,7 +221,7 @@ def test_material_historico_nunca_vira_fonte(usuario, llm_falso):
     tem = db.exec1("SELECT 1 x FROM documento WHERE tipo = 'historico' LIMIT 1")
     if not tem:
         pytest.skip("acervo sem material histórico")
-    disc = db.exec1("SELECT disciplina FROM documento WHERE tipo = 'historico' LIMIT 1")["disciplina"]
+    disc = _disciplina_do_acervo(historico=True)
     ids = geracao._por_disciplina([disc], 5)
     tipos = db.query(
         """SELECT DISTINCT d.tipo FROM chunk c JOIN documento d ON d.id = c.documento_id
@@ -250,14 +309,15 @@ def test_tipo_da_banca(usuario):
 def test_item_ce_gerado_entra_na_fila_e_corrige_sem_llm(client, usuario, llm_falso):
     """Fim a fim: gera item C/E, ele aparece na fila com o tipo, e responder
     pela rota devolve veredito binário sem tocar no modelo."""
-    def gerar(prompt, sistema="", json_mode=False, max_tokens=1200, schema=None):
-        arts = re.findall(r"\[[^\]]*?art\. ([^\]]+)\]", prompt)
+    def gerar(prompt, sistema="", json_mode=False, max_tokens=1200, schema=None,
+              temperatura=None):
+        arts = _artigos_do_prompt(prompt)
         return json.dumps([{"artigo": a, "tema": "t", "enunciado": "assertiva",
                             "gabarito_ce": i % 2 == 0, "justificativa": "porque a lei diz"}
-                           for i, a in enumerate(dict.fromkeys(arts))])
+                           for i, a in enumerate(arts)])
     llm_falso.gerar = gerar
 
-    disc = db.exec1("SELECT disciplina FROM documento WHERE tipo <> 'historico' LIMIT 1")["disciplina"]
+    disc = _disciplina_do_acervo()
     m = client.post("/mesas", json={"nome": "Mesa CE", "banca": "Cebraspe"},
                     headers=usuario["headers"]).json()
     eid = db.exec1("INSERT INTO edital (mesa_id, titulo) VALUES (%(m)s,'e') RETURNING id",
@@ -292,8 +352,9 @@ def test_item_ce_gerado_entra_na_fila_e_corrige_sem_llm(client, usuario, llm_fal
 def _serie_falsa(fake, n_itens=3):
     """Duplê que devolve UMA série: texto-base + N itens sobre o artigo que
     veio no material (mesmo motivo do duplê de item avulso)."""
-    def gerar(prompt, sistema="", json_mode=False, max_tokens=1200, schema=None):
-        art = re.findall(r"\[[^\]]*?art\. ([^\]]+)\]", prompt)[0]
+    def gerar(prompt, sistema="", json_mode=False, max_tokens=1200, schema=None,
+              temperatura=None):
+        art = _artigos_do_prompt(prompt)[0]
         return json.dumps({
             "artigo": art,
             "contexto": "Carlos, servidor estável, foi inabilitado no estágio probatório.",
@@ -310,7 +371,7 @@ def test_serie_grava_texto_base_uma_vez_e_itens_ordenados(client, usuario, llm_f
     cópia dentro de cada enunciado — é o que permite dizer "item 2 de 3" e o
     que impede as cópias divergirem quando uma for corrigida."""
     _serie_falsa(llm_falso, 3)
-    disc = db.exec1("SELECT disciplina FROM documento WHERE tipo <> 'historico' LIMIT 1")["disciplina"]
+    disc = _disciplina_do_acervo()
     m = client.post("/mesas", json={"nome": "Mesa série", "banca": "Cebraspe"},
                     headers=usuario["headers"]).json()
     eid = db.exec1("INSERT INTO edital (mesa_id, titulo) VALUES (%(m)s,'e') RETURNING id",
@@ -341,7 +402,7 @@ def test_apagar_contexto_leva_os_itens_junto(usuario, llm_falso):
     no argumento acima" sem o argumento), e apareceria na fila de alguém.
     Órfão silencioso é pior que apagar junto."""
     _serie_falsa(llm_falso, 2)
-    disc = db.exec1("SELECT disciplina FROM documento WHERE tipo <> 'historico' LIMIT 1")["disciplina"]
+    disc = _disciplina_do_acervo()
     r = geracao.sob_demanda([disc], quantidade=2, tipo="certo_errado")
     ids = [q["id"] for q in r["questoes"]]
     ctx = r["questoes"][0]["contexto_id"]
@@ -366,7 +427,7 @@ def test_um_item_so_nao_vira_serie(usuario, llm_falso):
     sozinho — o Cebraspe cobra item avulso também, e é o formato mais barato
     de gerar."""
     _modelo_que_responde_sobre_o_lote(llm_falso)
-    disc = db.exec1("SELECT disciplina FROM documento WHERE tipo <> 'historico' LIMIT 1")["disciplina"]
+    disc = _disciplina_do_acervo()
     chamadas_antes = len(llm_falso.chamadas)
     r = geracao.sob_demanda([disc], quantidade=1, tipo="certo_errado")
     assert "contexto" not in r

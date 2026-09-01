@@ -137,6 +137,36 @@ medição.
   NÃO acontece mais é o cargo errado: as 33 ênfases são oferecidas na curadoria
   e só a escolhida entra na mesa.
 
+- **A nota da escala de naturalidade (`avaliar_chat.py`) NÃO separa versões de
+  prompt, e isto foi medido.** A régua tem sete dimensões ancoradas, evidência
+  obrigatória por nota e total normalizado em 0-100. Parece instrumento; no
+  tamanho de amostra que dá pra pagar, não é.
+
+  Três rodadas do cenário `regressoes`, entrada IGUAL, mesmo prompt: **36, 93 e
+  57**. Suspeitei da temperatura (0.3 para tudo, em `core/llm.py`) e a tornei
+  parametrizável, com o juiz em 0. Não resolveu, e o experimento que atribui a
+  culpa é este: o **mesmo transcript**, julgado duas vezes a temperatura 0, deu
+  **86 e 100** — a dimensão `ancoragem` virou de 0 para 4 sozinha. Ou seja, o
+  Gemini não é determinístico nem em 0, e há duas fontes somadas: o juiz (~14
+  pontos na mesma entrada) e o tutor a 0.3, que gera conversa diferente a cada
+  rodada.
+
+  Efeito que se queria detectar (uma versão de prompt contra a outra): ~17
+  pontos. Ruído: ~64. Não dá.
+
+  **O que É confiável no mesmo script:** a contagem de erros de regra, que é
+  código e não opinião. O vazamento da palavra "acervo" saiu de 2, 1, 1 erros
+  em três rodadas do `socratic-v35` para 0, 0, 0 no `v36` — sinal limpo, na
+  mesma medição em que a nota dizia que havia PIORADO. Use os erros pra decidir
+  e o "o que mais atrapalha" do juiz como ponteiro pra ir ler o turno; não use a
+  nota pra aprovar ou reprovar um prompt.
+
+  Caminhos não tentados, se um dia a nota precisar valer: rodar o tutor também
+  em 0 (mede um tutor que não é o produto), pontuar cada dimensão em chamada
+  separada, ou tirar a média sobre os oito cenários em vez de repetir um
+  (`--cenario todos`) — este último é o mais barato e o único que amplia a
+  cobertura junto.
+
 ## Aberto
 
 - **Múltipla escolha** (FGV, Vunesp): exige tabela de alternativas. O

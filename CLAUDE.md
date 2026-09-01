@@ -105,6 +105,8 @@ chat.py                    sessão de estudo (CLI, usuário fixo por email)
 api.py                     API HTTP (FastAPI) — mesma lógica de core/, autenticada por JWT
 sincronizar.py             exporta/importa questões e progresso de UM usuário entre máquinas
 semear_demo.py             semeia conta descartável com 3 mesas e 15 dias, pra olhar a TELA
+avaliar_chat.py            aluno SINTÉTICO conversa com o tutor; mostra o que virou vetor e o que a resposta tem de errado
+testar.sh (raiz)           ./testar.sh — o comando único da avaliação do chat (banco, venv, chave, e a suíte em --pytest)
 migrar.py                  aplica as migrações de db/ que faltam (único mecanismo)
 atualizar.sh               instala arquivos baixados do chat
 Dockerfile (apps/api)      backend containerizado — torch CPU-only, modelo DENTRO da imagem
@@ -271,6 +273,43 @@ mesma coisa é como um deles fica sem a regra do outro.
   (`[DESEMPENHO REAL DO ALUNO]`) e o modelo escrevendo questão de múltipla
   escolha dentro do chat. Nenhuma das duas aparece em teste automatizado,
   porque o texto continua sendo uma resposta válida.
+  **`./testar.sh` faz essa leitura ficar barata**: encena a conversa com um aluno
+  sintético e imprime, por turno, a string que virou vetor, a estratégia de
+  busca, os trechos que voltaram e as violações de regra já conhecidas. Não
+  substitui a leitura — dá o texto pronto pra ler, e um roteiro fixo com as
+  falas que causaram cada regressão, pra comparar antes e depois. Custa cota:
+  7 chamadas no padrão, o dobro dos turnos com `--livre`.
+- **CONSERTOU? RODE DE NOVO E MOSTRE OS DOIS NÚMEROS.** Conserto de checagem se
+  prova com `--reprocessar` (texto idêntico, grátis). Conserto de PROMPT só se
+  prova com conversa nova, e o `.logs/defeitos.md` traz no topo o comando exato
+  que reproduz aquela rodada — cenário, mesa e falas. Compare a CONTAGEM DE
+  ERROS antes × depois, 3 rodadas de cada; a nota da escala não serve (abaixo).
+  Exemplo do que basta dizer: "acervo: 2/1/1 erros no v35 → 0/0/0 no v36".
+- **Duas verificações diferentes, e confundi-las engana.** `--reprocessar` roda
+  as CHECAGENS de hoje sobre as ~140 respostas já gravadas em `.logs/*.json`:
+  não gasta LLM nem banco, e prova se uma regra nova só encontra o que devia.
+  Não diz nada sobre o PROMPT — aquelas respostas são de antes do conserto. Para
+  o prompt, só conversa nova: `--cenario todos`. Ao mexer numa checagem, rode o
+  `--reprocessar` ANTES de confiar nela: a checagem 3c nasceu apontando "invocou
+  art. 312 em prosa" numa resposta que só dizia "use o botão", e foi o corpus
+  que mostrou.
+- **A NOTA da escala não separa versões de prompt — MEDIDO, ver
+  `docs/LIMITACOES.md`.** Três rodadas da mesma entrada deram 36, 93 e 57; o
+  mesmo transcript julgado duas vezes a temperatura 0 deu 86 e 100. Decida pela
+  CONTAGEM DE ERROS DE REGRA (código, reprodutível: 2/1/1 no `socratic-v35` → 0/0/0
+  no `v36`) e use o "o que mais atrapalha" do juiz só como ponteiro pra ir ler o
+  turno. Não aprove nem reprove um prompt pela nota.
+- **A ESCALA (`ESCALA` em `avaliar_chat.py`) é opinião ancorada, não medição.**
+  Sete dimensões de 0 a 4, cada nível descrito por um comportamento real deste
+  app, evidência obrigatória por nota, e o total normalizado em 0-100 porque
+  `descobrir_antes` pode ser n/a. Três coisas que ela exige pra valer alguma
+  coisa: (1) **uma rodada é ruído** — compare 3+ do mesmo roteiro; (2) o juiz é
+  Gemini, igual ao avaliado, e não estranha o que ele mesmo escreveria; (3) nota
+  só se compara com nota da MESMA régua, e por isso `ESCALA_VERSAO` é separada
+  de `VERSAO` — suba-a ao mexer em dimensão ou âncora, e o placar passa a
+  agrupar à parte. Decisão de produto NÃO é defeito: a instrução do botão "Quero
+  questões sobre isto" está ressalvada na âncora, porque sem isso toda rodada
+  ficava presa em ~60 por uma escolha já registrada.
 - Pra conferir a TELA com dado plausível (não só o terminal):
   `python semear_demo.py --email conta@teste --senha 12345678`. `simular.py`
   responde se a REGRA se sustenta; ele não toca no banco, então não diz se
@@ -326,6 +365,23 @@ mesma coisa é como um deles fica sem a regra do outro.
 ./setup.sh --subir            # dia a dia: confere o schema e sobe os dois
 ./setup.sh --parar            # derruba API e front (o banco fica)
 
+# QUALIDADE DA RESPOSTA do tutor (não "o código quebrou?" — isso é o pytest):
+./testar.sh                      # aluno sintético + juiz; mostra o que virou vetor
+./testar.sh --livre --persona cético --turnos 8   # o aluno também é um LLM
+./testar.sh --falas "oi" "me explica peculato"    # suas falas
+./testar.sh --rapido             # sem o juiz (uma chamada de LLM a menos)
+./testar.sh --pytest             # a suíte ANTES da avaliação · --so-pytest: só ela
+./testar.sh --cenario listar     # os 10 cenários, um por risco
+./testar.sh --cenario forense_do_zero --mesa "PC-PR Investigador"
+./testar.sh --cenario direto     # roda um só · --cenario todos: a coleção inteira
+./testar.sh --reprocessar        # re-checa TODAS as conversas gravadas (grátis)
+./testar.sh --cenario todos      # a bateria inteira: 10 cenários, ~53 chamadas
+./testar.sh --placar             # histórico de notas, sem gastar LLM
+./testar.sh --limpar             # apaga a conta descartável
+# havendo defeito, sai .logs/defeitos.md (nome FIXO) só com o que falhou, e a
+# frase pra entregar a um agente: "conserta os defeitos em .logs/defeitos.md"
+# com o juiz, a rodada entra em .logs/placar.jsonl com a nota de naturalidade
+
 # ambiente, de qualquer pasta do repo
 source ativar.sh              # ativa o venv e te deixa em apps/api
 ./tutor migrar.py --listar    # roda UM comando no venv certo, sem mudar o shell
@@ -349,6 +405,7 @@ python corpus/html_para_texto.py corpus/Arquivo.html corpus/norma.txt --cortar-e
 python avaliar_retrieval.py         # depois de qualquer ingestão nova ou mudança em retrieval.py
 python edital.py corpus/edital.pdf --orgao "PC-PR" --banca FGV   # data da prova + conteúdo programático
 python edital.py corpus/edital.pdf --mesa "PC-PR Investigador"   # cria a mesa se não existir
+python edital.py corpus/edital.pdf --mesa "X" --email teste@local # conta descartável, pra experimentar
 python gerar.py --cobertura 3
 python gerar.py 3 --secao "FUNCIONARIO PUBLICO" --por-lote 3 --max 12
 python chat.py estudar
