@@ -19,6 +19,11 @@ acervo/
 # inteiro dos dois lados) e um commit obrigatório pra levar o dado. Ver
 # .githooks/_comum.sh.
 apps/api/dados/progresso.json
+# Os arquivos originais do material do aluno, escritos pelo `sincronizar.py
+# exportar` (024). Viajam no ref `estado`, como blobs numa subárvore — nunca no
+# branch de código. Fora do git aqui pelo mesmo motivo do `acervo/`: é material
+# de cursinho, e o branch de trabalho não é lugar de PDF pago.
+apps/api/dados/arquivos/
 
 # transitórios
 # logs e PIDs dos processos que o setup.sh sobe (API e frontend)

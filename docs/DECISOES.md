@@ -1063,6 +1063,42 @@ disciplina que a conversa NOMEOU (`assunto.disciplina_citada`, regra pura), com
 teto de 40 (`mesa.MAX_TOPICOS_NO_PROMPT`). Ciências Forenses da PC-PR são ~30
 linhas. Sem disciplina nomeada, não vai nada.
 
+**O PDF DO ALUNO FICA GUARDADO, E VIAJA COMO BLOB — NUNCA DENTRO DO JSON.**
+Até a 024 o upload era extraído, chunkado, vetorizado e o arquivo DESCARTADO:
+`documento.origem` guardava só o nome, e o docstring de `material.para_reindexar`
+dizia isso na cara ("quem tem que reenviar o arquivo é ele"). O efeito prático é
+o que o dono relatou: a apostila continuava presa no computador dele, e reler
+exigia achar o arquivo de novo.
+
+`bytea` e não `large object`: `bytea` viaja em `pg_dump`, em réplica e na
+exportação do `sincronizar.py` como qualquer coluna; `lo_*` exigiria tratamento
+próprio nos três. Coluna NULLABLE porque todo material anterior à migração fica
+sem arquivo — os bytes não existem mais —, e a tela mostra o botão só onde
+`arquivo IS NOT NULL`, em vez de prometer o que não pode entregar. O CHECK
+`arquivo IS NULL OR usuario_id IS NOT NULL` mantém corpus público fora disso:
+`corpus/` está no git, guardar de novo seria a decisão que o `.gitignore` do
+`acervo/` já recusou.
+
+Tamanho foi MEDIDO antes de decidir, não estimado: o banco tem 59 MB, o disco
+desta máquina tem 921 GB livres e 20 apostilas somam ~100 MB. O limite de 0,5 GB
+que apareceu na conversa é do plano gratuito do Neon e só valeria na nuvem — não
+existe no Postgres local do docker.
+
+**No sincronismo, o arquivo é BLOB numa subárvore do ref `estado`.** Base64
+dentro do pacote foi descartado por limite duro: infla 33%, o pacote é UM
+arquivo, e o GitHub REJEITA push de arquivo acima de 100 MB — vinte apostilas
+dariam ~133 MB num blob só, push recusado. Um blob por PDF resolve os três de
+uma vez: cada um no tamanho real, binário guardado nativamente, e arquivo
+idêntico deduplica porque o NOME é o sha256 do conteúdo (o mesmo hash que
+`documento.hash` já usa como identidade natural). `git mktree` monta um nível
+só, então os arquivos entram como árvore própria, modo `040000`.
+
+Na volta o hash é CONFERIDO antes de gravar: o nome do blob é o sha256, então
+divergência quer dizer arquivo trocado ou truncado, e gravar binário corrompido
+como "o original" é pior que não ter original. E a gravação roda também no
+caminho do `pulados` — material sincronizado antes da 024 está no banco sem
+bytes, e o pacote novo é a única chance de completá-lo.
+
 ## Armadilhas do corpus (Planalto)
 
 - Quebra de linha no meio da frase; `normalizar_lei()` remonta.

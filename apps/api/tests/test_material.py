@@ -452,3 +452,39 @@ def test_subir_material_nao_bloqueia_o_event_loop(client, usuario):
                                        ("material que passa pelo pool. " * 30).encode(),
                                        "text/plain")})
     assert r.status_code == 201 and r.json()["status"] == "processando"
+
+
+# ------------------------------------------- arquivo original (migração 024)
+def test_arquivo_original_volta_igual_e_so_pro_dono(client, usuario, outro_usuario):
+    """Os BYTES do upload são guardados e devolvidos idênticos, só ao dono.
+
+    Existe porque a alternativa era o aluno guardar o PDF no computador pra
+    sempre — `documento.origem` guardava só o NOME, e o docstring de
+    `para_reindexar` dizia "quem tem que reenviar o arquivo é ele". O pedido
+    real foi reler a apostila sem depender da máquina onde ela foi subida.
+
+    Trava as três coisas que podem regredir juntas e em silêncio: o byte-a-byte
+    (um encode no meio do caminho corromperia sem erro nenhum), o 404 pra
+    material de outro dono (id sequencial na URL entregaria apostila paga
+    alheia) e o nome no Content-Disposition, que sai de `origem` e não do
+    título — o título é editável e pode ter virado "Aula 4 — revisar", que não é
+    nome de arquivo."""
+    conteudo = ("Preservacao do local de crime. " * 90).encode("utf-8")
+    r = client.post("/materiais", headers=usuario["headers"], data={"tipo": "aula"},
+                    files={"arquivo": ("aula-024.txt", conteudo, "text/plain")})
+    assert r.status_code == 201, r.text
+    doc_id = r.json()["id"]
+
+    na_lista = next(m for m in client.get("/materiais", headers=usuario["headers"])
+                    .json()["materiais"] if m["id"] == doc_id)
+    assert na_lista["tem_arquivo"] is True
+    assert na_lista["arquivo_bytes"] == len(conteudo)
+
+    baixado = client.get(f"/materiais/{doc_id}/arquivo", headers=usuario["headers"])
+    assert baixado.status_code == 200
+    assert baixado.content == conteudo
+    assert 'filename="aula-024.txt"' in baixado.headers["content-disposition"]
+
+    # 404 e não 403: não confirmar a quem chuta um id que ele existe.
+    assert client.get(f"/materiais/{doc_id}/arquivo",
+                      headers=outro_usuario["headers"]).status_code == 404

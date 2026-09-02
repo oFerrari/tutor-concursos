@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Check, ChevronDown, Link2, Pencil, RotateCcw, Trash2, UploadCloud } from "lucide-react";
+import { Check, ChevronDown, Download, Link2, Pencil, RotateCcw, Trash2, UploadCloud } from "lucide-react";
 import {
   ErroApi,
   Material,
   Mesa,
   SugestoesMaterial,
   apagarMaterial,
+  baixarMaterial,
   classificarMaterial,
   getMateriais,
   getMesaAtual,
@@ -551,6 +552,18 @@ export default function PaginaMateriais() {
     }
   }
 
+  async function baixar(m: Material) {
+    // Sem estado de "baixando": a resposta é local (o arquivo está no banco) e
+    // um spinner que pisca por 200ms cansa mais do que informa. Erro, sim —
+    // 404 aqui quer dizer que alguém apagou o material noutra aba, e ficar em
+    // silêncio faria o clique parecer quebrado.
+    try {
+      await baixarMaterial(m.id, m.origem ?? `${m.titulo}.pdf`);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "não consegui baixar o arquivo");
+    }
+  }
+
   async function remover(m: Material) {
     setErro(null);
     try {
@@ -935,6 +948,24 @@ export default function PaginaMateriais() {
                   </span>
                 </div>
                 <div className="flex items-center justify-end gap-1">
+                  {/* Só onde o arquivo EXISTE (024). Material anterior à migração
+                      não tem os bytes, e um botão que sempre falha é pior que
+                      botão ausente — foi a mesma escolha do retry, que só
+                      aparece em falha/processando. */}
+                  {m.tem_arquivo && (
+                    <button
+                      onClick={() => baixar(m)}
+                      title={
+                        m.arquivo_bytes
+                          ? `Baixar o original (${Math.max(1, Math.round(m.arquivo_bytes / 1024))} KB)`
+                          : "Baixar o arquivo original"
+                      }
+                      className="flex h-6 w-6 items-center justify-center rounded-[7px] text-label transition-colors hover:bg-surface-hover hover:text-accent-text"
+                      aria-label={`baixar ${m.titulo}`}
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                   <button
                     onClick={() => {
                       setEditando(m.id);

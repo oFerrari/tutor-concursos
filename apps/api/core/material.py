@@ -22,7 +22,7 @@ import re
 
 from . import chunking, db, embeddings
 
-VERSAO = "material-v3"
+VERSAO = "material-v4"
 
 LOTE = 32
 MIN_CHARS = 200
@@ -288,12 +288,21 @@ def registrar(usuario_id: int, nome: str, dados: bytes,
     if not chunks:
         raise ErroMaterial("não consegui dividir este material em trechos")
 
+    # O ARQUIVO VAI PARA O BANCO (024). Antes daqui o `dados` era usado pra
+    # extrair texto e descartado, e o PDF ficava só no computador de quem subiu
+    # — reler a apostila exigia achar o arquivo de novo, e trocar de máquina
+    # perdia tudo. Guardar é o que permite o download da biblioteca.
+    #
+    # Gravado no MESMO INSERT, não num UPDATE depois: um segundo passo poderia
+    # falhar entre os dois e deixar a linha existindo sem arquivo, que é
+    # exatamente o estado indistinguível de "material antigo, de antes da 024".
     doc = db.exec1(
         """INSERT INTO documento (titulo, disciplina, assunto, tipo, origem, hash,
                                   usuario_id, mesa_id, status, chunks_total,
-                                  classificado_por)
+                                  classificado_por, arquivo, arquivo_tipo,
+                                  arquivo_bytes)
            VALUES (%(t)s, %(d)s, %(as)s, %(tp)s, %(o)s, %(h)s, %(u)s, %(mid)s,
-                   'processando', %(n)s, %(cp)s)
+                   'processando', %(n)s, %(cp)s, %(arq)s, %(arqt)s, %(arqn)s)
            RETURNING id, titulo, disciplina, assunto, tipo, status, chunks_total,
                      classificado_por, mesa_id, criado_em""",
         {"t": (titulo or re.sub(r"\.[A-Za-z0-9]{1,5}$", "", nome)).strip()[:200],
@@ -307,8 +316,41 @@ def registrar(usuario_id: int, nome: str, dados: bytes,
          # Só marca 'aluno' se ele realmente disse algo. Sem isso, material
          # não classificado apareceria como "você informou" — e a tela usa
          # essa procedência pra decidir se pede conferência.
-         "cp": "aluno" if (disciplina or "").strip() else None})
+         "cp": "aluno" if (disciplina or "").strip() else None,
+         "arq": dados, "arqt": _tipo_mime(nome), "arqn": len(dados)})
     return {**doc, "chunks": 0}
+
+
+# O `Content-Type` que a rota de download devolve. Deduzido da EXTENSÃO e não
+# adivinhado do conteúdo: é a extensão que o navegador usa pra decidir se abre
+# ou baixa, e é ela que o aluno reconhece. `octet-stream` é o default honesto —
+# força download em vez de o navegador tentar renderizar algo que não sabe.
+MIME = {"pdf": "application/pdf", "txt": "text/plain; charset=utf-8",
+        "md": "text/markdown; charset=utf-8", "html": "text/html; charset=utf-8",
+        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
+
+
+def _tipo_mime(nome: str) -> str:
+    ext = (nome.rsplit(".", 1)[-1] if "." in nome else "").lower()
+    return MIME.get(ext, "application/octet-stream")
+
+
+def arquivo(usuario_id: int, documento_id: int) -> dict | None:
+    """Os bytes do original, se forem DELE e se existirem.
+
+    O `usuario_id` no WHERE é a autorização inteira, e é assim que toda a
+    biblioteca já funciona (019): sem ele, um id sequencial na URL daria a
+    apostila paga de um aluno para outro. Não há checagem em camada acima —
+    ela mora aqui, junto do SELECT, onde não dá pra esquecer.
+
+    Devolve `None` tanto pra material de outro dono quanto pra material antigo
+    sem arquivo: quem chama responde 404 nos dois casos, e é o certo — dizer
+    "existe mas não é seu" já é contar algo sobre a biblioteca alheia."""
+    return db.exec1(
+        """SELECT titulo, origem, arquivo, arquivo_tipo, arquivo_bytes
+             FROM documento
+            WHERE id = %(d)s AND usuario_id = %(u)s AND arquivo IS NOT NULL""",
+        {"d": documento_id, "u": usuario_id})
 
 
 def indexar(documento_id: int, nome: str, dados: bytes) -> None:
@@ -477,6 +519,7 @@ def listar(usuario_id: int) -> list[dict]:
     return db.query(
         """SELECT d.id, d.titulo, d.disciplina, d.assunto, d.tipo, d.status,
                   d.erro, d.classificado_por, d.chunks_total, d.origem, d.criado_em,
+                  d.arquivo_bytes, (d.arquivo IS NOT NULL) AS tem_arquivo,
                   d.mesa_id, m.nome AS mesa_nome,
                   count(c.id) AS chunks
              FROM documento d

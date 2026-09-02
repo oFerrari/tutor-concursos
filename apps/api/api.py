@@ -33,6 +33,7 @@ from pathlib import Path
 from fastapi import (BackgroundTasks, Depends, FastAPI, File, Form, Header, HTTPException,
                      UploadFile)
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from starlette.concurrency import run_in_threadpool
 
@@ -1121,6 +1122,38 @@ def rota_classificar_material(documento_id: int, body: ClassificarBody,
     if not r:
         raise HTTPException(404, "material não encontrado")
     return r
+
+
+@app.get("/materiais/{documento_id}/arquivo")
+def rota_baixar_material(documento_id: int, uid: int = Depends(usuario_atual)):
+    """O arquivo ORIGINAL de volta (024) — pra reler a apostila sem guardá-la no
+    computador, que era o pedido.
+
+    404 pra material de outro dono E pra material antigo sem arquivo, no mesmo
+    ramo: a autorização mora no WHERE de `material.arquivo`, e distinguir os
+    dois casos na resposta contaria a quem chuta um id que ele existe. Mesma
+    escolha de `rota_apagar_material` logo abaixo.
+
+    `Content-Disposition: attachment` com o nome de ORIGEM, não o título: o
+    título é editável e pode ter virado "Aula 4 — revisar", que não é nome de
+    arquivo. `origem` é o que ele subiu, com a extensão que o sistema operacional
+    dele entende.
+
+    Devolve `Response` de uma vez, sem streaming: o material do aluno é apostila
+    de alguns MB, e `StreamingResponse` sobre `bytea` exigiria manter a conexão
+    do banco aberta durante o envio — a conexão é UMA por processo (ver
+    `core/db.conexao_isolada`), então segurá-la aqui bloquearia o resto do app
+    pelo tempo do download.
+    """
+    a = material.arquivo(uid, documento_id)
+    if not a:
+        raise HTTPException(404, "arquivo não encontrado")
+    nome = (a["origem"] or a["titulo"] or "material").replace('"', "")
+    return Response(
+        content=bytes(a["arquivo"]),
+        media_type=a["arquivo_tipo"] or "application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{nome}"',
+                 "Content-Length": str(a["arquivo_bytes"] or len(a["arquivo"]))})
 
 
 @app.delete("/materiais/{documento_id}")

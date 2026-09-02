@@ -90,6 +90,21 @@ from core.config import CLI_USUARIO_EMAIL
 
 VERSAO = "sincronizar-v3"
 ARQUIVO = Path("dados/progresso.json")
+
+# OS ARQUIVOS ORIGINAIS VIAJAM COMO BLOBS, FORA DO JSON.
+#
+# Meter PDF em base64 dentro do pacote foi descartado por um limite duro, não
+# por gosto: base64 infla 33%, o pacote é UM arquivo, e o GitHub REJEITA push de
+# arquivo acima de 100 MB. Vinte apostilas dariam ~133 MB num blob só — push
+# recusado, não lento.
+#
+# Um arquivo por PDF resolve os três problemas de uma vez: cada blob fica no seu
+# tamanho real, o git guarda binário nativamente (sem inflar) e PDF idêntico
+# deduplica pelo próprio hash, porque o NOME do arquivo aqui É o sha256 do
+# conteúdo — o mesmo hash que `documento.hash` usa como identidade natural.
+# `_comum.sh` monta a árvore do ref `estado` com `mktree`, então acrescentar
+# entradas é o caminho que já existe.
+ARQUIVOS = Path("dados/arquivos")
 LOTE_EMBEDDING = 32
 
 
@@ -112,6 +127,24 @@ def _destravar() -> None:
         db.query("SELECT pg_advisory_unlock(%(k)s)", {"k": TRAVA})
     except Exception:
         pass
+
+
+def _extensao(origem: str | None) -> str:
+    """A extensão do arquivo original, normalizada e com teto.
+
+    Vem do `origem` (o nome que o aluno subiu) e não de `arquivo_tipo`: o MIME
+    não diz extensão de volta sem uma tabela inversa, e o nome dentro de
+    `dados/arquivos/` existe pra que uma pessoa consiga abrir o arquivo direto
+    da pasta. Sem extensão, o sistema operacional não sabe com o que abrir.
+
+    O teto de 5 e o filtro de caracteres não são paranoia decorativa: este
+    pedaço entra num caminho de arquivo, e `origem` é texto que chegou pelo
+    upload."""
+    if not origem or "." not in origem:
+        return ""
+    ext = origem.rsplit(".", 1)[-1]
+    ext = "".join(c for c in ext if c.isalnum())[:5].lower()
+    return f".{ext}" if ext else ""
 
 
 def chave(texto: str) -> str:
@@ -227,7 +260,8 @@ def exportar(com_material: bool = True, com_senha: bool = True) -> int:
     # ---- material do aluno (019/020/021) + os chunks dele
     mat_rows = db.query(
         """SELECT id, titulo, disciplina, assunto, tipo, origem, hash, criado_em,
-                  usuario_id, status, chunks_total, erro, classificado_por, mesa_id
+                  usuario_id, status, chunks_total, erro, classificado_por, mesa_id,
+                  arquivo_tipo, arquivo_bytes, (arquivo IS NOT NULL) AS tem_arquivo
            FROM documento WHERE usuario_id IS NOT NULL ORDER BY id"""
     )
     mat_chunks: dict[int, list] = {}
@@ -241,6 +275,28 @@ def exportar(com_material: bool = True, com_senha: bool = True) -> int:
             mat_chunks.setdefault(c["documento_id"], []).append(
                 {k: c[k] for k in ("ordem", "texto", "norma", "artigo", "paragrafo",
                                    "inciso", "rubrica", "secao")})
+    # Grava os bytes um a um, cada um no seu arquivo. Um SELECT por documento e
+    # não um `WHERE id = ANY(...)`: trazer vinte apostilas na mesma resposta
+    # coloca ~100 MB na memória do processo de uma vez, e a conexão do projeto é
+    # única (ver `core/db`). Um por vez é mais lento e não empilha.
+    arquivos_gravados = bytes_gravados = 0
+    if com_material:
+        for m in mat_rows:
+            if not (m["tem_arquivo"] and m["hash"]):
+                continue
+            destino = ARQUIVOS / f"{m['hash']}{_extensao(m['origem'])}"
+            if destino.exists() and destino.stat().st_size == (m["arquivo_bytes"] or -1):
+                arquivos_gravados += 1          # já está lá, e do tamanho certo
+                bytes_gravados += destino.stat().st_size
+                continue
+            linha = db.exec1("SELECT arquivo FROM documento WHERE id = %(i)s", {"i": m["id"]})
+            if not linha or linha["arquivo"] is None:
+                continue
+            ARQUIVOS.mkdir(parents=True, exist_ok=True)
+            destino.write_bytes(bytes(linha["arquivo"]))
+            arquivos_gravados += 1
+            bytes_gravados += destino.stat().st_size
+
     materiais = []
     for m in mat_rows:
         if not m["hash"]:
@@ -254,6 +310,13 @@ def exportar(com_material: bool = True, com_senha: bool = True) -> int:
              "status": m["status"], "erro": m["erro"],
              "chunks_total": m["chunks_total"], "classificado_por": m["classificado_por"],
              "mesa": mesa_ref.get(m["mesa_id"], (None, None))[1],
+             # O pacote referencia o arquivo, não o carrega. `arquivo` é o nome
+             # dentro de `dados/arquivos/`, e é derivável do hash — guardado
+             # explícito de propósito, pra quem lê o JSON não precisar conhecer a
+             # regra de formação do nome.
+             "arquivo": (f"{m['hash']}{_extensao(m['origem'])}"
+                         if (com_material and m["tem_arquivo"]) else None),
+             "arquivo_tipo": m["arquivo_tipo"], "arquivo_bytes": m["arquivo_bytes"],
              "chunks": mat_chunks.get(m["id"], [])})
 
     # ---- simulados (a tentativa aponta pra eles, então vêm antes)
@@ -339,6 +402,13 @@ def exportar(com_material: bool = True, com_senha: bool = True) -> int:
     print(f"  {len(materiais)} materiais do aluno "
           f"({sum(len(m['chunks']) for m in materiais)} trechos"
           f"{'' if com_material else ', TEXTO DE FORA por --sem-material'})")
+    if arquivos_gravados:
+        # `// 1024 // 1024 or 1` mostrava "1 MB" pra 1920 bytes — número redondo
+        # e errado, do tipo que faz você não confiar no resto do relatório.
+        tam = (f"{bytes_gravados / 1048576:.1f} MB" if bytes_gravados >= 1048576
+               else f"{bytes_gravados // 1024 or 1} KB")
+        print(f"  {arquivos_gravados} arquivo(s) originais em {ARQUIVOS}/ "
+              f"({tam}) — viajam como blobs, fora do pacote")
     return 0
 
 
@@ -469,8 +539,9 @@ def _refs(item) -> list[str]:
 
 def _materiais(pacote, uid, mesa_id, indexar: bool = True) -> tuple[int, int, int]:
     """
-    Documento do aluno + chunks. Recalcula embedding em CPU local, porque o
-    vetor não viaja (inflaria o arquivo) e o PDF também não (fica fora do git).
+    Documento do aluno + chunks + o ARQUIVO original. Recalcula embedding em CPU
+    local, porque o vetor não viaja (inflaria o pacote); o PDF viaja, mas como
+    blob próprio em `dados/arquivos/`, nunca dentro do JSON — ver `ARQUIVOS`.
 
     `indexar=False` grava as LINHAS e para: quem chama assim é o hook de pull,
     que precisa devolver o terminal em segundos. O embedding de algumas
@@ -479,7 +550,7 @@ def _materiais(pacote, uid, mesa_id, indexar: bool = True) -> tuple[int, int, in
     Quem termina o serviço depois é `sincronizar.py material`, e enquanto isso
     o documento fica 'processando' — estado que a biblioteca já mostra.
     """
-    novos = reindexados = pulados = 0
+    novos = reindexados = pulados = arquivos = 0
     pendentes = []
     for m in pacote.get("materiais", []):
         u = uid.get(m["usuario"])
@@ -497,7 +568,7 @@ def _materiais(pacote, uid, mesa_id, indexar: bool = True) -> tuple[int, int, in
                               {"d": doc_id})["n"]
             if locais and (not chunks or locais == len(chunks)):
                 pulados += 1
-                continue
+                chunks = []          # nada a reindexar, mas o arquivo abaixo ainda entra
         else:
             r = db.exec1(
                 """INSERT INTO documento (titulo, disciplina, assunto, tipo, origem, hash,
@@ -523,9 +594,38 @@ def _materiais(pacote, uid, mesa_id, indexar: bool = True) -> tuple[int, int, in
             )
             doc_id = r["id"]
             novos += 1
+        # O ARQUIVO ENTRA MESMO EM DOCUMENTO QUE JÁ EXISTIA, e é de propósito:
+        # material sincronizado antes da 024 está no banco sem bytes, e o pacote
+        # novo é a única chance de completá-lo. Por isso a gravação fica FORA do
+        # `else` do insert e roda também no caminho do `pulados` — só sobrescreve
+        # quando ainda não há arquivo local.
+        if m.get("arquivo"):
+            caminho = ARQUIVOS / m["arquivo"]
+            if caminho.exists():
+                falta = db.exec1(
+                    "SELECT 1 AS x FROM documento WHERE id=%(d)s AND arquivo IS NULL",
+                    {"d": doc_id})
+                if falta:
+                    dados = caminho.read_bytes()
+                    # Confere o hash antes de gravar: o nome do blob É o sha256
+                    # do conteúdo, então divergência quer dizer arquivo trocado
+                    # ou truncado no caminho, e gravar um binário corrompido
+                    # como "o original" é pior que não ter original.
+                    if hashlib.sha256(dados).hexdigest() == m["hash"]:
+                        db.query(
+                            """UPDATE documento SET arquivo = %(b)s, arquivo_tipo = %(t)s,
+                                                    arquivo_bytes = %(n)s
+                                WHERE id = %(d)s""",
+                            {"b": dados, "t": m.get("arquivo_tipo"),
+                             "n": len(dados), "d": doc_id})
+                        arquivos += 1
+                    else:
+                        print(f"  arquivo de {m['titulo']!r} com hash divergente — ignorado")
         if chunks:
             pendentes.append((doc_id, chunks))
 
+    if arquivos:
+        print(f"  {arquivos} arquivo(s) original(is) gravado(s) no banco")
     if pendentes and not indexar:
         return novos, 0, pulados
     if pendentes:

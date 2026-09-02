@@ -24,6 +24,13 @@
 # árvore tem um arquivo só.
 REF_ESTADO="refs/heads/estado"
 ARQ_ESTADO="apps/api/dados/progresso.json"
+# Os arquivos ORIGINAIS do material do aluno (migração 024). Entram numa
+# SUBÁRVORE e não dentro do JSON: base64 infla 33%, o pacote é um arquivo só, e
+# o GitHub recusa push de arquivo acima de 100 MB — vinte apostilas dariam ~133
+# MB num blob. Um blob por PDF fica no tamanho real, o git guarda binário
+# nativamente e arquivo idêntico deduplica, porque o nome É o sha256 do
+# conteúdo.
+DIR_ARQUIVOS="apps/api/dados/arquivos"
 
 _raiz() { git rev-parse --show-toplevel 2>/dev/null; }
 
@@ -56,7 +63,26 @@ estado_enviar() {
   }
   [ -f "$r/$ARQ_ESTADO" ] || return 0
   blob=$(git hash-object -w "$r/$ARQ_ESTADO") || return 0
-  tree=$(printf '100644 blob %s\tprogresso.json\n' "$blob" | git mktree) || return 0
+
+  # A SUBÁRVORE DOS ARQUIVOS. `git mktree` monta um nível só (não aceita "/" no
+  # caminho), então os PDFs viram uma árvore própria e ela entra na de cima como
+  # entrada de tipo tree, modo 040000.
+  entradas=$(printf '100644 blob %s\tprogresso.json\n' "$blob")
+  if [ -d "$r/$DIR_ARQUIVOS" ] && [ -n "$(ls -A "$r/$DIR_ARQUIVOS" 2>/dev/null)" ]; then
+    linhas=""
+    for f in "$r/$DIR_ARQUIVOS"/*; do
+      [ -f "$f" ] || continue
+      b=$(git hash-object -w "$f") || continue
+      linhas="${linhas}$(printf '100644 blob %s\t%s' "$b" "$(basename "$f")")
+"
+    done
+    if [ -n "$linhas" ]; then
+      sub=$(printf '%s' "$linhas" | git mktree) || sub=""
+      [ -n "$sub" ] && entradas="${entradas}
+$(printf '040000 tree %s\tarquivos' "$sub")"
+    fi
+  fi
+  tree=$(printf '%s\n' "$entradas" | git mktree) || return 0
   pai=""
   if git rev-parse -q --verify "$REF_ESTADO" >/dev/null; then
     # Nada mudou desde o último envio: não cria commit vazio a cada push.
@@ -71,7 +97,11 @@ estado_enviar() {
   # --no-verify: sem isto o push interno chama este mesmo hook, de novo, pra
   # sempre. Medido em repositório de teste: travou até o timeout.
   if TUTOR_HOOK=1 git push --no-verify -q "$remoto" "$REF_ESTADO:$REF_ESTADO" 2>/dev/null; then
-    echo "  [tutor] estado enviado ($(du -h "$r/$ARQ_ESTADO" | cut -f1))"
+    tam=$(du -h "$r/$ARQ_ESTADO" | cut -f1)
+    if [ -d "$r/$DIR_ARQUIVOS" ]; then
+      tam="$tam + $(du -sh "$r/$DIR_ARQUIVOS" 2>/dev/null | cut -f1) de arquivos"
+    fi
+    echo "  [tutor] estado enviado ($tam)"
   else
     echo "  [tutor] estado commitado localmente, mas o envio falhou (rede?)"
   fi
@@ -86,6 +116,18 @@ estado_receber() {
   fi
   mkdir -p "$(dirname "$r/$ARQ_ESTADO")"
   git show "refs/remotes/$remoto/estado:progresso.json" > "$r/$ARQ_ESTADO" 2>/dev/null || return 0
+
+  # Os arquivos originais, quando o ref os tiver. `git archive` extrai a
+  # subárvore inteira de uma vez; falha silenciosa é aceitável e esperada — ref
+  # antigo (de antes da 024) simplesmente não tem `arquivos/`, e isso não é erro.
+  if git rev-parse -q --verify "refs/remotes/$remoto/estado:arquivos" >/dev/null 2>&1; then
+    mkdir -p "$r/$DIR_ARQUIVOS"
+    if TUTOR_HOOK=1 git archive "refs/remotes/$remoto/estado:arquivos" \
+         | tar -x -C "$r/$DIR_ARQUIVOS" 2>/dev/null; then
+      n=$(ls -1 "$r/$DIR_ARQUIVOS" 2>/dev/null | wc -l)
+      echo "  [tutor] $n arquivo(s) original(is) do material recebidos"
+    fi
+  fi
   # Schema ANTES do dado: pacote novo contra schema velho falha no insert, e
   # é exatamente o buraco que a migração 023 fechou — `git pull` traz o
   # arquivo .sql e não aplica nada.

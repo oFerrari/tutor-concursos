@@ -72,6 +72,7 @@ db/020_material_classificado.sql disciplina virou NULLABLE + assunto + classific
 db/021_biblioteca_por_mesa.sql documento.mesa_id + mesa.biblioteca_compartilhada
 db/022_conceito_faltante.sql tentativa.conceito_faltante: o que o aluno CONFUNDE
 db/023_migracao.sql        livro-razão: quais migrações já rodaram NESTE banco
+db/024_arquivo_do_material.sql documento.arquivo (bytea): o PDF original fica guardado, e dá pra baixar de volta
 db/schema.dbml             schema documentado (DBML) — visualização, não fonte de verdade
 core/chunking.py           lei -> chunks por artigo (função pura)
 core/embeddings.py         e5 local, prefixos query:/passage:, cache
@@ -478,6 +479,8 @@ curl -s localhost:8000/fila  -H "Authorization: Bearer $TOKEN" -H "X-Mesa-Id: 3"
 
 # biblioteca do aluno (019/020): material PRIVADO, indexado no mesmo acervo
 curl -s localhost:8000/materiais -H "Authorization: Bearer $TOKEN"
+# o arquivo ORIGINAL de volta (024) — 404 pra material de outro dono ou anterior à migração
+curl -s -OJ localhost:8000/materiais/12/arquivo -H "Authorization: Bearer $TOKEN"
 # disciplina e assunto são OPCIONAIS — sem eles, o classificador descobre
 curl -s -X POST localhost:8000/materiais -H "Authorization: Bearer $TOKEN" \
      -F "arquivo=@aula-03.pdf" -F "tipo=aula"

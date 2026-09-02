@@ -762,6 +762,12 @@ export type Material = {
   chunks_total: number | null;
   chunks: number;
   origem: string | null;
+  /** O arquivo ORIGINAL está guardado (024)? `false` em material ingerido antes
+   *  da migração: os bytes não existem mais, e o botão de download não aparece
+   *  em vez de prometer o que não pode entregar. */
+  tem_arquivo?: boolean;
+  /** Tamanho do original em bytes, pra tela mostrar sem baixar. */
+  arquivo_bytes?: number | null;
   /** Mesa que subiu este material (021). `null` = pool comum: material anterior
    *  à migração, ou que serve a qualquer concurso. */
   mesa_id: number | null;
@@ -839,6 +845,42 @@ export function reindexarMaterial(id: number, arquivo: File): Promise<{ ok: true
 
 export function apagarMaterial(id: number): Promise<{ ok: true }> {
   return chamar(`/materiais/${id}`, { method: "DELETE" });
+}
+
+/**
+ * Baixa o arquivo original do material (024) e dispara o "salvar como".
+ *
+ * Não é um `<a href>` direto porque a rota exige `Authorization` — link de
+ * navegador não manda header, e a alternativa (token na query string) o
+ * colocaria no histórico e nos logs do servidor. Então busca com o header,
+ * transforma em blob e clica num link temporário.
+ *
+ * `revokeObjectURL` no fim importa: sem ele cada download deixa o arquivo
+ * inteiro preso na memória da aba até o reload, e aqui os arquivos são
+ * apostilas de vários MB.
+ */
+export async function baixarMaterial(id: number, nomeSugerido: string): Promise<void> {
+  const token = getToken();
+  const resposta = await fetch(`${API_URL}/materiais/${id}/arquivo`, {
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...cabecalhoMesa() },
+  });
+  if (!resposta.ok) {
+    const corpo = await resposta.json().catch(() => ({}));
+    throw new ErroApi(resposta.status, corpo.detail ?? `erro ${resposta.status}`);
+  }
+  // O nome vem do Content-Disposition (é o `origem` que o aluno subiu); o
+  // parâmetro é só reserva pra quando o header não vier.
+  const disp = resposta.headers.get("Content-Disposition") ?? "";
+  const casado = /filename="([^"]+)"/.exec(disp);
+  const blob = await resposta.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = casado?.[1] ?? nomeSugerido;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 export function getEdital(): Promise<EditalAtual> {
