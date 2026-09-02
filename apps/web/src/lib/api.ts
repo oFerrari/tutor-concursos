@@ -560,7 +560,22 @@ export type Fonte = {
 export function perguntar(
   pergunta: string,
   conversaId?: number
-): Promise<{ resposta: string; fontes: Fonte[]; conversa_id: number; titulo: string }> {
+): Promise<{
+  resposta: string;
+  fontes: Fonte[];
+  conversa_id: number;
+  titulo: string;
+  /** Questões que o SERVIDOR já gerou porque a fala pedia treino
+   *  (`core/pedido.py`). São questões de verdade — com `fonte_chunks`, gravadas
+   *  e na fila SM-2 —, as mesmas que o botão produzia; o que sai é o clique.
+   *  Vazio quando a fala não pedia treino, ou quando o gerador falhou (o turno
+   *  não é derrubado por isso: a resposta do tutor já existe). */
+  questoes: Questao[];
+  /** A fala pedia SIMULADO formal (prova, cronômetro, correção no fim). Não é
+   *  caso de gerar aqui: a tela tem a página do simulado, e o servidor não deve
+   *  abri-la sozinho no meio de um chat. */
+  simulado_pedido: boolean;
+}> {
   return chamar("/perguntar", {
     method: "POST",
     body: JSON.stringify({ pergunta, conversa_id: conversaId }),

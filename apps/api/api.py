@@ -39,8 +39,8 @@ from starlette.concurrency import run_in_threadpool
 
 from pydantic import BaseModel
 
-from core import (assunto, auth, conversa, desafio, edital, geracao, material, mesa, questoes,
-                  rascunho, ritmo, scheduler, simulado, socratic)
+from core import (assunto, auth, conversa, desafio, edital, geracao, material, mesa, pedido,
+                  questoes, rascunho, ritmo, scheduler, simulado, socratic)
 from core.config import CORS_ORIGINS
 from core.llm import ErroLLM
 
@@ -720,7 +720,57 @@ def rota_perguntar(body: PerguntaBody, uid: int = Depends(usuario_atual),
     fontes = [{"id": f["id"], "titulo": f["titulo"], "norma": f.get("norma"),
                "artigo": f.get("artigo")} for f in r["fontes"]]
     conversa.gravar(conv["id"], "tutor", r["resposta"], fontes)
-    return {**r, "conversa_id": conv["id"], "titulo": conv["titulo"]}
+
+    # ---- TREINO PEDIDO NA CONVERSA: o app monta as questões, sem botão.
+    #
+    # É o mesmo `geracao.sob_demanda` que `/questoes/gerar` chama, com o mesmo
+    # tema derivado no SERVIDOR — então proveniência (`fonte_chunks`), gravação
+    # e entrada na fila SM-2 continuam idênticas. O que sai é o clique.
+    #
+    # Custa cota, e isso é deliberado: `/questoes/gerar` avisa no docstring que
+    # gerar "gasta cota de LLM e ESCREVE no acervo", e por isso nunca acontece
+    # dentro de um GET. Aqui continua sendo ação EXPLÍCITA do aluno — pedir
+    # questão numa frase é o mesmo ato que clicar no botão era, e nada gera se
+    # `pedido.treino` não reconhecer o pedido.
+    #
+    # Falha aqui NÃO derruba o turno: a resposta do tutor já existe e já está
+    # gravada, e trocar uma conversa boa por um 503 porque o gerador tossiu é
+    # perder o que funcionou junto com o que não. Vai `questoes: []` e o front
+    # mostra o texto — que é o comportamento de hoje.
+    questoes: list[dict] = []
+    p = pedido.treino(body.pergunta)
+    if p and not p["formal"]:
+        # O TEMA VEM DO HISTÓRICO DE ANTES DO PEDIDO, e essa escolha é o conserto
+        # de um bug que eu mesmo introduzi aqui. Usar o histórico ATUALIZADO
+        # (que já inclui esta fala) faz a própria frase do pedido virar a
+        # consulta: `em_foco` viu "me da 3 questoes disso", achou "disso" como
+        # palavra de conteúdo, e as três questões saíram sobre apropriação
+        # indébita, inquérito policial e usurpação — numa conversa sobre
+        # peculato. É a mesma classe do "vamos" que fez nascer o `core/assunto.py`.
+        #
+        # Pedido de treino NUNCA nomeia o assunto: ele diz "disso", "isso",
+        # "nisso". Quem nomeia é a conversa até aqui, e `historico` é justamente
+        # ela — capturado antes de `gravar`, algumas linhas acima.
+        tema = assunto.em_foco(historico, disciplinas=m["disciplinas"])
+        try:
+            tipo = p["tipo"] or geracao.tipo_da_banca(m.get("banca"))
+            g = geracao.sob_demanda(m["disciplinas"], tema, p["quantidade"], tipo)
+            questoes = g["questoes"]
+        except (geracao.SemMaterial, ErroLLM):
+            questoes = []
+        if questoes:
+            temas = ", ".join(q["tema"] for q in questoes)
+            conversa.registrar_evento(
+                conv["id"],
+                f"Você propôs {len(questoes)} questão(ões) sobre {temas}. "
+                f"O aluno vai respondê-las agora, dentro desta conversa.")
+
+    return {**r, "conversa_id": conv["id"], "titulo": conv["titulo"],
+            "questoes": questoes,
+            # `simulado_pedido` deixa a TELA decidir o que fazer com um pedido de
+            # prova cronometrada: ela tem a página do simulado, o servidor não
+            # deve abri-la por conta própria no meio de um chat.
+            "simulado_pedido": bool(p and p["formal"])}
 
 
 # ------------------------------------------------------------------ conversas

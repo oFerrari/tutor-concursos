@@ -551,6 +551,11 @@ def test_rotulo_corrigido_entra_no_indice_e_a_busca_acha(client, usuario):
 
     linha = db.exec1("SELECT texto, rotulo FROM chunk WHERE documento_id = %(d)s "
                      "ORDER BY ordem LIMIT 1", {"d": doc_id})
-    assert linha["rotulo"] == "Ciências Forenses. Papiloscopia"
+    # ASSUNTO PRIMEIRO: nome de disciplina muda entre editais ("Direito
+    # Administrativo" × "Noções de Direito Administrativo" × "... e Gestão
+    # Pública" — a PC-PR tem duas dessas ao mesmo tempo), e apostila rotulada
+    # com o nome de um edital deixaria de ser achada ao trocar de concurso. O
+    # assunto não tem esse problema.
+    assert linha["rotulo"] == "Papiloscopia. Ciências Forenses"
     assert not linha["texto"].startswith("Ciências Forenses"), \
         "o rótulo vazou pro texto exibido — o prompt leria isso como conteúdo"

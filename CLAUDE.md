@@ -87,6 +87,7 @@ core/rascunho.py           curadoria do edital: extrai pra rascunho, pessoa esco
 core/geracao.py            gera questão do ACERVO sob demanda e grava com proveniência
 core/conversa.py           conversa persistida do tutor + janela de histórico pro prompt
 core/assunto.py            o assunto em foco da conversa — a consulta que vai à BUSCA (PURO)
+core/pedido.py             o aluno pediu treino? quantas? simulado formal? — REGRA PURA que aciona a geração sem botão
 core/scheduler_regras.py   regras de promoção — FUNÇÕES PURAS
 core/scheduler.py          fila, registro, caderno de erros, meta — tudo por usuario_id
 core/simulado.py           prova sob condição de exame: sem dica, corrige no final

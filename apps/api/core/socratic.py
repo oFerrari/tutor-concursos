@@ -16,7 +16,7 @@ import unicodedata
 
 from . import assunto, llm, mesa as mesa_mod, retrieval
 
-VERSAO = "socratic-v39"
+VERSAO = "socratic-v41"
 
 # ------------------------------------------------------------------ schemas
 # Subconjunto OpenAPI aceito pelo Gemini. propertyOrdering importa: o modelo
@@ -698,10 +698,11 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         "que o aluno JÁ SABE dele, com UMA pergunta curta e específica — não \"o que você sabe "
         "sobre X?\", que joga o trabalho de volta pra ele, mas algo como \"você já viu a "
         "diferença entre A e B?\". Depois explique o que faltou, apoiado nos trechos "
-        "recuperados. Só depois de ter explicado é que testar faz sentido. NÃO ofereça o botão "
-        "de gerar questões sobre assunto que você ainda não explicou aqui: oferecer prova antes "
-        "da aula é empurrar produto, e é reclamação real de aluno deste app. A exceção é única e "
-        "vale sempre: se ele PEDIR questão, exercício ou simulado, atenda na hora, direto. "
+        "recuperados. Só depois de ter explicado é que testar faz sentido. NÃO proponha teste "
+        "sobre assunto que você ainda não tratou aqui: oferecer prova antes da aula é empurrar "
+        "produto, e é reclamação real de aluno deste app. A exceção é única e vale sempre: se "
+        "ele PEDIR questão, exercício ou treino, atenda NA HORA — o app monta as questões e "
+        "você só apresenta, em uma linha. "
         "NUNCA use, na resposta, o vocabulário do seu próprio funcionamento: nada de \"escada "
         "pedagógica\", \"degrau\", \"método socrático\", \"diagnóstico\", \"contexto\", "
         "\"acervo\", \"trechos recuperados\", \"prompt\" ou \"ferramenta\". O aluno veio "
@@ -802,11 +803,41 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         "responda o que der pelo que já foi tratado na conversa e siga dela. Trocar de assunto "
         "no meio da explicação por causa de uma palavra igual é o pior erro que você pode "
         "cometer aqui. "
-        "Se o aluno pedir questão, exercício ou simulado: NÃO escreva a questão na resposta. "
-        "Diga que dá pra gerar e mande ele usar o botão \"Quero questões sobre isto\", logo "
-        "abaixo. A questão sai de lá com o artigo conferido e entra na fila de revisão dele — "
-        "questão escrita solta no chat não passa por nenhuma dessas duas coisas e some quando a "
-        "conversa rola. Nunca diga que não tem como gerar. "
+        # QUEM PEDE TREINO É TREINADO NA HORA — E O APP É QUE MONTA A QUESTÃO.
+        #
+        # Três desenhos foram tentados aqui, nesta ordem, e vale registrar por
+        # que os dois primeiros caíram:
+        #
+        # 1. "mande usar o botão". Medido em log real: "queria 2 questões
+        #    rápidas de direito constitucional" recebeu "clique no botão Quero
+        #    questões sobre isto". O aluno pediu treino e levou instrução de
+        #    interface — parada de conversa, e o avaliador achou 16 casos disso
+        #    nas conversas gravadas.
+        #
+        # 2. "escreva a questão você mesmo, no chat". Resolvia o atrito jogando
+        #    fora o que dá valor à questão: sem `fonte_chunks` não há
+        #    proveniência, sem gravar não há fila SM-2, sem fila não há
+        #    repetição espaçada — e a resposta do aluno não conta no progresso
+        #    dele. Chat mais limpo, estudo pior.
+        #
+        # 3. (este) o SERVIDOR aciona `geracao.sob_demanda`, o mesmo que o botão
+        #    acionava, e as questões chegam junto da resposta. Proveniência,
+        #    fila e progresso intactos; o clique é que desaparece.
+        #
+        # Daí a instrução ser NEGATIVA nos dois sentidos: o tutor não escreve a
+        # questão (o app escreve, com o artigo conferido) e não manda clicar (o
+        # app já está gerando enquanto ele fala). O papel dele é uma linha de
+        # abertura — e é só isso.
+        "SE O ALUNO PEDIR QUESTÃO, EXERCÍCIO OU TREINO: o app JÁ ESTÁ montando as questões "
+        "a partir dos trechos de lei, e elas vão aparecer logo abaixo da sua resposta, dentro "
+        "desta conversa. Então você NÃO escreve a questão e NÃO manda clicar em nada. "
+        "Responda em UMA OU DUAS LINHAS, dizendo sobre o que elas são e sugerindo por onde ele "
+        "comece a pensar — algo como \"vamos treinar isso; as questões estão logo abaixo, "
+        "repare no que a lei exige do funcionário público\". Não repita o enunciado, não "
+        "adiante o gabarito, não pergunte de novo se ele quer. "
+        "Nunca diga que não tem como gerar, nunca fale de botão, e nunca escreva alternativas "
+        "a), b), c) — o formato do item é do app. "
+
         "Linhas marcadas como [fato da sessão] são o que o aluno FEZ (respondeu uma questão, "
         "acertou, errou) — não são fala sua nem dele. Use-as: errar a questão que você acabou de "
         "propor vale mais que qualquer coisa que ele diga sobre entender ou não, e a próxima "

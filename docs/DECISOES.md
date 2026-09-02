@@ -1141,6 +1141,53 @@ Chunk de LEI não mudou: `rotulo` é NULL, o `coalesce` devolve vazio e o tsvect
 sai idêntico. Verificado com `avaliar_retrieval.py` antes e depois — top1 21/32,
 top6 30/32 nas duas medições, e dispositivo 6/6, rubrica 4/4 intactos.
 
+**QUEM PEDE TREINO É TREINADO NA HORA, E O APP É QUE MONTA A QUESTÃO.** Três
+desenhos, nesta ordem, e vale registrar por que os dois primeiros caíram.
+
+1. **"mande usar o botão".** Log real: "queria 2 questões rápidas de direito
+   constitucional" recebeu "clique no botão Quero questões sobre isto". O aluno
+   pediu treino e levou instrução de interface — e a busca daquele turno tinha
+   devolvido CF 102 e CPP 649, então nem o botão entregaria o que ele pediu. O
+   `avaliar_chat.py --reprocessar` achou **16 casos** disso nas conversas
+   gravadas: era sistemático, não azar.
+
+2. **"o tutor escreve a questão no chat".** Resolve o atrito jogando fora o que
+   dá valor à questão: sem `fonte_chunks` não há proveniência, sem gravar não há
+   fila SM-2, sem fila não há repetição espaçada — e a resposta do aluno não
+   conta no progresso dele. Chat mais limpo, estudo pior. Recusado pelo dono nos
+   termos exatos: "não vamos sacrificar a proveniência, a fila do SM-2 e o
+   histórico de longo prazo".
+
+3. **O SERVIDOR aciona o gerador que o botão acionava.** `core/pedido.py`
+   reconhece o pedido na fala (regra pura, como `assunto.py` e `ritmo_regras.py`
+   — LLM aqui custaria a cota mais escassa do projeto e 1-2s em todo turno), e
+   `/perguntar` chama `geracao.sob_demanda` com o tema derivado no servidor.
+   Proveniência, gravação, fila e progresso **idênticos** ao caminho do botão. O
+   que desaparece é o clique.
+
+O tutor não escreve a questão e não menciona botão: o prompt manda responder em
+uma ou duas linhas apresentando o que vem abaixo. O botão continua existindo
+para SIMULADO FORMAL (prova cronometrada, correção no fim, caderno de erros) —
+`pedido.treino` devolve `formal: True` nesses casos e nada é gerado no chat,
+porque ali a pessoa quer a página do simulado, não um punhado de questões no
+meio da conversa.
+
+**Gerar dentro de `/perguntar` custa cota, e é deliberado.** O docstring de
+`/questoes/gerar` avisa que gerar "gasta cota de LLM e ESCREVE no acervo", e por
+isso nunca acontece dentro de um GET. Aqui continua sendo ação EXPLÍCITA do
+aluno: pedir questão numa frase é o mesmo ato que clicar era, e nada acontece se
+`pedido.treino` não reconhecer o pedido. Falha do gerador NÃO derruba o turno —
+vai `questoes: []` e o texto do tutor, que já existe e já está gravado.
+
+**O TEMA VEM DO HISTÓRICO ANTERIOR AO PEDIDO**, e isto foi um bug medido no
+próprio dia em que a mudança nasceu. Usando o histórico já atualizado, `em_foco`
+lia a frase do pedido — "me da 3 questoes disso" —, achava "disso" como palavra
+de conteúdo, e as três questões saíram sobre apropriação indébita, inquérito
+policial e usurpação numa conversa sobre **peculato**. Mesma classe do "vamos"
+que fez nascer o `core/assunto.py`: pedido de treino nunca nomeia o assunto, ele
+diz "disso". Com o histórico de antes, a primeira questão passou a ser Peculato
+(CP 312).
+
 ## Armadilhas do corpus (Planalto)
 
 - Quebra de linha no meio da frase; `normalizar_lei()` remonta.

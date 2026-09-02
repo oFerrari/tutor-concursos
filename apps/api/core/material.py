@@ -22,7 +22,7 @@ import re
 
 from . import chunking, db, embeddings
 
-VERSAO = "material-v5"
+VERSAO = "material-v6"
 
 LOTE = 32
 MIN_CHARS = 200
@@ -376,10 +376,32 @@ def texto_para_vetor(texto: str, disciplina: str | None, assunto: str | None) ->
     resolver um problema que a medição não aponta (`avaliar_retrieval.py`:
     dispositivo 6/6, rubrica 4/4).
 
+    O ASSUNTO VEM PRIMEIRO, E NUNCA SE DEPENDE DA DISCIPLINA SOZINHA. O nome da
+    matéria muda de edital pra edital — "Direito Administrativo", "Noções de
+    Direito Administrativo", "Direito Administrativo e Gestão Pública" são a
+    mesma gaveta com três nomes, e a PC-PR tem duas dessas ao mesmo tempo.
+    Apostila rotulada com o nome de um edital deixaria de ser encontrada ao
+    trocar de concurso, o que é o pior tipo de perda: silenciosa.
+    O assunto ("papiloscopia", "improbidade") não tem esse problema — é o que a
+    pessoa realmente quer estudar, e é a mesma razão pela qual
+    `assunto._com_assunto` já descarta nome de disciplina como assunto de busca:
+    disciplina é a gaveta, não o conteúdo.
+
+    Por isso o assunto abre o prefixo e é REPETIDO no fim: embedding é média, e
+    posição pesa pouco — repetir é o que de fato move o vetor na direção dele.
+    A disciplina fica no meio, como contexto, e sozinha nunca é o bastante.
+
     Sem rótulo devolve o texto intacto: `sha256` igual, cache aproveitado, nada
     reindexado sem motivo."""
-    rotulo = ". ".join(x.strip() for x in (disciplina, assunto) if x and x.strip())
-    return f"{rotulo}. {texto}" if rotulo else texto
+    a = (assunto or "").strip()
+    d = (disciplina or "").strip()
+    if a and d:
+        return f"{a}. {d}. {a}. {texto}"
+    if a:
+        return f"{a}. {a}. {texto}"
+    if d:
+        return f"{d}. {texto}"
+    return texto
 
 
 def indexar(documento_id: int, nome: str, dados: bytes) -> None:
@@ -418,7 +440,11 @@ def indexar(documento_id: int, nome: str, dados: bytes) -> None:
     # posição 2, mas "ciências forenses" ficou fora do top6, porque embedding é
     # média e o rótulo é curto perto do corpo. O lexical casa a palavra
     # independentemente do tamanho do trecho.
-    rotulo_lex = ". ".join(x for x in (rot.get("disciplina"), rot.get("assunto")) if x) or None
+    # Ordem espelha `texto_para_vetor`: assunto na frente. No tsvector a ordem
+    # não muda nada (é conjunto de lexemas), mas duas formações diferentes da
+    # mesma string é o começo de duas strings diferentes — e o `rotulo` é o que
+    # o teste compara.
+    rotulo_lex = ". ".join(x for x in (rot.get("assunto"), rot.get("disciplina")) if x) or None
 
     try:
         with db.conexao_isolada() as c:

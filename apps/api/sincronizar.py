@@ -663,7 +663,9 @@ def _materiais(pacote, uid, mesa_id, indexar: bool = True) -> tuple[int, int, in
                          # 025: mesmo rótulo que o upload grava, senão material
                          # que chegou pelo pull não responderia à busca por
                          # matéria e o que veio pelo upload sim.
-                         "rot": ". ".join(y for y in (disc, assu) if y) or None},
+                         # Assunto primeiro, igual a `material.texto_para_vetor`:
+                         # nome de disciplina muda entre editais, assunto não.
+                         "rot": ". ".join(y for y in (assu, disc) if y) or None},
                     )
             db.query(
                 "UPDATE documento SET status='pronto', erro=NULL, chunks_total=%(n)s WHERE id=%(d)s",

@@ -189,6 +189,19 @@ export default function PaginaTutor() {
         ...m,
         { autor: "tutor", texto: r.resposta, citadas: [...citadas], consultadas: [...consultadas] },
       ]);
+      // QUESTÕES QUE O SERVIDOR JÁ GEROU porque a fala pedia treino
+      // (`core/pedido.py`). Mesmo destino das que vinham do botão — `setGeradas`
+      // as desenha aqui mesmo, com `<DialogoQuestao>` —, e mesmo estado no
+      // banco: proveniência, gravação e fila SM-2. O clique é que sumiu.
+      //
+      // `caixa: 0` e `prox_revisao: ""` são o mesmo preenchimento que o caminho
+      // do botão faz: questão recém-criada não tem progresso ainda, e é a fila
+      // que passa a contá-la.
+      if (r.questoes?.length) {
+        setGeradas(
+          r.questoes.map((q) => ({ ...q, caixa: 0, prox_revisao: "" }) as Questao)
+        );
+      }
     } catch (err) {
       if (err instanceof ErroApi && err.status === 401) {
         sair();

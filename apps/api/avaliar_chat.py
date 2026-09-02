@@ -87,11 +87,11 @@ from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
-from core import assunto, auth, conversa, db, llm, mesa, retrieval, socratic
+from core import assunto, auth, conversa, db, llm, mesa, pedido, retrieval, socratic
 from core.config import CLI_USUARIO_EMAIL, EMBEDDING_MODEL
 from core.llm import ErroLLM
 
-VERSAO = "avaliar-chat-v16"
+VERSAO = "avaliar-chat-v18"
 
 # Conta descartável, como manda o AGENTS.md: nada aqui pode encostar na conta
 # real. O `ON DELETE CASCADE` da 009 limpa tudo de uma vez em `--limpar`.
@@ -377,6 +377,13 @@ RE_AUTORIDADE = re.compile(
     r"(?i)\b(art\w*\.?\s*\d|lei\s|leis\s|c[óo]digo|constitui[çc][ãa]o|s[úu]mula|"
     r"jurisprud[êe]ncia|STF|STJ|§|inciso|par[áa]grafo|decreto|estatuto)\b")
 
+# Quem reconhece pedido de treino é `core/pedido.py`, importado e não copiado:
+# é a MESMA regra que faz a API gerar a questão, e o avaliador não pode divergir
+# de quem ele avalia. Escrevi a cópia aqui primeiro e ela já divergia — deixava
+# passar "me dá uma questão disso" e não reconhecia "simulado".
+RE_MANDA_BOTAO = re.compile(r"(?i)quero quest[õo]es sobre isto|clique no bot[ãa]o|"
+                            r"use o bot[ãa]o|bot[ãa]o (?:abaixo|logo abaixo)")
+
 RE_ALTERNATIVA = re.compile(r"^\s*[a-eA-E]\s*[\)\.]\s+\S", re.MULTILINE)
 RE_ASSINALE = re.compile(r"(?i)assinale a (alternativa|op[çc][ãa]o)")
 RE_COLCHETE = re.compile(r"\[([^\]]+)\]")
@@ -406,6 +413,22 @@ def checar(fala: str, resposta: str, chunks: list[dict],
     #    não tem proveniência, não entra na fila e some quando a conversa rola.
     if RE_ALTERNATIVA.search(resposta) or RE_ASSINALE.search(resposta):
         achados.append(("erro", "escreveu questão de múltipla escolha na resposta"))
+
+    # 2b. MANDOU CLICAR EM VEZ DE PERGUNTAR (socratic-v40).
+    #
+    #     Log real que motivou a regra: "queria 2 questões rápidas de direito
+    #     constitucional" recebeu "clique no botão Quero questões sobre isto".
+    #     O aluno pediu treino e levou instrução de interface — e a busca do
+    #     turno tinha devolvido CF 102 e CPP 649, então nem o botão entregaria
+    #     o que ele pediu.
+    #
+    #     A ressalva é a mesma do prompt: pedido de SIMULADO FORMAL (prova,
+    #     caderno de erros, correção automática) continua sendo caso do botão,
+    #     porque ali proveniência e fila SM-2 é o que a pessoa quer.
+    p_treino = pedido.treino(fala)
+    if p_treino and not p_treino["formal"] and RE_MANDA_BOTAO.search(resposta):
+        achados.append(("erro", "aluno pediu treino e a resposta mandou clicar no botão "
+                                "em vez de fazer a pergunta no chat"))
 
     # 3. Lei afirmada sem trecho por trás. É a única coisa que este tutor não
     #    pode fazer, e a instrução de "nenhum trecho recuperado" existe pra isso.
@@ -531,7 +554,7 @@ def checar(fala: str, resposta: str, chunks: list[dict],
     #    clicar, não responder, e o prompt manda exatamente isso. O aviso saltava
     #    em todo pedido de questão, ou seja, num acerto — e aviso que dispara em
     #    acerto ensina você a ignorar avisos. Mesma ressalva já feita na ESCALA.
-    if "?" not in resposta[-250:] and "quero questões sobre isto" not in baixo:
+    if "?" not in resposta[-250:] and not RE_MANDA_BOTAO.search(resposta):
         achados.append(("aviso", "não termina com pergunta"))
 
     return achados
@@ -572,7 +595,7 @@ def checar(fala: str, resposta: str, chunks: list[dict],
 # Separada de `VERSAO` de propósito: mexer no spinner ou na cor da tabela não
 # invalida histórico nenhum, e obrigar a isso faria a série reiniciar por
 # cosmético. Suba SÓ quando mudar dimensão, âncora ou o texto do juiz.
-ESCALA_VERSAO = "escala-v4"
+ESCALA_VERSAO = "escala-v5"
 
 ESCALA = [
     ("proporcao", "Tamanho proporcional à fala do aluno",
@@ -633,9 +656,10 @@ ESCALA = [
      " 'acervo', 'diagnóstico', 'trechos recuperados', 'contexto', 'prompt')"
      " · 2 = natural, com um deslize de jargão"
      " · 4 = nada no texto denuncia que existe um app por baixo."
-     " RESSALVA: mandar usar o botão \"Quero questões sobre isto\" é recurso"
-     " deliberado do produto e NÃO desconta ponto aqui — desconte só se ele"
-     " descrever COMO o app funciona por dentro"),
+     " RESSALVA: apontar o botão \"Quero questões sobre isto\" para quem pediu SIMULADO"
+     " FORMAL é recurso deliberado e não desconta ponto; desconte se ele descrever COMO o"
+     " app funciona por dentro, ou se mandar clicar em botão para quem só pediu treino —"
+     " nesse caso o certo era fazer a pergunta no chat"),
 
     ("avanco", "Cada turno move a conversa adiante",
      "0 = fecha mensagens seguidas com o MESMO convite, ou repete explicação que já"
