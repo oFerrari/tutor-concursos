@@ -133,115 +133,10 @@ histórico do projeto mora em `docs/`, e vale mais que qualquer resumo dele:
 Regra que vale pros dois: decisão registrada com MEDIÇÃO só se derruba com
 outra medição, não com opinião.
 
-**A última dica não sai automática (regra de produto, não número).** O prompt do
-gerador manda a terceira dica "quase entregar", e ela entrega mesmo — medido no
-dado real: gabarito "A reparação do dano que precede à sentença irrecorrível
-extingue a punibilidade do agente" contra dica 3 "Antes da irrecorribilidade
-extingue-se a punibilidade". A dica cumpriu o papel dela; o defeito era ela
-aparecer SOZINHA a cada erro, entregando a resposta a quem não pediu — e ainda
-pontuando por isso. Relatado como "na última dica ele me deu a resposta".
-
-Detectar por texto se a dica vazou o gabarito foi considerado e recusado:
-calibrado contra esse caso, "extingue a punibilidade" × "extingue-se a
-punibilidade" não casa por substring, e por sobreposição de palavras de conteúdo
-a dica LEGÍTIMA (que é próxima por desenho) cai junto. `DICAS_AUTOMATICAS =
-MAX_DICAS - 1` é regra, e regra não erra — é a mesma decisão central de
-`socratic.py`, a retenção do gabarito imposta em código e não confiada ao
-prompt. A dica continua acessível: quem quiser pede, e aí conta como PEDIDA,
-entrando na penalidade. Vale nas duas interfaces (`DialogoQuestao.tsx` e
-`chat.py`), porque MAX_DICAS/MAX_TENTATIVAS sempre foram regra compartilhada.
-
-**O rótulo do resultado contava a coisa errada.** "3 erro(s), 1 dica(s)
-pedida(s)" foi lido como contagem quebrada, com razão: o aluno tinha VISTO três
-dicas e o texto falava de uma. Dica pedida e dica mostrada são números
-diferentes de propósito (só a pedida entra na penalidade), mas esconder o
-segundo faz o primeiro parecer defeito. Agora sai "3 erros · 3 dicas vistas (1
-pedida)", e o que não existe não é mencionado.
-
-**"Pausar e entender isto" era um clique sem efeito.** `<Intervencao>` fazia
-`router.push("/tutor?q=...")`, e o caso mais comum é a intervenção aparecer
-DENTRO do /tutor (a questão que gerou os 3 erros costuma ser a embutida no chat)
-— e o Next não remonta a rota pra ela mesma. É o mesmo defeito que o botão "Nova
-conversa" da sidebar já tinha tido, e a saída é a mesma: CustomEvent pra página
-irmã. Manda pra conversa ATUAL em vez de abrir uma nova, porque "entender ISTO"
-só quer dizer algo com o que acabou de acontecer na tela.
-
-**A rolagem do chat mexe no CONTAINER, não em `scrollIntoView`.** Há dois
-scrollers aninhados (o `<main>` do AppShell e o da página), e `scrollIntoView`
-escolhe sozinho qual ancestral mover — foi por isso que a rolagem passou no meu
-teste e não na tela. `irAoFim` escreve `scrollTop` do container certo, com dois
-`requestAnimationFrame` (o primeiro roda antes de o React pintar, e aí
-`scrollHeight` ainda é o de antes). Rola ao MANDAR também, não só ao receber: o
-balão do aluno mais o "pensando" já empurram o fim pra fora da tela.
-
-**O prompt vazou o próprio andaime, e a culpa é do rótulo.** O bloco de ordem de
-ensino começava com "ESCADA PEDAGÓGICA" em maiúsculas, e o modelo passou a
-NARRAR o método: uma resposta real abriu com "Perfeito, vamos voltar um degrau
-na escada pedagógica". É o mesmo defeito do `[DESEMPENHO REAL DO ALUNO]` citado
-como fonte, pela mesma causa — nome próprio dentro do prompt vira vocabulário do
-modelo. A instrução perdeu o nome, e a proibição de nomear passou a ser
-explícita (nada de "escada", "degrau", "método socrático", "diagnóstico",
-"trechos recuperados", "acervo"): o aluno veio estudar Direito, não ler o manual
-do app.
-
-Junto entraram duas regras de tom, as duas de reclamação real: **responder no
-TAMANHO da pergunta** (um "boa noite" recebia um parágrafo sobre eficácia das
-normas; agora recebe uma linha e uma pergunta aberta citando as disciplinas do
-edital) e **um micro-tópico por resposta** (explicar direitos sociais e emendar
-competência concorrente no parágrafo seguinte confunde em vez de ensinar).
-
-**A "metralhadora de assuntos" não era só tom — era a busca sem assunto.** No
-turno do "boa noite" a busca devolveu CP art. 150, CPP art. 569 e Lei 8.112 art.
-75, e o modelo falou do que apareceu no prato dele. Instrução de foco trata o
-sintoma; a causa era a consulta.
-
-**E a consulta amnésica escapou por outra fresta: `em_foco` excluía o TUTOR.**
-Conversa real: aluno "boa noite" → tutor propõe eficácia plena × limitada →
-aluno "podemos testar eu nao sei se ja estou bom". Nenhuma fala do ALUNO nomeia
-matéria, então a consulta virou "podemos testar eu nao sei se ja estou bom boa
-noite" e as questões geradas foram CF art. 200 (SUS) e CP art. 94
-(reabilitação) — o mesmo estrago do "vamos".
-
-A lição NÃO é "faltou palavra na lista `VAZIAS`". Nenhuma enumeração cobre toda
-forma de dizer "vamos lá", e a lista já cresceu duas vezes atrás de caso real. O
-defeito era estrutural: **quando o aluno não nomeia o assunto, quem nomeou foi o
-tutor**, e a proposta dele É o assunto da conversa. Excluí-lo sempre
-transformava "o aluno aceitou o convite" em "ninguém falou de nada". Agora é
-FALLBACK (não fonte de igual peso — a razão original de excluí-lo continua
-valendo quando o aluno JÁ disse do que quer falar), e há teste separando os dois
-casos.
-
-**E NOME DE DISCIPLINA não conta como assunto no fallback.** Isso apareceu ao
-consertar o tom: com o prompt novo, a resposta a um "boa noite" é "por onde você
-quer começar, Direito Constitucional ou Direito Penal?" — curta e certa. Só que
-o fallback achava "assunto" ali ("direito", "constitucional", "penal") e a busca
-devolvia artigo sorteado DENTRO da matéria: CPP art. 2º pra quem não pediu nada.
-Errado de um jeito pior que vazio, porque tem cara de acerto. Disciplina é a
-gaveta, não o que a pessoa quer estudar — o prompt já a recebe pelo "Contexto do
-aluno". Sem assunto de verdade, o certo é NÃO buscar, e aí a instrução de
-"nenhum trecho recuperado" manda o tutor perguntar de que assunto se trata.
-
-Lido nos três turnos reais depois da mudança: "boa noite" → uma linha e pergunta
-aberta, zero busca; "podemos testar" → pergunta de diagnóstico, zero busca, zero
-lei afirmada sem fonte; "quero eficácia das normas constitucionais" → pergunta
-certa sobre aplicabilidade imediata × dependente de lei. Nenhum vocabulário de
-sistema em nenhuma das três.
-
-**O terceiro botão com o mesmo defeito de rota.** Clicar num recente estando JÁ
-no /tutor não recuperava a conversa: o efeito que lê `?c=` roda na MONTAGEM, e ir
-de `/tutor?c=1` pra `/tutor?c=413` não remonta a rota nem muda as dependências
-dele — e o `replaceState` ainda apaga a query, então nem dependência nova
-resolveria. O log mostrava `GET /tutor?c=413 200`: a navegação acontecia, a
-leitura não. Depois de "Nova conversa" e "Pausar e entender isto", é a terceira
-vez — o padrão de conserto (CustomEvent da sidebar pra página irmã) já era
-conhecido, e agora `abrirConversa` tem os dois gatilhos.
-
-**Fonte repetida virava chave repetida no React.** O caminho AO VIVO deduplicava
-as fontes com `Set`; o de REABRIR não, e o mesmo documento aparece em vários
-chunks — `referencia()` devolve só o título quando não há artigo (material do
-aluno, tipo `historico`), então a etiqueta repetia. O React reclamou no log com
-a chave literal (`curso-392722-aula-04-2787-completo`). Dois caminhos para a
-mesma coisa é como um deles fica sem a regra do outro.
+- **Relatos de tela e de prompt** (dica automática, rótulo do resultado, rolagem
+  do chat, vocabulário do prompt vazando, consulta amnésica, botões que não
+  remontavam a rota) foram para `docs/DECISOES.md` — este arquivo é carregado em
+  todo prompt, e narrativa longa cobra esse preço a cada mensagem.
 
 ## Invariantes (violação = bug)
 
@@ -282,51 +177,19 @@ mesma coisa é como um deles fica sem a regra do outro.
   substitui a leitura — dá o texto pronto pra ler, e um roteiro fixo com as
   falas que causaram cada regressão, pra comparar antes e depois. Custa cota:
   7 chamadas no padrão, o dobro dos turnos com `--livre`.
-- **`.logs/defeitos.md` só existe quando há defeito.** Rodada limpa não escreve
-  nada, nem com o juiz ligado — a AUSÊNCIA do arquivo é o sinal de "está limpo".
-  Antes ele gravava toda rodada que tivesse julgamento, e como o juiz é o padrão
-  isso queria dizer sempre: a bateria de 9 cenários deixou 9 seções, 8 delas com
-  zero erro. Arquivo chamado `defeitos` que lista rodadas não responde "o que
-  ainda está quebrado?". `--refazer` e `--cenario todos` reescrevem o arquivo do
-  zero (guardando o antigo em `.anterior`); rodada única e limpa não o apaga —
-  ele pode ter o defeito de outro cenário — mas avisa na tela que é velho.
-- **CONSERTOU? RODE DE NOVO E MOSTRE OS DOIS NÚMEROS.** Conserto de checagem se
-  prova com `--reprocessar` (texto idêntico, grátis). Conserto de PROMPT só se
-  prova com conversa nova, e o `.logs/defeitos.md` traz no topo o comando exato
-  que reproduz aquela rodada — cenário, mesa e falas. Compare a CONTAGEM DE
-  ERROS antes × depois, 3 rodadas de cada; a nota da escala não serve (abaixo).
-  Exemplo do que basta dizer: "acervo: 2/1/1 erros no v35 → 0/0/0 no v36".
-- **O avaliador passa pelo CAMINHO DE PRODUÇÃO, não por `socratic.explicar`
-  direto** (`_turno` em `avaliar_chat.py`). Deixou de ser cosmético quando o
-  pedido de treino passou a ser atendido pelo servidor: chamando só `explicar`,
-  ele via a linha de abertura do tutor e não via se a questão foi gerada — cego
-  justamente para o comportamento novo. Ao acrescentar caminho na rota, espelhe
-  aqui, ou o relatório mede outra coisa.
-- **Duas verificações diferentes, e confundi-las engana.** `--reprocessar` roda
-  as CHECAGENS de hoje sobre as ~140 respostas já gravadas em `.logs/*.json`:
-  não gasta LLM nem banco, e prova se uma regra nova só encontra o que devia.
-  Não diz nada sobre o PROMPT — aquelas respostas são de antes do conserto. Para
-  o prompt, só conversa nova: `--cenario todos`. Ao mexer numa checagem, rode o
-  `--reprocessar` ANTES de confiar nela: a checagem 3c nasceu apontando "invocou
-  art. 312 em prosa" numa resposta que só dizia "use o botão", e foi o corpus
-  que mostrou.
-- **A NOTA da escala não separa versões de prompt — MEDIDO, ver
-  `docs/LIMITACOES.md`.** Três rodadas da mesma entrada deram 36, 93 e 57; o
-  mesmo transcript julgado duas vezes a temperatura 0 deu 86 e 100. Decida pela
-  CONTAGEM DE ERROS DE REGRA (código, reprodutível: 2/1/1 no `socratic-v35` → 0/0/0
-  no `v36`) e use o "o que mais atrapalha" do juiz só como ponteiro pra ir ler o
-  turno. Não aprove nem reprove um prompt pela nota.
-- **A ESCALA (`ESCALA` em `avaliar_chat.py`) é opinião ancorada, não medição.**
-  Sete dimensões de 0 a 4, cada nível descrito por um comportamento real deste
-  app, evidência obrigatória por nota, e o total normalizado em 0-100 porque
-  `descobrir_antes` pode ser n/a. Três coisas que ela exige pra valer alguma
-  coisa: (1) **uma rodada é ruído** — compare 3+ do mesmo roteiro; (2) o juiz é
-  Gemini, igual ao avaliado, e não estranha o que ele mesmo escreveria; (3) nota
-  só se compara com nota da MESMA régua, e por isso `ESCALA_VERSAO` é separada
-  de `VERSAO` — suba-a ao mexer em dimensão ou âncora, e o placar passa a
-  agrupar à parte. Decisão de produto NÃO é defeito: a instrução do botão "Quero
-  questões sobre isto" está ressalvada na âncora, porque sem isso toda rodada
-  ficava presa em ~60 por uma escolha já registrada.
+- **Avaliar o chat: `./testar.sh`.** Detalhe e medições em `docs/LIMITACOES.md`
+  ("a nota da escala"); o essencial em cinco linhas:
+  · `--reprocessar` roda as checagens sobre as ~140 respostas gravadas (grátis,
+    sem banco) e prova se uma regra nova só encontra o que devia — rode ANTES de
+    confiar numa checagem nova;
+  · `--cenario todos` é a bateria; `--refazer` repete o que o defeitos.md
+    registrou e mostra o antes × depois;
+  · `.logs/defeitos.md` só existe quando há defeito — a AUSÊNCIA é o sinal de
+    limpo, e cada seção traz no topo o comando que reproduz a rodada;
+  · decida pela CONTAGEM DE ERROS, nunca pela nota de 0-100 (ela não separa
+    versões de prompt: 36, 93 e 57 na mesma entrada — medido);
+  · o avaliador vai pelo `POST /perguntar`, o caminho de produção. Ao
+    acrescentar caminho na rota, ele acompanha sozinho.
 - Pra conferir a TELA com dado plausível (não só o terminal):
   `python semear_demo.py --email conta@teste --senha 12345678`. `simular.py`
   responde se a REGRA se sustenta; ele não toca no banco, então não diz se

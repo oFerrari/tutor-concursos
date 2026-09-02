@@ -33,7 +33,7 @@ Aqui só se responde "ele quer treinar, e quantas".
 """
 import re
 
-VERSAO = "pedido-v1"
+VERSAO = "pedido-v2"
 
 # Pedido de TREINO. `quest(?:[ãa]o|[õo]es)` e não `quest[õo]es?`: o singular
 # leva "ã" e o plural "õ", e quem tem pressa digita sem acento — a primeira
@@ -68,21 +68,79 @@ MAX = 5
 PADRAO = 2
 
 
+RE_QUANTIDADE_SOLTA = re.compile(
+    r"(?i)\b(\d{1,2}|" + "|".join(NUMERO) + r")\b")
+
+
 def quantas(fala: str) -> int:
     """Quantas questões a fala pede. `PADRAO` quando ela não diz.
 
     Dois é o padrão e não um: "me dá questões" está no plural, e uma questão só
     encerra o treino antes de ele começar. Cinco é o teto porque cada questão
     custa uma chamada de LLM e o aluno espera por todas antes de ver a primeira."""
-    m = RE_QUANTIDADE.search(fala or "")
+    # Primeiro a forma completa ("3 questões"), que é inequívoca. Só depois o
+    # número solto — em "agora só uma" não há substantivo pra ancorar, e ler o
+    # primeiro número da frase seria errado em "art. 312" se este caminho
+    # valesse fora do contexto de treino (não vale: ver `RE_CONTINUA`).
+    m = RE_QUANTIDADE.search(fala or "") or RE_QUANTIDADE_SOLTA.search(fala or "")
     if not m:
+        # "outra"/"outro" no singular é UMA a mais, não o padrão de duas.
+        if re.search(r"(?i)\boutr[ao]\b", fala or ""):
+            return 1
         return PADRAO
     bruto = m.group(1).lower()
     n = NUMERO.get(bruto, 0) or (int(bruto) if bruto.isdigit() else 0)
     return max(1, min(n or PADRAO, MAX))
 
 
-def treino(fala: str) -> dict | None:
+# CONTINUAÇÃO de um pedido de treino. Fala que só ajusta a quantidade ou pede
+# mais do mesmo, sem repetir a palavra "questão" — é como se fala depois de já
+# ter recebido um lote.
+#
+# Medido no cenário `quantas`: depois de "me da 4 questoes", as falas "agora só
+# uma" e "manda cinco" não geravam NADA, porque nenhuma contém as palavras da
+# `RE_TREINO`. O aluno acha que pediu; o app acha que ele mudou de assunto.
+#
+# Não é lista de sinônimos: é a forma ELÍPTICA, que só quer dizer isso DEPOIS de
+# um turno de treino. Fora desse contexto, "manda cinco" não é pedido de
+# questão — e por isso `apos_treino` é obrigatório pra este caminho valer.
+RE_CONTINUA = re.compile(
+    r"(?i)^\s*(?:e\s+|agora\s+|entao\s+|então\s+|ok,?\s+)?"
+    r"(?:mais|manda|mande|quero|vai|va|vá|s[óo]|apenas|de novo|denovo|outra|outras)?"
+    r"[\s,]*(?:\d{1,2}|" + "|".join(NUMERO) + r"|outra|outras|mais)\b")
+
+
+def veio_de_treino(historico: list[dict] | None) -> bool:
+    """A última fala do ALUNO já era pedido de treino?
+
+    É o contexto que `treino(..., apos_treino=True)` exige, e mora aqui pra que
+    a rota e o avaliador não tenham cada um a sua ideia de "o turno anterior era
+    treino" — o erro que este projeto já cometeu com `diz_assunto`, `e_eco` e
+    `com_fonte` no mesmo dia.
+
+    SEGUE A CORRENTE, e a primeira versão não seguia — olhava só a última fala
+    do aluno e exigia dela um pedido COMPLETO. Medido no cenário `quantas`: a
+    conversa era "me da 4 questoes" → "agora só uma" → "manda cinco", e a
+    terceira não gerava nada, porque a anterior a ela ("agora só uma") era
+    elíptica e não contava como treino. A corrente arrebentava no segundo elo.
+
+    Anda de trás pra frente pelas falas do aluno: para com `True` no primeiro
+    pedido completo, e com `False` na primeira fala que não é nem pedido nem
+    continuação. Ou seja, "me explica melhor" no meio ENCERRA a sequência — que
+    é o certo: depois de voltar a explicar, "manda cinco" já não é pedido de
+    questão."""
+    for m in reversed(historico or []):
+        if m.get("autor") != "aluno":
+            continue
+        fala = m.get("texto") or ""
+        if treino(fala) is not None:
+            return True
+        if not RE_CONTINUA.match(fala.strip()):
+            return False
+    return False
+
+
+def treino(fala: str, apos_treino: bool = False) -> dict | None:
     """
     `None` quando a fala não pede treino. Senão, o pedido decodificado:
     `{"quantidade": n, "tipo": ... | None, "formal": bool}`.
@@ -98,8 +156,12 @@ def treino(fala: str) -> dict | None:
     # "quero um simulado formal" devolvia `None` — o pedido mais explícito de
     # todos passava como conversa comum. Simulado e prova não contêm a palavra
     # "questão", que era o que a regex procurava.
-    if not fala or not (RE_TREINO.search(fala) or RE_FORMAL.search(fala)):
+    if not fala:
         return None
+    if not (RE_TREINO.search(fala) or RE_FORMAL.search(fala)):
+        # Só a forma elíptica, e só logo depois de um turno de treino.
+        if not (apos_treino and RE_CONTINUA.match(fala.strip())):
+            return None
     return {"quantidade": quantas(fala),
             "tipo": "certo_errado" if RE_CERTO_ERRADO.search(fala) else None,
             "formal": bool(RE_FORMAL.search(fala))}

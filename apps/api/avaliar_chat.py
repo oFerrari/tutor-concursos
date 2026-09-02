@@ -92,7 +92,7 @@ from core import (assunto, auth, conversa, db, geracao, llm, mesa, pedido,
 from core.config import CLI_USUARIO_EMAIL, EMBEDDING_MODEL
 from core.llm import ErroLLM
 
-VERSAO = "avaliar-chat-v20"
+VERSAO = "avaliar-chat-v21"
 
 # Conta descartável, como manda o AGENTS.md: nada aqui pode encostar na conta
 # real. O `ON DELETE CASCADE` da 009 limpa tudo de uma vez em `--limpar`.
@@ -208,6 +208,17 @@ CENARIOS: dict[str, tuple[str, list[str]]] = {
          "me da 3 questoes disso",
          "agora 2 itens certo ou errado",
          "quero um simulado formal cronometrado"]),
+
+    # Cenário CURTO e focado num ponto só: a QUANTIDADE pedida é respeitada.
+    # O `pede_treino` cobre o caminho inteiro (formato, simulado formal, tema
+    # herdado); este existe pra conferir o número, que é o que se pede na
+    # linguagem de todo dia — "me dá 4", "só uma", "cinco".
+    "quantas": (
+        "a quantidade pedida é a quantidade entregue, em dígito e por extenso",
+        ["quero estudar peculato",
+         "me da 4 questoes",
+         "agora só uma",
+         "manda cinco"]),
 
     "desanimo": (
         "desabafo, não matéria: pede tom, não conteúdo",
@@ -440,7 +451,7 @@ def checar(fala: str, resposta: str, chunks: list[dict],
     #     A ressalva é a mesma do prompt: pedido de SIMULADO FORMAL (prova,
     #     caderno de erros, correção automática) continua sendo caso do botão,
     #     porque ali proveniência e fila SM-2 é o que a pessoa quer.
-    p_treino = pedido.treino(fala)
+    p_treino = pedido.treino(fala, apos_treino=pedido.veio_de_treino(historico))
     if p_treino and not p_treino["formal"] and RE_MANDA_BOTAO.search(resposta):
         achados.append(("erro", "aluno pediu treino e a resposta mandou clicar no botão "
                                 "em vez de o app gerar a questão"))
@@ -814,34 +825,44 @@ def nota_geral(julgamento: dict) -> tuple[int, int]:
 
 # ══════════════════════════════════════════════════════════════════ a rodada
 
-def _turno(uid: int, m: dict, conv: dict, fala: str,
-           historico: list[dict], perfil: dict) -> dict:
-    """Um turno como a ROTA faz, não como `socratic.explicar` faz.
+def _cliente():
+    """Um cliente HTTP em processo, apontado pra própria API.
 
-    A diferença deixou de ser cosmética quando o pedido de treino passou a ser
-    atendido pelo SERVIDOR (`core/pedido.py` + `geracao.sob_demanda`): chamando
-    só `explicar`, o avaliador via a linha de abertura do tutor e não via se as
-    questões foram geradas — ou seja, ficava cego justamente para o
-    comportamento novo. Um avaliador que não passa pelo caminho de produção
-    mede outra coisa.
+    `TestClient` e não `httpx` contra `localhost`: assim não é preciso ter o
+    uvicorn de pé pra avaliar, e — o que importa mais — o `Observador` continua
+    valendo, porque os monkeypatches de `retrieval` vivem NESTE processo. Contra
+    um servidor separado a instrumentação não veria nada.
 
-    Reproduz a ordem da rota, e a ordem importa: o tema do treino sai do
-    histórico ANTERIOR ao pedido (por isso `historico` vem por parâmetro, já
-    capturado antes da gravação da fala), e falha do gerador não derruba o
-    turno — vai `questoes: []` e a resposta do tutor, que já existe.
-    """
-    r = socratic.explicar(fala, uid, m["disciplinas"], m, historico, perfil)
-    questoes: list[dict] = []
-    p = pedido.treino(fala)
-    if p and not p["formal"]:
-        tema = assunto.em_foco(historico, disciplinas=m["disciplinas"])
-        try:
-            tipo = p["tipo"] or geracao.tipo_da_banca(m.get("banca"))
-            questoes = geracao.sob_demanda(m["disciplinas"], tema,
-                                           p["quantidade"], tipo)["questoes"]
-        except (geracao.SemMaterial, ErroLLM):
-            questoes = []
-    return {**r, "questoes": questoes, "pedido": p}
+    Import tardio: `fastapi.testclient` puxa o `starlette` de teste, e o
+    `--placar`/`--reprocessar` não precisam de nada disso."""
+    from fastapi.testclient import TestClient
+    import api as api_mod
+    return TestClient(api_mod.app)
+
+
+def _turno(cliente, cab: dict, conversa_id: int | None, fala: str) -> dict:
+    """Um turno pelo `POST /perguntar` — a MESMA rota que o chat do tutor usa.
+
+    A primeira versão disto reproduzia a lógica da rota aqui dentro (chamava
+    `socratic.explicar` e depois repetia o `pedido.treino` + `sob_demanda`). Era
+    a duplicação de sempre, e já estava divergindo: quem avalia não pode ter a
+    própria cópia de quem é avaliado, porque a cópia envelhece calada e o
+    relatório passa a descrever um sistema que não existe.
+
+    Agora vai pela rota, e o que se ganha é tudo o que a rota faz e a cópia não
+    fazia: a conversa é criada e gravada por ela, o evento de "propus N
+    questões" entra na linha do tempo, e o `X-Mesa-Id` percorre o mesmo caminho
+    que percorre no navegador. `503` do LLM sobe como `ErroLLM` pra que o laço
+    de fora trate igual ao de antes."""
+    corpo = {"pergunta": fala}
+    if conversa_id is not None:
+        corpo["conversa_id"] = conversa_id
+    r = cliente.post("/perguntar", json=corpo, headers=cab)
+    if r.status_code == 503:
+        raise ErroLLM(r.json().get("detail", "LLM indisponível"))
+    if r.status_code != 200:
+        raise ErroLLM(f"POST /perguntar devolveu {r.status_code}: {r.text[:200]}")
+    return r.json()
 
 
 def imprimir_fala(n: int, fala: str) -> None:
@@ -944,8 +965,14 @@ def rodar(falas: list[str] | None, persona: str, n_turnos: int,
         m = mesa.contexto(uid, escolhida["id"])
     else:
         m = mesa.contexto(uid)
-    perfil = auth.perfil(uid)
-    conv = conversa.criar(uid, m["id"], "avaliação automática")
+    # A CONVERSA É DA ROTA, não daqui. `POST /perguntar` cria quando não recebe
+    # `conversa_id` e grava os dois lados do turno — criar uma por fora deixaria
+    # duas conversas por rodada, e a segunda sem as mensagens.
+    cliente = _cliente()
+    cab = {"Authorization": f"Bearer {auth.emitir_token(uid)}"}
+    if m.get("id"):
+        cab["X-Mesa-Id"] = str(m["id"])
+    conversa_id: int | None = None
 
     # O rótulo entra no placar e é o que torna duas linhas COMPARÁVEIS: nota de
     # roteiro fixo não se compara com nota de conversa livre, e roteiro seu não
@@ -995,18 +1022,20 @@ def rodar(falas: list[str] | None, persona: str, n_turnos: int,
                     break
             imprimir_fala(i + 1, fala)
 
-            historico = conversa.historico_para_prompt(conv["id"])
-            conversa.gravar(conv["id"], "aluno", fala)
+            # Histórico ANTES do turno: é o que a rota vai mandar ao prompt, e é
+            # contra ele que `e_eco` decide. Lido depois, já teria a fala nova.
+            historico = (conversa.historico_para_prompt(conversa_id)
+                         if conversa_id is not None else [])
             atual = obs.novo_turno()
             inicio = time.monotonic()
             try:
-                with console.status("[dim]buscando e chamando o tutor…", spinner="dots"):
-                    r = _turno(uid, m, conv, fala, historico, perfil)
+                with console.status("[dim]POST /perguntar…", spinner="dots"):
+                    r = _turno(cliente, cab, conversa_id, fala)
             except ErroLLM as e:
                 console.print(f"[red]LLM indisponível no turno {i+1}: {e}[/red]")
                 break
             segundos = time.monotonic() - inicio
-            conversa.gravar(conv["id"], "tutor", r["resposta"])
+            conversa_id = r["conversa_id"]
             atual["questoes"] = r.get("questoes") or []
 
             achados = checar(fala, r["resposta"], r["fontes"], historico,

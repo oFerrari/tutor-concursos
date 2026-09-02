@@ -297,7 +297,11 @@ def pede_assunto(fala: str | None) -> bool:
     #
     # Quem pede algo retomou a iniciativa, por definição — é a mesma leitura
     # que `PEDIDO` já faz de "quero", "explica", "vamos ver".
-    if pedido.treino(fala):
+    # `apos_treino=True` de propósito: aqui a pergunta é "esta fala retoma a
+    # iniciativa?", e "manda cinco" retoma tanto quanto "me dá 5 questões". O
+    # risco de errar pra mais é baixo — a fala continua saindo das candidatas a
+    # ASSUNTO em `em_foco`, que é onde o estrago aconteceria.
+    if pedido.treino(fala, apos_treino=True):
         return True
     cruas = {_sem_acento(x) for x in RE_PALAVRA.findall(fala.lower())}
     return bool(PEDIDO & cruas)
@@ -521,8 +525,8 @@ def em_foco(turnos: list[dict] | None = None, pergunta: str | None = None,
     # Com os pedidos fora, `em_foco` alcança "quero estudar peculato", que é o
     # que a conversa é. Mesmo espírito de `e_eco`: a fala que não propõe assunto
     # não deve decidir de qual artigo se cobra.
-    do_aluno = [f for f in falas_de("aluno") if not pedido.treino(f)]
-    if pergunta and not pedido.treino(pergunta):
+    do_aluno = [f for f in falas_de("aluno") if not pedido.treino(f, apos_treino=True)]
+    if pergunta and not pedido.treino(pergunta, apos_treino=True):
         do_aluno.append(pergunta)
 
     # Recência primeiro: é o que o aluno quer AGORA.

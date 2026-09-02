@@ -738,7 +738,11 @@ def rota_perguntar(body: PerguntaBody, uid: int = Depends(usuario_atual),
     # perder o que funcionou junto com o que não. Vai `questoes: []` e o front
     # mostra o texto — que é o comportamento de hoje.
     questoes: list[dict] = []
-    p = pedido.treino(body.pergunta)
+    # `apos_treino` deixa a forma ELÍPTICA valer: depois de "me da 4 questoes",
+    # "agora só uma" e "manda cinco" são pedido, e sem o contexto não seriam
+    # reconhecidos como nada. Quem sabe se o turno anterior era treino é
+    # `pedido.veio_de_treino`, sobre o histórico de ANTES desta fala.
+    p = pedido.treino(body.pergunta, apos_treino=pedido.veio_de_treino(historico))
     if p and not p["formal"]:
         # O TEMA VEM DO HISTÓRICO DE ANTES DO PEDIDO, e essa escolha é o conserto
         # de um bug que eu mesmo introduzi aqui. Usar o histórico ATUALIZADO

@@ -4,6 +4,7 @@
 # devolveu e o que a resposta tem de errado.
 #
 #   ./testar.sh                    roteiro das regressões conhecidas + juiz
+#   ./testar.sh --pedirmaisquestoes  só o pedido de N questões no chat (4 turnos)
 #   ./testar.sh --livre            o aluno é um LLM (conversa que ninguém escreveu)
 #   ./testar.sh --livre --persona cético --turnos 8
 #   ./testar.sh --falas "oi" "me explica peculato"
@@ -62,6 +63,8 @@ ARGS=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --livre)      ARGS+=("--aluno" "llm"); shift ;;
+    # Atalho pedido pelo nome: testa só o pedido de N questões no chat.
+    --pedirmaisquestoes) ARGS+=("--cenario" "quantas"); MODO_JUIZ=""; shift ;;
     --rapido)     MODO_JUIZ=""; shift ;;
     --pytest)     RODAR_PYTEST=1; shift ;;
     --so-pytest)  SO_PYTEST=1; RODAR_PYTEST=1; shift ;;

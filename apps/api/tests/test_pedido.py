@@ -113,3 +113,73 @@ def test_pedir_treino_no_chat_gera_questao_com_proveniencia_e_sem_botao(client, 
     baixo = d["resposta"].lower()
     assert "botão" not in baixo and "botao" not in baixo, \
         "o tutor mandou clicar em vez de o app gerar"
+
+
+# --------------------------------------------- continuação elíptica (v2)
+def _hist(*falas_do_aluno):
+    """Histórico alternando aluno/tutor, como `historico_para_prompt` devolve."""
+    out = []
+    for f in falas_do_aluno:
+        out += [{"autor": "aluno", "texto": f}, {"autor": "tutor", "texto": "..."}]
+    return out
+
+
+@pytest.mark.parametrize("fala, quantidade", [
+    ("agora só uma", 1),
+    ("manda cinco", 5),
+    ("mais 3", 3),
+    ("outra", 1),          # "outra" é UMA a mais, não o padrão de duas
+])
+def test_continuacao_conta_como_pedido_depois_de_treino(fala, quantidade):
+    """Depois de um lote, o aluno ajusta a quantidade sem repetir "questão".
+
+    Medido no cenário `quantas`: depois de "me da 4 questoes", as falas "agora
+    só uma" e "manda cinco" não geravam NADA — nenhuma contém as palavras da
+    `RE_TREINO`. O aluno acha que pediu; o app acha que ele mudou de assunto.
+    Nenhuma lista de sinônimos resolve isso, porque a forma é elíptica: só quer
+    dizer "mais questões" DEPOIS de um turno de treino."""
+    p = pedido.treino(fala, apos_treino=True)
+    assert p is not None, fala
+    assert p["quantidade"] == quantidade
+
+
+@pytest.mark.parametrize("fala", ["agora só uma", "manda cinco", "mais 3", "outra",
+                                  "5 anos de pena", "e o art. 312?"])
+def test_continuacao_nao_vale_fora_do_contexto(fala):
+    """`apos_treino` é obrigatório, e é o que impede o pior erro: gerar questão
+    porque alguém escreveu um número. "5 anos de pena" e "e o art. 312?" são
+    conversa de matéria — gerar ali gastaria cota e escreveria no acervo por
+    causa de um dígito."""
+    assert pedido.treino(fala) is None, fala
+
+
+def test_corrente_de_continuacoes_nao_arrebenta():
+    """"me da 4" → "agora só uma" → "manda cinco": os três são treino.
+
+    A primeira versão de `veio_de_treino` olhava só a última fala do aluno e
+    exigia dela um pedido COMPLETO — então o terceiro turno não gerava nada,
+    porque o segundo era elíptico. A corrente arrebentava no segundo elo."""
+    assert pedido.veio_de_treino(_hist("quero peculato", "me da 4 questoes")) is True
+    assert pedido.veio_de_treino(
+        _hist("quero peculato", "me da 4 questoes", "agora só uma")) is True
+    assert pedido.veio_de_treino(
+        _hist("me da 4 questoes", "agora só uma", "mais 2")) is True
+
+
+def test_explicacao_no_meio_encerra_a_corrente():
+    """Voltar a explicar quebra a sequência, e é o certo: depois disso "manda
+    cinco" não é mais pedido de questão, é continuação da explicação."""
+    assert pedido.veio_de_treino(_hist("me da 4 questoes", "me explica melhor")) is False
+    assert pedido.veio_de_treino(_hist("quero estudar peculato")) is False
+
+
+def test_continuacao_nao_vira_assunto_de_busca():
+    """A fala de continuação não pode decidir de qual artigo se cobra.
+
+    Mesma razão do "vamos": "manda cinco" não nomeia assunto, e deixá-la entrar
+    como candidata faria a busca cobrar de artigo sorteado. O assunto é o da
+    CONVERSA — aqui, peculato."""
+    from core import assunto
+    h = _hist("quero estudar peculato", "me da 4 questoes")
+    assert assunto.em_foco(h, disciplinas=["Direito Penal"]) == "quero estudar peculato"
+    assert assunto.em_foco(h, "manda cinco", ["Direito Penal"]) == "quero estudar peculato"
