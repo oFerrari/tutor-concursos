@@ -279,6 +279,14 @@ mesma coisa é como um deles fica sem a regra do outro.
   substitui a leitura — dá o texto pronto pra ler, e um roteiro fixo com as
   falas que causaram cada regressão, pra comparar antes e depois. Custa cota:
   7 chamadas no padrão, o dobro dos turnos com `--livre`.
+- **`.logs/defeitos.md` só existe quando há defeito.** Rodada limpa não escreve
+  nada, nem com o juiz ligado — a AUSÊNCIA do arquivo é o sinal de "está limpo".
+  Antes ele gravava toda rodada que tivesse julgamento, e como o juiz é o padrão
+  isso queria dizer sempre: a bateria de 9 cenários deixou 9 seções, 8 delas com
+  zero erro. Arquivo chamado `defeitos` que lista rodadas não responde "o que
+  ainda está quebrado?". `--refazer` e `--cenario todos` reescrevem o arquivo do
+  zero (guardando o antigo em `.anterior`); rodada única e limpa não o apaga —
+  ele pode ter o defeito de outro cenário — mas avisa na tela que é velho.
 - **CONSERTOU? RODE DE NOVO E MOSTRE OS DOIS NÚMEROS.** Conserto de checagem se
   prova com `--reprocessar` (texto idêntico, grátis). Conserto de PROMPT só se
   prova com conversa nova, e o `.logs/defeitos.md` traz no topo o comando exato

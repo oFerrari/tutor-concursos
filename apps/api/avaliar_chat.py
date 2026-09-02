@@ -91,7 +91,7 @@ from core import assunto, auth, conversa, db, llm, mesa, retrieval, socratic
 from core.config import CLI_USUARIO_EMAIL, EMBEDDING_MODEL
 from core.llm import ErroLLM
 
-VERSAO = "avaliar-chat-v15"
+VERSAO = "avaliar-chat-v16"
 
 # Conta descartável, como manda o AGENTS.md: nada aqui pode encostar na conta
 # real. O `ON DELETE CASCADE` da 009 limpa tudo de uma vez em `--limpar`.
@@ -956,6 +956,17 @@ def rodar(falas: list[str] | None, persona: str, n_turnos: int,
                "mesa": nome_mesa, "email": email, "juiz": com_juiz}
     defeitos = _gravar_defeitos(turnos_planos, total, m, julgamento,
                                 " ".join(partes_cmd), anexar=acumular, receita=receita)
+    velho = Path(__file__).resolve().parents[2] / ".logs" / "defeitos.md"
+    if not defeitos and not acumular and velho.exists():
+        # Rodada limpa NÃO apaga o arquivo: ele pode guardar o defeito de OUTRO
+        # cenário, e apagá-lo aqui perderia informação que ninguém pediu pra
+        # perder. Mas deixá-lo em silêncio faz você ler resultado velho achando
+        # que é deste comando — então diz, e diz de quando ele é.
+        from datetime import datetime as _dt
+        quando = _dt.fromtimestamp(velho.stat().st_mtime).strftime("%d/%m %H:%M")
+        console.print(f"\n  [green]nada a apontar nesta rodada.[/green] "
+                      f"[dim].logs/defeitos.md continua sendo o de {quando} — "
+                      f"`--refazer` reescreve, `--cenario todos` zera.[/dim]")
     if defeitos:
         rel = defeitos.relative_to(Path(__file__).resolve().parents[2])
         console.print(f"  defeitos:    [bold]{rel}[/bold]")
@@ -1115,12 +1126,24 @@ def _gravar_defeitos(turnos, total, m, julgamento: dict | None,
     Devolve `None` quando não houve nada — arquivo vazio de defeito é pior que
     arquivo nenhum, porque parece resultado velho.
 
+    RODADA LIMPA NÃO ENTRA, nem com o juiz ligado. A primeira versão gravava
+    sempre que houvesse julgamento, e como o juiz está ligado por padrão isso
+    quer dizer SEMPRE: a bateria de 9 cenários deixou 9 seções no arquivo, das
+    quais 8 estavam com zero erro e zero aviso. Um arquivo chamado `defeitos.md`
+    que lista rodadas em ordem não responde a pergunta que ele existe pra
+    responder — "o que ainda está quebrado?" — e obriga quem lê a filtrar na
+    mão. A escala continua no arquivo, mas como CONTEXTO de um defeito, não como
+    conteúdo próprio.
+
+    A consequência é o sinal que faltava: consertado tudo, `--refazer` não
+    escreve nada e o arquivo desaparece. Ausência passa a significar limpo.
+
     `anexar` existe por causa do `--cenario todos`: dez cenários rodavam em
     sequência e cada um sobrescrevia este arquivo, então nove relatórios eram
     jogados fora e sobrava o do último. O nome continua fixo (é o endereço que
     você passa pro agente); o que muda é que a bateria ACUMULA, com uma seção
     por cenário. Quem zera é o `--cenario todos`, uma vez, antes do primeiro."""
-    if not total["erro"] and not total["aviso"] and not julgamento:
+    if not total["erro"] and not total["aviso"]:
         return None
     raiz = Path(__file__).resolve().parents[2]
     pasta = raiz / ".logs"
@@ -1431,6 +1454,12 @@ def refazer() -> int:
         tab.add_row(cmd, f"{e0}e/{a0}a", f"{e1}e/{a1}a", Text(marca, style=estilo))
     console.print(tab)
     console.print("[dim]  \"zerou\" = a rodada não gerou mais nenhum apontamento.[/dim]")
+    if not md.exists():
+        console.print("\n  [bold green]nenhum defeito restou — .logs/defeitos.md não existe "
+                      "mais.[/bold green]")
+        console.print(f"  [dim]o de antes ficou em {md.stem}.anterior{md.suffix}[/dim]")
+    else:
+        console.print(f"\n  ainda apontados: [bold]{md.relative_to(md.parents[1])}[/bold]")
     return pior
 
 
