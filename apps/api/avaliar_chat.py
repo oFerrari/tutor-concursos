@@ -87,11 +87,12 @@ from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
-from core import assunto, auth, conversa, db, llm, mesa, pedido, retrieval, socratic
+from core import (assunto, auth, conversa, db, geracao, llm, mesa, pedido,
+                  retrieval, socratic)
 from core.config import CLI_USUARIO_EMAIL, EMBEDDING_MODEL
 from core.llm import ErroLLM
 
-VERSAO = "avaliar-chat-v18"
+VERSAO = "avaliar-chat-v20"
 
 # Conta descartável, como manda o AGENTS.md: nada aqui pode encostar na conta
 # real. O `ON DELETE CASCADE` da 009 limpa tudo de uma vez em `--limpar`.
@@ -194,6 +195,19 @@ CENARIOS: dict[str, tuple[str, list[str]]] = {
          "na ordem do edital da PC-PR",
          "começa pelo primeiro tópico então",
          "e o que é papiloscopia?"]),
+
+    # O CAMINHO NOVO: pedir treino numa frase e receber questão de verdade, com
+    # proveniência e fila, sem clicar em nada. Os turnos são graduados de
+    # propósito: sem quantidade, com quantidade, com formato, e por fim o
+    # pedido FORMAL — que não deve gerar aqui, porque simulado tem página
+    # própria.
+    "pede_treino": (
+        "pede treino no chat: o app gera questão com proveniência, sem botão",
+        ["quero estudar peculato",
+         "me testa nisso",
+         "me da 3 questoes disso",
+         "agora 2 itens certo ou errado",
+         "quero um simulado formal cronometrado"]),
 
     "desanimo": (
         "desabafo, não matéria: pede tom, não conteúdo",
@@ -300,7 +314,7 @@ class Observador:
 
     def novo_turno(self) -> dict:
         self.atual = {"consulta": None, "vetorizado": None, "estrategia": None,
-                      "chunks": []}
+                      "chunks": [], "questoes": []}
         return self.atual
 
     def instalar(self) -> None:
@@ -395,7 +409,8 @@ TETO_CUMPRIMENTO = 320
 
 
 def checar(fala: str, resposta: str, chunks: list[dict],
-           historico: list[dict] | None = None) -> list[tuple[str, str]]:
+           historico: list[dict] | None = None,
+           questoes: list[dict] | None = None) -> list[tuple[str, str]]:
     """Os defeitos que já aconteceram de verdade neste projeto, um por linha.
 
     Devolve `(gravidade, texto)`. Nada aqui é heurística nova: cada item tem um
@@ -428,7 +443,39 @@ def checar(fala: str, resposta: str, chunks: list[dict],
     p_treino = pedido.treino(fala)
     if p_treino and not p_treino["formal"] and RE_MANDA_BOTAO.search(resposta):
         achados.append(("erro", "aluno pediu treino e a resposta mandou clicar no botão "
-                                "em vez de fazer a pergunta no chat"))
+                                "em vez de o app gerar a questão"))
+
+    # 2c. PEDIU TREINO E NÃO VEIO QUESTÃO — ou veio na quantidade errada.
+    #
+    #     `questoes=None` quer dizer "quem chamou não sabe" (é o caso do
+    #     `--reprocessar` sobre transcrições antigas, gravadas antes de o
+    #     avaliador passar pela rota). Nesse caso não se afirma nada: silêncio
+    #     é melhor que apontar defeito por falta de dado.
+    if p_treino and not p_treino["formal"] and questoes is not None:
+        if not questoes:
+            achados.append(("erro", "aluno pediu treino e NENHUMA questão foi gerada"))
+        else:
+            # Proveniência é a razão de o app gerar em vez de o tutor escrever.
+            # Sem ela a questão não entra na fila SM-2 e não conta no progresso
+            # — é o que o dono recusou explicitamente.
+            # A PROVENIÊNCIA SE CONFERE NO BANCO, não no payload — e a
+            # primeira versão desta checagem conferia no payload, apontando
+            # "SEM PROVENIÊNCIA" em questão que tinha `fonte_chunks: [6028]`
+            # gravado. `sob_demanda` simplesmente não devolve a chave. Ler o
+            # banco é mais forte que consertar a leitura do dicionário: o que
+            # importa é o que ficou PERSISTIDO, porque é a linha gravada que a
+            # fila SM-2 vai usar.
+            ids = [q["id"] for q in questoes if q.get("id")]
+            gravadas = {r["id"]: r["fonte_chunks"] for r in db.query(
+                "SELECT id, fonte_chunks FROM questao WHERE id = ANY(%(i)s)",
+                {"i": ids})} if ids else {}
+            sem_fonte = [q for q in questoes if not gravadas.get(q.get("id"))]
+            if sem_fonte:
+                achados.append(("erro", f"{len(sem_fonte)} questão(ões) gerada(s) SEM "
+                                        f"proveniência (fonte_chunks vazio)"))
+            if len(questoes) != p_treino["quantidade"]:
+                achados.append(("aviso", f"pediu {p_treino['quantidade']} questão(ões) e "
+                                         f"veio(ram) {len(questoes)}"))
 
     # 3. Lei afirmada sem trecho por trás. É a única coisa que este tutor não
     #    pode fazer, e a instrução de "nenhum trecho recuperado" existe pra isso.
@@ -554,7 +601,13 @@ def checar(fala: str, resposta: str, chunks: list[dict],
     #    clicar, não responder, e o prompt manda exatamente isso. O aviso saltava
     #    em todo pedido de questão, ou seja, num acerto — e aviso que dispara em
     #    acerto ensina você a ignorar avisos. Mesma ressalva já feita na ESCALA.
-    if "?" not in resposta[-250:] and not RE_MANDA_BOTAO.search(resposta):
+    #    E TURNO DE TREINO NÃO TERMINA COM PERGUNTA, por instrução: as QUESTÕES
+    #    são a pergunta, e o prompt manda explicitamente "não pergunte de novo
+    #    se ele quer". O aviso disparava nos quatro turnos do cenário
+    #    `pede_treino`, ou seja, num acerto — e aviso que dispara em acerto
+    #    ensina você a ignorar avisos. Mesma ressalva já feita pro botão.
+    if ("?" not in resposta[-250:] and not RE_MANDA_BOTAO.search(resposta)
+            and not (p_treino and not p_treino["formal"])):
         achados.append(("aviso", "não termina com pergunta"))
 
     return achados
@@ -595,7 +648,7 @@ def checar(fala: str, resposta: str, chunks: list[dict],
 # Separada de `VERSAO` de propósito: mexer no spinner ou na cor da tabela não
 # invalida histórico nenhum, e obrigar a isso faria a série reiniciar por
 # cosmético. Suba SÓ quando mudar dimensão, âncora ou o texto do juiz.
-ESCALA_VERSAO = "escala-v5"
+ESCALA_VERSAO = "escala-v6"
 
 ESCALA = [
     ("proporcao", "Tamanho proporcional à fala do aluno",
@@ -761,6 +814,36 @@ def nota_geral(julgamento: dict) -> tuple[int, int]:
 
 # ══════════════════════════════════════════════════════════════════ a rodada
 
+def _turno(uid: int, m: dict, conv: dict, fala: str,
+           historico: list[dict], perfil: dict) -> dict:
+    """Um turno como a ROTA faz, não como `socratic.explicar` faz.
+
+    A diferença deixou de ser cosmética quando o pedido de treino passou a ser
+    atendido pelo SERVIDOR (`core/pedido.py` + `geracao.sob_demanda`): chamando
+    só `explicar`, o avaliador via a linha de abertura do tutor e não via se as
+    questões foram geradas — ou seja, ficava cego justamente para o
+    comportamento novo. Um avaliador que não passa pelo caminho de produção
+    mede outra coisa.
+
+    Reproduz a ordem da rota, e a ordem importa: o tema do treino sai do
+    histórico ANTERIOR ao pedido (por isso `historico` vem por parâmetro, já
+    capturado antes da gravação da fala), e falha do gerador não derruba o
+    turno — vai `questoes: []` e a resposta do tutor, que já existe.
+    """
+    r = socratic.explicar(fala, uid, m["disciplinas"], m, historico, perfil)
+    questoes: list[dict] = []
+    p = pedido.treino(fala)
+    if p and not p["formal"]:
+        tema = assunto.em_foco(historico, disciplinas=m["disciplinas"])
+        try:
+            tipo = p["tipo"] or geracao.tipo_da_banca(m.get("banca"))
+            questoes = geracao.sob_demanda(m["disciplinas"], tema,
+                                           p["quantidade"], tipo)["questoes"]
+        except (geracao.SemMaterial, ErroLLM):
+            questoes = []
+    return {**r, "questoes": questoes, "pedido": p}
+
+
 def imprimir_fala(n: int, fala: str) -> None:
     """A fala do aluno vai pra tela ANTES de o tutor ser chamado.
 
@@ -791,6 +874,26 @@ def imprimir_busca(obs: dict) -> None:
             t.add_row("", Text(f"· {retrieval.referencia(c)}", style="green"))
     else:
         t.add_row("trechos", Text("nenhum", style="dim"))
+    # As questões que o SERVIDOR gerou neste turno. Aparecem aqui e não junto
+    # da resposta porque são obra do app, não do tutor — e é justamente essa
+    # distinção que o relatório precisa deixar visível.
+    # A proveniência sai do BANCO, igual à checagem: `sob_demanda` não devolve
+    # `fonte_chunks` no payload, e a primeira versão desta linha escrevia "SEM
+    # PROVENIÊNCIA" em questão que tinha `[6028]` gravado. Rótulo mentiroso na
+    # tela é pior que rótulo ausente — foi o que me fez caçar um bug que não
+    # existia.
+    qs = obs.get("questoes") or []
+    fontes_gravadas = {}
+    if qs:
+        ids = [q["id"] for q in qs if q.get("id")]
+        if ids:
+            fontes_gravadas = {r["id"]: r["fonte_chunks"] for r in db.query(
+                "SELECT id, fonte_chunks FROM questao WHERE id = ANY(%(i)s)", {"i": ids})}
+    for q in qs:
+        f = fontes_gravadas.get(q.get("id"))
+        art = ", ".join(str(a) for a in f) if f else "[bold red]SEM PROVENIÊNCIA[/bold red]"
+        t.add_row("questão", Text.from_markup(
+            f"· {q.get('tema', '?')} [dim](chunk {art})[/dim]", style="cyan"))
     console.print(t)
 
 
@@ -898,14 +1001,16 @@ def rodar(falas: list[str] | None, persona: str, n_turnos: int,
             inicio = time.monotonic()
             try:
                 with console.status("[dim]buscando e chamando o tutor…", spinner="dots"):
-                    r = socratic.explicar(fala, uid, m["disciplinas"], m, historico, perfil)
+                    r = _turno(uid, m, conv, fala, historico, perfil)
             except ErroLLM as e:
                 console.print(f"[red]LLM indisponível no turno {i+1}: {e}[/red]")
                 break
             segundos = time.monotonic() - inicio
             conversa.gravar(conv["id"], "tutor", r["resposta"])
+            atual["questoes"] = r.get("questoes") or []
 
-            achados = checar(fala, r["resposta"], r["fontes"], historico)
+            achados = checar(fala, r["resposta"], r["fontes"], historico,
+                             r.get("questoes"))
             for gravidade, _ in achados:
                 total[gravidade] += 1
             imprimir_busca(atual)
@@ -921,6 +1026,10 @@ def rodar(falas: list[str] | None, persona: str, n_turnos: int,
                                   "obs": {**atual,
                                           "chunks": [retrieval.referencia(c)
                                                      for c in atual["chunks"]],
+                                          "questoes": [{"id": q.get("id"),
+                                                        "tema": q.get("tema"),
+                                                        "fonte_chunks": q.get("fonte_chunks")}
+                                                       for q in (atual.get("questoes") or [])],
                                           "fontes": [{"titulo": c.get("titulo"),
                                                       "norma": c.get("norma"),
                                                       "artigo": c.get("artigo"),
@@ -1371,7 +1480,7 @@ def reprocessar() -> int:
             chunks = _fontes_do_registro(obs)
             antes = {a[1] for a in (turno.get("achados") or [])}
             agora = {a[1] for a in checar(fala or "", turno.get("texto") or "",
-                                          chunks, historico)}
+                                          chunks, historico, obs.get("questoes"))}
             # Só DEPOIS de checar: no turno real, o histórico que `explicar`
             # recebeu era o de ANTES desta fala.
             historico.append({"autor": "aluno", "texto": fala or ""})

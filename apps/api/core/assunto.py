@@ -106,9 +106,10 @@ import unicodedata
 # aponta um artigo. Reusar em vez de copiar: duas versões de "isto é uma
 # citação?" divergem, e o sintoma seria a busca por dispositivo funcionando num
 # caminho e não no outro.
+from . import pedido
 from .retrieval import RE_CITACAO
 
-VERSAO = "assunto-v5"
+VERSAO = "assunto-v6"
 
 # Teto da consulta. Embedding é MÉDIA do que entra: parede de texto dilui o
 # assunto exatamente como o art. 37 (13.059 caracteres) já se dilui no próprio
@@ -285,6 +286,18 @@ def pede_assunto(fala: str | None) -> bool:
     if not fala:
         return False
     if cita_dispositivo(fala):
+        return True
+    # PEDIR TREINO É INICIATIVA, não resposta. Sem isto, "me testa nisso" era
+    # classificado como eco (vinha depois de uma pergunta do tutor, e nenhuma
+    # palavra dele está em `PEDIDO`), o caminho do eco assumia, e a consulta
+    # virava a fala do TUTOR — que, num turno de treino, é a linha de
+    # apresentação ("Vamos treinar isso; as questões estão logo abaixo") e não
+    # nomeia matéria nenhuma. Medido: as questões saíram sobre apropriação
+    # indébita e competência originária numa conversa sobre peculato.
+    #
+    # Quem pede algo retomou a iniciativa, por definição — é a mesma leitura
+    # que `PEDIDO` já faz de "quero", "explica", "vamos ver".
+    if pedido.treino(fala):
         return True
     cruas = {_sem_acento(x) for x in RE_PALAVRA.findall(fala.lower())}
     return bool(PEDIDO & cruas)
@@ -493,8 +506,23 @@ def em_foco(turnos: list[dict] | None = None, pergunta: str | None = None,
         herdado = _sem_citacao(candidatas[0])
         return _truncar(herdado) or None
 
-    do_aluno = falas_de("aluno")
-    if pergunta:
+    # PEDIDO DE TREINO NÃO NOMEIA ASSUNTO, e ignorá-los aqui é estrutural, não
+    # mais uma palavra na lista `VAZIAS`.
+    #
+    # Medido no cenário `pede_treino` logo que ele nasceu: a conversa era
+    # "quero estudar peculato" → "me testa nisso" → "me da 3 questoes disso", e
+    # as questões saíram sobre apropriação indébita, competência originária e
+    # julgamento nos tribunais. Duas coisas se somaram: a fala do pedido tem
+    # "disso"/"nisso" como palavra de conteúdo (então passa por `diz_assunto`),
+    # e a resposta do tutor a um pedido é uma linha de APRESENTAÇÃO ("Vamos
+    # treinar isso; as questões estão logo abaixo") que não nomeia matéria
+    # nenhuma — então o fallback pro tutor também não salvava.
+    #
+    # Com os pedidos fora, `em_foco` alcança "quero estudar peculato", que é o
+    # que a conversa é. Mesmo espírito de `e_eco`: a fala que não propõe assunto
+    # não deve decidir de qual artigo se cobra.
+    do_aluno = [f for f in falas_de("aluno") if not pedido.treino(f)]
+    if pergunta and not pedido.treino(pergunta):
         do_aluno.append(pergunta)
 
     # Recência primeiro: é o que o aluno quer AGORA.

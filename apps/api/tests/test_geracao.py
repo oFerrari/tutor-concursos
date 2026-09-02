@@ -20,7 +20,7 @@ import re
 
 import pytest
 
-from core import db, geracao
+from core import db, geracao, scheduler
 
 VERSAO = "test-geracao-v2"
 
@@ -332,7 +332,14 @@ def test_item_ce_gerado_entra_na_fila_e_corrige_sem_llm(client, usuario, llm_fal
     geradas = r.json()["questoes"]
     assert geradas and all(q["tipo"] == "certo_errado" for q in geradas)
 
-    fila = client.get("/fila", headers=cab).json()
+    # `scheduler.fila` com teto alto, e NÃO `GET /fila`: a rota usa
+    # `TETO_DIARIO = 40` e as inéditas entram `ORDER BY q.id`, então questão
+    # recém-criada tem o id mais alto e cai fora das 40 do dia assim que o
+    # banco passa de 40 questões. O teste passava por o banco ser pequeno, e
+    # quebrou quando ele chegou a 104 — mesma fragilidade do `LIMIT 1` sem
+    # `ORDER BY` que já derrubou este arquivo hoje. O que ele afirma não tem
+    # nada a ver com o teto: é o PAYLOAD da fila.
+    fila = scheduler.fila(usuario["id"], teto=500, disciplinas=[disc])
     na_fila = next(q for q in fila if q["id"] == geradas[0]["id"])
     assert na_fila["tipo"] == "certo_errado"
     assert isinstance(na_fila["gabarito_ce"], bool)
@@ -390,7 +397,14 @@ def test_serie_grava_texto_base_uma_vez_e_itens_ordenados(client, usuario, llm_f
     assert [q["ordem_no_contexto"] for q in geradas] == [1, 2, 3]
 
     # A fila entrega o texto-base JUNTO: assertiva sem ele é ilegível.
-    fila = client.get("/fila", headers=cab).json()
+    # `scheduler.fila` com teto alto, e NÃO `GET /fila`: a rota usa
+    # `TETO_DIARIO = 40` e as inéditas entram `ORDER BY q.id`, então questão
+    # recém-criada tem o id mais alto e cai fora das 40 do dia assim que o
+    # banco passa de 40 questões. O teste passava por o banco ser pequeno, e
+    # quebrou quando ele chegou a 104 — mesma fragilidade do `LIMIT 1` sem
+    # `ORDER BY` que já derrubou este arquivo hoje. O que ele afirma não tem
+    # nada a ver com o teto: é o PAYLOAD da fila.
+    fila = scheduler.fila(usuario["id"], teto=500, disciplinas=[disc])
     na_fila = next(q for q in fila if q["id"] == geradas[0]["id"])
     assert na_fila["contexto"] == r["contexto"]
 

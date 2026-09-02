@@ -296,6 +296,12 @@ mesma coisa é como um deles fica sem a regra do outro.
   que reproduz aquela rodada — cenário, mesa e falas. Compare a CONTAGEM DE
   ERROS antes × depois, 3 rodadas de cada; a nota da escala não serve (abaixo).
   Exemplo do que basta dizer: "acervo: 2/1/1 erros no v35 → 0/0/0 no v36".
+- **O avaliador passa pelo CAMINHO DE PRODUÇÃO, não por `socratic.explicar`
+  direto** (`_turno` em `avaliar_chat.py`). Deixou de ser cosmético quando o
+  pedido de treino passou a ser atendido pelo servidor: chamando só `explicar`,
+  ele via a linha de abertura do tutor e não via se a questão foi gerada — cego
+  justamente para o comportamento novo. Ao acrescentar caminho na rota, espelhe
+  aqui, ou o relatório mede outra coisa.
 - **Duas verificações diferentes, e confundi-las engana.** `--reprocessar` roda
   as CHECAGENS de hoje sobre as ~140 respostas já gravadas em `.logs/*.json`:
   não gasta LLM nem banco, e prova se uma regra nova só encontra o que devia.
@@ -382,7 +388,7 @@ mesma coisa é como um deles fica sem a regra do outro.
 ./testar.sh --falas "oi" "me explica peculato"    # suas falas
 ./testar.sh --rapido             # sem o juiz (uma chamada de LLM a menos)
 ./testar.sh --pytest             # a suíte ANTES da avaliação · --so-pytest: só ela
-./testar.sh --cenario listar     # os 10 cenários, um por risco
+./testar.sh --cenario listar     # os 11 cenários, um por risco
 ./testar.sh --cenario forense_do_zero --mesa "PC-PR Investigador"
 ./testar.sh --cenario direto     # roda um só · --cenario todos: a coleção inteira
 ./testar.sh --reprocessar        # re-checa TODAS as conversas gravadas (grátis)
