@@ -622,7 +622,11 @@ def _materiais(pacote, uid, mesa_id, indexar: bool = True) -> tuple[int, int, in
                     else:
                         print(f"  arquivo de {m['titulo']!r} com hash divergente — ignorado")
         if chunks:
-            pendentes.append((doc_id, chunks))
+            # O RÓTULO VIAJA JUNTO na fila de indexação: é ele que entra no
+            # vetor (`material.texto_para_vetor`), e buscá-lo de novo no banco
+            # aqui seria uma consulta por documento pra ler o que o pacote já
+            # trouxe.
+            pendentes.append((doc_id, chunks, m.get("disciplina"), m.get("assunto")))
 
     if arquivos:
         print(f"  {arquivos} arquivo(s) original(is) gravado(s) no banco")
@@ -632,20 +636,34 @@ def _materiais(pacote, uid, mesa_id, indexar: bool = True) -> tuple[int, int, in
         # Import tardio: carregar o modelo custa segundos e RAM, e a maioria
         # dos pulls não tem material novo nenhum.
         from core import embeddings
-        for doc_id, chunks in pendentes:
+        from core import material as material_mod
+        for doc_id, chunks, disc, assu in pendentes:
             db.query("DELETE FROM chunk WHERE documento_id = %(d)s", {"d": doc_id})
             for i in range(0, len(chunks), LOTE_EMBEDDING):
                 lote = chunks[i:i + LOTE_EMBEDDING]
-                vetores = embeddings.embed_passagens([x["texto"] for x in lote])
+                # MESMA regra de `material.texto_para_vetor`, importada e não
+                # copiada: material indexado pelo pull tem de ser encontrável
+                # pela mesma consulta que acha o indexado pelo upload. Duas
+                # fórmulas de "o que vai ao vetor" produziriam biblioteca em que
+                # metade do material responde à busca e metade não, dependendo
+                # de por qual caminho entrou.
+                vetores = embeddings.embed_passagens(
+                    [material_mod.texto_para_vetor(x["texto"], disc, assu) for x in lote])
                 for x, v in zip(lote, vetores):
                     db.query(
                         """INSERT INTO chunk (documento_id, ordem, texto, norma, artigo,
-                                              paragrafo, inciso, rubrica, secao, embedding)
-                           VALUES (%(d)s,%(o)s,%(t)s,%(n)s,%(a)s,%(p)s,%(i)s,%(r)s,%(s)s,%(e)s)
+                                              paragrafo, inciso, rubrica, secao, embedding,
+                                              rotulo)
+                           VALUES (%(d)s,%(o)s,%(t)s,%(n)s,%(a)s,%(p)s,%(i)s,%(r)s,%(s)s,
+                                   %(e)s,%(rot)s)
                            ON CONFLICT (documento_id, ordem) DO NOTHING""",
                         {"d": doc_id, "o": x["ordem"], "t": x["texto"], "n": x.get("norma"),
                          "a": x.get("artigo"), "p": x.get("paragrafo"), "i": x.get("inciso"),
-                         "r": x.get("rubrica"), "s": x.get("secao"), "e": v},
+                         "r": x.get("rubrica"), "s": x.get("secao"), "e": v,
+                         # 025: mesmo rótulo que o upload grava, senão material
+                         # que chegou pelo pull não responderia à busca por
+                         # matéria e o que veio pelo upload sim.
+                         "rot": ". ".join(y for y in (disc, assu) if y) or None},
                     )
             db.query(
                 "UPDATE documento SET status='pronto', erro=NULL, chunks_total=%(n)s WHERE id=%(d)s",

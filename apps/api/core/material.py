@@ -22,7 +22,7 @@ import re
 
 from . import chunking, db, embeddings
 
-VERSAO = "material-v4"
+VERSAO = "material-v5"
 
 LOTE = 32
 MIN_CHARS = 200
@@ -353,6 +353,35 @@ def arquivo(usuario_id: int, documento_id: int) -> dict | None:
         {"d": documento_id, "u": usuario_id})
 
 
+def texto_para_vetor(texto: str, disciplina: str | None, assunto: str | None) -> str:
+    """O texto que vai ao EMBEDDING — com o rótulo na frente.
+
+    POR QUE O RÓTULO ENTRA NO VETOR. Até aqui a correção que o aluno fazia na
+    disciplina e no assunto era usada pra gerar questão, pra recortar a fila e
+    pro seletor da tela — e NÃO pra busca, porque só o corpo do trecho era
+    vetorizado. O efeito é o que ele relatou: rotular uma apostila como
+    "Ciências Forenses" não fazia a busca achá-la quando ele perguntava de
+    ciências forenses. A informação mais confiável que existe sobre aquele
+    material — a que uma pessoa digitou olhando o conteúdo — ficava fora do
+    único lugar onde decide o que é encontrado.
+
+    O `chunk.texto` GRAVADO continua limpo, e essa separação é o ponto: é ele
+    que `formatar_contexto` manda ao prompt, e prefixar ali faria o tutor ler
+    "Disciplina: X. Assunto: Y." como se fosse conteúdo da apostila. O rótulo
+    enriquece o VETOR, não o texto.
+
+    Vale só pro material do ALUNO. Chunk de lei tem norma, artigo e rubrica, que
+    `por_dispositivo` e `por_rubrica` já usam com precisão maior que qualquer
+    prefixo — e mexer no vetor da lei exigiria reingerir 2.673 chunks pra
+    resolver um problema que a medição não aponta (`avaliar_retrieval.py`:
+    dispositivo 6/6, rubrica 4/4).
+
+    Sem rótulo devolve o texto intacto: `sha256` igual, cache aproveitado, nada
+    reindexado sem motivo."""
+    rotulo = ". ".join(x.strip() for x in (disciplina, assunto) if x and x.strip())
+    return f"{rotulo}. {texto}" if rotulo else texto
+
+
 def indexar(documento_id: int, nome: str, dados: bytes) -> None:
     """
     Calcula os embeddings e grava os chunks. RODA FORA DO REQUEST.
@@ -378,6 +407,19 @@ def indexar(documento_id: int, nome: str, dados: bytes) -> None:
                         (str(e)[:500], documento_id))
         return
 
+    # O rótulo ATUAL, lido aqui e não recebido por parâmetro: `indexar` roda em
+    # background e pode começar depois de o aluno já ter corrigido a disciplina
+    # na tela. Ler no começo do trabalho pega a versão mais nova que existe.
+    rot = db.exec1("SELECT disciplina, assunto FROM documento WHERE id = %(i)s",
+                   {"i": documento_id}) or {}
+    # O MESMO rótulo vai por dois caminhos, e é de propósito: `texto_para_vetor`
+    # o põe no vetor (semântico) e `chunk.rotulo` o põe no tsvector (lexical,
+    # 025). Medido, o vetor sozinho não bastava — "papiloscopia" subiu pra
+    # posição 2, mas "ciências forenses" ficou fora do top6, porque embedding é
+    # média e o rótulo é curto perto do corpo. O lexical casa a palavra
+    # independentemente do tamanho do trecho.
+    rotulo_lex = ". ".join(x for x in (rot.get("disciplina"), rot.get("assunto")) if x) or None
+
     try:
         with db.conexao_isolada() as c:
             # IDEMPOTENTE: limpa o que já existe deste documento antes de
@@ -397,17 +439,19 @@ def indexar(documento_id: int, nome: str, dados: bytes) -> None:
                             (documento_id,))
             for i in range(0, len(chunks), LOTE):
                 lote = chunks[i:i + LOTE]
-                vetores = embeddings.embed_passagens([x["texto"] for x in lote])
+                vetores = embeddings.embed_passagens(
+                    [texto_para_vetor(x["texto"], rot.get("disciplina"),
+                                      rot.get("assunto")) for x in lote])
                 with c.cursor() as cur:
                     for j, (x, v) in enumerate(zip(lote, vetores)):
                         cur.execute(
                             """INSERT INTO chunk (documento_id, ordem, texto, norma,
                                                   artigo, paragrafo, inciso, rubrica,
-                                                  secao, embedding)
-                               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                                                  secao, embedding, rotulo)
+                               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                             (documento_id, i + j, x["texto"], x["norma"], x["artigo"],
                              x["paragrafo"], x["inciso"], x.get("rubrica"),
-                             x.get("secao"), v))
+                             x.get("secao"), v, rotulo_lex))
             with c.cursor() as cur:
                 cur.execute("UPDATE documento SET status='pronto', erro=NULL WHERE id=%s",
                             (documento_id,))
@@ -481,7 +525,19 @@ def _classificar_se_faltar(documento_id: int, texto: str) -> None:
 def atualizar(usuario_id: int, documento_id: int, disciplina: str | None = None,
               assunto: str | None = None) -> dict | None:
     """O aluno corrige o palpite. Passa a valer como 'aluno' — a lista da tela
-    é que vale, mesmo princípio da curadoria de edital."""
+    é que vale, mesmo princípio da curadoria de edital.
+
+    DEVOLVE `reindexar: True` quando a correção precisa entrar nos vetores. O
+    rótulo agora faz parte do texto embutido (`texto_para_vetor`), então mudá-lo
+    sem reindexar deixa a biblioteca num estado que ninguém consegue explicar: a
+    lista mostra "Ciências Forenses" e a busca continua respondendo pelo rótulo
+    velho. Quem reindexa é a rota, em background — aqui não, porque `atualizar`
+    responde dentro do request e o embedding leva minutos.
+
+    Só pede reindexação se houver ARQUIVO (024): sem os bytes não há como
+    reextrair o texto, e material anterior à migração fica com o vetor antigo.
+    A lista continua certa; a busca é que não melhora — e é melhor isso que
+    apagar os trechos que existem."""
     campos, params = [], {"d": documento_id, "u": usuario_id}
     if disciplina is not None:
         campos.append("disciplina = %(disc)s")
@@ -492,11 +548,28 @@ def atualizar(usuario_id: int, documento_id: int, disciplina: str | None = None,
     if not campos:
         return None
     campos.append("classificado_por = 'aluno'")
-    return db.exec1(
+    r = db.exec1(
         f"""UPDATE documento SET {', '.join(campos)}
              WHERE id = %(d)s AND usuario_id = %(u)s
-         RETURNING id, titulo, disciplina, assunto, tipo, status, classificado_por""",
+         RETURNING id, titulo, disciplina, assunto, tipo, status, classificado_por,
+                   origem, (arquivo IS NOT NULL) AS tem_arquivo""",
         params)
+    if not r:
+        return None
+    return {**r, "reindexar": bool(r.pop("tem_arquivo"))}
+
+
+def bytes_do_arquivo(usuario_id: int, documento_id: int) -> tuple[str, bytes] | None:
+    """(nome, bytes) do original, pra reindexar sem o aluno reenviar nada.
+
+    É esta função que torna possível o laço "corrigi o rótulo -> a busca
+    melhora": antes da 024 os bytes não existiam, e reindexar exigia o upload de
+    novo — que é exatamente o atrito que fazia a correção não valer nada."""
+    r = db.exec1(
+        """SELECT origem, arquivo FROM documento
+            WHERE id = %(d)s AND usuario_id = %(u)s AND arquivo IS NOT NULL""",
+        {"d": documento_id, "u": usuario_id})
+    return (r["origem"] or "material", bytes(r["arquivo"])) if r else None
 
 
 def para_reindexar(usuario_id: int, documento_id: int) -> dict | None:

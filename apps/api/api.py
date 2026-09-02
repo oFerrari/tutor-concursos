@@ -1115,12 +1115,28 @@ class ClassificarBody(BaseModel):
 
 @app.patch("/materiais/{documento_id}")
 def rota_classificar_material(documento_id: int, body: ClassificarBody,
+                              tarefas: BackgroundTasks,
                               uid: int = Depends(usuario_atual)):
     """O aluno corrige o palpite do classificador. Passa a valer como 'aluno':
-    a lista da tela é que vale, mesmo princípio da curadoria de edital."""
+    a lista da tela é que vale, mesmo princípio da curadoria de edital.
+
+    E REINDEXA em background, porque o rótulo agora entra no vetor
+    (`material.texto_para_vetor`). Sem isto a correção ficaria pela metade — a
+    lista dizendo "Ciências Forenses" e a busca respondendo pelo rótulo velho,
+    que é pior que não ter corrigido, porque parece ter funcionado.
+
+    Em background e não aqui: o embedding leva minutos e o PATCH tem que
+    responder na hora. O material volta a `processando` e a biblioteca já sabe
+    desenhar esse estado. Só acontece se houver arquivo (024) — material
+    anterior à migração não tem bytes pra reextrair, e a resposta diz isso em
+    `reindexar` pra tela poder avisar."""
     r = material.atualizar(uid, documento_id, body.disciplina, body.assunto)
     if not r:
         raise HTTPException(404, "material não encontrado")
+    if r.get("reindexar"):
+        arq = material.bytes_do_arquivo(uid, documento_id)
+        if arq:
+            tarefas.add_task(material.indexar, documento_id, arq[0], arq[1])
     return r
 
 

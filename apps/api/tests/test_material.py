@@ -488,3 +488,69 @@ def test_arquivo_original_volta_igual_e_so_pro_dono(client, usuario, outro_usuar
     # 404 e não 403: não confirmar a quem chuta um id que ele existe.
     assert client.get(f"/materiais/{doc_id}/arquivo",
                       headers=outro_usuario["headers"]).status_code == 404
+
+
+def test_rotulo_corrigido_entra_no_indice_e_a_busca_acha(client, usuario):
+    """Corrigir disciplina/assunto muda o que a BUSCA encontra (024 + 025).
+
+    Era o buraco que o dono apontou: o rótulo que ele digitava valia pra lista,
+    pra geração de questão e pro seletor da tela, e NÃO pra busca — só o corpo
+    do trecho era indexado. Rotular uma apostila como "Ciências Forenses" não
+    fazia a busca achá-la quando ele perguntava de ciências forenses.
+
+    DUAS ARMADILHAS QUE ESTE TESTE JÁ CAIU, e por isso ele é assim:
+
+    1. Afirmar "fora do top6 antes, dentro depois" NÃO serve: `hibrida()` é
+       k-vizinhos SEM piso de relevância (é a razão de `core/assunto.py`
+       existir), então sempre devolve 6, e "estar fora" depende de quanto
+       material concorrente há no banco. Mesma fragilidade do `LIMIT 1` sem
+       `ORDER BY` que quebrou o test_geracao. A asserção é sobre o TSVECTOR,
+       que é determinístico.
+
+    2. Subir sem rótulo pra medir o "antes" também não serve: `_classificar_se_faltar`
+       roda em background e ACERTOU sozinho — leu "crista, desenho imutável,
+       pontos característicos" e rotulou como papiloscopia antes de o teste
+       corrigir. Então o material entra com um rótulo EXPLÍCITO e errado, o que
+       tem o bônus de provar algo mais forte: o índice segue a correção nos dois
+       sentidos, ganhando o termo novo e perdendo o velho.
+    """
+    corpo = ("A crista termina em um ponto e reinicia adiante formando ilha. "
+             "O desenho e unico e imutavel ao longo da vida. ") * 12
+    r = client.post("/materiais", headers=usuario["headers"],
+                    data={"tipo": "aula", "disciplina": "Direito Civil",
+                          "assunto": "Contratos"},
+                    files={"arquivo": ("aula-025.txt", corpo.encode(), "text/plain")})
+    assert r.status_code == 201, r.text
+    doc_id = r.json()["id"]
+    material.indexar(doc_id, "aula-025.txt", corpo.encode())
+
+    def casa(termo: str) -> bool:
+        return bool(db.exec1(
+            """SELECT 1 AS x FROM chunk
+                WHERE documento_id = %(d)s
+                  AND busca @@ websearch_to_tsquery('portuguese', %(t)s) LIMIT 1""",
+            {"d": doc_id, "t": termo}))
+
+    assert casa("contratos"), "o rótulo do upload não entrou no índice"
+    assert not casa("papiloscopia")
+
+    r2 = material.atualizar(usuario["id"], doc_id, "Ciências Forenses", "Papiloscopia")
+    assert r2["reindexar"] is True, "sem arquivo guardado (024) não há como reindexar"
+    nome, dados = material.bytes_do_arquivo(usuario["id"], doc_id)
+    material.indexar(doc_id, nome, dados)
+
+    assert casa("papiloscopia"), "o assunto corrigido não chegou ao índice"
+    assert casa("ciências forenses"), "a disciplina corrigida não chegou ao índice"
+    assert not casa("contratos"), "o rótulo ANTIGO ficou no índice depois da correção"
+
+    alvo = {c["id"] for c in db.query(
+        "SELECT id FROM chunk WHERE documento_id = %(d)s", {"d": doc_id})}
+    for consulta in ("papiloscopia", "ciências forenses"):
+        achados = retrieval.buscar(consulta, n=6, usuario_id=usuario["id"])
+        assert alvo & {c["id"] for c in achados}, f"busca por {consulta!r} não achou"
+
+    linha = db.exec1("SELECT texto, rotulo FROM chunk WHERE documento_id = %(d)s "
+                     "ORDER BY ordem LIMIT 1", {"d": doc_id})
+    assert linha["rotulo"] == "Ciências Forenses. Papiloscopia"
+    assert not linha["texto"].startswith("Ciências Forenses"), \
+        "o rótulo vazou pro texto exibido — o prompt leria isso como conteúdo"

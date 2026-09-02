@@ -1099,6 +1099,48 @@ como "o original" é pior que não ter original. E a gravação roda também no
 caminho do `pulados` — material sincronizado antes da 024 está no banco sem
 bytes, e o pacote novo é a única chance de completá-lo.
 
+**O RÓTULO QUE O ALUNO CORRIGE PASSA A VALER NA BUSCA — pelos DOIS lados da
+híbrida, porque um só não bastou.** A disciplina e o assunto digitados por ele
+valiam pra gerar questão, pra recortar a fila e pro seletor da tela, e não pra
+busca: só o corpo do trecho era indexado. Rotular uma apostila como "Ciências
+Forenses" não fazia a busca achá-la ao perguntar de ciências forenses — a
+informação mais confiável que existe sobre aquele material, a que uma pessoa
+digitou olhando o conteúdo, ficava fora do único lugar que decide o que é
+encontrado.
+
+Medido numa apostila cujo corpo NÃO menciona a matéria nem o assunto (o caso em
+que só o rótulo pode explicar o acerto):
+
+| consulta | sem rótulo | só no vetor | vetor + lexical |
+|---|---|---|---|
+| `papiloscopia` | fora do top6 | posição 2 | **posição 1** |
+| `ciências forenses` | fora do top6 | fora do top6 | **posição 1** |
+
+O vetor sozinho (`material.texto_para_vetor`, prefixo no texto que vai ao e5)
+resolveu o ASSUNTO e não a DISCIPLINA, e a razão é aritmética: embedding é
+média, e 35 caracteres de rótulo contra 700 de corpo quase não movem o vetor.
+Justamente a consulta mais provável — o nome da matéria — continuava falhando.
+Quem fechou foi `chunk.rotulo` no tsvector (025), porque o lado lexical casa
+palavra e não sofre diluição por tamanho.
+
+**O `chunk.texto` gravado continua LIMPO, e essa separação é o ponto.** É ele que
+`formatar_contexto` manda ao prompt: prefixar ali faria o tutor ler "Ciências
+Forenses. Papiloscopia." como conteúdo da apostila. O rótulo entra no que é
+INDEXADO, nunca no que é EXIBIDO — há teste travando isso.
+
+**E corrigir o rótulo REINDEXA, em background.** Sem isso a correção ficaria pela
+metade: a lista dizendo "Ciências Forenses" e a busca respondendo pelo rótulo
+velho, que é pior que não ter corrigido porque parece ter funcionado. Isto só é
+possível por causa da 024 — antes dela os bytes não existiam e reindexar exigia
+o upload de novo, que era exatamente o atrito que fazia a correção não valer
+nada. Material anterior à 024 não reindexa (`reindexar: false` na resposta) e
+fica com o vetor antigo: a lista continua certa, a busca é que não melhora, e
+isso é melhor que apagar os trechos que existem.
+
+Chunk de LEI não mudou: `rotulo` é NULL, o `coalesce` devolve vazio e o tsvector
+sai idêntico. Verificado com `avaliar_retrieval.py` antes e depois — top1 21/32,
+top6 30/32 nas duas medições, e dispositivo 6/6, rubrica 4/4 intactos.
+
 ## Armadilhas do corpus (Planalto)
 
 - Quebra de linha no meio da frase; `normalizar_lei()` remonta.
