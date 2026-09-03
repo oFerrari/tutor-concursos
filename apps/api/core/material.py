@@ -22,7 +22,7 @@ import re
 
 from . import chunking, db, embeddings
 
-VERSAO = "material-v6"
+VERSAO = "material-v7"
 
 LOTE = 32
 MIN_CHARS = 200
@@ -148,6 +148,12 @@ def _extrair(nome: str, dados: bytes) -> str:
 
 # ----------------------------------------------------------------- por link
 MAX_BYTES_URL = 25 * 1024 * 1024
+
+# Teto do upload direto. Mais generoso que o de link porque aqui o arquivo já
+# está na máquina de quem sobe (não há download pra travar), e apostila de
+# cursinho digitalizada passa fácil de 25 MB. Existe pra impedir o caso
+# patológico, não pra policiar tamanho normal.
+MAX_BYTES_ARQUIVO = 60 * 1024 * 1024
 TIMEOUT_URL = 20
 
 
@@ -264,6 +270,15 @@ def registrar(usuario_id: int, nome: str, dados: bytes,
     """
     if tipo not in TIPOS:
         raise ErroMaterial(f"tipo inválido: escolha entre {', '.join(TIPOS)}")
+    # TETO NO UPLOAD DIRETO. Só o caminho por LINK tinha (`MAX_BYTES_URL`), e o
+    # arrastar-e-soltar não tinha nenhum: um PDF de 200 MB era extraído inteiro
+    # em memória e agora, com a 024, gravado inteiro no banco. Falhar aqui é
+    # falhar barato — antes de extrair, antes de gravar, com a razão na tela.
+    if len(dados) > MAX_BYTES_ARQUIVO:
+        mb = MAX_BYTES_ARQUIVO // 1024 // 1024
+        raise ErroMaterial(
+            f"arquivo de {len(dados) // 1024 // 1024} MB — o teto é {mb} MB. "
+            f"Divida a apostila em partes, ou suba só os capítulos que você vai estudar.")
     # Disciplina NÃO é mais obrigatória (020). Vazio significa "descubra você",
     # e o classificador preenche em background. Exigir aqui obrigava a LER o
     # material antes de subir — e o caso que mais importa é justamente o
@@ -596,6 +611,48 @@ def bytes_do_arquivo(usuario_id: int, documento_id: int) -> tuple[str, bytes] | 
             WHERE id = %(d)s AND usuario_id = %(u)s AND arquivo IS NOT NULL""",
         {"d": documento_id, "u": usuario_id})
     return (r["origem"] or "material", bytes(r["arquivo"])) if r else None
+
+
+def pendentes_retomaveis() -> list[dict]:
+    """Material preso em `processando` que dá pra retomar sozinho.
+
+    A indexação roda em background NO PROCESSO do servidor — não há worker. Um
+    restart no meio (o `--reload` do uvicorn, um deploy, um Ctrl+C) deixava a
+    linha em `processando` PRA SEMPRE, e o único jeito de sair era o aluno
+    reenviar o arquivo, porque os bytes não existiam em lugar nenhum.
+
+    A 024 mudou isso: o arquivo está no banco. Então a fila passou a ser
+    retomável, e é o que destrava carga grande — subir vinte apostilas deixava
+    de ser uma aposta de que nada reinicia por horas.
+
+    `arquivo IS NOT NULL` é o filtro inteiro: material anterior à 024 continua
+    dependendo do reenvio, e é honesto que continue — sem bytes não há o que
+    reprocessar. `ORDER BY id` retoma na ordem em que foram subidos."""
+    return db.query(
+        """SELECT id, origem FROM documento
+            WHERE status = 'processando' AND arquivo IS NOT NULL
+            ORDER BY id""")
+
+
+def retomar_pendentes() -> int:
+    """Reindexa, UM POR VEZ, tudo o que ficou pendurado. Devolve quantos.
+
+    Sequencial de propósito: o embedding é CPU local e paralelizar só faria os
+    lotes disputarem os mesmos núcleos, com o efeito colateral de várias
+    conexões isoladas abertas ao mesmo tempo. Vinte apostilas em série levam o
+    tempo que levam; em paralelo levariam o mesmo e com mais coisa pra dar
+    errado.
+
+    Erro de um documento não para os outros: `indexar` já converte exceção em
+    `status='falha'` com a razão, que é exatamente o comportamento desejado
+    aqui — um PDF corrompido no meio da fila não pode segurar os dezenove."""
+    pend = pendentes_retomaveis()
+    for d in pend:
+        linha = db.exec1("SELECT arquivo FROM documento WHERE id = %(i)s", {"i": d["id"]})
+        if not linha or linha["arquivo"] is None:
+            continue
+        indexar(d["id"], d["origem"] or "material", bytes(linha["arquivo"]))
+    return len(pend)
 
 
 def para_reindexar(usuario_id: int, documento_id: int) -> dict | None:

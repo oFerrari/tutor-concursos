@@ -48,6 +48,38 @@ VERSAO = "api-v5"
 
 app = FastAPI(title="Tutor de concursos — API", version=VERSAO)
 
+
+@app.on_event("startup")
+def retomar_indexacao_pendente() -> None:
+    """Ao subir, reindexa o material que um restart deixou em `processando`.
+
+    A indexação roda em background NO PROCESSO — não há worker. Antes da 024 um
+    restart no meio deixava a linha presa pra sempre e o único jeito de sair era
+    o aluno reenviar o PDF, porque os bytes não existiam. Agora estão no banco,
+    e a fila passou a ser retomável: é isso que torna viável subir vinte
+    apostilas sem apostar que nada reinicia por horas.
+
+    EM THREAD, não no startup síncrono: o embedding leva minutos por apostila, e
+    bloquear aqui deixaria a API sem responder — o front veria timeout no login.
+    `daemon=True` porque um Ctrl+C não deve esperar a fila terminar; o que ficar
+    pela metade é retomado no próximo boot, que é justo o ponto.
+
+    Falha aqui NUNCA impede a API de subir: `indexar` já converte erro em
+    `status='falha'`, e um banco fora do ar no boot não pode virar app que não
+    sobe.
+    """
+    import threading
+
+    def trabalhar() -> None:
+        try:
+            n = material.retomar_pendentes()
+            if n:
+                print(f"[tutor] retomei a indexação de {n} material(is) pendente(s)")
+        except Exception as e:  # noqa: BLE001 — ver o docstring
+            print(f"[tutor] não consegui retomar a indexação: {e}")
+
+    threading.Thread(target=trabalhar, daemon=True).start()
+
 # CORS: só o Next.js local por padrão. Sem isso o navegador bloqueia a
 # resposta antes mesmo do JS ver — dá erro de rede genérico no fetch, não
 # um 403 explicável, então isso costuma ser o primeiro obstáculo silencioso

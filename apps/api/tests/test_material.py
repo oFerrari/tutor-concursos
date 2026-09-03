@@ -559,3 +559,44 @@ def test_rotulo_corrigido_entra_no_indice_e_a_busca_acha(client, usuario):
     assert linha["rotulo"] == "Papiloscopia. Ciências Forenses"
     assert not linha["texto"].startswith("Ciências Forenses"), \
         "o rótulo vazou pro texto exibido — o prompt leria isso como conteúdo"
+
+
+def test_indexacao_pendente_e_retomada_sem_reenviar_o_arquivo(client, usuario):
+    """Restart no meio da indexação deixa de ser perda (024 + retomada).
+
+    A indexação roda em background NO PROCESSO — não há worker. Antes de os
+    bytes ficarem no banco, um `--reload` do uvicorn no meio deixava a linha em
+    `processando` PRA SEMPRE, e o único jeito de sair era o aluno reenviar o
+    PDF. É isso que tornava carga grande uma aposta: subir vinte apostilas
+    exigia que nada reiniciasse por horas.
+
+    O teste simula o restart do jeito mais direto: `registrar` grava a linha
+    como `processando` e NÃO indexa (é `indexar` que faz isso, noutra thread).
+    Então o estado logo após `registrar` é exatamente o estado em que um crash
+    deixaria o material.
+    """
+    corpo = ("Preservacao do local de crime e cadeia de custodia. " * 60).encode()
+    r = client.post("/materiais", headers=usuario["headers"], data={"tipo": "aula"},
+                    files={"arquivo": ("aula-retomar.txt", corpo, "text/plain")})
+    assert r.status_code == 201, r.text
+    doc_id = r.json()["id"]
+    db.query("DELETE FROM chunk WHERE documento_id = %(d)s", {"d": doc_id})
+    db.query("UPDATE documento SET status='processando' WHERE id = %(d)s", {"d": doc_id})
+
+    assert doc_id in [d["id"] for d in material.pendentes_retomaveis()]
+
+    material.retomar_pendentes()
+
+    linha = db.exec1("SELECT status FROM documento WHERE id = %(d)s", {"d": doc_id})
+    assert linha["status"] == "pronto", "a retomada não terminou o serviço"
+    assert db.exec1("SELECT count(*) AS n FROM chunk WHERE documento_id = %(d)s",
+                    {"d": doc_id})["n"] > 0
+
+
+def test_arquivo_gigante_falha_antes_de_extrair():
+    """Teto no upload DIRETO. Só o caminho por link tinha (`MAX_BYTES_URL`); o
+    arrastar-e-soltar não tinha nenhum, e com a 024 um PDF de 200 MB passaria a
+    ser gravado inteiro no banco. Falhar antes de extrair é falhar barato."""
+    with pytest.raises(material.ErroMaterial, match="o teto é"):
+        material.registrar(1, "gigante.txt", b"x" * (material.MAX_BYTES_ARQUIVO + 1),
+                           tipo="aula")
