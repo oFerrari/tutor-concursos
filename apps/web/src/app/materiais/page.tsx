@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Confirmar } from "@/components/Confirmar";
 import { Check, ChevronDown, Download, Link2, Pencil, RotateCcw, Trash2, UploadCloud } from "lucide-react";
 import {
   ErroApi,
@@ -564,8 +565,17 @@ export default function PaginaMateriais() {
     }
   }
 
+  /** Apagar material passa pelo MESMO diálogo do resto do sistema.
+   *
+   *  Antes ia direto: um clique na lixeira e o material sumia, sem pergunta. É
+   *  a ação mais destrutiva desta tela — leva os trechos, o arquivo original
+   *  (024) e o rótulo que o aluno corrigiu — e era a única que não confirmava,
+   *  enquanto apagar mesa e apagar conta confirmam. */
+  const [aApagar, setAApagar] = useState<Material | null>(null);
+
   async function remover(m: Material) {
     setErro(null);
+    setAApagar(null);
     try {
       await apagarMaterial(m.id);
       setMateriais((atual) => atual?.filter((x) => x.id !== m.id) ?? null);
@@ -996,7 +1006,7 @@ export default function PaginaMateriais() {
                     </button>
                   )}
                   <button
-                    onClick={() => remover(m)}
+                    onClick={() => setAApagar(m)}
                     className="flex h-6 w-6 items-center justify-center rounded-[7px] text-label transition-colors hover:bg-surface-hover hover:text-danger"
                     aria-label={`remover ${m.titulo}`}
                   >
@@ -1038,6 +1048,26 @@ export default function PaginaMateriais() {
           </div>
         )}
       </div>
+
+      <Confirmar
+        aberto={aApagar !== null}
+        destrutivo
+        titulo={`Apagar "${aApagar?.titulo ?? ""}"?`}
+        descricao={
+          <>
+            Os {aApagar?.chunks_total ?? 0} trechos saem da busca, e o tutor deixa de
+            citar este material nas respostas.
+          </>
+        }
+        detalhe={
+          aApagar?.tem_arquivo
+            ? "O arquivo original vai junto — se quiser guardá-lo, baixe antes."
+            : "Seu progresso não é apagado: caixas, tentativas e caderno de erros continuam."
+        }
+        rotuloConfirmar="Apagar material"
+        onConfirmar={() => aApagar && remover(aApagar)}
+        onCancelar={() => setAApagar(null)}
+      />
     </div>
   );
 }
