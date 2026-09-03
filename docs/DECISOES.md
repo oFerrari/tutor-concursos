@@ -1302,6 +1302,44 @@ aluno, tipo `historico`), então a etiqueta repetia. O React reclamou no log com
 a chave literal (`curso-392722-aula-04-2787-completo`). Dois caminhos para a
 mesma coisa é como um deles fica sem a regra do outro.
 
+**A INDEXAÇÃO PASSA POR UMA FILA COM UM TRABALHADOR — e o que ensinou isso foi
+o servidor caindo.** A rota fazia `fundo.add_task(indexar, doc_id, nome, dados)`
+por upload. Com um arquivo, ótimo. Com VINTE, o `BackgroundTasks` despacha as
+vinte quase juntas, e cada uma carrega o arquivo inteiro em memória (o `dados`
+preso na closure), extrai o PDF, abre conexão isolada própria e roda o e5 na CPU.
+Relatado e reproduzível: o upload de 20 apostilas **matou a API depois da
+primeira**, e o F5 voltou numa tela vazia porque não havia mais API pra responder
+`/materiais`.
+
+A fila conserta os dois lados. Concorrência 1 porque o embedding é CPU local —
+paralelizar nunca ia ser mais rápido, só mais frágil. E a fila carrega o ID, não
+os BYTES: quem trabalha lê o arquivo do banco, o que só é possível por causa da
+024. A memória do processo deixa de crescer com o tamanho do lote.
+
+Medido depois: **20 uploads aceitos em 3,3s**, fila com 19 esperando, UMA thread
+trabalhando, e `GET /fila` respondendo em **111ms durante** a indexação.
+
+**Dois defeitos que só apareceram porque a indexação virou assíncrona DE VERDADE:**
+
+· o trabalhador lia os bytes com `db.exec1`, ou seja, na conexão GLOBAL do
+  módulo. `core.db.conn()` devolve UMA conexão e psycopg não é thread-safe —
+  usá-la aqui enquanto uma requisição usa a mesma é corrupção de protocolo, não
+  lentidão. Apareceu como material caindo em `status='falha'` sem razão nenhuma;
+  em produção apareceria como exceção aleatória em rota sem relação com material.
+  `indexar` já fazia certo (`conexao_isolada`), e é dele que veio a pista.
+
+· quatro testes afirmavam `status == 'pronto'` na linha seguinte ao upload. Isso
+  funcionava porque, com `TestClient`, o `BackgroundTasks` roda ANTES de a
+  resposta voltar — a indexação era síncrona no teste e assíncrona em produção.
+  A suíte escondia exatamente o comportamento que derrubou o servidor: em teste
+  as vinte nunca corriam ao mesmo tempo. Agora existe `material.esperar_fila`, e
+  quem afirma sobre o RESULTADO espera por ele.
+
+  Um deles ainda passava sozinho e falhava na suíte inteira: o trabalhador é
+  global e o `llm_falso` é por teste, então indexar em paralelo com ele fazia o
+  resultado depender de quem escrevia por último. A ordem certa é drenar a fila
+  ANTES de indexar à mão.
+
 ## Armadilhas do corpus (Planalto)
 
 - Quebra de linha no meio da frase; `normalizar_lei()` remonta.

@@ -18,11 +18,14 @@ apostila em vez da lei. Vai tudo por `chunk_generico` — perde citação por
 artigo, mantém busca híbrida. É o mesmo raciocínio de `tipo='historico'`.
 """
 import hashlib
+import queue
+import threading
+import time
 import re
 
 from . import chunking, db, embeddings
 
-VERSAO = "material-v7"
+VERSAO = "material-v8"
 
 LOTE = 32
 MIN_CHARS = 200
@@ -613,6 +616,109 @@ def bytes_do_arquivo(usuario_id: int, documento_id: int) -> tuple[str, bytes] | 
     return (r["origem"] or "material", bytes(r["arquivo"])) if r else None
 
 
+# ══════════════════════════════════════════════════ a FILA de indexação
+#
+# POR QUE UMA FILA COM UM TRABALHADOR SÓ.
+#
+# A rota fazia `fundo.add_task(indexar, doc_id, nome, dados)` por upload. Com um
+# arquivo isso é ótimo. Com VINTE, o `BackgroundTasks` do FastAPI despacha as
+# vinte pro pool de threads quase juntas, e cada uma:
+#
+#   · carrega o arquivo inteiro em memória (o `dados` fica preso na closure),
+#   · extrai o PDF com pypdf (CPU + RAM),
+#   · abre uma conexão isolada própria,
+#   · e roda o e5 na CPU.
+#
+# Vinte disso ao mesmo tempo derrubou o servidor — relatado e reproduzível: o
+# upload das vinte apostilas matou a API depois da primeira, e o F5 voltou numa
+# tela vazia porque não havia mais API pra responder `/materiais`.
+#
+# A fila conserta os dois lados de uma vez. Um trabalhador só significa
+# concorrência 1 — o embedding é CPU local, então paralelizar nunca ia ser mais
+# rápido, só mais frágil. E a fila carrega o ID, não os BYTES: quem precisa do
+# arquivo o lê do banco na hora de trabalhar (só é possível por causa da 024), e
+# a memória do processo deixa de crescer com o tamanho do lote.
+_fila: "queue.Queue[int]" = queue.Queue()
+_trabalhador: threading.Thread | None = None
+_trava_trabalhador = threading.Lock()
+
+
+def _trabalhar() -> None:
+    """Consome a fila pra sempre, um documento por vez.
+
+    Erro NUNCA mata o trabalhador: `indexar` já converte exceção em
+    `status='falha'` com a razão, e o que escapar disso é engolido aqui de
+    propósito — um PDF corrompido não pode parar os dezenove atrás dele na fila.
+    """
+    while True:
+        doc_id = _fila.get()
+        try:
+            # CONEXÃO ISOLADA, e não `db.exec1`. `core.db.conn()` devolve UMA
+            # conexão de módulo, e psycopg não é thread-safe: usá-la aqui
+            # enquanto uma requisição usa a mesma é corrupção de protocolo,
+            # não lentidão. Apareceu como material caindo em `status='falha'`
+            # sem razão nenhuma no teste — e apareceria em produção como
+            # exceção aleatória em rota que nada tem a ver com material.
+            # `indexar` já fazia certo (é ele que documenta o motivo).
+            with db.conexao_isolada() as c, c.cursor() as cur:
+                cur.execute(
+                    "SELECT origem, arquivo FROM documento "
+                    " WHERE id = %s AND arquivo IS NOT NULL", (doc_id,))
+                linha = cur.fetchone()
+            if linha:
+                indexar(doc_id, linha["origem"] or "material", bytes(linha["arquivo"]))
+        except Exception as e:  # noqa: BLE001 — ver o docstring
+            print(f"[tutor] indexação de {doc_id} falhou na fila: {e}")
+        finally:
+            _fila.task_done()
+
+
+def enfileirar(documento_id: int) -> None:
+    """Põe o documento na fila e garante que o trabalhador está de pé.
+
+    Chamado pela rota de upload em vez do `add_task` direto. Responde na hora: a
+    tela já mostra `processando` e o `0 de N` sai do banco, então a pessoa pode
+    sair da página, ir responder questões e voltar — nada depende de a aba ficar
+    aberta.
+
+    Trabalhador criado sob demanda e `daemon=True`: não há o que esperar no
+    shutdown, porque o que ficar na fila é retomado no próximo boot por
+    `retomar_pendentes` (a linha continua `processando` no banco)."""
+    global _trabalhador
+    with _trava_trabalhador:
+        if _trabalhador is None or not _trabalhador.is_alive():
+            _trabalhador = threading.Thread(target=_trabalhar, daemon=True,
+                                            name="indexador")
+            _trabalhador.start()
+    _fila.put(documento_id)
+
+
+def esperar_fila(segundos: float = 180.0) -> bool:
+    """Bloqueia até a fila drenar. `False` se estourou o tempo.
+
+    Existe pro TESTE, e a razão é uma mudança de comportamento real: com
+    `TestClient`, o `BackgroundTasks` do FastAPI rodava ANTES de a resposta
+    voltar, então quatro testes podiam subir material e afirmar
+    `status == 'pronto'` na linha seguinte. Com a fila a indexação é
+    assíncrona de verdade — o que é o ponto —, e quem afirma sobre o RESULTADO
+    tem de esperar por ele.
+
+    `queue.join()` não serve sozinho: ele volta quando o último `task_done`
+    acontece, e o `UPDATE ... status='pronto'` do `indexar` já terminou nessa
+    altura, mas o teste pode ler por outra conexão. Então espera a fila E dá
+    uma folga curta."""
+    fim = time.monotonic() + segundos
+    while _fila.unfinished_tasks and time.monotonic() < fim:
+        time.sleep(0.2)
+    return not _fila.unfinished_tasks
+
+
+def tamanho_da_fila() -> int:
+    """Quantos esperando. A tela usa pra dizer "3º da fila" em vez de um
+    `processando` mudo que parece travado."""
+    return _fila.qsize()
+
+
 def pendentes_retomaveis() -> list[dict]:
     """Material preso em `processando` que dá pra retomar sozinho.
 
@@ -648,10 +754,7 @@ def retomar_pendentes() -> int:
     aqui — um PDF corrompido no meio da fila não pode segurar os dezenove."""
     pend = pendentes_retomaveis()
     for d in pend:
-        linha = db.exec1("SELECT arquivo FROM documento WHERE id = %(i)s", {"i": d["id"]})
-        if not linha or linha["arquivo"] is None:
-            continue
-        indexar(d["id"], d["origem"] or "material", bytes(linha["arquivo"]))
+        enfileirar(d["id"])
     return len(pend)
 
 

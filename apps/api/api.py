@@ -59,26 +59,21 @@ def retomar_indexacao_pendente() -> None:
     e a fila passou a ser retomável: é isso que torna viável subir vinte
     apostilas sem apostar que nada reinicia por horas.
 
-    EM THREAD, não no startup síncrono: o embedding leva minutos por apostila, e
-    bloquear aqui deixaria a API sem responder — o front veria timeout no login.
-    `daemon=True` porque um Ctrl+C não deve esperar a fila terminar; o que ficar
-    pela metade é retomado no próximo boot, que é justo o ponto.
+    Só ENFILEIRA — não indexa. O trabalhador da fila (`material.enfileirar`) é
+    quem trabalha, numa thread daemon própria, então o boot não espera nada: são
+    N `put()` numa fila. Antes isto abria thread própria e indexava em série
+    aqui, o que funcionava e duplicava o mecanismo.
 
     Falha aqui NUNCA impede a API de subir: `indexar` já converte erro em
     `status='falha'`, e um banco fora do ar no boot não pode virar app que não
     sobe.
     """
-    import threading
-
-    def trabalhar() -> None:
-        try:
-            n = material.retomar_pendentes()
-            if n:
-                print(f"[tutor] retomei a indexação de {n} material(is) pendente(s)")
-        except Exception as e:  # noqa: BLE001 — ver o docstring
-            print(f"[tutor] não consegui retomar a indexação: {e}")
-
-    threading.Thread(target=trabalhar, daemon=True).start()
+    try:
+        n = material.retomar_pendentes()
+        if n:
+            print(f"[tutor] {n} material(is) pendente(s) de volta na fila de indexação")
+    except Exception as e:  # noqa: BLE001 — ver o docstring
+        print(f"[tutor] não consegui retomar a indexação: {e}")
 
 # CORS: só o Next.js local por padrão. Sem isso o navegador bloqueia a
 # resposta antes mesmo do JS ver — dá erro de rede genérico no fetch, não
@@ -1132,7 +1127,17 @@ async def rota_subir_material(fundo: BackgroundTasks,
             assunto=assunto, mesa_id=m["id"])
     except material.ErroMaterial as e:
         raise HTTPException(400, str(e))
-    fundo.add_task(material.indexar, doc["id"], arquivo.filename or "material", dados)
+    # ENFILEIRA em vez de `add_task(indexar, ..., dados)`. Com um arquivo dava no
+    # mesmo; com VINTE, o BackgroundTasks despachava as vinte quase juntas — cada
+    # uma com o arquivo inteiro preso na closure, extraindo PDF, abrindo conexão
+    # própria e rodando o e5 na CPU ao mesmo tempo. Isso DERRUBOU o servidor no
+    # upload de 20 apostilas: caiu depois da primeira, e o F5 voltou numa tela
+    # vazia porque não havia mais API respondendo `/materiais`.
+    #
+    # A fila tem UM trabalhador (o embedding é CPU local: paralelizar nunca ia
+    # ser mais rápido, só mais frágil) e carrega o ID, não os bytes — quem
+    # trabalha lê o arquivo do banco, o que só é possível por causa da 024.
+    material.enfileirar(doc["id"])
     return doc
 
 
@@ -1158,7 +1163,10 @@ async def rota_reindexar_material(documento_id: int, fundo: BackgroundTasks,
     if not await run_in_threadpool(material.para_reindexar, uid, documento_id):
         raise HTTPException(404, "material não encontrado")
     dados = await arquivo.read()
-    fundo.add_task(material.indexar, documento_id, arquivo.filename or "material", dados)
+    # Pela FILA também: vários retries seguidos repetiriam, em escala menor, o
+    # que derrubou o servidor no upload de 20. Os bytes já foram gravados pelo
+    # `registrar` original, então o trabalhador os lê do banco.
+    material.enfileirar(documento_id)
     return {"ok": True, "status": "processando"}
 
 
@@ -1190,7 +1198,7 @@ def rota_indexar_link(body: LinkBody, fundo: BackgroundTasks,
                                  mesa_id=m["id"])
     except material.ErroMaterial as e:
         raise HTTPException(400, str(e))
-    fundo.add_task(material.indexar, doc["id"], nome, dados)
+    material.enfileirar(doc["id"])
     return doc
 
 
@@ -1222,7 +1230,7 @@ def rota_classificar_material(documento_id: int, body: ClassificarBody,
     if r.get("reindexar"):
         arq = material.bytes_do_arquivo(uid, documento_id)
         if arq:
-            tarefas.add_task(material.indexar, documento_id, arq[0], arq[1])
+            material.enfileirar(documento_id)
     return r
 
 

@@ -99,7 +99,7 @@ core/desafio.py            meta do dia: reincidentes + novas + mini-simulado, te
 core/ritmo_regras.py       gatilho de intervenção proativa — FUNÇÕES PURAS
 core/ritmo.py              busca desempenho/reincidência/sequência, prioriza 1 sugestão
 core/edital.py             extrai data da prova e conteúdo programático de PDF de edital
-core/material.py           biblioteca do ALUNO: sobe/baixa, classifica, indexa material privado (fila retomável após restart)
+core/material.py           biblioteca do ALUNO: sobe/baixa, classifica, indexa — FILA com um trabalhador, retomável após restart
 edital.py                  CLI de ingestão de edital, reporta candidatos (não decide calado)
 corpus/html_para_texto.py  converte HTML compilado do Planalto pra .txt (cp1252, descarta tachado/revogado)
 ingest.py                  ingestão (batch)

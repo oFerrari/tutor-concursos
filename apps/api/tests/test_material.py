@@ -1,4 +1,6 @@
 """Biblioteca do aluno (019): material privado indexado no acervo comum."""
+import time
+
 import pytest
 
 from core import db, material, retrieval
@@ -13,6 +15,17 @@ def _material(client, headers, nome="Resumo.txt", disciplina="Direito Processual
                        files={"arquivo": (nome, TXT, "text/plain")},
                        data={"disciplina": disciplina, "tipo": "resumo"},
                        headers=headers)
+
+
+def _esperar_indexacao():
+    """A indexação agora é ASSÍNCRONA de verdade (fila com um trabalhador).
+
+    Antes o `BackgroundTasks` do FastAPI rodava dentro da própria requisição do
+    `TestClient`, então dava pra subir material e afirmar `pronto` na linha
+    seguinte. Isso escondia o comportamento real — e escondeu justamente o que
+    derrubou o servidor no upload de 20 apostilas, porque em teste as vinte
+    nunca corriam ao mesmo tempo."""
+    assert material.esperar_fila(240), "a fila de indexação não drenou no tempo"
 
 
 def test_sobe_lista_e_apaga(client, usuario):
@@ -73,6 +86,12 @@ def test_falha_do_classificador_nao_perde_o_material(client, usuario, llm_falso)
     llm_falso.excecao = RuntimeError("sem cota")
     doc = client.post("/materiais", files={"arquivo": ("x.txt", TXT, "text/plain")},
                       data={"tipo": "resumo"}, headers=usuario["headers"]).json()
+    # ORDEM: drena a fila PRIMEIRO, e só então indexa à mão. O trabalhador é
+    # global e o `llm_falso` é por teste — indexar em paralelo com ele fazia
+    # este teste depender de quem escrevia por último, e ele passava sozinho e
+    # falhava na suíte inteira. Com a fila vazia antes, o `indexar` daqui é o
+    # único escritor deste documento e o duplê está garantidamente ativo.
+    _esperar_indexacao()
     material.indexar(doc["id"], "x.txt", TXT)
     m = client.get("/materiais", headers=usuario["headers"]).json()["materiais"][0]
     assert m["status"] == "pronto" and m["chunks"] >= 1
@@ -166,6 +185,11 @@ def test_falha_no_indexar_vira_status_e_nao_excecao(client, usuario, monkeypatch
     """Exceção em background task morre sem ninguém ver, e o aluno ficaria com
     "processando" pra sempre. Vira `status='falha'` com a razão em texto."""
     doc = _material(client, usuario["headers"]).json()
+    # ESPERA a fila antes de mexer no mesmo documento: o trabalhador já está
+    # indexando este doc, e sem isto a corrida decide o resultado — o `indexar`
+    # à mão escreve `falha` e o trabalhador escreve `pronto` em cima (ou o
+    # contrário). Corrida que o upload síncrono de antes não tinha.
+    _esperar_indexacao()
     monkeypatch.setattr(material.embeddings, "embed_passagens",
                         lambda _: (_ for _ in ()).throw(RuntimeError("modelo fora do ar")))
     material.indexar(doc["id"], "Resumo.txt", TXT)
@@ -291,6 +315,7 @@ def test_nul_do_pdf_nao_derruba_a_indexacao(client, usuario, llm_falso):
     assert r.status_code == 201, r.text
     doc = r.json()
 
+    _esperar_indexacao()
     m = [x for x in client.get("/materiais", headers=usuario["headers"]).json()["materiais"]
          if x["id"] == doc["id"]][0]
     assert m["status"] == "pronto", m["erro"]
@@ -342,6 +367,12 @@ def test_mesa_isolada_nao_le_o_material_da_outra(client, usuario):
                 files={"arquivo": ("penal.txt",
                                    ("MNEMONICO QUIXOTEPENAL organiza os crimes. " * 30).encode(),
                                    "text/plain")})
+
+    # A busca só vê o que já foi indexado, e a indexação agora é assíncrona
+    # (fila com um trabalhador). Sem esperar, este teste afirmava isolamento
+    # sobre uma biblioteca ainda vazia — passava por não achar nada em lugar
+    # nenhum, que é o pior jeito de um teste de isolamento passar.
+    _esperar_indexacao()
 
     def ve(termo, mesa_id):
         return any(termo in (c.get("texto") or "") for c in
@@ -585,7 +616,16 @@ def test_indexacao_pendente_e_retomada_sem_reenviar_o_arquivo(client, usuario):
 
     assert doc_id in [d["id"] for d in material.pendentes_retomaveis()]
 
+    # `retomar_pendentes` ENFILEIRA — quem trabalha é o trabalhador único da
+    # fila, noutra thread. Esperar aqui é o que o teste tem de fazer; antes
+    # `retomar_pendentes` indexava em série e o assert vinha logo depois.
     material.retomar_pendentes()
+    for _ in range(120):
+        if material.tamanho_da_fila() == 0 and db.exec1(
+                "SELECT status FROM documento WHERE id = %(d)s",
+                {"d": doc_id})["status"] != "processando":
+            break
+        time.sleep(1)
 
     linha = db.exec1("SELECT status FROM documento WHERE id = %(d)s", {"d": doc_id})
     assert linha["status"] == "pronto", "a retomada não terminou o serviço"
