@@ -1340,6 +1340,26 @@ trabalhando, e `GET /fila` respondendo em **111ms durante** a indexação.
   resultado depender de quem escrevia por último. A ordem certa é drenar a fila
   ANTES de indexar à mão.
 
+**DUPLICATA PARADA NÃO É DUPLICATA — É SERVIÇO INACABADO.** O `registrar`
+barrava por hash qualquer arquivo já subido, e isso estava certo enquanto todo
+upload terminava. Depois de a fila existir, o relato foi o mais claro possível:
+o servidor caiu no meio do lote de 20, o dono subiu as 18 restantes de novo, e
+recebeu "você já subiu este arquivo" DEZOITO vezes — enquanto as dezoito linhas
+estavam no banco sem um único trecho indexado. A intenção dele era terminar o
+serviço; a resposta do sistema tratou como erro dele.
+
+Agora `pronto` COM trecho continua recusado (aí a duplicata é real, e reindexar
+seria pagar CPU de novo pelo mesmo material), e `processando`/`falha`/zero
+chunks volta pra fila devolvendo a linha que já existe, com `retomado: true`. Do
+ponto de vista de quem arrastou o arquivo, foi um upload — e é assim que a tela
+reporta: aviso, não erro. Contar retomada como falha produziu a mensagem mais
+confusa que o app já deu ("18 de 18 não entraram" para 18 que acabaram de
+entrar na fila).
+
+Isso mudou dois testes de propósito, e os dois estão anotados: "mesmo arquivo
+duas vezes é barrado" passou a esperar a indexação terminar, senão media a
+janela em que o primeiro ainda estava na fila.
+
 ## Armadilhas do corpus (Planalto)
 
 - Quebra de linha no meio da frase; `normalizar_lei()` remonta.

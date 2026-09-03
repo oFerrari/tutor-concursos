@@ -153,7 +153,15 @@ def test_texto_curto_avisa_sobre_ocr(client, usuario):
 
 
 def test_mesmo_arquivo_duas_vezes_e_barrado(client, usuario):
+    """Duplicata é barrada — DEPOIS de o primeiro terminar.
+
+    A espera não é detalhe de teste, é a regra: material `processando` sem
+    trecho nenhum passou a ser RETOMADO em vez de recusado, porque duplicata
+    parada não é duplicata, é serviço inacabado (ver
+    `test_subir_de_novo_material_parado_retoma_em_vez_de_recusar`). Sem esperar,
+    este teste media a janela em que o primeiro upload ainda estava na fila."""
     assert _material(client, usuario["headers"]).status_code == 201
+    _esperar_indexacao()
     r = _material(client, usuario["headers"])
     assert r.status_code == 400 and "já subiu" in r.json()["detail"]
 
@@ -640,3 +648,47 @@ def test_arquivo_gigante_falha_antes_de_extrair():
     with pytest.raises(material.ErroMaterial, match="o teto é"):
         material.registrar(1, "gigante.txt", b"x" * (material.MAX_BYTES_ARQUIVO + 1),
                            tipo="aula")
+
+
+def test_subir_de_novo_material_parado_retoma_em_vez_de_recusar(client, usuario):
+    """Duplicata PARADA não é duplicata — é serviço inacabado.
+
+    Relatado do jeito mais claro possível: o servidor caiu no meio do upload de
+    20 apostilas, o dono subiu as 18 restantes de novo, e recebeu "você já subiu
+    este arquivo" DEZOITO vezes — enquanto as linhas estavam no banco sem um
+    único trecho indexado. A reação certa dele era terminar o serviço; o sistema
+    tratou como erro dele.
+
+    O que continua recusado é a duplicata REAL (`pronto` com trechos): ali
+    reindexar seria pagar CPU de novo pelo mesmo material.
+    """
+    corpo = ("Local de crime e cadeia de custodia. " * 90).encode()
+    r1 = client.post("/materiais", headers=usuario["headers"], data={"tipo": "aula"},
+                     files={"arquivo": ("aula-dup.txt", corpo, "text/plain")})
+    assert r1.status_code == 201, r1.text
+    doc_id = r1.json()["id"]
+
+    # O estado exato em que um crash deixa o material.
+    _esperar_indexacao()
+    db.query("DELETE FROM chunk WHERE documento_id = %(d)s", {"d": doc_id})
+    db.query("UPDATE documento SET status='processando' WHERE id = %(d)s", {"d": doc_id})
+
+    r2 = client.post("/materiais", headers=usuario["headers"], data={"tipo": "aula"},
+                     files={"arquivo": ("aula-dup.txt", corpo, "text/plain")})
+    assert r2.status_code == 201, r2.text
+    assert r2.json()["retomado"] is True, "recusou como duplicata em vez de retomar"
+    assert r2.json()["id"] == doc_id, "criou uma linha nova em vez de retomar a que existia"
+
+    _esperar_indexacao()
+    assert db.exec1("SELECT status FROM documento WHERE id = %(d)s",
+                    {"d": doc_id})["status"] == "pronto"
+
+    # Agora que está pronto DE VERDADE, a duplicata volta a ser recusada.
+    r3 = client.post("/materiais", headers=usuario["headers"], data={"tipo": "aula"},
+                     files={"arquivo": ("aula-dup.txt", corpo, "text/plain")})
+    assert r3.status_code == 400
+    assert "já subiu" in r3.json()["detail"]
+
+    # E nunca houve mais de UMA linha pra este arquivo.
+    assert db.exec1("SELECT count(*) AS n FROM documento WHERE usuario_id = %(u)s",
+                    {"u": usuario["id"]})["n"] == 1

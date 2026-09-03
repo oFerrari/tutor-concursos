@@ -291,10 +291,36 @@ def registrar(usuario_id: int, nome: str, dados: bytes,
     # Só entre os documentos DESTE aluno (índice parcial da 019): o mesmo
     # arquivo na biblioteca de outra pessoa não é duplicata, é coincidência.
     ja = db.exec1(
-        "SELECT id, titulo FROM documento WHERE hash = %(h)s AND usuario_id = %(u)s",
+        """SELECT id, titulo, disciplina, assunto, tipo, status, chunks_total,
+                  classificado_por, mesa_id, criado_em,
+                  (SELECT count(*) FROM chunk WHERE documento_id = documento.id) AS chunks
+             FROM documento WHERE hash = %(h)s AND usuario_id = %(u)s""",
         {"h": digest, "u": usuario_id})
     if ja:
-        raise ErroMaterial(f"você já subiu este arquivo (\"{ja['titulo']}\")")
+        # DUPLICATA PARADA NÃO É DUPLICATA — é serviço inacabado, e recusá-la
+        # foi relatado do jeito mais claro possível: depois de o servidor cair
+        # no meio do lote, o dono subiu os 18 de novo e recebeu "você já subiu
+        # este arquivo" DEZOITO vezes, enquanto as linhas estavam no banco sem
+        # um único trecho indexado. A reação certa dele era terminar o serviço;
+        # a resposta do sistema tratava isso como erro dele.
+        #
+        # `pronto` COM trecho continua sendo recusado, e tem de continuar: aí a
+        # duplicata é real e reindexar seria pagar CPU de novo pelo mesmo
+        # material. O que muda é `processando` e `falha` (ou zero chunks):
+        # volta pra fila e devolve a linha que já existe, como se fosse um
+        # upload novo — do ponto de vista de quem arrastou o arquivo, foi.
+        parado = ja["status"] != "pronto" or (ja["chunks"] or 0) == 0
+        if not parado:
+            raise ErroMaterial(f"você já subiu este arquivo (\"{ja['titulo']}\")")
+        db.query("""UPDATE documento SET status = 'processando', erro = NULL,
+                           arquivo = COALESCE(arquivo, %(b)s),
+                           arquivo_tipo = COALESCE(arquivo_tipo, %(t)s),
+                           arquivo_bytes = COALESCE(arquivo_bytes, %(n)s)
+                     WHERE id = %(i)s""",
+                 {"i": ja["id"], "b": dados, "t": _tipo_mime(nome), "n": len(dados)})
+        enfileirar(ja["id"])
+        volta = {k: v for k, v in ja.items() if k != "chunks"}
+        return {**volta, "status": "processando", "chunks": 0, "retomado": True}
 
     texto = _extrair(nome, dados)
     if len(texto.strip()) < MIN_CHARS:

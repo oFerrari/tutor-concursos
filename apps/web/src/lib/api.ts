@@ -783,6 +783,11 @@ export type Material = {
   tem_arquivo?: boolean;
   /** Tamanho do original em bytes, pra tela mostrar sem baixar. */
   arquivo_bytes?: number | null;
+  /** O upload encontrou este arquivo JÁ NO BANCO, parado (`processando` ou
+   *  `falha`, sem trecho nenhum), e o recolocou na fila em vez de recusar como
+   *  duplicata. Não é erro: é serviço inacabado sendo retomado — foi o que
+   *  acontecia depois de o servidor cair no meio de um lote grande. */
+  retomado?: boolean;
   /** Mesa que subiu este material (021). `null` = pool comum: material anterior
    *  à migração, ou que serve a qualquer concurso. */
   mesa_id: number | null;

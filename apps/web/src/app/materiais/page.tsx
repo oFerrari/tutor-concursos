@@ -256,6 +256,10 @@ export default function PaginaMateriais() {
   const [tipo, setTipo] = useState("aula");
   const [url, setUrl] = useState("");
   const [erro, setErro] = useState<string | null>(null);
+  /** Aviso é diferente de ERRO: nada deu errado, mas houve algo que a pessoa
+   *  precisa saber (material parado que voltou pra fila). Vermelho pra isso
+   *  ensina a ignorar vermelho. */
+  const [aviso, setAviso] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   /** Progresso do LOTE. `null` fora de um envio múltiplo. */
   const [lote, setLote] = useState<{ feitos: number; total: number } | null>(null);
@@ -453,12 +457,21 @@ export default function PaginaMateriais() {
   async function enviar(arquivos: File[]) {
     if (!arquivos.length) return;
     setErro(null);
+    setAviso(null);
     setEnviando(true);
     setLote(arquivos.length > 1 ? { feitos: 0, total: arquivos.length } : null);
     const falhas: string[] = [];
+    // RETOMADOS não são falhas, e contá-los como falha foi o que produziu a
+    // mensagem mais confusa que este app já deu: depois de o servidor cair no
+    // meio do lote, subir os 18 de novo dizia "18 de 18 não entraram" com
+    // dezoito vezes "você já subiu este arquivo" — quando o servidor tinha
+    // acabado de RECOLOCAR os dezoito na fila. O que entrou foi reportado
+    // como o que não entrou.
+    let retomados = 0;
     for (let i = 0; i < arquivos.length; i++) {
       try {
-        await subirMaterial(arquivos[i], { disciplina, assunto, tipo });
+        const r = await subirMaterial(arquivos[i], { disciplina, assunto, tipo });
+        if (r.retomado) retomados += 1;
       } catch (e) {
         falhas.push(`${arquivos[i].name}${e instanceof ErroApi ? ` (${e.message})` : ""}`);
       }
@@ -473,6 +486,16 @@ export default function PaginaMateriais() {
       setErro(
         `${falhas.length} de ${arquivos.length} não entraram: ${falhas.join("; ")}. Os outros estão processando.`
       );
+    } else if (retomados) {
+      // Aviso, não erro: nada deu errado — material que estava parado voltou
+      // pra fila. Dizer QUANTOS evita a dúvida de "então não fez nada?".
+      setAviso(
+        retomados === arquivos.length
+          ? `${retomados} ${retomados === 1 ? "arquivo já estava aqui e estava" : "arquivos já estavam aqui e estavam"} parados — coloquei de volta na fila de indexação.`
+          : `${retomados} de ${arquivos.length} já estavam aqui, parados, e voltaram pra fila. O resto entrou agora.`
+      );
+      setAssunto("");
+      await carregarSugestoes();
     } else {
       // Rótulo é do LOTE, não da sessão: limpar evita que o próximo arquivo
       // herde calado a disciplina do curso anterior.
@@ -626,6 +649,8 @@ export default function PaginaMateriais() {
       )}
 
       {erro && <p className="callout-danger mb-4 !p-3 text-[13px]">{erro}</p>}
+
+      {aviso && <p className="callout-warning mb-4 !p-3 text-[13px]">{aviso}</p>}
 
       {/* Os três campos são OPCIONAIS e a tela diz isso. Preenchê-los é atalho
           pra quem já sabe do que é o material — poupa a chamada ao
