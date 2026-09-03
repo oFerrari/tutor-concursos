@@ -934,6 +934,17 @@ export function getRascunho(id: number): Promise<Rascunho> {
   return chamar<Rascunho>(`/editais/rascunho/${id}`);
 }
 
+/**
+ * Descarta um rascunho de edital sem confirmá-lo.
+ *
+ * A rota existia desde a 011 e não tinha tela: subiu o PDF errado, e a única
+ * saída era abandonar a página e esperar o rascunho expirar — sem nada dizendo
+ * que ele expira, e com o PDF errado ocupando a curadoria.
+ */
+export function apagarRascunho(id: number): Promise<{ ok: true }> {
+  return chamar(`/editais/rascunho/${id}`, { method: "DELETE" });
+}
+
 export function confirmarRascunho(
   id: number,
   dados: {

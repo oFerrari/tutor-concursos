@@ -121,6 +121,16 @@ export default function PaginaMeta() {
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Meta até a prova</h1>
         <p className="mt-1 text-sm text-muted">Dias restantes, cobertura e probabilidade de fechamento.</p>
+        {/* A PONTE QUE FALTAVA. `/alvo` só era alcançável por um `router.push`
+            dentro do onboarding — depois de sair dela, trocar de alvo exigia
+            digitar a URL. Esta tela é a que a Sidebar chama "Meu edital", então
+            é daqui que a pessoa espera mexer nele. */}
+        <Link
+          href="/alvo"
+          className="mt-2 inline-block text-[13px] text-muted underline-offset-2 hover:text-foreground hover:underline"
+        >
+          definir ou trocar o alvo desta mesa →
+        </Link>
       </div>
 
       {erro && <p className="mb-4 callout-danger">{erro}</p>}

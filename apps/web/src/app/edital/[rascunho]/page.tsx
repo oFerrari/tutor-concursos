@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Check } from "lucide-react";
+import { Check, Trash2 } from "lucide-react";
+import { Confirmar } from "@/components/Confirmar";
 import { Voltar } from "@/components/Voltar";
 import {
+  apagarRascunho,
   DisciplinaEdital,
   ErroApi,
   Rascunho,
@@ -56,6 +58,20 @@ export default function PaginaCuradoria() {
    *  um vínculo que o schema não tem. */
   const [cargoManual, setCargoManual] = useState("");
   const [salvando, setSalvando] = useState(false);
+  const [descartando, setDescartando] = useState(false);
+
+  async function descartar() {
+    setDescartando(false);
+    try {
+      await apagarRascunho(Number(id));
+    } catch {
+      // Rascunho já expirado ou apagado devolve 404 — e o destino é o
+      // mesmo que no sucesso. Travar a pessoa nesta tela por causa
+      // disso seria pior que seguir.
+    }
+    router.push("/onboarding");
+  }
+
 
   /** comuns + as do cargo escolhido. Trocar de cargo remonta a lista —
    *  edição manual do cargo anterior não sobrevive, e não deveria. */
@@ -336,8 +352,31 @@ export default function PaginaCuradoria() {
           <p className="mt-2.5 text-[12px] text-subtle">
             Só agora isso vira edital da mesa e passa a contar na meta e na fila.
           </p>
+
+          {/* DESCARTAR — a saída que faltava. A rota existe desde a 011 e não
+              tinha botão: subiu o PDF errado e a única saída era abandonar a
+              página, sem nada dizendo que o rascunho expira sozinho. Discreto
+              de propósito: é a ação secundária desta tela. */}
+          <button
+            onClick={() => setDescartando(true)}
+            className="mt-5 inline-flex items-center gap-1.5 text-[12.5px] text-muted underline-offset-2 hover:text-danger hover:underline"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Descartar este rascunho
+          </button>
         </div>
       )}
+
+      <Confirmar
+        aberto={descartando}
+        destrutivo
+        titulo="Descartar este rascunho?"
+        descricao="A leitura do PDF é jogada fora. Para tentar de novo você sobe o arquivo outra vez."
+        detalhe="Nada da sua mesa muda: o edital que já estava valendo (se houver) continua igual, e seu progresso não é tocado."
+        rotuloConfirmar="Descartar"
+        onConfirmar={descartar}
+        onCancelar={() => setDescartando(false)}
+      />
     </div>
   );
 }

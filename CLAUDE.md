@@ -66,7 +66,11 @@ db/012_questao_tipo.sql    questao.tipo + gabarito_ce: item CERTO/ERRADO (Cebras
 db/013_contexto.sql        "Texto associado": texto-base compartilhado por vários itens
 db/014_conversa.sql        conversa + mensagem: o chat do tutor passa a ter memória
 db/015_perfil.sql          usuario.perfil (JSONB): horas/nível/turno declarados no onboarding
+db/016_mensagem_evento.sql mensagem de EVENTO: o que o aluno FEZ (errou a questão), não só o que disse
+db/017_mesa_disciplinas.sql mesa declara disciplinas SEM edital — cartão de mesa nova para de nascer cheio
 db/018_edital_cargo.sql    edital.cargo: o plano diz PARA QUEM ele é (17 cargos no da PF)
+db/018_simulado_resumavel.sql simulado.questao_ids: a prova sobrevive a queda de conexão no meio
+db/019_simulado_nome.sql   simulado.nome: três provas no mesmo dia deixam de ser indistinguíveis
 db/019_material_do_aluno.sql documento.usuario_id + status/erro/chunks_total: biblioteca privada
 db/020_material_classificado.sql disciplina virou NULLABLE + assunto + classificado_por
 db/021_biblioteca_por_mesa.sql documento.mesa_id + mesa.biblioteca_compartilhada
@@ -232,6 +236,11 @@ outra medição, não com opinião.
   `test_geracao.py` (proveniência e os CHECKs da 012/013),
   `test_conversa.py` (histórico chegando ao prompt) e `test_perfil.py`
   (perfil inválido nunca chegando ao prompt).
+- **A PRÓXIMA migração é a 026.** Há dois pares com número repetido (`018_edital_cargo`
+  + `018_simulado_resumavel`, `019_material_do_aluno` + `019_simulado_nome`): nasceram
+  em paralelo e as quatro rodaram, porque `migrar.py` ordena por NOME e o livro-razão
+  chaveia por nome. Funciona, mas o número parou de identificar a migração — não crie
+  um terceiro repetido. Confira com `python migrar.py --listar` antes de numerar.
 - **Migração numerada nova entra com `python migrar.py`** (023). Da 012 à 022
   todas foram aplicadas na mão, na era anterior a isso — o livro-razão deste
   banco foi preenchido de uma vez com `migrar.py --adotar`. Banco de máquina

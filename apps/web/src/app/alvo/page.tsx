@@ -3,8 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { AlertTriangle, CalendarClock, Check, FolderOpen, Plus } from "lucide-react";
+import { AlertTriangle, CalendarClock, Check, FolderOpen, Plus, Trash2 } from "lucide-react";
+import { Confirmar } from "@/components/Confirmar";
 import {
+  removerEdital,
   EditalAtual,
   ErroApi,
   Mesa,
@@ -60,6 +62,26 @@ export default function PaginaAlvo() {
 
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [removendo, setRemovendo] = useState(false);
+
+  /** Tira o edital da mesa (`DELETE /edital`, migração 017).
+   *
+   *  A rota e o `removerEdital()` do api.ts existiam e NENHUMA tela os
+   *  chamava: um edital confirmado era definitivo pela interface. E o lugar
+   *  é aqui, não no /meta: `/meta` exibe a meta, esta tela é a que decide o
+   *  alvo — e o docstring da rota diz que remover é "o único jeito de a
+   *  escolha manual valer", que é exatamente o que se faz nesta página. */
+  async function remover() {
+    setRemovendo(false);
+    setErro(null);
+    try {
+      await removerEdital();
+      router.push("/meta");
+    } catch (e) {
+      setErro(e instanceof ErroApi ? e.message : "Não deu pra remover o edital");
+    }
+  }
+
   /** Segundo passo quando já existe edital: substituir é destrutivo e não
    *  acontece no primeiro clique. Sem edital, este passo nem existe — seria
    *  clique inútil. */
@@ -347,11 +369,41 @@ export default function PaginaAlvo() {
                     </Link>
                   </p>
                 )}
+                {/* O CAMINHO DO PDF, dito aqui. Esta tela é o "na mão", e quem
+                    chega nela pelo Raio-X pode ter o edital publicado em PDF —
+                    descobrir sozinho que existe outro fluxo pra isso é atrito
+                    desnecessário. */}
+                <p className="mt-2 text-[12.5px] text-subtle">
+                  Tem o PDF do edital?{" "}
+                  <Link href="/onboarding" className="underline underline-offset-2">
+                    subir o arquivo e deixar o sistema ler
+                  </Link>
+                </p>
+                {edital && (
+                  <button
+                    onClick={() => setRemovendo(true)}
+                    className="mt-5 inline-flex items-center gap-1.5 text-[12.5px] text-muted underline-offset-2 hover:text-danger hover:underline"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Remover o edital desta mesa
+                  </button>
+                )}
               </>
             )}
           </div>
         </>
       )}
+
+      <Confirmar
+        aberto={removendo}
+        destrutivo
+        titulo={`Remover o edital "${edital?.titulo ?? ""}" desta mesa?`}
+        descricao="A mesa volta a ser estudo avulso: a fila, o desempenho e o simulado passam a olhar o acervo inteiro, sem recorte por disciplina."
+        detalhe="Seu progresso não é apagado — caixas, tentativas e caderno de erros são seus, não da mesa. E você pode declarar o alvo na mão aqui mesmo, ou subir o PDF de novo."
+        rotuloConfirmar="Remover edital"
+        onConfirmar={remover}
+        onCancelar={() => setRemovendo(false)}
+      />
     </div>
   );
 }

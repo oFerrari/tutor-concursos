@@ -48,6 +48,10 @@ export function RaioX({ meta, mesa, edital, desempenho, carga, erros, onFechar }
   // Sem alvo, os blocos deste rail mostram o histórico INTEIRO do aluno. O
   // rail continua útil assim (é raio-x DO ALUNO, não da mesa) — o que não
   // pode é rotular isso como progresso de um edital que não existe.
+  // Sem alvo, o link vai pra onde se DEFINE o alvo (`/alvo`); tendo alvo
+  // mas sem data, vai pra onde se LÊ a meta (`/meta`). Antes os dois iam
+  // pro `/meta`, que só exibe — clicar em "sem alvo" levava a uma tela
+  // que também dizia que não havia alvo.
   const semAlvo = mesa?.origem_alvo === "nenhum";
   const comDado = (desempenho ?? []).filter((d) => d.pct_acerto != null);
   const ordenadas = [...comDado].sort((a, b) => (a.pct_acerto ?? 0) - (b.pct_acerto ?? 0));
@@ -77,7 +81,10 @@ export function RaioX({ meta, mesa, edital, desempenho, carga, erros, onFechar }
             <span className="text-[13.5px] text-muted">dias{dataProva ? ` · ${dataProva}` : ""}</span>
           </div>
         ) : (
-          <Link href="/meta" className="text-[13.5px] text-muted underline-offset-2 hover:text-foreground">
+          <Link
+            href={semAlvo ? "/alvo" : "/meta"}
+            className="text-[13.5px] text-muted underline-offset-2 hover:text-foreground"
+          >
             {semAlvo ? "sem alvo nesta mesa →" : "sem data de prova →"}
           </Link>
         )}
