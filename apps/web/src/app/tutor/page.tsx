@@ -8,6 +8,7 @@ import { MarcaGlifo } from "@/components/Marca";
 import { BalaoQuestao } from "@/components/BalaoQuestao";
 import { GerarQuestoes } from "@/components/GerarQuestoes";
 import { ResultadoQuestao } from "@/components/DialogoQuestao";
+import { TextoDoTutor } from "@/components/TextoDoTutor";
 import {
   ErroApi,
   Fonte,
@@ -506,7 +507,7 @@ export default function PaginaTutor() {
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="balao-tutor">
-                    <p className="whitespace-pre-wrap text-[15px] leading-[1.65]">{m.texto}</p>
+                    <TextoDoTutor texto={m.texto} />
                     {(m.citadas.length > 0 || m.consultadas.length > 0) && (
                       <div className="mt-3 space-y-1.5 border-t border-line-soft pt-3">
                         {m.citadas.length > 0 && (
