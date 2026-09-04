@@ -42,7 +42,7 @@ cooperativa; este projeto é separado disso por decisão explícita.
 ```
 Postgres 17 + pgvector   docker compose, porta 5433
 embeddings               intfloat/multilingual-e5-base, 768 dim, LOCAL (CPU)
-LLM                      Gemini Flash via REST, adaptador trocável
+LLM                      Gemini Flash via REST (gemini-3.1-flash-lite + cadeia de reserva), adaptador trocável
 auth                     JWT (PyJWT) + bcrypt, stateless — sem tabela de sessão
 interface                CLI (rich, chat.py) + API HTTP (FastAPI, api.py) sobre o mesmo core/,
                          e frontend Next.js (apps/web) consumindo a API.

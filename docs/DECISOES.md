@@ -1360,6 +1360,37 @@ Isso mudou dois testes de propósito, e os dois estão anotados: "mesmo arquivo
 duas vezes é barrado" passou a esperar a indexação terminar, senão media a
 janela em que o primeiro ainda estava na fila.
 
+**"A APLICAÇÃO ESTÁ LENTA" ERA O GEMINI — mas parte da espera era nossa.**
+Relatado assim: com o material carregado, um "bom dia" demorava muito e às vezes
+devolvia `LLM indisponível: HTTP 503`. A suspeita natural era o volume de
+material. Medido, não era:
+
+| o que | tempo |
+|---|---|
+| `mesa.contexto` + `perfil` + `_resumo_desempenho` + `_resumo_mesa` + `_programa_em_foco` | **11 ms somados** |
+| chamada TRIVIAL ao Gemini (10 tokens) | **33,8s / 42,4s / 503** |
+
+Máquina ociosa (load 0,63 em 8 núcleos), índice HNSW no lugar, 4.585 chunks. O
+app respondia em 11ms e esperava 40s pelo provedor.
+
+**O QUE ERA NOSSO:** `_post` repetia o MESMO modelo três vezes, dormindo 3s e
+10s entre as tentativas. O 503 do plano gratuito é por capacidade DO MODELO, não
+da conta — medido no mesmo minuto, `gemini-3.5-flash-lite` deu 503 em duas
+tentativas seguidas enquanto `gemini-3.1-flash-lite` respondeu em **2,1s**.
+Insistir no mesmo endereço transformava a instabilidade deles em 13s de espera
+nossa pra bater na mesma parede.
+
+Duas mudanças. Primeiro, uma tentativa por MODELO, percorrendo
+`GEMINI_RESERVAS` — 4/5 chamadas passaram a responder, e as boas caíram pra
+5,9s/7,2s. Segundo, e o que de fato resolveu: o `3.5-flash-lite` estava fora em
+praticamente toda chamada, então ele deixou de ser o principal. Com
+`3.1-flash-lite` na frente, um "bom dia" ponta a ponta ficou em **1,8s / 2,8s /
+5,8s**.
+
+A lição pra próxima vez que "o app está lento": cronometre as peças ANTES de
+acreditar na causa mais plausível. O material não tinha nada a ver, e mexer nele
+teria custado dias sem mudar o número.
+
 ## Armadilhas do corpus (Planalto)
 
 - Quebra de linha no meio da frase; `normalizar_lei()` remonta.

@@ -17,13 +17,13 @@ from pathlib import Path
 
 import httpx
 
-from .config import (GEMINI_API_KEY, GEMINI_MODEL, LLM_PROVIDER,
+from .config import (GEMINI_API_KEY, GEMINI_MODEL, GEMINI_RESERVAS, LLM_PROVIDER,
                      OLLAMA_MODEL, OLLAMA_URL)
 
 # 120s nao bastava no plano gratuito. Configuravel via LLM_TIMEOUT no .env.
 TIMEOUT = httpx.Timeout(float(os.getenv("LLM_TIMEOUT", "240")))
 DEBUG_FILE = Path(".llm_debug.txt")
-VERSAO = "llm-v16"
+VERSAO = "llm-v17"
 
 # Temperatura padrão de TODA chamada do produto. Era um literal repetido nos dois
 # adaptadores; virou constante quando o `temperatura=` apareceu, porque dois
@@ -112,8 +112,36 @@ class Gemini(LLM):
         if sistema:
             corpo["systemInstruction"] = {"parts": [{"text": sistema}]}
 
-        r = _post(f"{self.BASE}/{GEMINI_MODEL}:generateContent",
-                  {"key": GEMINI_API_KEY}, corpo)
+        # TROCA DE MODELO ANTES DE INSISTIR NO MESMO. O 503 do plano gratuito é
+        # por capacidade DO MODELO: medido no mesmo minuto, `3.5-flash-lite` deu
+        # 503 duas vezes enquanto `3.1-flash-lite` respondeu em 2,1s. A versão
+        # anterior repetia o mesmo endereço três vezes, dormindo 3s e 10s entre
+        # as tentativas — ou seja, transformava a instabilidade deles em 13s de
+        # espera nossa pra bater na mesma parede, e o aluno via "LLM
+        # indisponível" depois de quase um minuto olhando a tela.
+        #
+        # Uma tentativa por modelo, e o backoff fica só entre as rodadas: se
+        # nenhum dos quatro respondeu, aí sim vale esperar antes de repassar.
+        r = None
+        ultimo_erro = ""
+        for modelo in [GEMINI_MODEL, *GEMINI_RESERVAS]:
+            try:
+                r = _post(f"{self.BASE}/{modelo}:generateContent",
+                          {"key": GEMINI_API_KEY}, corpo, tentativas=1)
+            except ErroLLM as e:
+                ultimo_erro = str(e)
+                continue
+            if r.status_code < 500 and r.status_code != 429:
+                if modelo != GEMINI_MODEL:
+                    print(f"    {GEMINI_MODEL} indisponível; respondeu com {modelo}")
+                break
+            ultimo_erro = f"HTTP {r.status_code}"
+            r = None
+        if r is None:
+            raise ErroLLM(
+                f"o Gemini não respondeu em nenhum dos {1 + len(GEMINI_RESERVAS)} modelos "
+                f"({ultimo_erro}). Isso é instabilidade do provedor, não do app — "
+                f"costuma passar em alguns minutos. Tente de novo.")
         if r.status_code == 429:
             raise ErroLLM("cota do plano gratuito estourada (429). Aguarde ou troque de modelo.")
         if r.status_code == 404:
