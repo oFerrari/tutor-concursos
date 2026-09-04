@@ -738,3 +738,51 @@ def test_cabecalhos_de_navegador_no_download_por_link():
     frágil hoje."""
     ua = material.CABECALHOS_URL.get("User-Agent", "")
     assert "Mozilla" in ua, "sem UA de navegador o Planalto derruba a conexão"
+
+
+def test_lei_seca_do_aluno_vira_chunk_por_artigo(client, usuario):
+    """Subir a lei INTEIRA é dividido por artigo; apostila continua por janela.
+
+    Relatado: o dono colou o link da Constituição e depois subiu o .htm dela, e
+    as duas viraram ~2100 janelas genéricas com `artigo` NULO. Medido, o efeito
+    era quádruplo — não achava por dispositivo, não gerava questão (o gerador
+    exige `artigo IS NOT NULL`), a citação saía "constituicao, p. 14" em vez de
+    "CF, art. 37", e os 2100 trechos COMPETIAM na busca com a CF do acervo, que
+    já estava lá dividida por artigo.
+
+    O outro lado é o que a decisão original protegia, e continua protegido:
+    apostila cita "art. 312" no meio do parágrafo do professor, e virar chunk
+    com `artigo='312'` faria `por_dispositivo` devolver o comentário em vez da
+    lei. O que separa os dois casos é POSIÇÃO e VOLUME: lei publicada abre linha
+    com "Art. N" (584 vezes na CF); apostila cita no meio da frase.
+    """
+    lei = "\n".join(
+        f"Art. {n}. Fica estabelecido o disposto neste artigo para fins de teste "
+        f"do chunker, com texto suficientemente longo para ser indexado." for n in range(1, 61))
+    apostila = ("Nesta aula o professor comenta o art. 312 do CP e também o art. 313, "
+                "explicando a diferença entre apropriação e desvio. " * 40)
+
+    r = client.post("/materiais", headers=usuario["headers"], data={"tipo": "aula"},
+                    files={"arquivo": ("lei-teste.txt", lei.encode(), "text/plain")})
+    assert r.status_code == 201, r.text
+    doc_lei = r.json()["id"]
+
+    r2 = client.post("/materiais", headers=usuario["headers"], data={"tipo": "aula"},
+                     files={"arquivo": ("aula-teste.txt", apostila.encode(), "text/plain")})
+    assert r2.status_code == 201, r2.text
+    doc_aula = r2.json()["id"]
+
+    com_artigo = db.exec1(
+        "SELECT count(artigo) AS n FROM chunk WHERE documento_id = %(d)s", {"d": doc_lei})["n"]
+    assert com_artigo > 0, "lei seca do aluno não foi dividida por artigo"
+
+    sem_artigo = db.exec1(
+        "SELECT count(*) AS t, count(artigo) AS a FROM chunk WHERE documento_id = %(d)s",
+        {"d": doc_aula})
+    assert sem_artigo["a"] == 0, \
+        "apostila virou chunk por artigo — `por_dispositivo` passaria a devolver o comentário"
+
+    # A NORMA fica nula mesmo na lei do aluno: nome de norma é do acervo
+    # público, e inventar um aqui misturaria a cópia dele com a oficial.
+    assert db.exec1("SELECT count(norma) AS n FROM chunk WHERE documento_id = %(d)s",
+                    {"d": doc_lei})["n"] == 0

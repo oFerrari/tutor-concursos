@@ -1490,6 +1490,42 @@ falhava na suíte — não por código, mas porque o provedor devolvia 503. O qu
 afirma (proveniência, gravação, fila, tutor não mandando clicar) não precisa de
 modelo real nenhum. Duplê, como o resto do arquivo já fazia.
 
+**LEI SECA DO ALUNO É DIVIDIDA POR ARTIGO — E CÓPIA DO ACERVO É RECUSADA.** Dois
+consertos que nasceram do mesmo relato: o dono colou o link da Constituição,
+depois subiu o .htm dela, e perguntou por que o tutor continuava dizendo que não
+tinha material.
+
+**Primeira parte.** As duas cópias viraram ~2100 janelas genéricas com `artigo`
+NULO, porque todo material do aluno ia por `chunk_generico`. O efeito era
+quádruplo: não achava por dispositivo, não gerava questão (o gerador exige
+`artigo IS NOT NULL`), a citação saía "constituicao, p. 14" em vez de "CF, art.
+37", e competia na busca com a CF do acervo.
+
+`_e_lei_seca` separa lei de apostila pelo que os distingue de fato: lei publicada
+abre linha com "Art. N" (584 vezes na CF); apostila cita no meio da frase. Teto
+folgado de 40 ocorrências EM INÍCIO DE LINHA. A decisão anterior ("tudo por
+`chunk_generico`") tinha um medo legítimo — apostila comentada citando "art. 312"
+viraria chunk com `artigo='312'` e sequestraria `por_dispositivo` — e ele segue
+coberto duas vezes: a norma fica NULA e `por_dispositivo` ordena
+`d.tipo = 'lei' DESC`.
+
+**Segunda parte, e ela só apareceu porque a primeira funcionou.** Com as cópias
+divididas por artigo, elas passaram a GANHAR da original: a busca por "princípios
+da administração pública", que trazia `cf, art. 37` na posição 3, passou a trazer
+`constituicao.txt, art. 88`, `art. 39`, `art. 234`. Mil e oitenta e seis cópias
+afogando o original.
+
+E o `avaliar_retrieval.py` NÃO viu: ele mede contra o acervo compartilhado, sem
+`usuario_id`, então a biblioteca do aluno é invisível pra ele — 21/32 antes e
+depois. A degradação era exclusiva do aluno, o pior tipo, porque nenhuma medida
+do projeto a mostra. Fica registrado: ao mexer em material do aluno, medir COM
+`usuario_id`.
+
+Daí `norma_ja_no_acervo`: amostra 25 artigos e compara (artigo, prefixo do texto)
+contra o acervo público. Batendo 60%, o upload é recusado com a razão — subir
+cópia não acrescenta nada e piora a busca. O limiar tem folga porque emenda muda
+redação, e 25 amostras não confundem apostila que transcreve uns poucos artigos.
+
 ## Armadilhas do corpus (Planalto)
 
 - Quebra de linha no meio da frase; `normalizar_lei()` remonta.

@@ -9,13 +9,30 @@ precisa de dono, de estado de processamento e de nunca derrubar o request.
 A parte comum de verdade (extrair -> chunk -> embed -> gravar) é curta; o
 que difere é tudo em volta.
 
-DECISÃO CENTRAL: material do aluno NUNCA entra como `tipo='lei'`.
-`chunk_lei` extrai (norma, artigo) para permitir citação exata de
-dispositivo, e apostila comentada é justamente onde isso mente: o texto
-cita "art. 312" no meio de um parágrafo do professor, e virar um chunk com
-`artigo='312'` faria `por_dispositivo("art. 312")` devolver o comentário da
-apostila em vez da lei. Vai tudo por `chunk_generico` — perde citação por
-artigo, mantém busca híbrida. É o mesmo raciocínio de `tipo='historico'`.
+DECISÃO CENTRAL: material do aluno NUNCA entra como `tipo='lei'`. Isso
+continua valendo — o tipo é sempre o que ele escolheu (aula, resumo,
+jurisprudência), e a norma fica NULA, porque nome de norma é do acervo
+público (`ingest.py --norma CF`).
+
+O QUE MUDOU, e por um caso relatado: o CHUNKER passou a depender do texto.
+A regra anterior mandava tudo pra `chunk_generico`, e o medo era legítimo —
+apostila comentada cita "art. 312" no meio de um parágrafo do professor, e
+virar chunk com `artigo='312'` faria `por_dispositivo` devolver o comentário
+em vez da lei.
+
+Só que o dono colou o link da Constituição e depois subiu o .htm dela, e as
+duas viraram ~2100 janelas genéricas com `artigo` NULO. O efeito, medido:
+não dava pra achar por dispositivo, não dava pra gerar questão (o gerador
+exige `artigo IS NOT NULL`), a citação saía "constituicao, p. 14" em vez de
+"CF, art. 37", e — o pior — esses 2100 trechos COMPETIAM na busca com a CF
+do acervo, que já estava lá dividida por artigo.
+
+`_e_lei_seca` separa os dois casos pelo que os distingue de fato: lei
+publicada abre linha com "Art. N" (584 vezes na CF); apostila cita no meio da
+frase. Com teto folgado de 40 ocorrências EM INÍCIO DE LINHA, apostila que
+cita dezenas de artigos continua indo por janela. E o medo original segue
+coberto duas vezes: a norma nula e o `ORDER BY d.tipo = 'lei' DESC` de
+`por_dispositivo` mantêm a lei oficial na frente da cópia do aluno.
 """
 import hashlib
 import queue
@@ -25,7 +42,7 @@ import re
 
 from . import chunking, db, embeddings
 
-VERSAO = "material-v9"
+VERSAO = "material-v11"
 
 LOTE = 32
 MIN_CHARS = 200
@@ -315,6 +332,97 @@ def _html_para_texto(html: str) -> str:
     return re.sub(r"\n\s*\n\s*\n+", "\n\n", limpo).strip()
 
 
+# Quantos "Art. N" seguidos fazem um texto ser LEI SECA e não apostila.
+#
+# 40 é folgado de propósito: apostila cita artigo o tempo todo (a de
+# Criminalística cita dezenas), e tratar apostila como lei seca seria pior que o
+# contrário — o chunker de lei parte o texto por artigo e jogaria fora a
+# explicação do professor entre um e outro.
+MIN_ARTIGOS_LEI = 40
+RE_ARTIGO_LEI = re.compile(r"(?im)^\s*Art(?:igo)?\.?\s*\d")
+
+
+def _e_lei_seca(texto: str) -> bool:
+    """O material é o TEXTO DE UMA LEI, e não uma aula sobre ela?
+
+    Existe por um caso relatado: o dono colou o link da Constituição e depois
+    subiu o .htm dela, e as duas viraram ~2100 trechos de janela genérica com
+    `artigo` NULO. Consequências, todas medidas:
+    · não dá pra achar por dispositivo ("art. 37" não casa nada),
+    · não dá pra gerar questão (o gerador exige `artigo IS NOT NULL`),
+    · a citação sai como "constituicao, p. 14" em vez de "CF, art. 37",
+    · e — o pior — esses 2100 trechos COMPETEM na busca com a CF do acervo
+      público, que já estava lá corretamente dividida por artigo.
+
+    Conta artigo em INÍCIO DE LINHA, que é como lei publicada se apresenta.
+    Citação no meio do texto ("previsto no art. 37") não conta, e é justamente
+    o que apostila faz."""
+    return len(RE_ARTIGO_LEI.findall(texto)) >= MIN_ARTIGOS_LEI
+
+
+# Quantos artigos amostrados precisam bater pra dizer "isto já está no acervo".
+# 0.6 e 25 amostras: sobra folga pra versão mais nova (emendas mudam artigos) e
+# não confunde apostila que TRANSCREVE alguns artigos com a lei inteira.
+LIMIAR_DUPLICATA = 0.6
+AMOSTRA_DUPLICATA = 25
+
+
+def norma_ja_no_acervo(chunks: list[dict]) -> str | None:
+    """A lei que o aluno subiu já existe no acervo PÚBLICO? Devolve a norma.
+
+    POR QUE ISTO É NECESSÁRIO, e a medição que obrigou: o dono colou o link da
+    Constituição e depois subiu o .htm dela. Cada cópia virou 543 chunks por
+    artigo, e as duas passaram a COMPETIR com a CF oficial — a busca por
+    "princípios da administração pública", que antes trazia `cf, art. 37` na
+    posição 3, passou a trazer `constituicao.txt, art. 88`, `art. 39`,
+    `art. 234`. Mil e oitenta e seis cópias afogando o original.
+    
+    O `avaliar_retrieval.py` NÃO pega isso, e é importante saber: ele mede
+    contra o acervo compartilhado, sem `usuario_id`, então a biblioteca do aluno
+    é invisível pra ele. Ficou 21/32 antes e depois. A degradação era só do
+    aluno — o pior tipo, porque nenhuma medida do projeto a mostra.
+    
+    Compara por (artigo, começo do texto) numa amostra: emenda muda a redação de
+    alguns artigos, então exigir igualdade total recusaria a versão nova de uma
+    lei que valeria a pena ter. `LIMIAR_DUPLICATA` de 60% em 25 amostras dá essa
+    folga sem confundir apostila que transcreve uns poucos artigos."""
+    amostra = [c for c in chunks if c.get("artigo")][:AMOSTRA_DUPLICATA]
+    if len(amostra) < 10:
+        return None
+    achados: dict[str, int] = {}
+    for c in amostra:
+        prefixo = " ".join((c.get("texto") or "").split())[:60]
+        if len(prefixo) < 30:
+            continue
+        for r in db.query(
+            """SELECT c.norma FROM chunk c JOIN documento d ON d.id = c.documento_id
+                WHERE d.usuario_id IS NULL AND c.norma IS NOT NULL
+                  AND c.artigo = %(a)s
+                  AND regexp_replace(c.texto, '\s+', ' ', 'g') LIKE %(p)s""",
+            {"a": c["artigo"], "p": f"%{prefixo}%"},
+        ):
+            achados[r["norma"]] = achados.get(r["norma"], 0) + 1
+    if not achados:
+        return None
+    norma, batidas = max(achados.items(), key=lambda x: x[1])
+    return norma if batidas / len(amostra) >= LIMIAR_DUPLICATA else None
+
+
+def _dividir(texto: str, nome: str) -> list[dict]:
+    """Divide pelo chunker CERTO pro tipo de texto.
+
+    Lei seca pelo `chunk_lei` (um chunk por artigo, com `artigo` preenchido —
+    é o que dá proveniência, citação exata e geração de questão); o resto por
+    janela. A norma fica `None`: o nome dela é do acervo público
+    (`ingest.py --norma CF`), e inventar uma aqui faria a busca por dispositivo
+    misturar a cópia do aluno com a oficial."""
+    if _e_lei_seca(texto):
+        chunks = chunking.chunk_lei(chunking.normalizar_lei(texto), norma=None)
+        if chunks:
+            return chunks
+    return chunking.chunk_generico(texto)
+
+
 def registrar(usuario_id: int, nome: str, dados: bytes,
               disciplina: str | None = None, tipo: str = "aula",
               titulo: str | None = None, assunto: str | None = None,
@@ -385,9 +493,20 @@ def registrar(usuario_id: int, nome: str, dados: bytes,
             "quase nenhum texto foi extraído — este PDF provavelmente é imagem "
             "escaneada. Rode OCR (ocrmypdf) e suba de novo.")
 
-    chunks = chunking.chunk_generico(texto)
+    chunks = _dividir(texto, nome)
     if not chunks:
         raise ErroMaterial("não consegui dividir este material em trechos")
+
+    # RECUSA CÓPIA DO QUE JÁ ESTÁ NO ACERVO, e recusar é o certo aqui: aceitar
+    # não acrescenta nada e ATIVAMENTE piora a busca do aluno, porque as cópias
+    # competem com o original. Medido — ver `norma_ja_no_acervo`.
+    ja_tem = norma_ja_no_acervo(chunks)
+    if ja_tem:
+        raise ErroMaterial(
+            f"esta lei já está no acervo do app ({ja_tem}), dividida por artigo — subir uma "
+            f"cópia não acrescenta nada e piora a busca, porque as duas versões competem. "
+            f"Pergunte direto ao tutor (\"art. 37\") que ele usa a que já está aqui. "
+            f"O que vale subir é o que o app NÃO tem: aula, resumo e apostila.")
 
     # O ARQUIVO VAI PARA O BANCO (024). Antes daqui o `dados` era usado pra
     # extrair texto e descartado, e o PDF ficava só no computador de quem subiu
@@ -523,7 +642,13 @@ def indexar(documento_id: int, nome: str, dados: bytes) -> None:
     """
     try:
         texto = _extrair(nome, dados)
-        chunks = chunking.chunk_generico(texto)
+        # `_dividir` e não `chunk_generico` direto: `indexar` reextrai dos bytes
+        # por decisão (ver docstring), então ele tem a MESMA escolha de chunker a
+        # fazer que o `registrar`. Trocar só num dos dois foi o que fiz primeiro,
+        # e o efeito foi silencioso: a CF reindexada voltou com 1074 janelas
+        # genéricas e zero artigo, exatamente como antes, porque o caminho que
+        # roda de verdade é este.
+        chunks = _dividir(texto, nome)
     except Exception as e:  # noqa: BLE001 — ver o comentário do except final
         with db.conexao_isolada() as c, c.cursor() as cur:
             cur.execute("UPDATE documento SET status='falha', erro=%s WHERE id=%s",
