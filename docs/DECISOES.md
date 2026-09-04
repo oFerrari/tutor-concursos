@@ -1445,6 +1445,51 @@ proveniência junto da boa. Duas falhas de instrumento:
   chip o que casa o formato de `retrieval.referencia` (tem "art." ou "p." com
   número).
 
+**O PLANALTO DERRUBA CLIENTE SEM `User-Agent` DE NAVEGADOR.** Relatado: colar
+`https://www.planalto.gov.br/ccivil_03/constituicao/constituicao.htm` na
+biblioteca devolvia "Não deu pra indexar este link". Medido no mesmo minuto: sem
+UA de navegador, `ReadTimeout`; com, HTTP 200 e 1,8 MB. O UA honesto
+("FerrarIA/1.0") era o certo por educação e o errado na prática — e o alvo é a
+fonte mais óbvia de lei seca deste projeto.
+
+E o texto vinha `Constitui��o`: o HTML compilado do Planalto é cp1252 e o
+cabeçalho não diz, então `r.text` chutava utf-8 e comia 1170 artigos de acento.
+Acento quebrado não é cosmético aqui — some da busca lexical e aparece na
+citação que o aluno lê. Agora a decodificação é explícita (utf-8, cp1252,
+latin-1, e só no último recurso `errors="ignore"`), pelo mesmo helper nos dois
+caminhos.
+
+**HTML por ARQUIVO passou a ser suportado.** Por LINK já era (o `baixar` olha o
+content-type); arrastar um `.htm` salvo caía no `decode` genérico e indexava as
+tags como se fossem conteúdo. Quem salva a página da CF e arrasta o arquivo é o
+caso mais provável daqui.
+
+**TROCA DE ASSUNTO NA GERAÇÃO PASSOU A SER DECLARADA.** O fallback de
+`sob_demanda` (tema sem trecho utilizável → recorte da mesa) estava certo, e era
+SILENCIOSO — o que o transformava em mentira: o aluno conversou sobre princípios
+do Direito Administrativo, pediu três questões, e recebeu extensão de recurso,
+omissão de projetista e estabilidade, com o tutor abrindo "vamos treinar isso".
+
+Agora `sob_demanda` devolve `trocou_de_assunto`, a rota repassa como
+`questoes_fora_do_assunto`, e a TELA avisa acima das questões. Quem diz é a tela
+e não o tutor porque o texto dele é escrito ANTES de gerar — ele não pode saber.
+Mesma regra que o prompt já impõe pra explicação: silêncio sobre o que o sistema
+não tem é o defeito, não o fallback.
+
+**INDEXAR É SÍNCRONO NOS TESTES, e isso é sobre acoplamento.** A fila é global ao
+processo, então num `pytest` os uploads de todos os arquivos de teste empilham no
+mesmo trabalhador — o teste que esperava a fila drenar estourou 240s por causa da
+fila de OUTROS testes, passando sozinho e falhando na suíte. Acoplar testes por
+recurso global é pior que perder a cobertura da fila ali, e a fila não fica sem
+prova: a concorrência foi medida à mão (20 uploads em 3,3s, uma thread, `GET
+/fila` em 111ms durante a indexação).
+
+**E TESTE PONTA A PONTA NÃO CHAMA O GEMINI DE VERDADE.** Escrevi
+`test_pedir_treino_no_chat_...` contra o modelo real e ele passava sozinho e
+falhava na suíte — não por código, mas porque o provedor devolvia 503. O que ele
+afirma (proveniência, gravação, fila, tutor não mandando clicar) não precisa de
+modelo real nenhum. Duplê, como o resto do arquivo já fazia.
+
 ## Armadilhas do corpus (Planalto)
 
 - Quebra de linha no meio da frase; `normalizar_lei()` remonta.

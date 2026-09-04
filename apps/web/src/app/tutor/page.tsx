@@ -87,6 +87,11 @@ export default function PaginaTutor() {
   // acabou de construir. Elas continuam entrando na fila normal (são
   // gravadas no acervo); a diferença é onde você as responde.
   const [geradas, setGeradas] = useState<Questao[]>([]);
+  /** O acervo não tinha trecho do assunto da conversa e o gerador caiu pro
+   *  recorte da mesa. As questões valem e têm proveniência — só não são do que
+   *  vocês estavam tratando, e dizer isso é obrigação: sem o aviso, o tutor
+   *  abria com "vamos treinar isso" e vinham questões de outra matéria. */
+  const [foraDoAssunto, setForaDoAssunto] = useState(false);
   const [pensando, setPensando] = useState(false);
   const fim = useRef<HTMLDivElement>(null);
   // O CONTAINER que rola, não o `window`. Há DOIS scrollers aninhados aqui (o
@@ -198,6 +203,7 @@ export default function PaginaTutor() {
       // `caixa: 0` e `prox_revisao: ""` são o mesmo preenchimento que o caminho
       // do botão faz: questão recém-criada não tem progresso ainda, e é a fila
       // que passa a contá-la.
+      setForaDoAssunto(Boolean(r.questoes_fora_do_assunto));
       if (r.questoes?.length) {
         setGeradas(
           r.questoes.map((q) => ({ ...q, caixa: 0, prox_revisao: "" }) as Questao)
@@ -542,6 +548,18 @@ export default function PaginaTutor() {
               com `key` própria: sem isso o React reaproveita a instância e a
               segunda questão abre já mostrando o resultado da primeira — o
               mesmo bug que o /desafio teve. */}
+          {geradas.length > 0 && foraDoAssunto && (
+            <div className="mt-2 pl-[42px]">
+              <p className="callout-warning !p-3 text-[13px]">
+                Não tenho trecho de lei do que estávamos tratando, então estas questões são
+                de outros pontos do seu edital. Suba material desse assunto na{" "}
+                <Link href="/materiais" className="underline underline-offset-2">
+                  sua biblioteca
+                </Link>{" "}
+                e eu passo a cobrar dele.
+              </p>
+            </div>
+          )}
           {geradas.map((q) => (
             <div key={q.id} className="pl-[42px]">
               <BalaoQuestao

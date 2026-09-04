@@ -25,7 +25,7 @@ import re
 
 from . import chunking, db, embeddings
 
-VERSAO = "material-v8"
+VERSAO = "material-v9"
 
 LOTE = 32
 MIN_CHARS = 200
@@ -131,7 +131,19 @@ def _limpar(texto: str) -> str:
 
 def _extrair(nome: str, dados: bytes) -> str:
     """Bytes -> texto. PDF via pypdf; qualquer outra coisa como texto puro."""
-    if nome.lower().endswith(".pdf"):
+    baixo = nome.lower()
+    if baixo.endswith((".htm", ".html", ".xhtml")):
+        # HTML por LINK já era tratado em `baixar` (pelo content-type); por
+        # ARQUIVO caía no `decode` genérico, ou seja, indexava as tags. Quem
+        # salva a página do Planalto e arrasta o .htm é o caso mais provável de
+        # todos neste projeto.
+        #
+        # cp1252 antes de utf-8 como reserva: o HTML compilado do Planalto é
+        # cp1252 (é o que `corpus/html_para_texto.py` já documenta), e decodificar
+        # como utf-8 com `errors="ignore"` come os acentos em silêncio — texto
+        # sem acento casa pior na busca e fica ilegível na citação.
+        return _limpar(_html_para_texto(_decodificar(dados)))
+    if baixo.endswith(".pdf"):
         import io
         from pypdf import PdfReader
         try:
@@ -158,6 +170,22 @@ MAX_BYTES_URL = 25 * 1024 * 1024
 # patológico, não pra policiar tamanho normal.
 MAX_BYTES_ARQUIVO = 60 * 1024 * 1024
 TIMEOUT_URL = 20
+
+# USER-AGENT DE NAVEGADOR, e não é firula: o Planalto — a fonte mais óbvia de
+# lei seca deste projeto — DERRUBA a conexão de cliente sem `User-Agent`.
+# Medido no mesmo minuto: sem cabeçalho, `ReadTimeout`; com este, HTTP 200 e
+# 1,8 MB de HTML. O erro que o aluno via era "Não deu pra indexar este link"
+# pra uma URL perfeitamente válida.
+#
+# httpx não manda UA por padrão (manda `python-httpx/x.y`), e vários servidores
+# de governo tratam isso como robô. Identificar-se como navegador aqui é o que
+# faz a função cumprir o que ela promete: buscar uma página pública.
+CABECALHOS_URL = {
+    "User-Agent": ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                   "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"),
+    "Accept": "text/html,application/xhtml+xml,application/pdf,text/plain;q=0.9,*/*;q=0.8",
+    "Accept-Language": "pt-BR,pt;q=0.9",
+}
 
 
 def baixar(url: str) -> tuple[str, bytes]:
@@ -211,8 +239,13 @@ def baixar(url: str) -> tuple[str, bytes]:
                     "só endereço público é aceito")
 
     atual = url.strip()
+    # O UA honesto ("FerrarIA/1.0") era o certo por educação e o errado na
+    # prática: o Planalto DERRUBA a conexão de quem não parece navegador, e é a
+    # fonte mais óbvia de lei seca deste projeto. Medido no mesmo minuto — sem
+    # UA de navegador, ReadTimeout; com, HTTP 200 e 1,8 MB. O aluno via "Não deu
+    # pra indexar este link" numa URL perfeitamente válida.
     with httpx.Client(follow_redirects=False, timeout=TIMEOUT_URL,
-                      headers={"user-agent": "FerrarIA/1.0 (+biblioteca do aluno)"}) as c:
+                      headers=CABECALHOS_URL) as c:
         for _ in range(5):
             checar(atual)
             r = c.get(atual)
@@ -227,7 +260,16 @@ def baixar(url: str) -> tuple[str, bytes]:
             if "pdf" in tipo_http or atual.lower().endswith(".pdf"):
                 return _nome_da_url(atual, ".pdf"), r.content
             if "html" in tipo_http or "text" in tipo_http or not tipo_http:
-                return _nome_da_url(atual, ".txt"), _html_para_texto(r.text).encode()
+                # DECODIFICA À MÃO em vez de confiar em `r.text`. O HTML
+                # compilado do Planalto é cp1252 e o cabeçalho não diz — o
+                # httpx chutava utf-8 e o resultado vinha "Constitui��o", com
+                # 1170 artigos ilegíveis. Acento quebrado não é cosmético aqui:
+                # some da busca lexical e aparece na citação que o aluno lê.
+                #
+                # Mesma ordem de `_extrair`, e por isso mesmo: utf-8 primeiro
+                # (é o que a web moderna usa), cp1252 como reserva.
+                return _nome_da_url(atual, ".txt"), _html_para_texto(
+                    _decodificar(r.content)).encode()
             raise ErroMaterial(f"não sei ler este conteúdo ({tipo_http or 'sem tipo'})")
     raise ErroMaterial("redirecionamentos demais")
 
@@ -238,6 +280,21 @@ def _nome_da_url(url: str, ext: str) -> str:
     base = (p.path.rstrip("/").rsplit("/", 1)[-1] or p.netloc or "link")
     base = re.sub(r"\.[A-Za-z0-9]{1,5}$", "", base)
     return (re.sub(r"[^\w\-.]+", "-", base)[:80] or "link") + ext
+
+
+def _decodificar(dados: bytes) -> str:
+    """Bytes -> str, com a ordem que este projeto precisa.
+
+    utf-8 primeiro porque é o que a web moderna usa; cp1252 como reserva
+    porque é o que o Planalto serve, e é de lá que vem quase toda lei seca
+    daqui. `errors="ignore"` só no último recurso — comer acento em silêncio é
+    pior que falhar, e por isso não é a primeira tentativa."""
+    for codec in ("utf-8", "cp1252", "latin-1"):
+        try:
+            return dados.decode(codec)
+        except UnicodeDecodeError:
+            continue
+    return dados.decode("utf-8", errors="ignore")
 
 
 def _html_para_texto(html: str) -> str:

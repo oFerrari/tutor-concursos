@@ -25,7 +25,10 @@ def _esperar_indexacao():
     seguinte. Isso escondia o comportamento real — e escondeu justamente o que
     derrubou o servidor no upload de 20 apostilas, porque em teste as vinte
     nunca corriam ao mesmo tempo."""
-    assert material.esperar_fila(240), "a fila de indexação não drenou no tempo"
+    # No teste a indexação é SÍNCRONA (ver `_indexar_sincrono` no conftest), então
+    # não há fila pra esperar — esta função existe pra que os testes não precisem
+    # saber disso, e pra continuar valendo se um dia a fila voltar pra cá.
+    assert material.esperar_fila(30), "a fila de indexação não drenou no tempo"
 
 
 def test_sobe_lista_e_apaga(client, usuario):
@@ -692,3 +695,46 @@ def test_subir_de_novo_material_parado_retoma_em_vez_de_recusar(client, usuario)
     # E nunca houve mais de UMA linha pra este arquivo.
     assert db.exec1("SELECT count(*) AS n FROM documento WHERE usuario_id = %(u)s",
                     {"u": usuario["id"]})["n"] == 1
+
+
+def test_html_por_arquivo_vira_texto_e_nao_tags(client, usuario):
+    """Arrastar um .htm salvo do Planalto tem de indexar o TEXTO, não as tags.
+
+    HTML por LINK já era tratado em `baixar` (pelo content-type); por ARQUIVO
+    caía no `decode` genérico e indexava `<div class=...>` como se fosse
+    conteúdo. Quem salva a página da CF e arrasta o arquivo é o caso mais
+    provável deste projeto, e foi relatado como "nem me dá suporte pra
+    alimentar com arquivos html".
+
+    O cp1252 está no teste de propósito: é o que o Planalto serve, e decodificar
+    como utf-8 com `errors="ignore"` come os acentos em silêncio — texto sem
+    acento casa pior na busca lexical e fica ilegível na citação que o aluno lê.
+    """
+    corpo = ("<html><head><style>p{color:red}</style></head><body>"
+             "<h1>Art. 37</h1><p>A administra\xe7\xe3o p\xfablica obedecer\xe1 aos "
+             "princ\xedpios de legalidade, impessoalidade, moralidade, publicidade "
+             "e efici\xeancia.</p></body></html>" * 6).encode("cp1252")
+
+    texto = material._extrair("constituicao.htm", corpo)
+    assert "<p>" not in texto and "style" not in texto, "indexou as tags"
+    assert "administração pública" in texto, "acento perdido na decodificação"
+    assert "Art. 37" in texto
+
+    r = client.post("/materiais", headers=usuario["headers"], data={"tipo": "aula"},
+                    files={"arquivo": ("constituicao.htm", corpo, "text/html")})
+    assert r.status_code == 201, r.text
+
+
+def test_cabecalhos_de_navegador_no_download_por_link():
+    """O Planalto DERRUBA cliente que não parece navegador.
+
+    Medido no mesmo minuto: sem `User-Agent` de navegador, `ReadTimeout`; com,
+    HTTP 200 e 1,8 MB. O aluno via "Não deu pra indexar este link" numa URL
+    perfeitamente válida — e a URL era a da Constituição, a fonte mais óbvia de
+    lei seca deste projeto.
+
+    Testa a CONSTANTE e não a rede: teste que depende do Planalto estar de pé
+    falha por motivo alheio ao código, e este arquivo já sofreu com teste
+    frágil hoje."""
+    ua = material.CABECALHOS_URL.get("User-Agent", "")
+    assert "Mozilla" in ua, "sem UA de navegador o Planalto derruba a conexão"

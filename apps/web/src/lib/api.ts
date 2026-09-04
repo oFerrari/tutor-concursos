@@ -571,6 +571,11 @@ export function perguntar(
    *  Vazio quando a fala não pedia treino, ou quando o gerador falhou (o turno
    *  não é derrubado por isso: a resposta do tutor já existe). */
   questoes: Questao[];
+  /** O acervo não tinha trecho do assunto da conversa, e o gerador caiu pro
+   *  recorte da mesa. As questões são válidas e têm proveniência — só não são
+   *  do que vocês estavam tratando. A tela AVISA: sem isso, o tutor abria com
+   *  "vamos treinar isso" e vinham questões de outra matéria. */
+  questoes_fora_do_assunto?: boolean;
   /** A fala pedia SIMULADO formal (prova, cronômetro, correção no fim). Não é
    *  caso de gerar aqui: a tela tem a página do simulado, e o servidor não deve
    *  abri-la sozinho no meio de um chat. */

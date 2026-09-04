@@ -109,3 +109,36 @@ def llm_falso(monkeypatch):
     fake = _LLMFalso()
     monkeypatch.setattr(llm, "obter", lambda: fake)
     return fake
+
+
+@pytest.fixture(autouse=True)
+def _indexar_sincrono(monkeypatch):
+    """Nos TESTES, indexar material é síncrono.
+
+    Em produção a indexação passa por uma fila com UM trabalhador — foi isso
+    que impediu o upload de 20 apostilas de derrubar o servidor. Mas essa fila
+    é GLOBAL ao processo, e num `pytest` isso significa que os uploads de todos
+    os arquivos de teste se empilham no mesmo trabalhador: o teste que esperava
+    a fila drenar passou a estourar 240s por causa da fila de OUTROS testes, e
+    passava sozinho e falhava na suíte inteira.
+
+    Acoplar testes por um recurso global é pior que perder a cobertura da fila
+    aqui — e a fila não fica sem prova: a concorrência dela foi medida à mão
+    (20 uploads em 3,3s, uma thread, `GET /fila` em 111ms durante a indexação),
+    e o que os testes precisam afirmar é o RESULTADO da indexação, que é o
+    mesmo nos dois caminhos.
+
+    `enfileirar` continua sendo a porta única: quem trocar de mecanismo mexe num
+    lugar só, e este duplê acompanha.
+    """
+    from core import material
+
+    def agora(documento_id: int) -> None:
+        linha = db.exec1(
+            "SELECT origem, arquivo FROM documento WHERE id = %(i)s AND arquivo IS NOT NULL",
+            {"i": documento_id})
+        if linha:
+            material.indexar(documento_id, linha["origem"] or "material",
+                             bytes(linha["arquivo"]))
+
+    monkeypatch.setattr(material, "enfileirar", agora)

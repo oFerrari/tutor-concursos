@@ -12,6 +12,9 @@ Três desenhos foram tentados antes deste, e dois caíram:
     `fonte_chunks`, a fila SM-2 e o progresso.
 O terceiro é este: o servidor aciona o mesmo gerador que o botão acionava.
 """
+import json
+import re
+
 import pytest
 
 from core import db, pedido
@@ -74,7 +77,8 @@ def test_formato_explicito_vence_a_banca():
     assert pedido.treino("me dá 3 questões")["tipo"] is None
 
 
-def test_pedir_treino_no_chat_gera_questao_com_proveniencia_e_sem_botao(client, usuario):
+def test_pedir_treino_no_chat_gera_questao_com_proveniencia_e_sem_botao(
+        client, usuario, llm_falso):
     """Fim a fim: o aluno pede treino numa frase e recebe questão DE VERDADE.
 
     É a asserção que protege a decisão do dono — "não vamos sacrificar a
@@ -87,7 +91,27 @@ def test_pedir_treino_no_chat_gera_questao_com_proveniencia_e_sem_botao(client, 
     disso", achar "disso" como palavra de conteúdo e gerar sobre apropriação
     indébita e inquérito policial numa conversa sobre peculato — a mesma classe
     do "vamos" que fez nascer o `core/assunto.py`.
+
+    LLM FALSO, e a lição é minha: escrevi este teste contra o Gemini de verdade
+    e ele passava sozinho e falhava na suíte. A causa não era o código — era o
+    provedor devolvendo 503 (medido: chamada trivial de 10 tokens levando 33-42s
+    ou falhando). Teste ponta a ponta que depende de plano gratuito estar de pé
+    flakeia pra sempre, e o que ele afirma — proveniência, gravação, fila, e o
+    tutor não mandando clicar — não precisa de modelo real nenhum.
     """
+    # O duplê devolve uma questão por artigo que ESTIVER no material, que é o
+    # único comportamento do modelo real do qual a gravação depende. Mesmo
+    # padrão de `test_geracao._modelo_que_responde_sobre_o_lote`.
+    def gerar(prompt, sistema="", json_mode=False, max_tokens=1200, schema=None,
+              temperatura=None):
+        if not json_mode and not schema:
+            return "Vamos treinar isso; as questões estão logo abaixo."
+        arts = list(dict.fromkeys(
+            a.strip() for a in re.findall(r"\[[^\]]*?art\. ([^\]—]+)", prompt)))
+        return json.dumps([
+            {"artigo": a, "tema": f"Tema {a}", "enunciado": "Enunciado?",
+             "gabarito": "Gabarito.", "dicas": ["d1", "d2", "d3"]} for a in arts])
+    llm_falso.gerar = gerar
     r1 = client.post("/perguntar", headers=usuario["headers"],
                      json={"pergunta": "quero estudar peculato"})
     assert r1.status_code == 200, r1.text

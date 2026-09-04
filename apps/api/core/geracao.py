@@ -281,11 +281,21 @@ def sob_demanda(disciplinas: list[str] | None = None, tema: str | None = None,
     """
     quantidade = max(1, min(quantidade, MAX_POR_VEZ))
     ids = _por_tema(tema, quantidade) if tema else _por_disciplina(disciplinas, quantidade)
+    # TROCA DE ASSUNTO DECLARADA. O fallback já existia e estava certo — cair
+    # pro recorte é melhor que devolver vazio a quem pediu questão —, mas era
+    # SILENCIOSO, e isso o transformava em mentira: relatado com transcrição, o
+    # aluno conversou sobre princípios do Direito Administrativo, pediu três
+    # questões, e recebeu extensão de recurso, omissão de projetista e
+    # estabilidade. O tutor abriu com "vamos treinar isso" — sobre outra coisa.
+    #
+    # Quem chama precisa SABER que trocou, pra poder dizer. É a mesma regra que
+    # o prompt já impõe pra explicação ("se os trechos não cobrirem, diga
+    # isso"): silêncio sobre o que o sistema não tem é o defeito, não o
+    # fallback.
+    trocou_de_assunto = False
     if not ids and tema:
-        # A busca por tema não achou trecho utilizável, mas a mesa pode ter
-        # material — cair pro recorte é melhor que devolver vazio a quem
-        # pediu questão. O que NÃO se faz é inventar sem fonte.
         ids = _por_disciplina(disciplinas, quantidade)
+        trocou_de_assunto = bool(ids)
     if not ids:
         raise SemMaterial(
             "o acervo ainda não tem trecho de lei dessas disciplinas pra gerar questão"
@@ -303,7 +313,8 @@ def sob_demanda(disciplinas: list[str] | None = None, tema: str | None = None,
         serie = socratic.gerar_serie_ce(lote[:1], quantidade)
         if serie:
             salvas, descartes = salvar_serie(serie, lote)
-            return {"questoes": salvas, "descartadas": len(descartes),
+            return {"trocou_de_assunto": trocou_de_assunto,
+                    "questoes": salvas, "descartadas": len(descartes),
                     "motivos": descartes, "contexto": serie["contexto"],
                     "fontes": [f"{lote[0]['norma'] or lote[0]['titulo']} art. {lote[0]['artigo']}"]}
         # Série não saiu: cai pro item avulso em vez de devolver vazio. O
@@ -312,6 +323,7 @@ def sob_demanda(disciplinas: list[str] | None = None, tema: str | None = None,
     questoes = socratic.gerar_questoes(lote, len(lote), tipo)
     salvas, descartes = salvar(questoes, lote)
     return {
+        "trocou_de_assunto": trocou_de_assunto,
         "questoes": salvas,
         "descartadas": len(descartes),
         "motivos": descartes,

@@ -765,6 +765,7 @@ def rota_perguntar(body: PerguntaBody, uid: int = Depends(usuario_atual),
     # perder o que funcionou junto com o que não. Vai `questoes: []` e o front
     # mostra o texto — que é o comportamento de hoje.
     questoes: list[dict] = []
+    trocou = False
     # `apos_treino` deixa a forma ELÍPTICA valer: depois de "me da 4 questoes",
     # "agora só uma" e "manda cinco" são pedido, e sem o contexto não seriam
     # reconhecidos como nada. Quem sabe se o turno anterior era treino é
@@ -787,6 +788,12 @@ def rota_perguntar(body: PerguntaBody, uid: int = Depends(usuario_atual),
             tipo = p["tipo"] or geracao.tipo_da_banca(m.get("banca"))
             g = geracao.sob_demanda(m["disciplinas"], tema, p["quantidade"], tipo)
             questoes = g["questoes"]
+            # A TROCA DE ASSUNTO VIAJA ATÉ A TELA. O acervo não tinha trecho do
+            # que a conversa tratava, o gerador caiu pro recorte da mesa (certo)
+            # e ninguém avisava (errado): o tutor abria com "vamos treinar isso"
+            # e vinham questões de outra matéria. O texto do tutor é escrito
+            # ANTES de gerar, então ele não pode saber — quem diz é a tela.
+            trocou = bool(g.get("trocou_de_assunto"))
         except (geracao.SemMaterial, ErroLLM):
             questoes = []
         if questoes:
@@ -798,6 +805,7 @@ def rota_perguntar(body: PerguntaBody, uid: int = Depends(usuario_atual),
 
     return {**r, "conversa_id": conv["id"], "titulo": conv["titulo"],
             "questoes": questoes,
+            "questoes_fora_do_assunto": trocou,
             # `simulado_pedido` deixa a TELA decidir o que fazer com um pedido de
             # prova cronometrada: ela tem a página do simulado, o servidor não
             # deve abri-la por conta própria no meio de um chat.

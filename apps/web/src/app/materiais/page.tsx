@@ -736,7 +736,7 @@ export default function PaginaMateriais() {
       <input
         ref={inputRetry}
         type="file"
-        accept=".pdf,.txt,.md"
+        accept=".pdf,.txt,.md,.htm,.html"
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0];
@@ -747,7 +747,7 @@ export default function PaginaMateriais() {
       <input
         ref={inputArquivo}
         type="file"
-        accept=".pdf,.txt,.md"
+        accept=".pdf,.txt,.md,.htm,.html"
         multiple
         className="hidden"
         onChange={(e) => {
@@ -783,7 +783,7 @@ export default function PaginaMateriais() {
         <span className="block text-[13.5px] text-muted">
           Pode soltar vários de uma vez — os campos acima valem pro lote inteiro
         </span>
-        <span className="mt-3 block font-mono text-[11.5px] text-label">PDF, TXT ou MD</span>
+        <span className="mt-3 block font-mono text-[11.5px] text-label">PDF, TXT, MD ou HTML</span>
       </button>
 
       <form
