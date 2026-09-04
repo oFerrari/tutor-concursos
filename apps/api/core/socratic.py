@@ -16,7 +16,7 @@ import unicodedata
 
 from . import assunto, llm, mesa as mesa_mod, retrieval
 
-VERSAO = "socratic-v41"
+VERSAO = "socratic-v42"
 
 # ------------------------------------------------------------------ schemas
 # Subconjunto OpenAPI aceito pelo Gemini. propertyOrdering importa: o modelo
@@ -835,8 +835,16 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         "comece a pensar — algo como \"vamos treinar isso; as questões estão logo abaixo, "
         "repare no que a lei exige do funcionário público\". Não repita o enunciado, não "
         "adiante o gabarito, não pergunte de novo se ele quer. "
-        "Nunca diga que não tem como gerar, nunca fale de botão, e nunca escreva alternativas "
-        "a), b), c) — o formato do item é do app. "
+        # A PROIBIÇÃO FOI DESOBEDECIDA em log real, então ela ficou explícita
+        # sobre o que exatamente não fazer: o tutor escreveu
+        # "[Questão 1: ... a) Legalidade; b) Eficiência; c) Autotutela...]"
+        # NO MESMO TURNO em que o app gerou três questões de verdade — ou seja,
+        # duplicou o trabalho e entregou a versão sem proveniência junto da boa.
+        "Nunca diga que não tem como gerar e nunca fale de botão. E NÃO ESCREVA A QUESTÃO: "
+        "nada de \"Questão 1:\", nada de enunciado numerado, nada de alternativas a), b), c) — "
+        "nem entre colchetes, nem em lista, nem no meio da frase. Colchete na sua resposta é "
+        "reservado a CITAÇÃO de fonte, e escrever questão ali a disfarça de lei. O app já "
+        "montou os itens com o artigo conferido; a sua parte é a linha de abertura. "
 
         "Linhas marcadas como [fato da sessão] são o que o aluno FEZ (respondeu uma questão, "
         "acertou, errou) — não são fala sua nem dele. Use-as: errar a questão que você acabou de "

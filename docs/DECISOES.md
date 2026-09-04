@@ -1391,6 +1391,60 @@ A lição pra próxima vez que "o app está lento": cronometre as peças ANTES d
 acreditar na causa mais plausível. O material não tinha nada a ver, e mexer nele
 teria custado dias sem mudar o número.
 
+**PEDIDO SEM OBJETO NÃO É INICIATIVA — É ECO.** A pior consulta já registrada
+aqui, com log completo do dono:
+
+    tutor:  "...item 9.1 do seu edital: Conceito, fontes e princípios do
+             Direito Administrativo. Você já sabe diferenciar os princípios
+             expressos dos implícitos, como a Autotutela?"
+    aluno:  "não você pode me explicar e mostrar como isso cai em concurso?"
+    aluno:  "me traga ai umas 3 questões desse conteudo"
+
+A consulta virou `'não você pode me explicar e mostrar como isso cai em
+concurso? direito administrativo, quero someçar do primeiro topico'`, a busca
+devolveu CPP 580, CP 337-O e ADCT 19, e as três questões geradas foram sobre
+extensão de recurso, omissão de projetista e estabilidade — numa conversa sobre
+princípios administrativos.
+
+O caminho do defeito: "explicar" está em `PEDIDO`, então `pede_assunto` dizia
+True, `e_eco` dizia False, e a fala de palha do aluno venceu a do TUTOR — que
+havia nomeado o assunto corretamente. A palavra de conteúdo que sustentou a
+fala foi "mostrar", a única fora de `VAZIAS`. Mais uma vez: **não é lista que
+resolve**.
+
+O que resolve é estrutural, e é a mesma distinção que o docstring de
+`pede_assunto` já fazia sem exigir: "me explica peculato" NOMEIA, "me explica
+isso" não. Agora o pedido precisa trazer algo além do próprio vocabulário de
+pedir. A escapatória continua funcionando — "agora quero controle de
+constitucionalidade" troca o assunto, porque "controle" e "constitucionalidade"
+não são palavras de pedir. Verificado nos nove casos do teste.
+
+Com isso a consulta passou a ser a frase do tutor, que nomeia princípios, LIMPE
+e Autotutela.
+
+**E A BUSCA CONTINUA ERRANDO — medido, e não é o teto que conserta.** Com a
+consulta certa, o acervo devolve CP 170 e CPP 500. Testei reduzir a prosa
+herdada a palavras de conteúdo e cortar em 400/160/120/90/60 caracteres: CF 37
+não aparece em NENHUM desses cortes. Só aparece com consulta curta e de
+vocabulário certo — `'administração pública princípios legalidade
+impessoalidade'` traz CF 37 na posição 1; `'princípios da administração'` não
+traz. É o e5 genérico em domínio jurídico, e não há surgery de consulta que
+conserte. Fica registrado pra ninguém tentar teto de novo achando que é isso.
+
+**O TUTOR ESCREVEU QUESTÃO DE MÚLTIPLA ESCOLHA NO CHAT, no mesmo turno em que o
+app gerou três de verdade.** `[Questão 1: ... a) Legalidade; b) Eficiência; c)
+Autotutela; d) Publicidade.]` — duplicou o trabalho e entregou a versão sem
+proveniência junto da boa. Duas falhas de instrumento:
+
+· `RE_ALTERNATIVA` só olhava começo de linha (`^`), e as alternativas vinham
+  inline. Agora exige DUAS alternativas em sequência, o que não confunde com
+  prosa ("o item a) do edital").
+· o formatador de texto chipava TUDO entre colchetes, então desenhou a questão
+  inventada como se fosse fonte de lei. Chip é promessa de conferibilidade —
+  dar essa aparência a texto inventado é pior que não formatar. Agora só recebe
+  chip o que casa o formato de `retrieval.referencia` (tem "art." ou "p." com
+  número).
+
 ## Armadilhas do corpus (Planalto)
 
 - Quebra de linha no meio da frase; `normalizar_lei()` remonta.

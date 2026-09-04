@@ -109,7 +109,7 @@ import unicodedata
 from . import pedido
 from .retrieval import RE_CITACAO
 
-VERSAO = "assunto-v6"
+VERSAO = "assunto-v7"
 
 # Teto da consulta. Embedding é MÉDIA do que entra: parede de texto dilui o
 # assunto exatamente como o art. 37 (13.059 caracteres) já se dilui no próprio
@@ -304,7 +304,34 @@ def pede_assunto(fala: str | None) -> bool:
     if pedido.treino(fala, apos_treino=True):
         return True
     cruas = {_sem_acento(x) for x in RE_PALAVRA.findall(fala.lower())}
-    return bool(PEDIDO & cruas)
+    if not (PEDIDO & cruas):
+        return False
+    # PEDIDO SEM OBJETO NÃO É INICIATIVA — é eco. Foi o buraco que deixou passar
+    # a pior consulta já registrada aqui, com log completo:
+    #
+    #   tutor:  "...item 9.1 do seu edital: Conceito, fontes e princípios do
+    #            Direito Administrativo. Você já sabe diferenciar os princípios
+    #            expressos dos implícitos, como a Autotutela?"
+    #   aluno:  "não você pode me explicar e mostrar como isso cai em concurso?"
+    #
+    # A fala do aluno tem "explicar", que está em `PEDIDO`, então `pede_assunto`
+    # dizia True, `e_eco` dizia False, e a consulta virou a própria frase dele —
+    # que não nomeia matéria nenhuma. (A palavra de conteúdo que sobrou foi
+    # "mostrar", a única fora de `VAZIAS`.) Resultado: CPP 580, CP 337-O e ADCT
+    # 19 numa conversa sobre princípios administrativos, e três questões geradas
+    # sobre extensão de recurso, projetista e estabilidade.
+    #
+    # O assunto ESTAVA na conversa — o tutor o havia nomeado. Mas a fala dele só
+    # é consultada quando NENHUMA do aluno qualifica, e uma fala de palha
+    # qualificava.
+    #
+    # A distinção que resolve: "me explica peculato" nomeia; "me explica isso"
+    # não. Então exige-se que o pedido traga algo ALÉM do próprio vocabulário de
+    # pedir. Isto NÃO enfraquece a escapatória que a função existe pra ser —
+    # "agora quero controle de constitucionalidade" continua trocando o assunto,
+    # porque "controle" e "constitucionalidade" não são palavras de pedir.
+    return bool([x for x in palavras_de_conteudo(fala)
+                 if _sem_acento(x) not in PEDIDO])
 
 
 # O aluno PEDINDO exposição em vez de sabatina. Lista fechada e curta, como

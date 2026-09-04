@@ -23,6 +23,22 @@
 /** `**negrito**` e `[Citação, art. N]`. O resto do texto passa intacto. */
 const PEDACOS = /(\*\*[^*\n]+\*\*|\[[^\]\n]{1,160}\])/g;
 
+/**
+ * O que dentro de `[...]` é de fato uma CITAÇÃO.
+ *
+ * A primeira versão chipava tudo entre colchetes, e a primeira conversa real
+ * mostrou por que isso não serve: o tutor escreveu
+ * `[Questão 1: ... a) Legalidade; b) Eficiência...]` — violando o prompt, que
+ * proíbe alternativa no chat — e a tela o desenhou como se fosse fonte de lei.
+ * Chip é promessa de conferibilidade; dar essa aparência a texto inventado é
+ * pior que não formatar nada.
+ *
+ * O formato é o de `retrieval.referencia`: "cp, art. 312", "CF, art. 37 — …",
+ * "Lei 8.112/1990, art. 40", "Prova pericial, p. 14". Ou seja, tem "art." ou
+ * "p." com número, e é curto. O resto fica texto comum.
+ */
+const CITACAO = /^[^\]]{1,80}?,\s*(art\w*\.?\s*\d|p\.\s*\d)/i;
+
 function formatar(linha: string, chave: string) {
   return linha.split(PEDACOS).map((p, i) => {
     if (!p) return null;
@@ -34,7 +50,7 @@ function formatar(linha: string, chave: string) {
         </strong>
       );
     }
-    if (p.startsWith("[") && p.endsWith("]")) {
+    if (p.startsWith("[") && p.endsWith("]") && CITACAO.test(p.slice(1, -1))) {
       return (
         <span
           key={k}

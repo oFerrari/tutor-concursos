@@ -92,7 +92,7 @@ from core import (assunto, auth, conversa, db, geracao, llm, mesa, pedido,
 from core.config import CLI_USUARIO_EMAIL, EMBEDDING_MODEL
 from core.llm import ErroLLM
 
-VERSAO = "avaliar-chat-v21"
+VERSAO = "avaliar-chat-v22"
 
 # Conta descartável, como manda o AGENTS.md: nada aqui pode encostar na conta
 # real. O `ON DELETE CASCADE` da 009 limpa tudo de uma vez em `--limpar`.
@@ -409,7 +409,14 @@ RE_AUTORIDADE = re.compile(
 RE_MANDA_BOTAO = re.compile(r"(?i)quero quest[õo]es sobre isto|clique no bot[ãa]o|"
                             r"use o bot[ãa]o|bot[ãa]o (?:abaixo|logo abaixo)")
 
-RE_ALTERNATIVA = re.compile(r"^\s*[a-eA-E]\s*[\)\.]\s+\S", re.MULTILINE)
+# Alternativa de múltipla escolha, no começo da linha OU no meio da frase.
+# A versão anterior só olhava o começo da linha (`^`), e o tutor escreveu
+# "a) Legalidade; b) Eficiência; c) Autotutela; d) Publicidade" tudo inline —
+# passou limpo pela checagem, e ainda por cima dentro de `[...]`, o que fez a
+# tela desenhar como citação. Duas alternativas seguidas já é o padrão: uma
+# letra com parêntese solta acontece em prosa ("o item a) do edital").
+RE_ALTERNATIVA = re.compile(
+    r"(?:^|[;\s])[a-eA-E]\s*\)\s*\S.{0,80}?[;\s][b-eB-E]\s*\)", re.MULTILINE | re.DOTALL)
 RE_ASSINALE = re.compile(r"(?i)assinale a (alternativa|op[çc][ãa]o)")
 RE_COLCHETE = re.compile(r"\[([^\]]+)\]")
 
