@@ -1647,6 +1647,39 @@ consulta curta — "princípios explícitos" sozinho não acha, e "LIMPE legalid
 impessoalidade" também não. O acervo tem o artigo; o e5 é que não liga essas
 palavras a ele.
 
+**TESTE DE UNIDADE SOBRE FUNÇÃO MORTA PASSA.** `limpar_questoes` existiu por um
+commit inteiro sem ser chamada: ao refazer a edição da função (a primeira tinha
+errado a assinatura de `limpar_citacoes`), perdi a linha do `return` de
+`explicar`. A suíte continuou verde — o teste chamava a função DIRETO — e só a
+bateria de cenários trouxe as questões inline de volta.
+
+O conserto tem duas partes, e a segunda importa mais: além de ligar a função,
+entrou um teste que vai pela ROTA (`POST /perguntar`) com o duplê respondendo
+questão inline. Teste que exercita o CAMINHO pega função desligada; teste de
+unidade não.
+
+**A CHECAGEM 3b VOLTOU A SER AVISO, na quarta iteração.** Na bateria completa, 7
+dos 9 "erros" eram dela, e nenhum era doutrina sem aviso:
+
+  · "não tenho acesso a súmulas ou jurisprudência no seu material"
+  · "Sou seu professor particular e foco no seu edital"
+  · "o artigo 312 aparece em dois lugares distintos no seu edital"
+
+Os três são o tutor ACERTANDO — recusando, se apresentando, navegando.
+`RE_AUTORIDADE` casa porque eles falam de lei, súmula e artigo; o que ela não
+distingue é falar SOBRE o material de afirmar conteúdo, e essa distinção é
+semântica. Regex não a alcança, e insistir foi erro meu por quatro versões.
+
+Quem alcança é o juiz, e alcançou na mesma bateria: `ancoragem: 0` com "o tutor
+afirma que a lei exige duas testemunhas para assinar o termo de oitiva, mas o
+trecho citado [CPP, art. 6º, V] não menciona a exigência". Esse é o defeito de
+verdade, e veio da dimensão certa.
+
+Fica como AVISO — ponteiro pra ir ler o turno, não veredito. E recusa explícita
+("não tenho", "não consta") passou a ser isenta de vez: era metade dos falsos
+positivos, e apontar o tutor por dizer que não tem material é o pior ruído
+possível. Checagem que grita em acerto ensina a ignorar checagem.
+
 ## Armadilhas do corpus (Planalto)
 
 - Quebra de linha no meio da frase; `normalizar_lei()` remonta.

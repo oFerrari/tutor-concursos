@@ -295,3 +295,31 @@ def test_questao_escrita_pelo_modelo_e_apagada_da_resposta():
     # Prosa que menciona letras não é questão.
     prosa = "O item a) do edital trata de princípios e o b) de atos."
     assert socratic.limpar_questoes(prosa) == (prosa, 0)
+
+
+def test_explicar_nao_devolve_questao_escrita_pelo_modelo(client, usuario, llm_falso):
+    """`limpar_questoes` tem de estar LIGADA em `explicar`, não só existir.
+
+    Ela existiu por um commit inteiro sem ser chamada: perdi a linha do `return`
+    ao refazer a edição da função, e o efeito foi silencioso — a suíte continuou
+    verde, porque o teste de unidade chama a função direto, e só a bateria de
+    cenários trouxe as questões inline de volta. Teste de unidade sobre função
+    morta passa.
+
+    Este teste vai pelo CAMINHO: manda o duplê responder com questão inline e
+    afirma que ela não sai pela rota.
+    """
+    llm_falso.gerar = lambda *a, **k: (
+        "Vamos treinar isso; as questões estão logo abaixo.\n\n"
+        "[Questão 1: O peculato-apropriação ocorre quando o funcionário, tendo a posse "
+        "do bem em razão do cargo, inverte o título da posse.]\n"
+        "[Questão 2: No peculato mediante erro de outrem, o funcionário induz a vítima "
+        "ao erro para que ela lhe entregue o bem.]")
+
+    r = client.post("/perguntar", headers=usuario["headers"],
+                    json={"pergunta": "me explica peculato"})
+    assert r.status_code == 200, r.text
+    texto = r.json()["resposta"]
+    assert "Questão 1" not in texto and "Questão 2" not in texto, \
+        "a questão escrita pelo modelo saiu pela rota — limpar_questoes não está ligada"
+    assert texto.startswith("Vamos treinar isso")

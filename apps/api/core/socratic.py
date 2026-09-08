@@ -924,7 +924,23 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         "ignorar, e aí o convite não funciona nem quando é a hora certa."
     )
     resposta = llm.obter().gerar("\n\n".join(partes), sistema, max_tokens=1500)
-    return {"resposta": limpar_citacoes(resposta, chunks), "fontes": chunks}
+
+    # A ORDEM IMPORTA: tira as questões ANTES de limpar citações. Questão escrita
+    # pelo modelo vem cheia de "art. 37" inventado, e limpar citação primeiro
+    # gastaria trabalho num texto que vai ser apagado inteiro.
+    #
+    # `limpar_questoes` existia, tinha teste e NÃO ERA CHAMADA: perdi esta linha
+    # ao refazer a edição da função, e o efeito foi silencioso — a suíte
+    # continuou verde (o teste chama a função direto) e a bateria trouxe as
+    # questões inline de volta. Teste de unidade sobre função morta passa.
+    resposta, questoes_tiradas = limpar_questoes(resposta)
+    if questoes_tiradas and len(resposta) < 40:
+        # Sobrou só cacoete. Uma linha honesta é melhor que um resto de frase —
+        # e reescrever prosa de modelo é o que `_costurar` aprendeu a não fazer.
+        resposta = ("Vamos treinar isso — as questões estão logo abaixo, "
+                    "com o artigo conferido.")
+    return {"resposta": limpar_citacoes(resposta, chunks), "fontes": chunks,
+            "questoes_do_modelo_tiradas": questoes_tiradas}
 
 
 def gerar_questoes(chunks: list[dict], quantidade: int = 5,

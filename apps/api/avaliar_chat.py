@@ -92,7 +92,7 @@ from core import (assunto, auth, conversa, db, geracao, llm, mesa, pedido,
 from core.config import CLI_USUARIO_EMAIL, EMBEDDING_MODEL
 from core.llm import ErroLLM
 
-VERSAO = "avaliar-chat-v23"
+VERSAO = "avaliar-chat-v24"
 
 # Conta descartável, como manda o AGENTS.md: nada aqui pode encostar na conta
 # real. O `ON DELETE CASCADE` da 009 limpa tudo de uma vez em `--limpar`.
@@ -408,6 +408,14 @@ RE_SEM_FONTE_AVISADO = re.compile(
     r"|n[ãa]o\s+est[áa]\s+em\s+artigo|fora\s+do\s+seu\s+material"
     r"|confira\s+na\s+sua\s+apostila|n[ãa]o\s+tenho\s+trecho)")
 
+# O tutor DIZENDO QUE NÃO TEM. É o comportamento correto quando o acervo não
+# cobre, e apontá-lo como defeito é o pior ruído possível — foi metade dos
+# falsos positivos da bateria.
+RE_RECUSA = re.compile(
+    r"(?i)n[ãa]o\s+(?:tenho|temos|h[áa]|possuo|disponho)\b|"
+    r"n[ãa]o\s+(?:est[áa]|consta|aparece|existe)\b|"
+    r"fora\s+do\s+(?:seu\s+)?material|sem\s+trecho")
+
 RE_AUTORIDADE = re.compile(
     r"(?i)\b(art\w*\.?\s*\d|lei\s|leis\s|c[óo]digo|constitui[çc][ãa]o|s[úu]mula|"
     r"jurisprud[êe]ncia|STF|STJ|§|inciso|par[áa]grafo|decreto|estatuto)\b")
@@ -541,13 +549,36 @@ def checar(fala: str, resposta: str, chunks: list[dict],
     #     ensinar conceito de conhecimento próprio quando não há trecho — o que
     #     ele não pode é fazer isso CALADO. Então a checagem inverteu de lado:
     #     ela agora aponta a ausência do aviso, não a ausência da citação.
-    avisou = bool(RE_SEM_FONTE_AVISADO.search(resposta))
+    #     E ELA VOLTOU A SER AVISO, depois de quatro iterações produzindo falso
+    #     positivo. Na bateria completa, 7 dos 9 "erros" eram desta regra, e
+    #     nenhum era doutrina sem aviso:
+    #
+    #       "não tenho acesso a súmulas ou jurisprudência no seu material"
+    #       "Sou seu professor particular e foco no seu edital"
+    #       "o artigo 312 aparece em dois lugares distintos no seu edital"
+    #
+    #     Os três são o tutor acertando — recusando, se apresentando, navegando.
+    #     `RE_AUTORIDADE` casa porque eles FALAM de lei, súmula e artigo; o que
+    #     ela não distingue é falar SOBRE o material de afirmar conteúdo. Essa
+    #     distinção é semântica, e regex não a alcança.
+    #
+    #     Quem alcança é o juiz, e ele alcançou: na mesma bateria pontuou
+    #     `ancoragem: 0` com "o tutor afirma que a lei exige duas testemunhas
+    #     para assinar o termo de oitiva, mas o trecho citado [CPP, art. 6º, V]
+    #     não menciona a exigência". Esse é o defeito de verdade, e veio da
+    #     dimensão certa. Aqui fica AVISO — ponteiro pra ir ler o turno, não
+    #     veredito. Checagem que grita em acerto ensina a ignorar checagem.
+    #
+    #     Recusa explícita ("não tenho", "não consta") sai de vez: é o tutor
+    #     fazendo o certo, e apontá-la é o pior tipo de ruído.
+    avisou = bool(RE_SEM_FONTE_AVISADO.search(resposta)
+                  or RE_RECUSA.search(resposta))
     ensinando = (RE_AUTORIDADE.search(resposta) or assunto.pede_exposicao(fala))
     if (chunks and len(resposta) > 400 and not RE_COLCHETE.search(resposta)
             and ensinando and not avisou):
-        achados.append(("erro", f"explicou em bloco sem citar fonte E sem avisar que não "
-                                f"veio do material, tendo {len(chunks)} trecho(s) "
-                                f"recuperado(s) — doutrina pode, calada não"))
+        achados.append(("aviso", f"explicou em bloco sem citar fonte e sem avisar que não "
+                                 f"veio do material ({len(chunks)} trecho(s) "
+                                 f"recuperado(s)) — leia o turno; doutrina pode, calada não"))
 
     # 3c. ARTIGO INVOCADO EM PROSA, sem colchete, que nenhum trecho sustenta.
     #
