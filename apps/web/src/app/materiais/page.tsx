@@ -639,16 +639,236 @@ export default function PaginaMateriais() {
 
   /** Agrupado por disciplina, com o não-classificado por ÚLTIMO: ele é o que
    *  ainda vai mudar, e no topo faria o bloco pular de lugar a cada polling. */
+  // MATERIAL DE ESTUDO × POÇO DE CONSULTA, em duas listas.
+  //
+  // Pedido nestas palavras: "jurisprudência não deve ser fragmentada, é
+  // simplesmente um poço de informações que serve de auxiliar complementar aos
+  // PDFs; ele deveria estar separado ali embaixo para diferenciar do material
+  // de aula". E o argumento que fecha: "se fôssemos criar assunto da CF,
+  // iríamos ter que criar uma quantidade imensurável de assuntos".
+  //
+  // Está certo, e não era só arrumação: o assunto entra na BUSCA (025). Um
+  // assunto único inventado a partir das primeiras páginas de um corpus fazia
+  // a cópia da Constituição do aluno ganhar de 6 a 0 da CF oficial em qualquer
+  // consulta constitucional. Separar na tela é a metade visível de uma correção
+  // que também é de dado (migração 027).
+  //
+  // Quem decide é o backend (`material.e_referencia`), pelo campo `referencia`:
+  // o front não tem como saber que um PDF virou 543 artigos.
+  const [deEstudo, deConsulta] = useMemo(() => {
+    const estudo: Material[] = [];
+    const consulta: Material[] = [];
+    for (const m of materiais ?? []) (m.referencia ? consulta : estudo).push(m);
+    return [estudo, consulta];
+  }, [materiais]);
+
   const grupos = useMemo(() => {
     const mapa = new Map<string, Material[]>();
-    for (const m of materiais ?? []) {
+    for (const m of deEstudo) {
       const k = m.disciplina ?? SEM_DISCIPLINA;
       mapa.set(k, [...(mapa.get(k) ?? []), m]);
     }
     return [...mapa.entries()].sort(([a], [b]) =>
       a === SEM_DISCIPLINA ? 1 : b === SEM_DISCIPLINA ? -1 : a.localeCompare(b)
     );
-  }, [materiais]);
+  }, [deEstudo]);
+
+  // A LINHA DE UM MATERIAL, extraída porque agora ela aparece em DUAS listas:
+  // os grupos por matéria (material de estudo) e a seção de consulta
+  // (jurisprudência e corpus de norma). Função local e não componente de
+  // verdade de propósito: ela usa uma dúzia de closures desta tela (edição
+  // inline, arraste, abrir, apagar), e passar quinze props pra fora só pra
+  // reusar o mesmo JSX trocaria duplicação por encanamento.
+  const linhaMaterial = (m: Material) => (
+            <div
+              key={m.id}
+              // Não arrastável durante a edição inline: arrastar um campo de
+              // texto selecionaria a linha em vez de deixar escrever nela.
+              draggable={editando !== m.id}
+              onDragStart={(e) => {
+                setArrastando(m.id);
+                e.dataTransfer.effectAllowed = "move";
+                // Firefox exige algum payload pra iniciar o arraste; o id vai
+                // como texto, mas quem manda é o estado (o payload não
+                // sobrevive a tudo entre navegadores).
+                e.dataTransfer.setData("text/plain", String(m.id));
+              }}
+              onDragEnd={() => {
+                setArrastando(null);
+                setSobre(null);
+              }}
+              className={`grid grid-cols-[minmax(0,1fr)_100px_180px_74px] items-center gap-3 border-b border-line-soft px-5 py-3.5 transition-colors last:border-b-0 hover:bg-surface-raised max-md:grid-cols-[minmax(0,1fr)_64px_100px_66px] ${
+                editando === m.id ? "" : "cursor-grab active:cursor-grabbing"
+              } ${arrastando === m.id ? "opacity-40" : ""}`}
+            >
+              <div className="min-w-0">
+                {editando === m.id ? (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      salvarRotulo(m.id);
+                    }}
+                    className="flex flex-wrap items-center gap-1.5"
+                  >
+                    <Seletor
+                      valor={editDisc}
+                      aoMudar={setEditDisc}
+                      opcoes={opcoesDiscEdicao}
+                      placeholder="disciplina"
+                      className="field !py-1 text-[12.5px]"
+                      caixa="relative w-[160px]"
+                      aria="corrigir disciplina"
+                    />
+                    {/* Assunto NÃO se edita em material de referência: ele é
+                        descartado na indexação (uma norma inteira não tem um
+                        assunto), então o campo prometeria um efeito que não
+                        existe. A disciplina continua editável — dela sai o
+                        recorte da mesa. */}
+                    {!m.referencia && (
+                      <Seletor
+                        valor={editAssu}
+                        aoMudar={setEditAssu}
+                        opcoes={opcoesAssuntoEdicao}
+                        placeholder="assunto"
+                        className="field !py-1 text-[12.5px]"
+                        caixa="relative w-[160px]"
+                        aria="corrigir assunto"
+                      />
+                    )}
+                    <button type="submit" className="chip-ativo">
+                      ok
+                    </button>
+                    <button type="button" onClick={() => setEditando(null)} className="chip">
+                      cancelar
+                    </button>
+                  </form>
+                ) : (
+                  <>
+                    {/* O ASSUNTO é o título visível quando existe: dentro de
+                        um bloco de disciplina, "Remédios constitucionais"
+                        identifica a aula e "curso-392722-aula-03-6ca6" não. */}
+                    {/* O TÍTULO ABRE O ARQUIVO. Pedido: "se eu clicar em cima
+                        do material eu deveria abrir o pdf num popup, em vez
+                        de ser obrigado a baixar". Ler a apostila é o caso
+                        comum; guardar cópia é o raro, e continua no ícone de
+                        download ao lado. Só é botão onde há arquivo —
+                        material anterior à 024 não tem os bytes. */}
+                    {m.tem_arquivo ? (
+                      <button
+                        onClick={() => abrir(m)}
+                        title="Abrir o arquivo"
+                        className="max-w-full truncate text-left text-[13.5px] underline-offset-2 hover:text-accent-text hover:underline"
+                      >
+                        {m.assunto ?? m.titulo}
+                      </button>
+                    ) : (
+                      <p className="truncate text-[13.5px]">{m.assunto ?? m.titulo}</p>
+                    )}
+                    <p className="mt-0.5 truncate font-mono text-[11px] text-label">
+                      {m.assunto ? `${m.titulo} · ` : ""}
+                      {detalhe(m)}
+                      {/* Só o PALPITE pede conferência. O que o aluno digitou
+                          não precisa de aviso — ele sabe o que escreveu. */}
+                      {m.classificado_por === "modelo" && (
+                        <span className="text-warning"> · eu deduzi, confira</span>
+                      )}
+                    </p>
+                    {/* A etiqueta da mesa em LINHA PRÓPRIA, e não pendurada no
+                        fim da linha de cima: lá ela ficava dentro de um
+                        `truncate` e era engolida pelo nome do arquivo — o
+                        "(inativo aqui)", que é a informação que importa,
+                        simplesmente não chegava à tela. */}
+                    {m.mesa_id !== null && mesa && m.mesa_id !== mesa.id && (
+                      <p className="mt-1">
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-[10.5px] ${
+                            mesa.biblioteca_compartilhada
+                              ? "border-line-strong text-subtle"
+                              : "border-warning-line bg-warning-soft text-warning"
+                          }`}
+                          title={
+                            mesa.biblioteca_compartilhada
+                              ? `Subido na mesa ${m.mesa_nome}, e esta mesa usa material de todas.`
+                              : `Subido na mesa ${m.mesa_nome}. Como ${mesa.nome} está isolada, o tutor NÃO lê este material aqui.`
+                          }
+                        >
+                          {m.mesa_nome}
+                          {!mesa.biblioteca_compartilhada && " · inativo aqui"}
+                        </span>
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+              <div className="font-mono text-[12px] text-muted">
+                {m.criado_em.slice(0, 10).split("-").reverse().join("/")}
+              </div>
+              <div>
+                <span className={SELO[m.status].classe}>
+                  <span
+                    className={`selo-ponto ${m.status === "processando" ? "animate-[pxPulse_1.2s_ease-in-out_infinite]" : ""}`}
+                  />
+                  {SELO[m.status].rotulo}
+                </span>
+              </div>
+              <div className="flex items-center justify-end gap-1">
+                {/* Só onde o arquivo EXISTE (024). Material anterior à migração
+                    não tem os bytes, e um botão que sempre falha é pior que
+                    botão ausente — foi a mesma escolha do retry, que só
+                    aparece em falha/processando. */}
+                {m.tem_arquivo && (
+                  <button
+                    onClick={() => baixar(m)}
+                    title={
+                      m.arquivo_bytes
+                        ? `Baixar o original (${Math.max(1, Math.round(m.arquivo_bytes / 1024))} KB)`
+                        : "Baixar o arquivo original"
+                    }
+                    className="flex h-6 w-6 items-center justify-center rounded-[7px] text-label transition-colors hover:bg-surface-hover hover:text-accent-text"
+                    aria-label={`baixar ${m.titulo}`}
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setEditando(m.id);
+                    setEditDisc(m.disciplina ?? "");
+                    setEditAssu(m.assunto ?? "");
+                  }}
+                  title="Corrigir disciplina e assunto"
+                  className="flex h-6 w-6 items-center justify-center rounded-[7px] text-label transition-colors hover:bg-surface-hover hover:text-accent-text"
+                  aria-label={`corrigir rótulo de ${m.titulo}`}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+                {(m.status === "falha" || m.status === "processando") && (
+                  <button
+                    onClick={() => {
+                      setRetryDe(m);
+                      inputRetry.current?.click();
+                    }}
+                    title={
+                      m.status === "falha"
+                        ? "Reenviar o arquivo e tentar indexar de novo"
+                        : "Travado em processando? O servidor pode ter reiniciado — reenvie"
+                    }
+                    className="flex h-6 w-6 items-center justify-center rounded-[7px] text-label transition-colors hover:bg-surface-hover hover:text-accent-text"
+                    aria-label={`tentar indexar ${m.titulo} de novo`}
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  </button>
+                )}
+                <button
+                  onClick={() => setAApagar(m)}
+                  className="flex h-6 w-6 items-center justify-center rounded-[7px] text-label transition-colors hover:bg-surface-hover hover:text-danger"
+                  aria-label={`remover ${m.titulo}`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+  );
 
   const nomeDoAlvo = mesa?.origem_alvo === "manual" ? "minhas matérias" : "meu edital";
 
@@ -952,191 +1172,37 @@ export default function PaginaMateriais() {
               </p>
             </div>
 
-            {itens.map((m) => (
-              <div
-                key={m.id}
-                // Não arrastável durante a edição inline: arrastar um campo de
-                // texto selecionaria a linha em vez de deixar escrever nela.
-                draggable={editando !== m.id}
-                onDragStart={(e) => {
-                  setArrastando(m.id);
-                  e.dataTransfer.effectAllowed = "move";
-                  // Firefox exige algum payload pra iniciar o arraste; o id vai
-                  // como texto, mas quem manda é o estado (o payload não
-                  // sobrevive a tudo entre navegadores).
-                  e.dataTransfer.setData("text/plain", String(m.id));
-                }}
-                onDragEnd={() => {
-                  setArrastando(null);
-                  setSobre(null);
-                }}
-                className={`grid grid-cols-[minmax(0,1fr)_100px_180px_74px] items-center gap-3 border-b border-line-soft px-5 py-3.5 transition-colors last:border-b-0 hover:bg-surface-raised max-md:grid-cols-[minmax(0,1fr)_64px_100px_66px] ${
-                  editando === m.id ? "" : "cursor-grab active:cursor-grabbing"
-                } ${arrastando === m.id ? "opacity-40" : ""}`}
-              >
-                <div className="min-w-0">
-                  {editando === m.id ? (
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        salvarRotulo(m.id);
-                      }}
-                      className="flex flex-wrap items-center gap-1.5"
-                    >
-                      <Seletor
-                        valor={editDisc}
-                        aoMudar={setEditDisc}
-                        opcoes={opcoesDiscEdicao}
-                        placeholder="disciplina"
-                        className="field !py-1 text-[12.5px]"
-                        caixa="relative w-[160px]"
-                        aria="corrigir disciplina"
-                      />
-                      <Seletor
-                        valor={editAssu}
-                        aoMudar={setEditAssu}
-                        opcoes={opcoesAssuntoEdicao}
-                        placeholder="assunto"
-                        className="field !py-1 text-[12.5px]"
-                        caixa="relative w-[160px]"
-                        aria="corrigir assunto"
-                      />
-                      <button type="submit" className="chip-ativo">
-                        ok
-                      </button>
-                      <button type="button" onClick={() => setEditando(null)} className="chip">
-                        cancelar
-                      </button>
-                    </form>
-                  ) : (
-                    <>
-                      {/* O ASSUNTO é o título visível quando existe: dentro de
-                          um bloco de disciplina, "Remédios constitucionais"
-                          identifica a aula e "curso-392722-aula-03-6ca6" não. */}
-                      {/* O TÍTULO ABRE O ARQUIVO. Pedido: "se eu clicar em cima
-                          do material eu deveria abrir o pdf num popup, em vez
-                          de ser obrigado a baixar". Ler a apostila é o caso
-                          comum; guardar cópia é o raro, e continua no ícone de
-                          download ao lado. Só é botão onde há arquivo —
-                          material anterior à 024 não tem os bytes. */}
-                      {m.tem_arquivo ? (
-                        <button
-                          onClick={() => abrir(m)}
-                          title="Abrir o arquivo"
-                          className="max-w-full truncate text-left text-[13.5px] underline-offset-2 hover:text-accent-text hover:underline"
-                        >
-                          {m.assunto ?? m.titulo}
-                        </button>
-                      ) : (
-                        <p className="truncate text-[13.5px]">{m.assunto ?? m.titulo}</p>
-                      )}
-                      <p className="mt-0.5 truncate font-mono text-[11px] text-label">
-                        {m.assunto ? `${m.titulo} · ` : ""}
-                        {detalhe(m)}
-                        {/* Só o PALPITE pede conferência. O que o aluno digitou
-                            não precisa de aviso — ele sabe o que escreveu. */}
-                        {m.classificado_por === "modelo" && (
-                          <span className="text-warning"> · eu deduzi, confira</span>
-                        )}
-                      </p>
-                      {/* A etiqueta da mesa em LINHA PRÓPRIA, e não pendurada no
-                          fim da linha de cima: lá ela ficava dentro de um
-                          `truncate` e era engolida pelo nome do arquivo — o
-                          "(inativo aqui)", que é a informação que importa,
-                          simplesmente não chegava à tela. */}
-                      {m.mesa_id !== null && mesa && m.mesa_id !== mesa.id && (
-                        <p className="mt-1">
-                          <span
-                            className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-[10.5px] ${
-                              mesa.biblioteca_compartilhada
-                                ? "border-line-strong text-subtle"
-                                : "border-warning-line bg-warning-soft text-warning"
-                            }`}
-                            title={
-                              mesa.biblioteca_compartilhada
-                                ? `Subido na mesa ${m.mesa_nome}, e esta mesa usa material de todas.`
-                                : `Subido na mesa ${m.mesa_nome}. Como ${mesa.nome} está isolada, o tutor NÃO lê este material aqui.`
-                            }
-                          >
-                            {m.mesa_nome}
-                            {!mesa.biblioteca_compartilhada && " · inativo aqui"}
-                          </span>
-                        </p>
-                      )}
-                    </>
-                  )}
-                </div>
-                <div className="font-mono text-[12px] text-muted">
-                  {m.criado_em.slice(0, 10).split("-").reverse().join("/")}
-                </div>
-                <div>
-                  <span className={SELO[m.status].classe}>
-                    <span
-                      className={`selo-ponto ${m.status === "processando" ? "animate-[pxPulse_1.2s_ease-in-out_infinite]" : ""}`}
-                    />
-                    {SELO[m.status].rotulo}
-                  </span>
-                </div>
-                <div className="flex items-center justify-end gap-1">
-                  {/* Só onde o arquivo EXISTE (024). Material anterior à migração
-                      não tem os bytes, e um botão que sempre falha é pior que
-                      botão ausente — foi a mesma escolha do retry, que só
-                      aparece em falha/processando. */}
-                  {m.tem_arquivo && (
-                    <button
-                      onClick={() => baixar(m)}
-                      title={
-                        m.arquivo_bytes
-                          ? `Baixar o original (${Math.max(1, Math.round(m.arquivo_bytes / 1024))} KB)`
-                          : "Baixar o arquivo original"
-                      }
-                      className="flex h-6 w-6 items-center justify-center rounded-[7px] text-label transition-colors hover:bg-surface-hover hover:text-accent-text"
-                      aria-label={`baixar ${m.titulo}`}
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                  <button
-                    onClick={() => {
-                      setEditando(m.id);
-                      setEditDisc(m.disciplina ?? "");
-                      setEditAssu(m.assunto ?? "");
-                    }}
-                    title="Corrigir disciplina e assunto"
-                    className="flex h-6 w-6 items-center justify-center rounded-[7px] text-label transition-colors hover:bg-surface-hover hover:text-accent-text"
-                    aria-label={`corrigir rótulo de ${m.titulo}`}
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                  {(m.status === "falha" || m.status === "processando") && (
-                    <button
-                      onClick={() => {
-                        setRetryDe(m);
-                        inputRetry.current?.click();
-                      }}
-                      title={
-                        m.status === "falha"
-                          ? "Reenviar o arquivo e tentar indexar de novo"
-                          : "Travado em processando? O servidor pode ter reiniciado — reenvie"
-                      }
-                      className="flex h-6 w-6 items-center justify-center rounded-[7px] text-label transition-colors hover:bg-surface-hover hover:text-accent-text"
-                      aria-label={`tentar indexar ${m.titulo} de novo`}
-                    >
-                      <RotateCcw className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                  <button
-                    onClick={() => setAApagar(m)}
-                    className="flex h-6 w-6 items-center justify-center rounded-[7px] text-label transition-colors hover:bg-surface-hover hover:text-danger"
-                    aria-label={`remover ${m.titulo}`}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-            ))}
+            {itens.map(linhaMaterial)}
           </div>
         ))}
+
+        {/* POÇO DE CONSULTA, separado do material de estudo e DEPOIS dele.
+            Pedido nestas palavras: "jurisprudência não deve ser fragmentada, é
+            simplesmente um poço de informações que serve de auxiliar
+            complementar aos PDFs".
+
+            Sem grupo por matéria e sem assunto, e isso é o ponto: uma norma
+            inteira trata de centenas de assuntos, então rotular com UM é
+            mentir. Cada trecho aqui já se identifica por artigo, que é rótulo
+            melhor que qualquer assunto. */}
+        {deConsulta.length > 0 && (
+          <section className="mt-3">
+            <div className="mb-2.5 flex items-baseline justify-between gap-3">
+              <p className="rotulo">consulta e apoio</p>
+              <p className="font-mono text-[11px] text-label">
+                {deConsulta.length} {deConsulta.length === 1 ? "fonte" : "fontes"}
+              </p>
+            </div>
+            <p className="mb-2.5 text-[12.5px] text-muted">
+              Lei e jurisprudência não são aula: o tutor consulta estas fontes por artigo,
+              como apoio às suas apostilas, e elas não recebem assunto — uma norma inteira
+              trata de assunto demais pra caber num rótulo.
+            </p>
+            <div className="overflow-hidden rounded-2xl border border-line bg-surface">
+              {deConsulta.map(linhaMaterial)}
+            </div>
+          </section>
+        )}
 
         {/* Zona de soltar "Outros" que só existe DURANTE o arraste, e só quando
             não há grupo sem matéria pra receber. Sem ela, desfazer a

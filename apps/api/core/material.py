@@ -42,7 +42,7 @@ import re
 
 from . import chunking, db, embeddings
 
-VERSAO = "material-v12"
+VERSAO = "material-v14"
 
 LOTE = 32
 MIN_CHARS = 200
@@ -51,6 +51,41 @@ MIN_CHARS = 200
 # prometem coisa que material privado não pode cumprir (citação exata de
 # dispositivo). Sobra o que a tela realmente oferece.
 TIPOS = ("aula", "resumo", "jurisprudencia")
+
+# MATERIAL DE REFERÊNCIA × MATERIAL DE ESTUDO, e a diferença tem consequência.
+#
+# `aula` e `resumo` são uma coisa só: uma aula fala de traumatologia forense,
+# um resumo fala de lesão corporal. `assunto` é o título dessa coisa, e é o que
+# faz a busca achar a aula 12 quando o aluno pergunta de asfixiologia (020/025).
+#
+# `jurisprudencia` não é uma coisa só — é um poço de decisões que serve de
+# apoio a várias matérias. Um corpus de lei também não: a CF trata de centenas
+# de assuntos.
+#
+# RELATO QUE DEU ORIGEM A ISTO: o aluno indexou a CF pelo link do Planalto como
+# jurisprudência, e o classificador — que lê só o COMEÇO do material — rotulou
+# os 1074 trechos com "Princípios fundamentais e direitos e garantias
+# fundamentais", que é o que está nas primeiras páginas. As palavras dele: "se
+# fôssemos criar assunto da CF, iríamos ter que criar uma quantidade
+# imensurável de assuntos".
+#
+# NÃO É COSMÉTICO — MEDIDO. O rótulo entra no tsvector (025), então esse
+# assunto falso casava lexicalmente com QUALQUER consulta constitucional, em
+# todos os 1074 trechos. Resultado antes do conserto:
+#
+#   "princípios fundamentais do direito administrativo"
+#      -> a cópia levava 6 de 6, devolvendo art. 88, art. 234, art. 18
+#   "direitos e garantias fundamentais: remédios constitucionais"
+#      -> art. 196 (saúde), art. 157, art. 55, art. 83
+#
+# Relevância decidida por ruído. E este é o mecanismo do defeito antigo "as
+# duas cópias da CF do aluno passam na frente da CF oficial": não era ser
+# cópia, era o rótulo mentiroso repetido mil vezes.
+#
+# Material de lei seca não perde nada sem o assunto: cada trecho já tem
+# `artigo` e `rubrica`, que são rótulos PRECISOS por trecho — melhores que um
+# assunto único, não piores.
+TIPOS_DE_REFERENCIA = ("jurisprudencia",)
 
 
 # ------------------------------------------------------ classificar sozinho
@@ -74,7 +109,19 @@ ESQUEMA_CLASSE = {
 MAX_CHARS_CLASSE = 6_000
 
 
-def classificar(texto: str, disciplinas_conhecidas: list[str] | None = None) -> dict:
+def e_referencia(tipo: str | None, chunks: list[dict] | None = None) -> bool:
+    """Este material é poço de consulta, não aula? Ver `TIPOS_DE_REFERENCIA`.
+
+    Duas evidências, qualquer uma basta: o TIPO que o aluno escolheu, e o
+    material ter sido fatiado por artigo (`_dividir` -> `chunk_lei`), que é
+    corpus de norma inteira independentemente do que ele marcou no seletor."""
+    if (tipo or "") in TIPOS_DE_REFERENCIA:
+        return True
+    return bool(chunks) and any(c.get("artigo") for c in chunks)
+
+
+def classificar(texto: str, disciplinas_conhecidas: list[str] | None = None,
+                com_assunto: bool = True) -> dict:
     """
     Descobre disciplina e assunto lendo o começo do material.
 
@@ -107,11 +154,18 @@ def classificar(texto: str, disciplinas_conhecidas: list[str] | None = None) -> 
         "depois, e \"Direito Const.\" não casa com \"Direito Constitucional\". "
         "Se for matéria que não está na lista, escreva o nome canônico dela "
         "(\"Direito Tributário\", \"Informática\").\n\n"
-        "ASSUNTO é o recorte DENTRO da disciplina, curto, como um título de "
-        "aula: \"Remédios constitucionais\", \"Controle de constitucionalidade\", "
-        "\"Crimes contra a administração pública\". Um curso inteiro cai na mesma "
-        "disciplina — é o assunto que distingue a aula 3 da aula 11.\n\n"
-        "Se não der pra saber, devolva string vazia no campo. Não invente."
+        + ("ASSUNTO é o recorte DENTRO da disciplina, curto, como um título de "
+           "aula: \"Remédios constitucionais\", \"Controle de constitucionalidade\", "
+           "\"Crimes contra a administração pública\". Um curso inteiro cai na mesma "
+           "disciplina — é o assunto que distingue a aula 3 da aula 11.\n\n"
+           if com_assunto else
+           # SEM pedir assunto: material de referência não tem um, e pedir a um
+           # modelo que leu só o começo produz uma resposta plausível e falsa —
+           # foi assim que a CF inteira virou "Princípios fundamentais". Campo
+           # que não deve existir não se pede e se descarta: não se pede.
+           "NÃO devolva assunto: este material é um poço de consulta (norma "
+           "inteira, jurisprudência) e não trata de um assunto só.\n\n")
+        + "Se não der pra saber, devolva string vazia no campo. Não invente."
     )
     try:
         r = llm.obter().gerar_json(texto[:MAX_CHARS_CLASSE], sistema,
@@ -119,8 +173,12 @@ def classificar(texto: str, disciplinas_conhecidas: list[str] | None = None) -> 
     except Exception:
         return {}
     limpa = lambda v: re.sub(r"\s+", " ", str(v or "")).strip()[:120]
-    return {k: v for k, v in (("disciplina", limpa(r.get("disciplina"))),
-                              ("assunto", limpa(r.get("assunto")))) if v}
+    # O descarte do assunto fica AQUI e não só no prompt: o modelo devolve o
+    # campo mesmo mandado não devolver, e é este projeto decidindo no código o
+    # que o prompt não garante.
+    pares = (("disciplina", limpa(r.get("disciplina"))),
+             ("assunto", limpa(r.get("assunto")) if com_assunto else ""))
+    return {k: v for k, v in pares if v}
 
 
 class ErroMaterial(Exception):
@@ -624,6 +682,12 @@ def texto_para_vetor(texto: str, disciplina: str | None, assunto: str | None) ->
     return texto
 
 
+# Classe do advisory lock do Postgres. Número arbitrário e fixo: ele só existe
+# pra que `pg_try_advisory_lock(classe, documento_id)` não colida com outro uso
+# de advisory lock que apareça no projeto.
+TRAVA_INDEXACAO = 40271
+
+
 def indexar(documento_id: int, nome: str, dados: bytes) -> None:
     """
     Calcula os embeddings e grava os chunks. RODA FORA DO REQUEST.
@@ -639,6 +703,11 @@ def indexar(documento_id: int, nome: str, dados: bytes) -> None:
     Erro aqui NÃO sobe: vira `status='falha'` com a razão em `erro`. Exceção
     numa background task morre sem ninguém ver, e o aluno ficaria com uma
     linha "processando" pra sempre.
+
+    UM INDEXADOR POR DOCUMENTO, garantido por lock no banco — ver
+    `TRAVA_INDEXACAO`. A fila deste processo tem um trabalhador só, e por muito
+    tempo isso pareceu bastar; não basta, porque a fila é do PROCESSO e não do
+    banco.
     """
     try:
         texto = _extrair(nome, dados)
@@ -658,8 +727,37 @@ def indexar(documento_id: int, nome: str, dados: bytes) -> None:
     # O rótulo ATUAL, lido aqui e não recebido por parâmetro: `indexar` roda em
     # background e pode começar depois de o aluno já ter corrigido a disciplina
     # na tela. Ler no começo do trabalho pega a versão mais nova que existe.
-    rot = db.exec1("SELECT disciplina, assunto FROM documento WHERE id = %(i)s",
+    rot = db.exec1("SELECT disciplina, assunto, tipo FROM documento WHERE id = %(i)s",
                    {"i": documento_id}) or {}
+    # MATERIAL DE REFERÊNCIA NÃO LEVA ASSUNTO EM TRECHO NENHUM — nem no vetor,
+    # nem no tsvector. Ver o bloco de `TIPOS_DE_REFERENCIA`: um assunto único
+    # repetido em 1074 trechos da CF fazia a cópia do aluno ganhar 6 de 6 em
+    # consulta constitucional qualquer, devolvendo artigo sem relação.
+    #
+    # A DISCIPLINA fica. Ela é VERDADE nos 1074 trechos (é tudo Direito
+    # Constitucional), e é por nome de disciplina que `mesa.filtro` acha o
+    # material. A 025 mediu esse ganho; o que estava errado era o assunto.
+    # A DISCIPLINA TAMBÉM SAI, e isto foi a segunda medição. Tirado o assunto,
+    # a cópia da CF ainda levava 5 de 5 em "direitos e garantias fundamentais:
+    # remédios constitucionais", devolvendo art. 196 (saúde) e art. 6 (direitos
+    # sociais) — enquanto a CF oficial, com os MESMOS artigos, não aparecia.
+    #
+    # A causa: "Direito Constitucional" no `rotulo` casa lexicalmente com
+    # "direitos"/"constitucionais" em TODOS os 1074 trechos, e o trecho oficial
+    # tem `rotulo` NULL. O rótulo era verdadeiro e ainda assim decidia a
+    # ordenação — porque num corpus de norma inteira ele não distingue trecho
+    # nenhum: só multiplica por mil um acerto que não informa nada.
+    #
+    # O que a 025 comprou foi outra coisa: o rótulo que o ALUNO corrige valendo
+    # na busca de material de AULA ("papiloscopia", "ciências forenses"). Ali o
+    # rótulo distingue a aula 12 da aula 3, e a medição dela segue de pé — o
+    # teste de "traumatologia forense" continua devolvendo a aula em 1º.
+    #
+    # `documento.disciplina` FICA: é dela que sai o recorte da mesa
+    # (`mesa.filtro('d.disciplina')`) e o agrupamento da tela. O que sai é a
+    # injeção por trecho. Cópia da CF passa a se comportar como a CF.
+    if e_referencia(rot.get("tipo"), chunks):
+        rot = {**rot, "assunto": None, "disciplina": None}
     # O MESMO rótulo vai por dois caminhos, e é de propósito: `texto_para_vetor`
     # o põe no vetor (semântico) e `chunk.rotulo` o põe no tsvector (lexical,
     # 025). Medido, o vetor sozinho não bastava — "papiloscopia" subiu pra
@@ -674,6 +772,37 @@ def indexar(documento_id: int, nome: str, dados: bytes) -> None:
 
     try:
         with db.conexao_isolada() as c:
+            # UM INDEXADOR POR DOCUMENTO — e este lock existe porque a falta
+            # dele já apagou material.
+            #
+            # O QUE ACONTECEU. `uvicorn --reload` chama `retomar_pendentes()` a
+            # cada boot, e um comando de manutenção rodando `retomar_pendentes()`
+            # noutro processo pegou o MESMO documento no mesmo instante. Os dois
+            # trabalhadores rodaram este bloco em paralelo: os dois apagaram os
+            # trechos, os dois começaram a inserir, e o segundo bateu em
+            # `duplicate key value violates unique constraint
+            # "chunk_documento_id_ordem_key"`. O documento terminou com status
+            # 'falha' e ZERO trechos — a Constituição inteira do aluno,
+            # invisível pra busca.
+            #
+            # A idempotência do DELETE abaixo é real e não protege disto: ela
+            # cobre duas passadas em SEQUÊNCIA, e o problema é o paralelo. A fila
+            # com um trabalhador também não, porque ela é do PROCESSO: dois
+            # processos têm duas filas e nenhum coordena com o outro.
+            #
+            # `pg_try_advisory_lock` é a coordenação no único lugar que os dois
+            # compartilham — o banco. Não espera (`try_`): quem perde a corrida
+            # DESISTE, porque quem ganhou vai fazer exatamente o mesmo trabalho.
+            # Lock de sessão, então sai sozinho quando esta conexão fecha,
+            # inclusive se o processo morrer no meio.
+            with c.cursor() as cur:
+                cur.execute("SELECT pg_try_advisory_lock(%s, %s) AS meu",
+                            (TRAVA_INDEXACAO, documento_id))
+                if not cur.fetchone()["meu"]:
+                    print(f"[tutor] {documento_id} já está sendo indexado "
+                          f"por outro processo; deixo pra ele.")
+                    return
+
             # IDEMPOTENTE: limpa o que já existe deste documento antes de
             # começar. Sem isso, indexar duas vezes o mesmo material dobra os
             # trechos — e duas vezes acontece de verdade em dois casos: o
@@ -705,8 +834,17 @@ def indexar(documento_id: int, nome: str, dados: bytes) -> None:
                              x["paragrafo"], x["inciso"], x.get("rubrica"),
                              x.get("secao"), v, rotulo_lex))
             with c.cursor() as cur:
-                cur.execute("UPDATE documento SET status='pronto', erro=NULL WHERE id=%s",
-                            (documento_id,))
+                # `chunks_total` é reescrito, não só o status: ele foi gravado
+                # em `registrar` com a contagem daquele momento, e a contagem
+                # MUDA quando o chunker muda de opinião sobre o texto. A CF do
+                # aluno tinha 1074 (janelas genéricas de uma versão anterior de
+                # `_dividir`) e reindexou pra 543 artigos — a tela mostrava
+                # "543 de 1074" pra material completo, que parece indexação
+                # travada. O denominador tem de vir de quem acabou de contar.
+                cur.execute("""UPDATE documento
+                                  SET status='pronto', erro=NULL, chunks_total=%s
+                                WHERE id=%s""",
+                            (len(chunks), documento_id))
 
     except Exception as e:
         with db.conexao_isolada() as c, c.cursor() as cur:
@@ -728,34 +866,49 @@ def indexar(documento_id: int, nome: str, dados: bytes) -> None:
     #     IndeterminateDatatype no UPDATE virou "falha na leitura" num arquivo
     #     com todos os trechos gravados. Rótulo é enfeite; índice é o produto.
     try:
-        _classificar_se_faltar(documento_id, texto)
+        _classificar_se_faltar(documento_id, texto, chunks)
     except Exception:
         pass
 
 
-def _classificar_se_faltar(documento_id: int, texto: str) -> None:
+def _classificar_se_faltar(documento_id: int, texto: str,
+                           chunks: list[dict] | None = None) -> None:
     """Preenche disciplina/assunto quando o aluno não disse.
 
     NÃO sobrescreve o que ele digitou: quem informou a matéria decidiu, e um
     palpite de modelo passando por cima disso é o sistema discordando de quem
     tem mais contexto. Só completa o que está vazio — e é por campo, porque
     "informei a disciplina, descubra o assunto" é um caso normal.
+
+    MATERIAL DE REFERÊNCIA só recebe disciplina (ver `TIPOS_DE_REFERENCIA`).
+    `chunks` entra pra que a decisão use a forma REAL do material e não só o
+    seletor da tela: corpus de norma fatiado por artigo é referência mesmo
+    marcado como "aula".
     """
     with db.conexao_isolada() as c:
         with c.cursor() as cur:
-            cur.execute("SELECT disciplina, assunto FROM documento WHERE id=%s",
+            cur.execute("SELECT disciplina, assunto, tipo FROM documento WHERE id=%s",
                         (documento_id,))
             atual = cur.fetchone()
-        if not atual or (atual["disciplina"] and atual["assunto"]):
+        if not atual:
+            return
+        referencia = e_referencia(atual["tipo"], chunks)
+        # Referência precisa só da disciplina; pedir o assunto de novo a cada
+        # reindexação gastaria cota pra descartar a resposta.
+        if atual["disciplina"] and (atual["assunto"] or referencia):
             return
         conhecidas = [r["disciplina"] for r in
                       db.query("SELECT DISTINCT disciplina FROM documento "
                                "WHERE disciplina IS NOT NULL ORDER BY 1")]
-        palpite = classificar(texto, conhecidas)
+        palpite = classificar(texto, conhecidas, com_assunto=not referencia)
         if not palpite:
             return
         disc = atual["disciplina"] or palpite.get("disciplina")
-        assu = atual["assunto"] or palpite.get("assunto")
+        # Em referência o assunto é ZERADO, não preservado: se o palpite antigo
+        # gravou um (era o comportamento até aqui, e é ele que poluiu a busca),
+        # reindexar tem de limpar. Preservar seria carregar o defeito pra
+        # frente justamente na hora que existe pra consertá-lo.
+        assu = None if referencia else (atual["assunto"] or palpite.get("assunto"))
         with c.cursor() as cur:
             cur.execute(
                 """UPDATE documento
@@ -1017,7 +1170,15 @@ def listar(usuario_id: int) -> list[dict]:
                   d.erro, d.classificado_por, d.chunks_total, d.origem, d.criado_em,
                   d.arquivo_bytes, (d.arquivo IS NOT NULL) AS tem_arquivo,
                   d.mesa_id, m.nome AS mesa_nome,
-                  count(c.id) AS chunks
+                  count(c.id) AS chunks,
+                  -- É MATERIAL DE REFERÊNCIA? A regra é a de `e_referencia()`,
+                  -- em SQL porque a tela precisa dela por linha e não vale
+                  -- reimplementá-la no front: jurisprudência, ou material
+                  -- fatiado por artigo (corpus de norma inteira). É o que faz a
+                  -- tela separar "poço de consulta" de "aula", que era o pedido:
+                  -- "jurisprudência não deve ser fragmentada, é um poço de
+                  -- informações que serve de auxiliar complementar aos PDFs".
+                  (d.tipo = ANY(%(ref)s) OR count(c.artigo) > 0) AS referencia
              FROM documento d
              LEFT JOIN chunk c ON c.documento_id = d.id
              -- LEFT: material do pool comum (mesa_id NULL) não pode desaparecer
@@ -1027,7 +1188,7 @@ def listar(usuario_id: int) -> list[dict]:
             WHERE d.usuario_id = %(u)s
             GROUP BY d.id, m.nome
             ORDER BY d.criado_em DESC, d.id DESC""",
-        {"u": usuario_id})
+        {"u": usuario_id, "ref": list(TIPOS_DE_REFERENCIA)})
 
 
 def sugestoes(usuario_id: int) -> dict:

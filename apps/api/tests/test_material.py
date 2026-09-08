@@ -5,7 +5,7 @@ import pytest
 
 from core import db, material, retrieval
 
-VERSAO = "test-material-v1"
+VERSAO = "test-material-v2"
 TXT = ("MEU RESUMO PARTICULAR\n\nO mnemônico QUIXOTEBRAVO organiza os prazos "
        "recursais do processo penal conforme minha anotação de aula. " * 10).encode()
 
@@ -786,3 +786,51 @@ def test_lei_seca_do_aluno_vira_chunk_por_artigo(client, usuario):
     # público, e inventar um aqui misturaria a cópia dele com a oficial.
     assert db.exec1("SELECT count(norma) AS n FROM chunk WHERE documento_id = %(d)s",
                     {"d": doc_lei})["n"] == 0
+
+
+def test_dois_indexadores_no_mesmo_documento_nao_se_atropelam(client, usuario):
+    """O DEFEITO QUE APAGOU A CONSTITUIÇÃO DE UM ALUNO.
+
+    `uvicorn --reload` chama `retomar_pendentes()` a cada boot, e um comando de
+    manutenção rodando o mesmo noutro processo pegou o MESMO documento no mesmo
+    instante. Os dois apagaram os trechos, os dois começaram a inserir, e o
+    segundo bateu em `duplicate key ... chunk_documento_id_ordem_key`. O
+    documento terminou 'falha' com ZERO trechos.
+
+    A idempotência do DELETE não protege disto — ela cobre duas passadas em
+    SEQUÊNCIA. A fila com um trabalhador também não: ela é do PROCESSO, e dois
+    processos têm duas filas que não conversam. A coordenação tem de estar no
+    banco (`pg_try_advisory_lock`), e é isso que este teste exerce: duas
+    threads chamando `indexar` no mesmo documento, ao mesmo tempo.
+    """
+    import threading
+
+    doc = _material(client, usuario["headers"], nome="Concorrente.txt").json()
+    _esperar_indexacao()
+    linha = db.exec1("SELECT origem, arquivo FROM documento WHERE id = %(i)s",
+                     {"i": doc["id"]})
+    antes = db.exec1("SELECT count(*) n FROM chunk WHERE documento_id = %(i)s",
+                     {"i": doc["id"]})["n"]
+    assert antes > 0
+
+    erros: list[Exception] = []
+
+    def indexar_agora():
+        try:
+            material.indexar(doc["id"], linha["origem"], bytes(linha["arquivo"]))
+        except Exception as e:      # noqa: BLE001 — o teste é sobre não haver
+            erros.append(e)
+
+    fios = [threading.Thread(target=indexar_agora) for _ in range(2)]
+    for f in fios:
+        f.start()
+    for f in fios:
+        f.join(timeout=240)
+
+    assert erros == [], f"indexação concorrente estourou: {erros}"
+    fim = db.exec1("SELECT status, erro FROM documento WHERE id = %(i)s", {"i": doc["id"]})
+    assert fim["status"] == "pronto", fim["erro"]
+    # O NÚMERO é o que prova: sem a trava dava zero (os dois apagaram) ou o
+    # dobro (os dois inseriram).
+    assert db.exec1("SELECT count(*) n FROM chunk WHERE documento_id = %(i)s",
+                    {"i": doc["id"]})["n"] == antes

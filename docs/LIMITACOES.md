@@ -307,6 +307,26 @@ medição.
   norma`) ou apelido comum ("constituição" → CF); some sem detecção clara
   cai de volta pro empate alfabético de antes — limitação aceita e
   documentada, não escondida.
+- **CÓPIA DE NORMA SUBIDA PELO ALUNO AINDA COMPETE COM A OFICIAL — o que
+  tinha conserto foi consertado (027), o que sobrou é duplicata mesmo.** O
+  defeito relatado era "as cópias da CF do aluno passam na frente da CF
+  oficial", e a causa não era ser cópia: era o `assunto` inventado pelo
+  classificador. Ele lê só o começo do material, então a Constituição inteira
+  virou "Princípios fundamentais e direitos e garantias fundamentais" — e
+  esse rótulo, que entra no tsvector desde a 025, casava com QUALQUER consulta
+  constitucional nos 1074 trechos. Medido antes: a cópia levava 6 de 6 em
+  "princípios fundamentais do direito administrativo", devolvendo art. 88,
+  art. 234 e art. 18. Depois da 027 (assunto e rótulo zerados em material de
+  referência): a CF oficial volta pro 1º lugar, e "habeas corpus" devolve 4 de
+  5 oficiais.
+  **O que NÃO se resolve com rótulo:** o mesmo artigo existe duas vezes no
+  acervo, então uma consulta boa devolve o oficial e a cópia lado a lado
+  (posições 1 e 2), gastando vaga de contexto com texto repetido. Consulta
+  vaga sobre doutrina que a lei não nomeia — "remédios constitucionais", que a
+  CF nunca escreve — continua ruim, e é o mesmo teto de doutrina já
+  documentado abaixo, não um efeito da cópia. A tela AVISA na hora de subir
+  ("esta lei já está no acervo do app, dividida por artigo"); apagar a cópia é
+  decisão do aluno, e o sistema não apaga material dele por conta própria.
 - **Postgres `'portuguese'` não faz accent-folding — mas `unaccent` NÃO
   entrou, de propósito.** "alguem" sem acento no Art. 121 (typo isolado, 1
   ocorrência em 434 artigos) fazia a busca lexical não encontrar NADA para

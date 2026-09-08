@@ -808,6 +808,17 @@ export type Material = {
   tem_arquivo?: boolean;
   /** Tamanho do original em bytes, pra tela mostrar sem baixar. */
   arquivo_bytes?: number | null;
+  /** É POÇO DE CONSULTA, não aula: jurisprudência, ou corpus de norma inteira
+   *  (material que foi fatiado por artigo). A regra mora no backend
+   *  (`material.e_referencia`) e vem por linha justamente pra não ser
+   *  reimplementada aqui — o front não sabe se um PDF virou 543 artigos.
+   *
+   *  Muda duas coisas na tela: este material aparece numa seção SEPARADA, e
+   *  não tem `assunto` — um assunto único num corpus de centenas de assuntos
+   *  é falso, e como o rótulo entra na busca (025) ele era falso E prejudicial
+   *  (a cópia da CF ganhava de 6 a 0 da CF oficial em consulta constitucional
+   *  qualquer). */
+  referencia?: boolean;
   /** O upload encontrou este arquivo JÁ NO BANCO, parado (`processando` ou
    *  `falha`, sem trecho nenhum), e o recolocou na fila em vez de recusar como
    *  duplicata. Não é erro: é serviço inacabado sendo retomado — foi o que

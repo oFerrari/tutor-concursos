@@ -79,6 +79,7 @@ db/023_migracao.sql        livro-razão: quais migrações já rodaram NESTE ban
 db/024_arquivo_do_material.sql documento.arquivo (bytea): o PDF original fica guardado, e dá pra baixar de volta
 db/025_rotulo_no_lexical.sql chunk.rotulo entra no tsvector: a disciplina/assunto que o ALUNO corrige passa a valer na BUSCA
 db/026_questao_do_aluno.sql questao.usuario_id: questão gerada da APOSTILA dele, privada — NULL segue sendo o acervo de todos
+db/027_referencia_sem_assunto.sql material de REFERÊNCIA (jurisprudência, corpus de norma) não tem assunto — um rótulo único num corpus mentia E afogava a busca
 db/schema.dbml             schema documentado (DBML) — visualização, não fonte de verdade
 core/chunking.py           lei -> chunks por artigo (função pura)
 core/embeddings.py         e5 local, prefixos query:/passage:, cache
@@ -171,6 +172,15 @@ outra medição, não com opinião.
   pool entra lá.
 - O dono da questão sai do CHUNK, nunca de parâmetro (`geracao.salvar`). É o que
   faz não existir a chamada que grava apostila como pública por esquecimento.
+- `assunto` é rótulo de AULA. Material de REFERÊNCIA (jurisprudência, ou
+  material fatiado por artigo) não recebe assunto NEM disciplina em
+  `chunk.rotulo` — ver `material.e_referencia()` e a 027. Um assunto único num
+  corpus de centenas de assuntos não é só impreciso: ele entra no tsvector
+  (025) e decide a ordenação por ruído.
+- Indexar um documento é EXCLUSIVO: `pg_try_advisory_lock` por documento_id
+  (`material.TRAVA_INDEXACAO`). A fila com um trabalhador é do PROCESSO, e dois
+  processos (`uvicorn --reload` + um comando de manutenção) apagaram o material
+  de um aluno indexando o mesmo documento ao mesmo tempo.
 - Erro de transporte não escapa de `core/llm.py` como exceção httpx.
 
 ## Convenções
@@ -247,7 +257,7 @@ outra medição, não com opinião.
   `test_geracao.py` (proveniência e os CHECKs da 012/013),
   `test_conversa.py` (histórico chegando ao prompt) e `test_perfil.py`
   (perfil inválido nunca chegando ao prompt).
-- **A PRÓXIMA migração é a 027.** Há dois pares com número repetido (`018_edital_cargo`
+- **A PRÓXIMA migração é a 028.** Há dois pares com número repetido (`018_edital_cargo`
   + `018_simulado_resumavel`, `019_material_do_aluno` + `019_simulado_nome`): nasceram
   em paralelo e as quatro rodaram, porque `migrar.py` ordena por NOME e o livro-razão
   chaveia por nome. Funciona, mas o número parou de identificar a migração — não crie

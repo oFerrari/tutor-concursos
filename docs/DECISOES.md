@@ -2208,3 +2208,145 @@ material. Pacote da era anterior à 026 não tem o campo: entra público, que é
 que ele era. Conferido exportando de verdade: 259 questões, 13 marcadas com
 dono, as públicas com `usuario: null`. Sem cobertura de teste automatizado — o
 `sincronizar` não tem suíte.
+
+---
+
+## "Jurisprudência não deve ser fragmentada" (027)
+
+**O relato, com a evidência na tela.** O aluno indexou a Constituição pelo link
+do Planalto, marcada como jurisprudência, e a tela mostrou:
+
+```
+Direito Constitucional
+  Princípios fundamentais e direitos e garantias fundamentais
+  constituicao.txt · 543 trechos · eu deduzi, confira
+```
+
+O argumento dele: "jurisprudência não deve ser fragmentada, é simplesmente um
+poço de informações que serve de auxiliar complementar aos PDFs; ele deveria
+estar separado ali embaixo para diferenciar do material de aula. Até porque se
+fôssemos criar assunto da CF, iríamos ter que criar uma quantidade imensurável
+de assuntos, e bem mais do que os 3 que você mapeou."
+
+**Estava certo, e o problema era maior do que arrumação de tela.**
+`classificar()` lê só `texto[:MAX_CHARS_CLASSE]` — o COMEÇO do material. O
+começo da CF é o Preâmbulo, o Título I (Dos princípios fundamentais) e o Título
+II (Dos direitos e garantias fundamentais); daí o rótulo. Plausível, e falso
+para 543 artigos.
+
+E `assunto` não é rótulo de tela: ele vai pro texto que virou embedding e,
+desde a 025, pro tsvector de CADA trecho (`chunk.rotulo`). Um assunto falso
+repetido em mil trechos casa lexicalmente com qualquer consulta constitucional.
+Medido, com a biblioteca dele:
+
+| consulta | antes |
+|---|---|
+| `princípios fundamentais do direito administrativo` | a cópia leva **6 de 6**: art. 88, art. 39, art. 234, art. 18, art. 133, art. 24 |
+| `direitos e garantias fundamentais: remédios constitucionais` | art. 196 (saúde), art. 54-A, art. 157, art. 197, art. 55, art. 83 |
+
+Relevância decidida por ruído. **E este é o mecanismo do defeito antigo "as
+cópias da CF do aluno passam na frente da CF oficial"**, que estava em
+LIMITACOES sem causa identificada: não era ser cópia, era o rótulo mentiroso
+repetido mil vezes.
+
+### A regra
+
+`assunto` é rótulo de AULA: o título de uma coisa só ("Traumatologia forense",
+"Lesão corporal"), e é o que faz a busca achar a aula 12 quando se pergunta de
+asfixiologia (020/025). Poço de consulta não tem um. `material.e_referencia()`
+decide por duas evidências, qualquer uma bastando: o TIPO escolhido
+(`jurisprudencia`) e o material ter sido fatiado por artigo — corpus de norma
+inteira, independentemente do que o aluno marcou no seletor.
+
+Material de referência não perde nada: cada trecho já tem `artigo` e `rubrica`,
+rótulos PRECISOS por trecho, melhores que um assunto único.
+
+**O descarte fica no CÓDIGO, não só no prompt.** `classificar(...,
+com_assunto=False)` manda o modelo não devolver assunto E o campo é descartado
+na volta — o modelo preenche mesmo mandado não preencher, e é a doutrina do
+projeto (`limpar_citacoes`, `limpar_questoes`) aplicada de novo.
+
+### A disciplina também sai do rótulo, e isso foi a segunda medição
+
+A primeira versão da 027 mantinha a disciplina em `chunk.rotulo`, com o
+argumento de que ela é VERDADE nos 543 trechos (é tudo Direito
+Constitucional). É verdade e não bastou: medido depois, a cópia ainda levava 5
+de 5 em "direitos e garantias fundamentais: remédios constitucionais" (art. 6
+dos direitos sociais, art. 196 da saúde), enquanto a CF oficial, com os MESMOS
+artigos, não aparecia. "Direito Constitucional" casa "direitos"/"constitucionais"
+em todos os trechos, e o trecho oficial tem `rotulo` NULL.
+
+Num corpus de norma inteira o rótulo não DISTINGUE trecho nenhum — só
+multiplica por mil um acerto que não informa nada. `documento.disciplina` fica
+(dela saem o recorte da mesa e o agrupamento da tela); o que sai é a injeção
+por trecho. **Cópia da CF passa a se comportar como a CF.**
+
+O que a 025 comprou é outra coisa: o rótulo do material de AULA, onde ele
+distingue a aula 12 da aula 3. Aquela medição segue de pé — "traumatologia
+forense" e "asfixiologia" continuam devolvendo a aula nas cinco primeiras
+posições.
+
+### Depois
+
+| consulta | depois |
+|---|---|
+| `princípios fundamentais do direito administrativo` | **CF oficial em 1º** (art. 5º), oficial também em 3º |
+| `habeas corpus` | **4 de 5 oficiais** (CPP 654, 667, 656, 647-A) |
+| `traumatologia forense` / `asfixiologia` | a aula em 1º — o ganho da 025 preservado |
+| `direitos e garantias fundamentais: remédios constitucionais` | ainda ruim, e agora por outro motivo: a CF nunca escreve "remédios constitucionais" — é o teto de doutrina já medido, não efeito do rótulo |
+
+### Na tela
+
+Duas listas. Material de estudo agrupado por matéria, como antes; material de
+consulta numa seção própria, DEPOIS, sem grupo e sem assunto, com uma linha
+dizendo o que é. O campo de assunto também não é oferecido na edição inline de
+material de referência: ele seria descartado na indexação, e campo que promete
+efeito inexistente é pior que campo ausente.
+
+Quem decide é o backend, pelo campo `referencia` de `material.listar()`: o
+front não tem como saber que um PDF virou 543 artigos, e reimplementar a regra
+lá seria a segunda cópia dela.
+
+---
+
+## Dois indexadores no mesmo documento apagaram a Constituição de um aluno
+
+**Achado ao consertar a 027**, e é independente dela. Reindexei o documento
+1495 por um comando de manutenção enquanto o `uvicorn --reload` do aluno estava
+de pé. `uvicorn --reload` chama `material.retomar_pendentes()` a cada boot, e o
+documento estava `processando`. Os dois trabalhadores rodaram `indexar()` em
+paralelo:
+
+```
+erro: falhou ao indexar: duplicate key value violates unique constraint
+      "chunk_documento_id_ordem_key"
+DETAIL: Key (documento_id, ordem)=(1495, 0) already exists.
+```
+
+Resultado: `status='falha'` e **ZERO trechos**. A Constituição inteira do aluno,
+invisível pra busca, por um comando de manutenção que só queria reindexar.
+
+**Por que as duas defesas que existiam não pegaram:**
+
+- a **idempotência** do `DELETE FROM chunk` antes de inserir é real e cobre duas
+  passadas em SEQUÊNCIA. O problema é o paralelo: os dois apagaram, os dois
+  começaram a inserir;
+- a **fila com um trabalhador** — a que resolveu a queda no upload de 20 PDFs —
+  é do PROCESSO. Dois processos têm duas filas e nenhum coordena com o outro.
+
+A coordenação tem de estar no único lugar que os dois compartilham: o banco.
+`pg_try_advisory_lock(TRAVA_INDEXACAO, documento_id)`, sem espera — quem perde a
+corrida DESISTE, porque quem ganhou vai fazer exatamente o mesmo trabalho. Lock
+de sessão, então sai sozinho quando a conexão fecha, inclusive se o processo
+morrer no meio.
+
+O teste (`test_dois_indexadores_no_mesmo_documento_nao_se_atropelam`) sobe
+material, dispara duas threads chamando `indexar` no mesmo documento e afirma o
+número de trechos no fim. Verificado que ele PEGA o defeito: desligando o lock,
+falha com o mesmo `duplicate key ... ordem)=(…, 0)`.
+
+**De passagem, um número que a tela mostrava errado:** `chunks_total` é gravado
+em `registrar` e nunca era reescrito. A CF tinha 1074 (janelas genéricas de uma
+versão anterior de `_dividir`) e reindexou pra 543 artigos, então a tela dizia
+"543 de 1074" pra material completo — que parece indexação travada. O
+denominador passa a vir de quem acabou de contar.
