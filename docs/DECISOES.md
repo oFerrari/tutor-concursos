@@ -1546,6 +1546,26 @@ uma proposta que não existe mais.
 POST e não DELETE na rota: não é "apagar um recurso", é operação com retorno
 útil. DELETE que devolve corpo pra ser usado engana quem lê a rota.
 
+**CANCELAR É SÍNCRONO, e a primeira versão não era.** Ela pedia a pergunta de
+volta ao SERVIDOR pra repor no campo — ou seja, cancelar custava um ida-e-volta
+de rede, e quem digitou errado esperava DUAS vezes: a resposta que não queria e
+o cancelamento dela. Relatado nesses termos: "esse cancelamento tem de ser
+instantâneo".
+
+O texto já está no cliente. Guardá-lo num ref (`ultimaPergunta`) e repor de lá é
+o conserto — buscá-lo de novo era atravessar a rede pra saber o que a própria
+tela acabou de mandar. Tudo o que a pessoa VÊ (abortar, tirar o balão, repor o
+texto, devolver o foco) acontece sem `await`; a limpeza do servidor vai
+fire-and-forget.
+
+O `editar` seguiu o mesmo caminho: o texto vem do BALÃO que a pessoa clicou, não
+de uma consulta.
+
+O custo aceito, e ele é pequeno: falhando a limpeza (rede caiu no exato
+instante), a pergunta órfã fica no histórico e o prompt do próximo turno vê uma
+pergunta sem resposta. Ruim, não grave. Travar o cancelamento pra evitar isso
+seria trocar um problema raro por atrito em TODO cancelamento.
+
 **O QUE O BOTÃO DE PARAR NÃO FAZ, e é honesto dizer:** não recupera a chamada ao
 modelo. Ela sai no início do turno, então parar não a desfaz — o que se evita é
 o que vem DEPOIS (gerar questões, gravar a resposta) e, principalmente, a pessoa

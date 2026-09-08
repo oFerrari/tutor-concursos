@@ -98,6 +98,15 @@ export default function PaginaTutor() {
    *  controlador não precisa redesenhar nada, e um `useState` aqui faria o
    *  botão remontar no meio do clique. */
   const abortar = useRef<AbortController | null>(null);
+  /** A última pergunta ENVIADA, guardada no cliente.
+   *
+   *  Existe pra que cancelar seja INSTANTÂNEO. A primeira versão do `parar()`
+   *  pedia a pergunta de volta ao servidor pra repor no campo — ou seja,
+   *  cancelar custava um ida-e-volta de rede, e quem digitou errado esperava
+   *  DUAS vezes: a resposta que não queria e o cancelamento dela. O texto já
+   *  está aqui; buscá-lo de novo é atravessar a rede pra saber o que a própria
+   *  tela acabou de mandar. */
+  const ultimaPergunta = useRef<string>("");
   const fim = useRef<HTMLDivElement>(null);
   // O CONTAINER que rola, não o `window`. Há DOIS scrollers aninhados aqui (o
   // <main> do AppShell e este), e `scrollIntoView` decide sozinho qual ancestral
@@ -186,33 +195,28 @@ export default function PaginaTutor() {
 
    */
 
-  async function parar() {
-
+  function parar() {
+    // TUDO O QUE A PESSOA VÊ ACONTECE AQUI, sem await: aborta, tira o balão,
+    // repõe o texto do REF e devolve o foco. Zero rede no caminho — cancelar
+    // uma coisa que você não quer não pode custar outra espera.
     abortar.current?.abort();
-
     abortar.current = null;
-
     setPensando(false);
-
     setMensagens((ms) => ms.slice(0, -1));
-
-    if (conversaId === null) return;
-
-    try {
-
-      const r = await desfazerTurno(conversaId);
-
-      setPergunta(r.pergunta);
+    setGeradas([]);
+    setPergunta(ultimaPergunta.current);
     campo.current?.focus();
 
-    } catch {
-
-      // O turno pode nem ter sido gravado ainda (parada muito rápida). Nada a
-
-      // desfazer é sucesso, não erro.
-
-    }
-
+    // A limpeza do servidor vai SEM ESPERAR. Ela existe porque a pergunta é
+    // gravada antes de o modelo ser chamado (014) e sobraria órfã no
+    // histórico — mas é serviço de bastidor, e prender a tela nele foi o
+    // defeito que esta versão conserta.
+    //
+    // Falhando (rede caiu no exato instante), a pergunta órfã fica: o custo é
+    // o prompt do próximo turno ver uma pergunta sem resposta, o que é ruim e
+    // não é grave. Travar o cancelamento pra evitar isso seria trocar um
+    // problema raro por um atrito em todo cancelamento.
+    if (conversaId !== null) void desfazerTurno(conversaId).catch(() => {});
   }
 
 
@@ -228,47 +232,32 @@ export default function PaginaTutor() {
 
    */
 
-  async function editarUltima() {
-
+  function editarUltima() {
     if (conversaId === null || pensando) return;
-
-    try {
-
-      const r = await desfazerTurno(conversaId);
-
-      // Tira o par (pergunta + resposta) da tela. `filter` seria errado: a
-
-      // mesma pergunta pode ter sido feita antes, e sumiriam as duas.
-
-      setMensagens((ms) => {
-
-        const corte = [...ms];
-
-        while (corte.length && corte[corte.length - 1].autor !== "usuario") corte.pop();
-
-        corte.pop();
-
-        return corte;
-
-      });
-
-      setGeradas([]);
-
-      setPergunta(r.pergunta);
+    // O texto vem da TELA, não do servidor: ele está no balão que a pessoa
+    // acabou de clicar. Mesmo motivo do `parar()` — pedir de volta o que já
+    // está aqui é atravessar a rede por nada.
+    const ultima = [...mensagens].reverse().find((m) => m.autor === "usuario");
+    if (!ultima) return;
+    setMensagens((ms) => {
+      // Corta o par pelo FIM. `filter` por texto seria errado: a mesma
+      // pergunta pode ter sido feita antes, e sumiriam as duas.
+      const corte = [...ms];
+      while (corte.length && corte[corte.length - 1].autor !== "usuario") corte.pop();
+      corte.pop();
+      return corte;
+    });
+    setGeradas([]);
+    setPergunta(ultima.texto);
     campo.current?.focus();
-
-    } catch (e) {
-
-      setErroQuestao(e instanceof ErroApi ? e.message : "Não deu pra editar a pergunta");
-
-    }
-
+    void desfazerTurno(conversaId).catch(() => {});
   }
 
 
   const perguntarAoTutor = useCallback(async (texto: string) => {
     if (!texto) return;
     setMensagens((m) => [...m, { autor: "usuario", texto }]);
+    ultimaPergunta.current = texto;
     setPensando(true);
     // Rola JÁ ao mandar, não só ao receber: o balão do aluno mais o "pensando"
     // já empurram o fim da conversa pra fora da tela, e era aí que começava o
