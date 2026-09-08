@@ -432,14 +432,26 @@ export default function PaginaMateriais() {
     return sugestoes.assuntos_por_disciplina[disciplina.trim()] ?? sugestoes.assuntos;
   }, [usandoAlvo, sugestoes, disciplina]);
 
-  /** No lápis não há toggle: corrigir um rótulo é uma ação sobre a biblioteca,
-   *  e esconder metade das grafias possíveis atrás de um botão de modo faria a
-   *  correção depender de um estado que está no outro canto da tela. As duas
-   *  fontes entram juntas, sem repetição. */
-  const opcoesDiscEdicao = useMemo(
-    () => [...new Set([...materiasDoAlvo, ...(sugestoes?.disciplinas ?? [])])].sort(),
-    [materiasDoAlvo, sugestoes]
-  );
+  /** O interruptor MANDA na ordem, não no conteúdo — e isso é o ajuste pedido:
+   *  "o botão de usar meu edital também deve servir pra dar sugestão para a
+   *  alteração da matéria".
+   *
+   *  As duas fontes continuam entrando juntas, e essa parte da decisão
+   *  anterior fica de pé pelo motivo dela: esconder metade das grafias atrás
+   *  de um botão de modo faria a correção depender de um estado que está no
+   *  outro canto da tela — e aí renomear pra um nome que você JÁ usa exigiria
+   *  descobrir que existe um interruptor. O que muda é qual lado aparece
+   *  primeiro, que é o que "dar sugestão" quer dizer numa lista.
+   *
+   *  Sem `.sort()` no fim de propósito: ordenar alfabeticamente desfazia
+   *  exatamente a preferência que o interruptor acabou de expressar. Dentro de
+   *  cada lado a ordem é alfabética. */
+  const opcoesDiscEdicao = useMemo(() => {
+    const daMesa = [...materiasDoAlvo].sort();
+    const daBiblioteca = [...(sugestoes?.disciplinas ?? [])].sort();
+    const [primeiro, depois] = usandoAlvo ? [daMesa, daBiblioteca] : [daBiblioteca, daMesa];
+    return [...new Set([...primeiro, ...depois])];
+  }, [materiasDoAlvo, sugestoes, usandoAlvo]);
   const opcoesAssuntoEdicao = useMemo(() => {
     if (!sugestoes) return [];
     return sugestoes.assuntos_por_disciplina[editDisc.trim()] ?? sugestoes.assuntos;
@@ -661,6 +673,16 @@ export default function PaginaMateriais() {
     for (const m of materiais ?? []) (m.referencia ? consulta : estudo).push(m);
     return [estudo, consulta];
   }, [materiais]);
+
+  /** Qual das duas listas está na tela. ABA e não seção rolável: a primeira
+   *  versão punha a consulta DEPOIS dos grupos, e o relato foi imediato —
+   *  "não gostei dessa visão, eu tenho que rolar até lá embaixo pra poder
+   *  ver; seria melhor separar eles logo no começo".
+   *
+   *  Está certo, e a razão é do tamanho do dado: 18 apostilas em 5 grupos
+   *  empurram qualquer coisa que venha depois pra fora da tela. Separação que
+   *  só existe depois de rolar não separa — esconde. */
+  const [aba, setAba] = useState<"estudo" | "consulta">("estudo");
 
   const grupos = useMemo(() => {
     const mapa = new Map<string, Material[]>();
@@ -908,7 +930,20 @@ export default function PaginaMateriais() {
           normal pra quem está jogando um curso inteiro aqui. E o que for
           preenchido vale pro LOTE inteiro, não por arquivo. */}
       <div className="mb-3 flex flex-wrap items-end gap-3">
-        <label className="min-w-[210px] flex-1">
+        {/* `div`, NÃO `label`, e o motivo é um defeito relatado: "o clique do
+            mouse tá pegando, ficando do iconezinho".
+
+            O interruptor é um <button> e estava DENTRO do <label> do campo.
+            Clicar em qualquer lugar de um label dispara o comportamento de
+            ativação dele — o foco vai pro controle rotulado —, então cada
+            clique no interruptor também focava (e abria) o campo de
+            disciplina, e o contorno de foco ficava aceso no lugar errado.
+            Controle interativo dentro de label é sempre isso: dois efeitos
+            num clique, e o segundo ninguém pediu.
+
+            O campo não perde acessibilidade: o `Seletor` recebe `aria`, que é
+            o nome acessível dele — o <label> aqui era decoração de layout. */}
+        <div className="min-w-[210px] flex-1">
           <span className="mb-1.5 flex items-baseline justify-between gap-2 text-[12.5px] text-muted">
             <span>Disciplina (opcional)</span>
             {/* O botão só existe como escolha quando há de onde escolher:
@@ -951,7 +986,7 @@ export default function PaginaMateriais() {
             placeholder="deixe vazio e eu descubro"
             aria="disciplina do material"
           />
-        </label>
+        </div>
         <label className="min-w-[210px] flex-1">
           <span className="mb-1.5 block text-[12.5px] text-muted">
             Assunto (opcional)
@@ -1064,12 +1099,39 @@ export default function PaginaMateriais() {
         Só endereço público (o servidor recusa IP interno). PDF ou página; o texto é extraído.
       </p>
 
-      <div className="mb-2.5 mt-7 flex items-baseline justify-between gap-3">
-        <p className="rotulo">processamento</p>
+      <div className="mb-2.5 mt-7 flex flex-wrap items-baseline justify-between gap-3">
+        {/* AS DUAS LISTAS, no topo. As abas só aparecem quando há material de
+            consulta: uma aba solitária não é escolha, é ruído — e a contagem
+            vem no rótulo pra dizer que existe algo do outro lado antes de
+            alguém clicar pra descobrir. */}
+        {deConsulta.length > 0 ? (
+          <div className="flex items-center gap-1" role="tablist" aria-label="tipo de material">
+            <button
+              role="tab"
+              aria-selected={aba === "estudo"}
+              onClick={() => setAba("estudo")}
+              className={aba === "estudo" ? "chip-ativo" : "chip"}
+            >
+              aulas e resumos{" "}
+              <span className="font-mono text-[11px] opacity-70">{deEstudo.length}</span>
+            </button>
+            <button
+              role="tab"
+              aria-selected={aba === "consulta"}
+              onClick={() => setAba("consulta")}
+              className={aba === "consulta" ? "chip-ativo" : "chip"}
+            >
+              consulta e apoio{" "}
+              <span className="font-mono text-[11px] opacity-70">{deConsulta.length}</span>
+            </button>
+          </div>
+        ) : (
+          <p className="rotulo">processamento</p>
+        )}
         {/* Arraste é gesto invisível: quem não souber que existe nunca tenta.
             A dica só aparece com mais de um grupo, porque com um só não há
-            para onde mover. */}
-        {grupos.length > 1 && (
+            para onde mover — e nunca na aba de consulta, onde não há grupo. */}
+        {aba === "estudo" && grupos.length > 1 && (
           <p className="text-[12px] text-subtle">
             errou a matéria? arraste para outro grupo — ou solte fora deles pra tirar
           </p>
@@ -1085,96 +1147,116 @@ export default function PaginaMateriais() {
       )}
 
       <div className="flex flex-col gap-4">
-        {grupos.map(([disc, itens]) => (
-          <div
-            key={disc}
-            onDragOver={(e) => {
-              // `preventDefault` é o que AUTORIZA o soltar: sem ele o navegador
-              // recusa o drop e o gesto morre sem explicação.
-              if (arrastando === null) return;
-              e.preventDefault();
-              setSobre(disc);
-            }}
-            onDragLeave={() => setSobre((s) => (s === disc ? null : s))}
-            onDrop={(e) => {
-              e.preventDefault();
-              if (arrastando !== null) mover(arrastando, disc);
-            }}
-            className={`overflow-hidden rounded-2xl border bg-surface transition-colors ${
-              sobre === disc && arrastando !== null ? "border-accent" : "border-line"
-            }`}
-          >
-            <div className="flex items-baseline justify-between gap-3 border-b border-line-soft bg-surface-raised px-5 py-2.5">
-              {/* "Identificando" é PROMESSA: só vale enquanto alguma linha do
-                  grupo ainda está processando. Terminado o classificador, o que
-                  sobrou sem rótulo é "Outros" — dizer que ainda está
-                  identificando seria esperar por algo que não vai acontecer. */}
-              {/* O NOME DO GRUPO É EDITÁVEL. Pedido: "às vezes o mesmo assunto
-                  cai em nomes de matérias diferentes" — Criminalística num
-                  edital é Ciências Forenses no outro. Corrigir material por
-                  material existia e custava treze cliques pra treze aulas do
-                  mesmo curso. O grupo "Outros" não se renomeia: ele não é uma
-                  matéria, é a ausência dela (arraste pra dar nome). */}
-              {renomeando === disc ? (
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    confirmarRenome(disc);
-                  }}
-                  className="flex items-center gap-1.5"
-                >
-                  <input
-                    autoFocus
-                    value={nomeNovo}
-                    onChange={(e) => setNomeNovo(e.target.value)}
-                    onKeyDown={(e) => e.key === "Escape" && setRenomeando(null)}
-                    maxLength={120}
-                    className="field !py-1 w-[220px] text-[12.5px]"
-                    aria-label={`novo nome para ${disc}`}
-                  />
-                  <button type="submit" className="chip !py-1 text-[12px]">
-                    Renomear
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRenomeando(null)}
-                    className="chip !py-1 text-[12px]"
+        {aba === "estudo" &&
+          grupos.map(([disc, itens]) => (
+            <div
+              key={disc}
+              onDragOver={(e) => {
+                // `preventDefault` é o que AUTORIZA o soltar: sem ele o navegador
+                // recusa o drop e o gesto morre sem explicação.
+                if (arrastando === null) return;
+                e.preventDefault();
+                setSobre(disc);
+              }}
+              onDragLeave={() => setSobre((s) => (s === disc ? null : s))}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (arrastando !== null) mover(arrastando, disc);
+              }}
+              className={`overflow-hidden rounded-2xl border bg-surface transition-colors ${
+                sobre === disc && arrastando !== null ? "border-accent" : "border-line"
+              }`}
+            >
+              <div className="flex items-baseline justify-between gap-3 border-b border-line-soft bg-surface-raised px-5 py-2.5">
+                {/* "Identificando" é PROMESSA: só vale enquanto alguma linha do
+                    grupo ainda está processando. Terminado o classificador, o que
+                    sobrou sem rótulo é "Outros" — dizer que ainda está
+                    identificando seria esperar por algo que não vai acontecer. */}
+                {/* O NOME DO GRUPO É EDITÁVEL. Pedido: "às vezes o mesmo assunto
+                    cai em nomes de matérias diferentes" — Criminalística num
+                    edital é Ciências Forenses no outro. Corrigir material por
+                    material existia e custava treze cliques pra treze aulas do
+                    mesmo curso. O grupo "Outros" não se renomeia: ele não é uma
+                    matéria, é a ausência dela (arraste pra dar nome). */}
+                {renomeando === disc ? (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      confirmarRenome(disc);
+                    }}
+                    // Escape no FORMULÁRIO e não no campo: o `Seletor` consome
+                    // o Escape pra fechar a lista dele, e ele estava no
+                    // <input> que o seletor substituiu. No formulário a tecla
+                    // continua chegando aqui depois — a lista fecha no
+                    // primeiro Escape, a renomeação cancela no segundo, e com
+                    // a lista fechada cancela de primeira.
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") setRenomeando(null);
+                    }}
+                    className="flex items-center gap-1.5"
                   >
-                    Cancelar
-                  </button>
-                </form>
-              ) : (
-                <p className="group/gr flex items-center gap-1.5 text-[13.5px] font-medium">
-                  {disc !== SEM_DISCIPLINA ? (
-                    <>
-                      {disc}
-                      <button
-                        onClick={() => {
-                          setRenomeando(disc);
-                          setNomeNovo(disc);
-                        }}
-                        title="Renomear esta matéria em todos os materiais dela"
-                        aria-label={`renomear ${disc}`}
-                        className="flex h-5 w-5 items-center justify-center rounded-[6px] text-label opacity-0 transition-all hover:bg-surface-hover hover:text-accent-text focus-visible:opacity-100 group-hover/gr:opacity-100"
-                      >
-                        <Pencil className="h-3 w-3" />
-                      </button>
-                    </>
-                  ) : itens.some((m) => m.status === "processando") ? (
-                    <span className="text-muted">Identificando a matéria...</span>
-                  ) : (
-                    <span className="text-muted">Outros</span>
-                  )}
+                    {/* SELETOR e não campo vazio: era um <input> pelado, e o
+                        pedido foi direto — "o botão de usar meu edital também
+                        deve servir pra dar sugestão para a alteração da
+                        matéria". É aqui que a sugestão faltava de verdade: a
+                        renomeação em lote existe justamente pra unificar
+                        "Criminalística" e "Ciências Forenses", e digitar o
+                        nome de novo, à mão, é o convite pra criar uma
+                        terceira grafia — o problema que ela veio resolver.
+                        A ordem da lista é a que o interruptor manda (ver
+                        `opcoesDiscEdicao`); digitar livre continua valendo. */}
+                    <Seletor
+                      valor={nomeNovo}
+                      aoMudar={setNomeNovo}
+                      opcoes={opcoesDiscEdicao}
+                      placeholder="novo nome da matéria"
+                      className="field !py-1 text-[12.5px]"
+                      caixa="relative w-[220px]"
+                      aria={`novo nome para ${disc}`}
+                    />
+                    <button type="submit" className="chip !py-1 text-[12px]">
+                      Renomear
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRenomeando(null)}
+                      className="chip !py-1 text-[12px]"
+                    >
+                      Cancelar
+                    </button>
+                  </form>
+                ) : (
+                  <p className="group/gr flex items-center gap-1.5 text-[13.5px] font-medium">
+                    {disc !== SEM_DISCIPLINA ? (
+                      <>
+                        {disc}
+                        <button
+                          onClick={() => {
+                            setRenomeando(disc);
+                            setNomeNovo(disc);
+                          }}
+                          title="Renomear esta matéria em todos os materiais dela"
+                          aria-label={`renomear ${disc}`}
+                          className="flex h-5 w-5 items-center justify-center rounded-[6px] text-label opacity-0 transition-all hover:bg-surface-hover hover:text-accent-text focus-visible:opacity-100 group-hover/gr:opacity-100"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </button>
+                      </>
+                    ) : itens.some((m) => m.status === "processando") ? (
+                      <span className="text-muted">Identificando a matéria...</span>
+                    ) : (
+                      <span className="text-muted">Outros</span>
+                    )}
+                  </p>
+                )}
+                <p className="font-mono text-[11px] text-label">
+                  {itens.length} {itens.length === 1 ? "material" : "materiais"}
                 </p>
-              )}
-              <p className="font-mono text-[11px] text-label">
-                {itens.length} {itens.length === 1 ? "material" : "materiais"}
-              </p>
-            </div>
+              </div>
 
-            {itens.map(linhaMaterial)}
-          </div>
-        ))}
+              {itens.map(linhaMaterial)}
+            </div>
+          ))}
 
         {/* POÇO DE CONSULTA, separado do material de estudo e DEPOIS dele.
             Pedido nestas palavras: "jurisprudência não deve ser fragmentada, é
@@ -1185,14 +1267,8 @@ export default function PaginaMateriais() {
             inteira trata de centenas de assuntos, então rotular com UM é
             mentir. Cada trecho aqui já se identifica por artigo, que é rótulo
             melhor que qualquer assunto. */}
-        {deConsulta.length > 0 && (
-          <section className="mt-3">
-            <div className="mb-2.5 flex items-baseline justify-between gap-3">
-              <p className="rotulo">consulta e apoio</p>
-              <p className="font-mono text-[11px] text-label">
-                {deConsulta.length} {deConsulta.length === 1 ? "fonte" : "fontes"}
-              </p>
-            </div>
+        {aba === "consulta" && (
+          <section>
             <p className="mb-2.5 text-[12.5px] text-muted">
               Lei e jurisprudência não são aula: o tutor consulta estas fontes por artigo,
               como apoio às suas apostilas, e elas não recebem assunto — uma norma inteira
@@ -1210,29 +1286,31 @@ export default function PaginaMateriais() {
             materiais com rótulo, nenhum grupo "Outros" na tela, nada pra onde
             arrastar. Aparece no arraste e some depois porque alvo de drop
             parado numa tela sem nada sendo arrastado é ruído. */}
-        {arrastando !== null && !grupos.some(([k]) => k === SEM_DISCIPLINA) && (
-          <div
-            onDragOver={(e) => {
-              e.preventDefault();
-              setSobre(SEM_DISCIPLINA);
-            }}
-            onDragLeave={() => setSobre((s) => (s === SEM_DISCIPLINA ? null : s))}
-            onDrop={(e) => {
-              e.preventDefault();
-              if (arrastando !== null) mover(arrastando, SEM_DISCIPLINA);
-            }}
-            className={`rounded-2xl border border-dashed px-5 py-6 text-center transition-colors ${
-              sobre === SEM_DISCIPLINA
-                ? "border-accent bg-accent-soft text-accent-text"
-                : "border-line-stronger text-muted"
-            }`}
-          >
-            <p className="text-[13.5px] font-medium">Outros — tirar a matéria</p>
-            <p className="mt-0.5 text-[12px] text-subtle">
-              solte aqui pra deixar sem matéria; o assunto continua
-            </p>
-          </div>
-        )}
+        {aba === "estudo" &&
+          arrastando !== null &&
+          !grupos.some(([k]) => k === SEM_DISCIPLINA) && (
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setSobre(SEM_DISCIPLINA);
+              }}
+              onDragLeave={() => setSobre((s) => (s === SEM_DISCIPLINA ? null : s))}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (arrastando !== null) mover(arrastando, SEM_DISCIPLINA);
+              }}
+              className={`rounded-2xl border border-dashed px-5 py-6 text-center transition-colors ${
+                sobre === SEM_DISCIPLINA
+                  ? "border-accent bg-accent-soft text-accent-text"
+                  : "border-line-stronger text-muted"
+              }`}
+            >
+              <p className="text-[13.5px] font-medium">Outros — tirar a matéria</p>
+              <p className="mt-0.5 text-[12px] text-subtle">
+                solte aqui pra deixar sem matéria; o assunto continua
+              </p>
+            </div>
+          )}
       </div>
 
       <Confirmar

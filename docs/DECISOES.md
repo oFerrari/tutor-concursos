@@ -2350,3 +2350,45 @@ em `registrar` e nunca era reescrito. A CF tinha 1074 (janelas genéricas de uma
 versão anterior de `_dividir`) e reindexou pra 543 artigos, então a tela dizia
 "543 de 1074" pra material completo — que parece indexação travada. O
 denominador passa a vir de quem acabou de contar.
+
+### Três ajustes de tela em cima da 027
+
+**A separação virou ABA, não seção no rodapé.** A primeira versão punha a
+consulta depois dos grupos, e o relato foi imediato: "não gostei dessa visão,
+eu tenho que rolar até lá embaixo pra poder ver; seria melhor separar eles logo
+no começo". Certo, e a razão é do tamanho do dado: 18 apostilas em 5 grupos
+empurram qualquer coisa que venha depois pra fora da tela. **Separação que só
+existe depois de rolar não separa — esconde.** As abas aparecem só quando há
+material de consulta (aba solitária não é escolha) e trazem a contagem no
+rótulo, pra dizer que existe algo do outro lado antes de alguém clicar pra
+descobrir.
+
+**O interruptor "usar meu edital" passou a mandar na sugestão de RENOMEAR.**
+Pedido: "o botão de usar meu edital também deve servir pra dar sugestão para a
+alteração da matéria". Duas coisas mudaram, e a segunda era a que faltava de
+verdade:
+
+- o campo de renomear em lote era um `<input>` pelado, sem sugestão nenhuma. É
+  o pior lugar possível pra isso: a renomeação em lote existe justamente pra
+  unificar "Criminalística" e "Ciências Forenses", e digitar o nome à mão é o
+  convite pra criar uma TERCEIRA grafia — o problema que ela veio resolver.
+  Virou `Seletor`;
+- o interruptor manda na ORDEM da lista, não no conteúdo. A decisão anterior
+  ("no lápis não há toggle") fica de pé na parte que importa: as duas fontes
+  continuam entrando juntas, senão renomear pra um nome que você JÁ usa
+  exigiria descobrir que existe um interruptor no outro canto da tela. O que
+  muda é qual lado vem primeiro, que é o que "dar sugestão" quer dizer numa
+  lista. Sem `.sort()` no fim, que desfaria a preferência recém-expressa.
+
+**O clique que "pegava no iconezinho": `<button>` dentro de `<label>`.** O
+interruptor era um botão dentro do `<label>` do campo de disciplina. Clicar em
+qualquer lugar de um label dispara o comportamento de ativação dele — o foco
+vai pro controle rotulado —, então cada clique no interruptor também focava e
+abria o campo de disciplina, e o contorno de foco ficava aceso no lugar errado.
+Controle interativo dentro de label é sempre isso: dois efeitos num clique, e o
+segundo ninguém pediu. O `<label>` virou `<div>`; o campo não perde
+acessibilidade porque o `Seletor` já recebe `aria`, que é o nome acessível dele
+— o label ali era decoração de layout.
+
+**Classe de erro pra procurar:** qualquer `<label>` que envolva mais que o
+próprio campo. Nesta tela havia três, e só o de Disciplina tinha botão dentro.
