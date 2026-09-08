@@ -1163,6 +1163,39 @@ export default function PaginaMateriais() {
         )}
       </div>
 
+      {/* O QUE A BIBLIOTECA TEM, em uma linha — e a pergunta que ela existe
+          pra responder é literal: "ficou ainda algum rastro do link da CF que
+          ele mapeou como aula, porém eu não consigo saber, ele não me dá essa
+          informação".
+
+          Estava limpo. O defeito era a tela não saber dizer NEM que estava nem
+          que não: a pessoa apaga uma cópia de lei e fica sem como conferir, com
+          18 linhas em três abas pra varrer à mão. Ausência de aviso não é
+          prova de nada — é por isso que a frase aparece nos dois casos, e não
+          só quando há cópia.
+
+          `fatiado_por_artigo` é o sinal certo, não o tipo que a pessoa
+          escolheu: a CF colada pelo link virou "aula" no seletor e continuava
+          sendo lei dividida em 543 artigos. */}
+      {materiais !== null && materiais.length > 0 && (
+        <p className="mb-2.5 text-[12px] text-subtle">
+          {materiais.length} {materiais.length === 1 ? "material" : "materiais"} ·{" "}
+          {materiais.reduce((s, m) => s + m.chunks, 0).toLocaleString("pt-BR")} trechos ·{" "}
+          {(() => {
+            const leis = materiais.filter((m) => m.fatiado_por_artigo);
+            if (leis.length === 0)
+              return <span className="text-success">nenhuma cópia de lei aqui</span>;
+            return (
+              <span className="text-accent-text">
+                {leis.length === 1 ? "1 cópia de lei" : `${leis.length} cópias de lei`} (
+                {leis.map((m) => m.titulo).join(", ")}) — {leis.length === 1 ? "ela compete" : "elas competem"}{" "}
+                com a lei oficial na busca
+              </span>
+            );
+          })()}
+        </p>
+      )}
+
       {materiais === null && <Carregando linhas={3} titulo rotulo="Carregando sua biblioteca" />}
       {materiais?.length === 0 && (
         <p className="text-[13.5px] text-muted">
@@ -1329,7 +1362,7 @@ export default function PaginaMateriais() {
             inteira trata de centenas de assuntos, então rotular com UM é
             mentir. Cada trecho aqui já se identifica por artigo, que é rótulo
             melhor que qualquer assunto. */}
-        {semGrupo && (
+        {semGrupo && daAba.length > 0 && (
           <section>
             <p className="mb-2.5 text-[12.5px] text-muted">
               Jurisprudência e lei não são aula: o tutor consulta estas fontes por artigo,

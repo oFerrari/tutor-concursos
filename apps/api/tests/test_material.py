@@ -834,3 +834,27 @@ def test_dois_indexadores_no_mesmo_documento_nao_se_atropelam(client, usuario):
     # dobro (os dois inseriram).
     assert db.exec1("SELECT count(*) n FROM chunk WHERE documento_id = %(i)s",
                     {"i": doc["id"]})["n"] == antes
+
+
+def test_listar_diz_qual_material_e_copia_de_lei(client, usuario):
+    """A tela precisa poder AFIRMAR que não há cópia de lei na biblioteca.
+
+    Relato: o aluno apagou a cópia da Constituição e ficou sem como conferir —
+    "ficou ainda algum rastro do link da CF que ele mapeou como aula, porém eu
+    não consigo saber, ele não me dá essa informação". Estava limpo; o defeito
+    era a tela não saber dizer nem que estava nem que não, com 18 linhas em três
+    abas pra varrer à mão.
+
+    `fatiado_por_artigo` é o sinal certo, e não o tipo que a pessoa escolheu no
+    seletor: a CF colada pelo link virou "aula" e continuava sendo lei dividida
+    em 543 artigos. Aula de verdade é janela de parágrafo, sem artigo nenhum."""
+    _material(client, usuario["headers"], nome="Aula.txt")
+    _esperar_indexacao()
+
+    ms = material.listar(usuario["id"])
+    assert ms, "o material de teste não entrou"
+    # Nenhuma aula é fatiada por artigo — é o caso normal, e é o que deixa a
+    # tela dizer "nenhuma cópia de lei aqui" com base em dado, não em silêncio.
+    assert all(m["fatiado_por_artigo"] is False for m in ms), \
+        [m["titulo"] for m in ms if m["fatiado_por_artigo"]]
+    assert all("fatiado_por_artigo" in m for m in ms), "campo ausente na listagem"

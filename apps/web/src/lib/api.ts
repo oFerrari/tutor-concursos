@@ -819,6 +819,16 @@ export type Material = {
    *  (a cópia da CF ganhava de 6 a 0 da CF oficial em consulta constitucional
    *  qualquer). */
   referencia?: boolean;
+  /** Este material foi fatiado POR ARTIGO — ou seja, é texto de norma, não
+   *  aula: `material._e_lei_seca` o reconheceu e `chunk_lei` o dividiu por
+   *  dispositivo.
+   *
+   *  Separado de `referencia` porque responde outra pergunta. `referencia` é
+   *  "como a tela deve tratar isto"; este é "isto é uma cópia de lei" — e é
+   *  essa que a biblioteca precisava conseguir responder. Relato: o aluno
+   *  apagou a cópia da Constituição e não teve como CONFERIR que não sobrou
+   *  nada. Estava limpo, e a tela não sabia dizer nem que estava nem que não. */
+  fatiado_por_artigo?: boolean;
   /** O upload encontrou este arquivo JÁ NO BANCO, parado (`processando` ou
    *  `falha`, sem trecho nenhum), e o recolocou na fila em vez de recusar como
    *  duplicata. Não é erro: é serviço inacabado sendo retomado — foi o que

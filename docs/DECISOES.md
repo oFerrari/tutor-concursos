@@ -2475,6 +2475,50 @@ vazia diz o que fazer em vez de ficar em branco ("escolha esse tipo lá em cima
 antes de arrastar o arquivo") — lista vazia sem explicação parece defeito de
 carregamento.
 
+### "Não consigo saber" é um defeito, mesmo quando a resposta é "está limpo"
+
+Relato: "eu apaguei o material de jurisprudência, mas ficou ainda algum rastro
+do link da CF que ele mapeou como aula, porém eu não consigo saber, ele não me
+dá essa informação."
+
+Conferido no banco: **não havia rastro.** 18 documentos, todos `aula`, nenhum
+fatiado por artigo, zero trechos órfãos, nenhuma cópia de norma na conta. A
+exclusão tinha funcionado inteira.
+
+E ainda assim o relato é procedente, o que é o ponto: **o defeito era a tela não
+saber dizer NEM que estava limpo NEM que não.** A pessoa apaga uma cópia de lei
+— que ela sabe ter degradado a busca — e fica sem como verificar, com 18 linhas
+espalhadas em três abas pra varrer à mão. Ausência de aviso não é prova de nada.
+
+Duas coisas mudaram:
+
+**Uma linha de resumo do acervo**, sempre visível: "18 materiais · 2.060 trechos
+· nenhuma cópia de lei aqui" (verde), ou "1 cópia de lei (constituicao.txt) —
+ela compete com a lei oficial na busca" (rubro), nomeando os arquivos. Aparece
+nos DOIS casos, e é isso que a torna informação: um aviso que só existe quando
+há problema não permite concluir nada quando está ausente.
+
+O sinal é `fatiado_por_artigo` (novo em `material.listar`), e não o tipo que a
+pessoa escolheu no seletor — a CF colada pelo link virou "aula" e continuava
+sendo lei dividida em 543 artigos. Separado de `referencia` porque responde
+outra pergunta: `referencia` é "como a tela deve tratar isto",
+`fatiado_por_artigo` é "isto é uma cópia de lei".
+
+**E o TEMPO VERBAL da recusa.** A mensagem de duplicata dizia "subir uma cópia
+não acrescenta nada e piora a busca, porque as duas versões competem". Presente.
+O aluno tinha ACABADO de apagar a cópia dele, colou o link de novo pra
+conferir, leu "as duas versões competem" e entendeu que havia sobrado rastro —
+razoavelmente. Recusa fala do que ACONTECERIA; no presente ela afirma um fato
+sobre o acervo que não verificou. Agora abre com "não subi:" e termina com "nada
+foi gravado e a sua biblioteca continua como estava".
+
+**Classe de erro pra procurar:** mensagem de recusa escrita no presente do
+indicativo. Ela descreve um mundo que a recusa acabou de impedir de existir.
+
+(De passagem: a aba vazia mostrava DUAS mensagens — o estado vazio e a
+explicação do que é material de referência. Agora a explicação só sai quando há
+algo pra explicar.)
+
 ### O interruptor FILTRA, e essa foi a terceira tentativa
 
 Três versões do mesmo campo, cada correção mais direta que a anterior:

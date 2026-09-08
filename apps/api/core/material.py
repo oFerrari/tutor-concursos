@@ -42,7 +42,7 @@ import re
 
 from . import chunking, db, embeddings
 
-VERSAO = "material-v14"
+VERSAO = "material-v15"
 
 LOTE = 32
 MIN_CHARS = 200
@@ -560,11 +560,18 @@ def registrar(usuario_id: int, nome: str, dados: bytes,
     # competem com o original. Medido — ver `norma_ja_no_acervo`.
     ja_tem = norma_ja_no_acervo(chunks)
     if ja_tem:
+        # TEMPO VERBAL: "passariam a competir", não "competem". A redação
+        # anterior estava no presente, e foi lida como estado atual — o aluno
+        # tinha ACABADO de apagar a cópia dele, colou o link de novo pra
+        # conferir, leu "as duas versões competem" e entendeu que havia sobrado
+        # rastro. Não havia. Recusa fala do que ACONTECERIA; dizê-la no
+        # presente afirma um fato sobre o acervo que ela não verificou.
         raise ErroMaterial(
-            f"esta lei já está no acervo do app ({ja_tem}), dividida por artigo — subir uma "
-            f"cópia não acrescenta nada e piora a busca, porque as duas versões competem. "
-            f"Pergunte direto ao tutor (\"art. 37\") que ele usa a que já está aqui. "
-            f"O que vale subir é o que o app NÃO tem: aula, resumo e apostila.")
+            f"não subi: esta lei já está no acervo do app ({ja_tem}), dividida por artigo. "
+            f"Uma segunda cópia não acrescenta nada e pioraria a sua busca, porque as duas "
+            f"versões passariam a competir — então nada foi gravado e a sua biblioteca "
+            f"continua como estava. Pergunte direto ao tutor (\"art. 37\") que ele usa a que "
+            f"já está aqui. O que vale subir é o que o app NÃO tem: aula, resumo e apostila.")
 
     # O ARQUIVO VAI PARA O BANCO (024). Antes daqui o `dados` era usado pra
     # extrair texto e descartado, e o PDF ficava só no computador de quem subiu
@@ -1178,7 +1185,20 @@ def listar(usuario_id: int) -> list[dict]:
                   -- tela separar "poço de consulta" de "aula", que era o pedido:
                   -- "jurisprudência não deve ser fragmentada, é um poço de
                   -- informações que serve de auxiliar complementar aos PDFs".
-                  (d.tipo = ANY(%(ref)s) OR count(c.artigo) > 0) AS referencia
+                  (d.tipo = ANY(%(ref)s) OR count(c.artigo) > 0) AS referencia,
+                  -- FATIADO POR ARTIGO: este material é texto de norma, não
+                  -- aula — `_e_lei_seca` o reconheceu e `chunk_lei` o dividiu
+                  -- por dispositivo. Separado de `referencia` porque responde
+                  -- outra pergunta: `referencia` é "como a tela deve tratar
+                  -- isto", e este é "isto é uma cópia de lei".
+                  --
+                  -- A tela precisa dizer isso em algum lugar. Relato: o aluno
+                  -- apagou a cópia da Constituição e não teve como CONFERIR
+                  -- que sobrou nada — "ficou ainda algum rastro do link da CF
+                  -- que ele mapeou como aula, porém eu não consigo saber, ele
+                  -- não me dá essa informação". Estava limpo, e a tela não
+                  -- tinha como dizer nem que estava nem que não.
+                  (count(c.artigo) > 0) AS fatiado_por_artigo
              FROM documento d
              LEFT JOIN chunk c ON c.documento_id = d.id
              -- LEFT: material do pool comum (mesa_id NULL) não pode desaparecer
