@@ -68,10 +68,16 @@ const TIPOS = [
  *  com nome real de matéria. */
 const SEM_DISCIPLINA = " nao-classificado";
 
-function detalhe(m: Material): string {
+function detalhe(m: Material, jaNaAbaDeConsulta = false): string {
   if (m.status === "falha") return m.erro ?? "não deu pra ler";
   if (m.status === "processando") return `${m.chunks} de ${m.chunks_total ?? "?"}`;
-  return `${m.chunks} trechos`;
+  // "consulta" MARCA o caso confuso: material fatiado por artigo (uma lei
+  // subida como "Aula / apostila") não recebe assunto, e sem a marca a linha
+  // fica sendo uma aula sem assunto nenhum, do lado de treze que têm. Não
+  // aparece na aba de Jurisprudência, onde o cabeçalho já explica isso — dizer
+  // duas vezes é ruído.
+  const marca = m.referencia && !jaNaAbaDeConsulta ? " · consulta" : "";
+  return `${m.chunks} trechos${marca}`;
 }
 
 /**
@@ -651,49 +657,63 @@ export default function PaginaMateriais() {
 
   /** Agrupado por disciplina, com o não-classificado por ÚLTIMO: ele é o que
    *  ainda vai mudar, e no topo faria o bloco pular de lugar a cada polling. */
-  // MATERIAL DE ESTUDO × POÇO DE CONSULTA, em duas listas.
+  // UMA ABA POR TIPO DE MATERIAL, e as duas correções que chegaram até aqui.
   //
-  // Pedido nestas palavras: "jurisprudência não deve ser fragmentada, é
-  // simplesmente um poço de informações que serve de auxiliar complementar aos
-  // PDFs; ele deveria estar separado ali embaixo para diferenciar do material
-  // de aula". E o argumento que fecha: "se fôssemos criar assunto da CF,
-  // iríamos ter que criar uma quantidade imensurável de assuntos".
+  // A primeira: "jurisprudência não deve ser fragmentada, é simplesmente um
+  // poço de informações que serve de auxiliar complementar aos PDFs; ele
+  // deveria estar separado para diferenciar do material de aula". Está certo, e
+  // não era só arrumação — o `assunto` entra na BUSCA (025), e um assunto único
+  // inventado a partir das primeiras páginas de um corpus fazia a cópia da
+  // Constituição ganhar de 6 a 0 da CF oficial em consulta constitucional
+  // qualquer. A metade de DADO dessa correção é a migração 027.
   //
-  // Está certo, e não era só arrumação: o assunto entra na BUSCA (025). Um
-  // assunto único inventado a partir das primeiras páginas de um corpus fazia
-  // a cópia da Constituição do aluno ganhar de 6 a 0 da CF oficial em qualquer
-  // consulta constitucional. Separar na tela é a metade visível de uma correção
-  // que também é de dado (migração 027).
+  // A segunda: eu tinha derivado essa separação num conceito meu, "estudo ×
+  // consulta", com as abas "aulas e resumos" e "consulta e apoio". O relato
+  // desfez isso em cinco palavras — "ainda tá faltando o botão de
+  // Jurisprudência?". O aluno pensa nos TIPOS que ele mesmo escolhe ao subir
+  // o arquivo, e é isso que a tela tem de mostrar: aula, resumo,
+  // jurisprudência. Vocabulário inventado por mim, mesmo bem-intencionado,
+  // vira um botão que ninguém reconhece.
   //
-  // Quem decide é o backend (`material.e_referencia`), pelo campo `referencia`:
-  // o front não tem como saber que um PDF virou 543 artigos.
-  const [deEstudo, deConsulta] = useMemo(() => {
-    const estudo: Material[] = [];
-    const consulta: Material[] = [];
-    for (const m of materiais ?? []) (m.referencia ? consulta : estudo).push(m);
-    return [estudo, consulta];
+  // Daí as abas saírem de `TIPOS`, a MESMA constante do seletor do formulário:
+  // os dois lugares dizem "Jurisprudência" porque leem o mesmo rótulo.
+  const porTipo = useMemo(() => {
+    const mapa = new Map<string, Material[]>();
+    for (const m of materiais ?? []) mapa.set(m.tipo, [...(mapa.get(m.tipo) ?? []), m]);
+    return mapa;
   }, [materiais]);
 
-  /** Qual das duas listas está na tela. ABA e não seção rolável: a primeira
-   *  versão punha a consulta DEPOIS dos grupos, e o relato foi imediato —
-   *  "não gostei dessa visão, eu tenho que rolar até lá embaixo pra poder
-   *  ver; seria melhor separar eles logo no começo".
-   *
-   *  Está certo, e a razão é do tamanho do dado: 18 apostilas em 5 grupos
-   *  empurram qualquer coisa que venha depois pra fora da tela. Separação que
-   *  só existe depois de rolar não separa — esconde. */
-  const [aba, setAba] = useState<"estudo" | "consulta">("estudo");
+  /** Só os tipos que TÊM material. Aba vazia é promessa de conteúdo que não
+   *  existe, e com três tipos fixos duas delas ficariam vazias na conta
+   *  normal. */
+  const abas = useMemo(
+    () => TIPOS.filter((x) => (porTipo.get(x.valor)?.length ?? 0) > 0),
+    [porTipo]
+  );
+
+  const [abaPedida, setAba] = useState<string>("aula");
+  /** A aba EFETIVA. `abaPedida` pode apontar pra um tipo que ficou sem
+   *  material (o último resumo foi apagado, ou a lista ainda está
+   *  carregando), e uma aba selecionada mostrando lista vazia parece
+   *  biblioteca vazia. Cai na primeira que tem algo. */
+  const aba = porTipo.has(abaPedida) ? abaPedida : (abas[0]?.valor ?? "aula");
+  const daAba = useMemo(() => porTipo.get(aba) ?? [], [porTipo, aba]);
+
+  /** Jurisprudência não se agrupa por matéria — é o pedido, e é coerente com o
+   *  resto: material de referência não tem assunto porque trata de assunto
+   *  demais, e subdividir a lista dele repetiria o mesmo erro na tela. */
+  const semGrupo = aba === "jurisprudencia";
 
   const grupos = useMemo(() => {
     const mapa = new Map<string, Material[]>();
-    for (const m of deEstudo) {
+    for (const m of daAba) {
       const k = m.disciplina ?? SEM_DISCIPLINA;
       mapa.set(k, [...(mapa.get(k) ?? []), m]);
     }
     return [...mapa.entries()].sort(([a], [b]) =>
       a === SEM_DISCIPLINA ? 1 : b === SEM_DISCIPLINA ? -1 : a.localeCompare(b)
     );
-  }, [deEstudo]);
+  }, [daAba]);
 
   // A LINHA DE UM MATERIAL, extraída porque agora ela aparece em DUAS listas:
   // os grupos por matéria (material de estudo) e a seção de consulta
@@ -788,7 +808,7 @@ export default function PaginaMateriais() {
                     )}
                     <p className="mt-0.5 truncate font-mono text-[11px] text-label">
                       {m.assunto ? `${m.titulo} · ` : ""}
-                      {detalhe(m)}
+                      {detalhe(m, semGrupo)}
                       {/* Só o PALPITE pede conferência. O que o aluno digitou
                           não precisa de aviso — ele sabe o que escreveu. */}
                       {m.classificado_por === "modelo" && (
@@ -1100,38 +1120,36 @@ export default function PaginaMateriais() {
       </p>
 
       <div className="mb-2.5 mt-7 flex flex-wrap items-baseline justify-between gap-3">
-        {/* AS DUAS LISTAS, no topo. As abas só aparecem quando há material de
-            consulta: uma aba solitária não é escolha, é ruído — e a contagem
-            vem no rótulo pra dizer que existe algo do outro lado antes de
-            alguém clicar pra descobrir. */}
-        {deConsulta.length > 0 ? (
-          <div className="flex items-center gap-1" role="tablist" aria-label="tipo de material">
-            <button
-              role="tab"
-              aria-selected={aba === "estudo"}
-              onClick={() => setAba("estudo")}
-              className={aba === "estudo" ? "chip-ativo" : "chip"}
-            >
-              aulas e resumos{" "}
-              <span className="font-mono text-[11px] opacity-70">{deEstudo.length}</span>
-            </button>
-            <button
-              role="tab"
-              aria-selected={aba === "consulta"}
-              onClick={() => setAba("consulta")}
-              className={aba === "consulta" ? "chip-ativo" : "chip"}
-            >
-              consulta e apoio{" "}
-              <span className="font-mono text-[11px] opacity-70">{deConsulta.length}</span>
-            </button>
+        {/* UM BOTÃO POR TIPO, com o rótulo do próprio seletor do formulário —
+            "Jurisprudência" aqui é a mesma string de lá porque as duas leem
+            `TIPOS`. Só aparece com mais de um tipo no acervo: uma aba
+            solitária não é escolha, é ruído. A contagem no rótulo diz que
+            existe algo do outro lado antes de alguém clicar pra descobrir. */}
+        {abas.length > 1 ? (
+          <div className="flex flex-wrap items-center gap-1" role="tablist"
+               aria-label="tipo de material">
+            {abas.map((x) => (
+              <button
+                key={x.valor}
+                role="tab"
+                aria-selected={aba === x.valor}
+                onClick={() => setAba(x.valor)}
+                className={aba === x.valor ? "chip-ativo" : "chip"}
+              >
+                {x.rotulo}{" "}
+                <span className="font-mono text-[11px] opacity-70">
+                  {porTipo.get(x.valor)?.length ?? 0}
+                </span>
+              </button>
+            ))}
           </div>
         ) : (
           <p className="rotulo">processamento</p>
         )}
         {/* Arraste é gesto invisível: quem não souber que existe nunca tenta.
             A dica só aparece com mais de um grupo, porque com um só não há
-            para onde mover — e nunca na aba de consulta, onde não há grupo. */}
-        {aba === "estudo" && grupos.length > 1 && (
+            para onde mover — e nunca onde não há grupo (jurisprudência). */}
+        {!semGrupo && grupos.length > 1 && (
           <p className="text-[12px] text-subtle">
             errou a matéria? arraste para outro grupo — ou solte fora deles pra tirar
           </p>
@@ -1147,7 +1165,7 @@ export default function PaginaMateriais() {
       )}
 
       <div className="flex flex-col gap-4">
-        {aba === "estudo" &&
+        {!semGrupo &&
           grupos.map(([disc, itens]) => (
             <div
               key={disc}
@@ -1289,15 +1307,15 @@ export default function PaginaMateriais() {
             inteira trata de centenas de assuntos, então rotular com UM é
             mentir. Cada trecho aqui já se identifica por artigo, que é rótulo
             melhor que qualquer assunto. */}
-        {aba === "consulta" && (
+        {semGrupo && (
           <section>
             <p className="mb-2.5 text-[12.5px] text-muted">
-              Lei e jurisprudência não são aula: o tutor consulta estas fontes por artigo,
+              Jurisprudência e lei não são aula: o tutor consulta estas fontes por artigo,
               como apoio às suas apostilas, e elas não recebem assunto — uma norma inteira
               trata de assunto demais pra caber num rótulo.
             </p>
             <div className="overflow-hidden rounded-2xl border border-line bg-surface">
-              {deConsulta.map(linhaMaterial)}
+              {daAba.map(linhaMaterial)}
             </div>
           </section>
         )}
@@ -1308,7 +1326,7 @@ export default function PaginaMateriais() {
             materiais com rótulo, nenhum grupo "Outros" na tela, nada pra onde
             arrastar. Aparece no arraste e some depois porque alvo de drop
             parado numa tela sem nada sendo arrastado é ruído. */}
-        {aba === "estudo" &&
+        {!semGrupo &&
           arrastando !== null &&
           !grupos.some(([k]) => k === SEM_DISCIPLINA) && (
             <div

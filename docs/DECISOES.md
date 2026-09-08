@@ -2428,6 +2428,39 @@ acessibilidade porque o `Seletor` já recebe `aria`, que é o nome acessível de
 **Classe de erro pra procurar:** qualquer `<label>` que envolva mais que o
 próprio campo. Nesta tela havia três, e só o de Disciplina tinha botão dentro.
 
+### As abas passaram a ser por TIPO, e a lição é sobre vocabulário
+
+"Ainda tá faltando o botão de Jurisprudência?"
+
+Cinco palavras desfazendo uma decisão minha. Eu tinha derivado a separação num
+conceito PRÓPRIO — "material de estudo × poço de consulta" — e batizado as abas
+de "aulas e resumos" e "consulta e apoio". O conceito está certo (é ele que
+governa a regra do assunto, no backend, e continua governando), mas ele é MEU.
+O aluno pensa nos três tipos que ele mesmo escolhe no seletor ao subir o
+arquivo: aula, resumo, jurisprudência. Procurou "Jurisprudência" na tela e não
+achou — porque eu tinha traduzido o nome dele para o meu.
+
+As abas agora saem de `TIPOS`, a MESMA constante que alimenta o seletor do
+formulário: os dois lugares dizem "Jurisprudência" porque leem o mesmo rótulo,
+e não porque alguém lembrou de escrever igual nos dois. Só aparecem os tipos
+que têm material (aba vazia é promessa de conteúdo que não existe, e com três
+tipos fixos duas ficariam vazias na conta normal), e a aba efetiva cai na
+primeira com conteúdo se a selecionada esvaziar — aba selecionada mostrando
+lista vazia parece biblioteca vazia.
+
+**A regra de dado NÃO virou "tipo".** Continua sendo `material.e_referencia()`,
+que também pega material fatiado por artigo — uma lei subida como "Aula /
+apostila" é corpus de norma independentemente do seletor, e é dela que o
+assunto tem de sair. Só a NAVEGAÇÃO é por tipo. Isso cria um caso que a tela
+tem de explicar: essa lei aparece na aba "Aula / apostila", sem assunto, do
+lado de treze aulas que têm um. A linha do material ganhou " · consulta" pra
+esse caso — e só pra ele, porque na aba de Jurisprudência o cabeçalho já diz
+isso e repetir é ruído.
+
+**Lição:** conceito interno bom não é nome de botão. O nome do botão é a palavra
+que o usuário já usou em outro lugar do produto — de preferência lida da mesma
+constante, pra não poder divergir.
+
 ### E o campo de renomear vinha PREENCHIDO, o que matava a lista
 
 Relatado na mensagem seguinte, em duas frases que pareciam dois defeitos: "já
