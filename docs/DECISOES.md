@@ -1579,6 +1579,39 @@ O lápis aparece só na ÚLTIMA pergunta e só com a conversa parada. Editar uma
 meio significaria descartar tudo o que veio depois, e ninguém pede isso ao
 clicar num lápis.
 
+**O TUTOR NÃO ESCREVE QUESTÃO — GARANTIDO EM CÓDIGO, depois de três prompts
+falharem.** As tentativas, em ordem: v40 mandava usar o botão; v41 dizia que o
+app monta e ele só apresenta; v42 enumerava "nada de \"Questão 1:\", nada de
+enunciado numerado, nada de alternativas a), b), c) — nem entre colchetes, nem
+em lista, nem no meio da frase". O log seguinte trouxe exatamente
+`[Questão 1: ... a) Autotutela; b) Impessoalidade; c) Supremacia; d)
+Indisponibilidade.]`, duas vezes.
+
+`limpar_citacoes` já existia pelo mesmo motivo, e a lição é a mesma: o que dá
+pra garantir em código não se confia ao prompt. `limpar_questoes` apaga o bloco
+antes de a resposta sair, e sobrando pouco texto entra uma linha padrão —
+reescrever prosa de modelo é o que `_costurar` aprendeu a não fazer.
+
+O dano era concreto, não estético: questão na prosa não tem campo de resposta,
+não tem `fonte_chunks`, não entra na fila SM-2 e não conta no progresso. Relatado
+assim: "não trouxe o campo pra eu anexar a resposta individualmente". O aluno lê
+duas questões que parecem iguais às de verdade e não tem onde responder.
+
+O GATILHO SÃO TRÊS ALTERNATIVAS, não duas. Com duas, a regra apagava prosa
+legítima: "O item a) do edital trata de princípios e o b) de atos". Item de prova
+brasileira tem quatro ou cinco; texto corrido cita uma ou duas.
+
+**QUANTIDADE PEDIDA EM PARTES É SOMADA.** "traga 1 questão sobre principios
+explicitos e uma sobre explicito" pedia DUAS e vinha uma, porque a regra parava
+no primeiro número. A segunda quantidade é elíptica — "uma [questão] sobre Y" —,
+então procurar outra ocorrência ANCORADA não bastava: é preciso somar número
+solto que venha DEPOIS do primeiro ancorado.
+
+Ancorar no primeiro é o que torna a soma segura (número antes dele pode ser
+"art. 312" ou "3 anos de pena"), e o que vem logo após "art.", "§", "inciso" ou
+"caixa" é pulado. Pedir "uma de cada" é a forma natural de cobrir dois pontos, e
+entregar metade é o erro que a pessoa não reporta — ela só acha que o app é ruim.
+
 ## Armadilhas do corpus (Planalto)
 
 - Quebra de linha no meio da frase; `normalizar_lei()` remonta.

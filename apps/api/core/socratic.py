@@ -479,6 +479,54 @@ def com_fonte(citada: str, chunks: list[dict]) -> bool:
     return False
 
 
+# QUESTÃO ESCRITA PELO TUTOR, que o app tem de apagar da resposta.
+#
+# `[Questão 1: ...]` é a forma que o modelo escolheu sozinho, e alternativas
+# inline são a marca dela. Duas alternativas em sequência é o gatilho: uma letra
+# com parêntese solta aparece em prosa legítima ("o item a) do edital").
+RE_BLOCO_QUESTAO = re.compile(
+    r"\[\s*(?:quest[ãa]o|item|assertiva)\b[^\]]{0,900}\]", re.IGNORECASE | re.DOTALL)
+# TRÊS alternativas, não duas. Com duas, a regra apagava prosa legítima:
+# "O item a) do edital trata de princípios e o b) de atos." Item de prova
+# brasileira tem quatro ou cinco; texto corrido cita uma ou duas.
+RE_ALTERNATIVAS = re.compile(
+    r"(?:^|[;\s(])a\s*\)\s*\S.{0,200}?[;\s]b\s*\)\s*\S.{0,200}?[;\s]c\s*\)",
+    re.IGNORECASE | re.DOTALL)
+RE_ASSINALE = re.compile(r"(?i)assinale\s+a\s+(?:alternativa|op[çc][ãa]o|correta)")
+
+
+def limpar_questoes(resposta: str) -> tuple[str, int]:
+    """Tira da resposta as questões que o TUTOR escreveu. Devolve (texto, quantas).
+
+    POR QUE EM CÓDIGO, e não mais uma linha de prompt: já foram TRÊS tentativas
+    de proibir por instrução (v40 pedindo o botão, v41 dizendo que o app monta,
+    v42 enumerando "nada de Questão 1:, nada de alternativas a), b), c)"), e o
+    log seguinte mostrou o modelo escrevendo exatamente isso de novo. Este
+    projeto já sabe o que fazer nesse ponto: `limpar_citacoes` existe pelo mesmo
+    motivo — o que dá pra garantir em código não se confia ao prompt.
+
+    E o dano é concreto, não estético: questão escrita na prosa não tem campo de
+    resposta, não tem `fonte_chunks`, não entra na fila SM-2 e não conta no
+    progresso. O aluno lê duas questões que parecem iguais às de verdade, tenta
+    responder, e não tem onde. Foi relatado assim: "não trouxe o campo pra eu
+    anexar a resposta individualmente".
+
+    Não tenta consertar a frase de abertura: se sobrar pouco texto, quem chama
+    põe uma linha padrão. Reescrever prosa de modelo é o que `_costurar`
+    aprendeu a não fazer."""
+    limpo, n = RE_BLOCO_QUESTAO.subn("", resposta)
+    # Fora de colchete também: o modelo alterna entre os dois formatos.
+    linhas, mortas = [], 0
+    for par in limpo.split("\n"):
+        if RE_ALTERNATIVAS.search(par) or RE_ASSINALE.search(par):
+            mortas += 1
+            continue
+        linhas.append(par)
+    limpo = "\n".join(linhas)
+    limpo = re.sub(r"\n{3,}", "\n\n", limpo).strip()
+    return limpo, n + mortas
+
+
 def limpar_citacoes(resposta: str, chunks: list[dict]) -> str:
     """Apaga da resposta as citações que nenhum trecho recuperado sustenta.
 

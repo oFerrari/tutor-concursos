@@ -207,3 +207,26 @@ def test_continuacao_nao_vira_assunto_de_busca():
     h = _hist("quero estudar peculato", "me da 4 questoes")
     assert assunto.em_foco(h, disciplinas=["Direito Penal"]) == "quero estudar peculato"
     assert assunto.em_foco(h, "manda cinco", ["Direito Penal"]) == "quero estudar peculato"
+
+
+@pytest.mark.parametrize("fala, quantidade", [
+    # Relatado: "traga 1 questão sobre principios explicitos e uma sobre
+    # explicito" veio com UMA. A segunda quantidade é elíptica — "uma
+    # [questão] sobre Y" —, então procurar outra ocorrência ANCORADA não
+    # bastava.
+    ("traga 1 questão sobre principios explicitos e uma sobre explicito", 2),
+    ("traga 2 questões de penal e 3 de processo", 5),
+    # Ancorar no primeiro é o que torna a soma segura: número ANTES dele pode
+    # ser dispositivo ou pena.
+    ("e o art. 312? me da uma questao", 1),
+    ("me da uma questao do art. 312", 1),
+    ("quero 2 questões sobre o art. 37", 2),
+])
+def test_quantidade_pedida_em_partes_e_somada(fala, quantidade):
+    """Pedir "uma de cada" é a forma natural de cobrir dois pontos.
+
+    Entregar metade é o erro que a pessoa não reporta: ela só acha que o app é
+    ruim. E somar número solto sem âncora pegaria "art. 312" e "3 anos de
+    pena" — daí a soma começar depois do primeiro ancorado e pular o que vem
+    logo após "art.", "§", "inciso" ou "caixa"."""
+    assert pedido.quantas(fala) == quantidade

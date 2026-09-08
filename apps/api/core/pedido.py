@@ -33,7 +33,7 @@ Aqui só se responde "ele quer treinar, e quantas".
 """
 import re
 
-VERSAO = "pedido-v2"
+VERSAO = "pedido-v3"
 
 # Pedido de TREINO. `quest(?:[ãa]o|[õo]es)` e não `quest[õo]es?`: o singular
 # leva "ã" e o plural "õ", e quem tem pressa digita sem acento — a primeira
@@ -72,6 +72,12 @@ RE_QUANTIDADE_SOLTA = re.compile(
     r"(?i)\b(\d{1,2}|" + "|".join(NUMERO) + r")\b")
 
 
+def _valor(bruto: str) -> int:
+    """"tres" -> 3, "3" -> 3, qualquer outra coisa -> 0."""
+    b = bruto.lower()
+    return NUMERO.get(b, 0) or (int(b) if b.isdigit() else 0)
+
+
 def quantas(fala: str) -> int:
     """Quantas questões a fala pede. `PADRAO` quando ela não diz.
 
@@ -82,6 +88,35 @@ def quantas(fala: str) -> int:
     # número solto — em "agora só uma" não há substantivo pra ancorar, e ler o
     # primeiro número da frase seria errado em "art. 312" se este caminho
     # valesse fora do contexto de treino (não vale: ver `RE_CONTINUA`).
+    # SOMA as quantidades quando a fala pede em partes. Relatado: "traga 1
+    # questão sobre principios explicitos e uma sobre explicito" — duas
+    # questões, e a regra devolvia 1, porque parava no primeiro número. Pedir
+    # "uma de cada" é a forma natural de pedir cobertura de dois pontos, e
+    # entregar metade é o tipo de erro que a pessoa não reporta: ela só acha
+    # que o app é ruim.
+    #
+    # Só soma o que vier ANCORADO em substantivo ("1 questão", "uma pergunta"):
+    # somar número solto pegaria "art. 37" e "3 anos de pena".
+    texto = fala or ""
+    primeira = RE_QUANTIDADE.search(texto)
+    if primeira:
+        total = _valor(primeira.group(1))
+        # A SEGUNDA QUANTIDADE VEM ELÍPTICA: em "1 questão sobre X e uma sobre
+        # Y", o "uma" não tem substantivo depois — ele está subentendido. Por
+        # isso não basta procurar outra ocorrência ANCORADA; é preciso somar
+        # número solto que venha DEPOIS do primeiro ancorado.
+        #
+        # Ancorar no primeiro é o que torna isso seguro: número antes dele pode
+        # ser "art. 312" ou "3 anos de pena", e o filtro de dispositivo abaixo
+        # cobre o que aparecer depois.
+        for m in RE_QUANTIDADE_SOLTA.finditer(texto, primeira.end()):
+            antes = texto[max(0, m.start() - 12):m.start()].lower()
+            if re.search(r"art\w*\.?\s*$|§\s*$|inciso\s*$|caixa\s*$", antes):
+                continue
+            total += _valor(m.group(1))
+        if total:
+            return max(1, min(total, MAX))
+
     m = RE_QUANTIDADE.search(fala or "") or RE_QUANTIDADE_SOLTA.search(fala or "")
     if not m:
         # "outra"/"outro" no singular é UMA a mais, não o padrão de duas.

@@ -252,3 +252,46 @@ def test_desfazer_turno_de_outro_dono_da_404(client, usuario, outro_usuario, llm
                        headers=outro_usuario["headers"]).status_code == 404
     # E o turno do dono continua lá.
     assert len(conversa.mensagens(cid)) == 2
+
+
+def test_questao_escrita_pelo_modelo_e_apagada_da_resposta():
+    """O tutor NÃO escreve questão — e isso é garantido em CÓDIGO, não no prompt.
+
+    Foram TRÊS tentativas de proibir por instrução (v40 mandando usar o botão,
+    v41 dizendo que o app monta, v42 enumerando "nada de Questão 1:, nada de
+    alternativas a), b), c)"), e o log seguinte mostrou o modelo escrevendo
+    exatamente isso. `limpar_citacoes` já existia pelo mesmo motivo: o que dá
+    pra garantir em código não se confia ao prompt.
+
+    O dano é concreto, não estético: questão na prosa não tem campo de resposta,
+    não tem `fonte_chunks`, não entra na fila SM-2 e não conta no progresso. O
+    aluno lê duas questões que parecem iguais às de verdade e não tem onde
+    responder — foi relatado assim: "não trouxe o campo pra eu anexar a
+    resposta individualmente".
+
+    O falso positivo que a primeira versão tinha está no teste: com DUAS
+    alternativas como gatilho, ela apagava "O item a) do edital trata de
+    princípios e o b) de atos". Item de prova brasileira tem quatro ou cinco;
+    prosa cita uma ou duas.
+    """
+    from core import socratic
+
+    com_questoes = (
+        "Vamos treinar isso; as questões estão logo abaixo.\n\n"
+        "[Questão 1: Assinale a alternativa que indica um princípio expresso no art. 37: "
+        "a) Autotutela; b) Impessoalidade; c) Supremacia; d) Indisponibilidade.]\n\n"
+        "[Questão 2: Sobre os implícitos, assinale a correta: a) A Supremacia é expressa "
+        "no LIMPE; b) A Indisponibilidade permite abrir mão; c) A Supremacia justifica a "
+        "desapropriação; d) A Autotutela é o único.]")
+    limpo, quantas = socratic.limpar_questoes(com_questoes)
+    assert quantas == 2
+    assert "Questão 1" not in limpo and "Autotutela;" not in limpo
+    assert limpo.startswith("Vamos treinar isso")
+
+    # Resposta normal não é tocada.
+    normal = "Peculato é crime de funcionário público [cp, art. 312]. Já viu a diferença?"
+    assert socratic.limpar_questoes(normal) == (normal, 0)
+
+    # Prosa que menciona letras não é questão.
+    prosa = "O item a) do edital trata de princípios e o b) de atos."
+    assert socratic.limpar_questoes(prosa) == (prosa, 0)
