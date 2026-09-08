@@ -2515,6 +2515,42 @@ foi gravado e a sua biblioteca continua como estava".
 **Classe de erro pra procurar:** mensagem de recusa escrita no presente do
 indicativo. Ela descreve um mundo que a recusa acabou de impedir de existir.
 
+**E ainda não era isso.** Reescrita a mensagem, o relato voltou: "o problema
+continua e ainda não mostra qual arquivo tá com o link". Duas coisas erradas de
+uma vez, e nenhuma era a que eu tinha consertado:
+
+1. **"acervo do app" foi lido como "a minha biblioteca".** A recusa dizia "esta
+   lei já está no acervo do app (CF)" e não dizia ONDE — então a pessoa foi
+   procurar o arquivo culpado na lista dela. Não havia arquivo dela: o que
+   existe é a CF OFICIAL que o app já traz ingerida por artigo, e da qual não há
+   nada pra apagar. Mensagem que aponta um conflito sem dizer com QUEM manda
+   procurar o culpado na lista errada. Agora abre com "não subi, e não é nada
+   que você tenha na biblioteca: esta lei JÁ VEM COM O APP (CF — 276 artigos,
+   já ingerida pelo próprio app)... não há arquivo seu envolvido nem nada pra
+   apagar."
+
+2. **"qual arquivo tá com o link" era uma informação que o sistema nunca
+   guardou** — e essa é a migração 028. `POST /materiais/link` chama
+   `material.baixar(url)`, que devolve um NOME derivado do endereço, e é esse
+   nome que vai pra `documento.origem`. A URL morria ali: do banco em diante,
+   material vindo de link era indistinguível de arquivo arrastado com o mesmo
+   nome, e "constituicao.txt" não diz que veio do Planalto.
+
+   Coluna nova e não reuso de `origem`, porque `origem` tem função ativa:
+   `indexar` o devolve pro `_extrair`, que escolhe o leitor pela EXTENSÃO.
+   Guardar URL ali quebraria a reextração de todo material de link — e
+   silenciosamente, no reindex, não no upload. Sem backfill possível: a URL do
+   material já existente não foi guardada em lugar nenhum.
+
+   Na tela, a linha do material mostra o HOST como link (`planalto.gov.br`), com
+   a URL inteira no `title` e no `href` — a linha é monoespaçada e estreita, e
+   60 caracteres de endereço empurrariam o resto pro truncamento.
+
+**De passagem, uma inconsistência achada pelo teste:** a rota de link passava
+`titulo=nome`, o que pulava a tira-extensão do `registrar`. Material de link
+ficava titulado "constituicao.txt" ao lado de "aula-local" — mesma origem (um
+nome de arquivo), dois resultados na tela.
+
 (De passagem: a aba vazia mostrava DUAS mensagens — o estado vazio e a
 explicação do que é material de referência. Agora a explicação só sai quando há
 algo pra explicar.)

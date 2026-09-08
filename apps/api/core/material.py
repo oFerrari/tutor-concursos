@@ -42,7 +42,7 @@ import re
 
 from . import chunking, db, embeddings
 
-VERSAO = "material-v15"
+VERSAO = "material-v17"
 
 LOTE = 32
 MIN_CHARS = 200
@@ -425,6 +425,30 @@ LIMIAR_DUPLICATA = 0.6
 AMOSTRA_DUPLICATA = 25
 
 
+def descricao_da_norma_publica(norma: str) -> str:
+    """"CF (276 artigos, já vem com o app)" — o que a recusa de duplicata
+    precisa dizer pra não ser lida como acusação a um arquivo do aluno.
+
+    POR QUE ISTO EXISTE. A recusa dizia "esta lei já está no acervo do app
+    (CF)", e "acervo do app" foi lido como "a minha biblioteca". O aluno tinha
+    apagado a cópia dele e ficou procurando o arquivo culpado: "o problema
+    continua e ainda não mostra qual arquivo tá com o link". Não havia arquivo
+    dele — o que existe é a CF OFICIAL, que o app já traz ingerida por artigo,
+    e da qual não há nada pra apagar.
+
+    Mensagem que aponta um conflito sem dizer com QUEM manda a pessoa procurar
+    o culpado na lista errada."""
+    r = db.exec1(
+        """SELECT d.titulo, count(*) AS arts
+             FROM documento d JOIN chunk c ON c.documento_id = d.id
+            WHERE d.usuario_id IS NULL AND c.norma = %(n)s AND c.artigo IS NOT NULL
+            GROUP BY d.titulo ORDER BY count(*) DESC LIMIT 1""",
+        {"n": norma})
+    if not r:
+        return norma
+    return f"{norma} — {r['arts']} artigos, já ingerida pelo próprio app"
+
+
 def norma_ja_no_acervo(chunks: list[dict]) -> str | None:
     """A lei que o aluno subiu já existe no acervo PÚBLICO? Devolve a norma.
 
@@ -484,7 +508,7 @@ def _dividir(texto: str, nome: str) -> list[dict]:
 def registrar(usuario_id: int, nome: str, dados: bytes,
               disciplina: str | None = None, tipo: str = "aula",
               titulo: str | None = None, assunto: str | None = None,
-              mesa_id: int | None = None) -> dict:
+              mesa_id: int | None = None, url: str | None = None) -> dict:
     """
     Grava a LINHA do documento e devolve na hora, com `status='processando'`.
 
@@ -567,11 +591,12 @@ def registrar(usuario_id: int, nome: str, dados: bytes,
         # rastro. Não havia. Recusa fala do que ACONTECERIA; dizê-la no
         # presente afirma um fato sobre o acervo que ela não verificou.
         raise ErroMaterial(
-            f"não subi: esta lei já está no acervo do app ({ja_tem}), dividida por artigo. "
-            f"Uma segunda cópia não acrescenta nada e pioraria a sua busca, porque as duas "
-            f"versões passariam a competir — então nada foi gravado e a sua biblioteca "
-            f"continua como estava. Pergunte direto ao tutor (\"art. 37\") que ele usa a que "
-            f"já está aqui. O que vale subir é o que o app NÃO tem: aula, resumo e apostila.")
+            f"não subi, e não é nada que você tenha na biblioteca: esta lei JÁ VEM COM O APP "
+            f"({descricao_da_norma_publica(ja_tem)}), e o tutor a usa direto — não há arquivo "
+            f"seu envolvido nem nada pra apagar. Uma segunda cópia não acrescentaria nada e "
+            f"pioraria a sua busca, porque as duas versões passariam a competir; então nada "
+            f"foi gravado e a sua biblioteca continua como estava. Pergunte \"art. 37\" ao "
+            f"tutor pra ver. O que vale subir é o que o app NÃO tem: aula, resumo e apostila.")
 
     # O ARQUIVO VAI PARA O BANCO (024). Antes daqui o `dados` era usado pra
     # extrair texto e descartado, e o PDF ficava só no computador de quem subiu
@@ -585,15 +610,20 @@ def registrar(usuario_id: int, nome: str, dados: bytes,
         """INSERT INTO documento (titulo, disciplina, assunto, tipo, origem, hash,
                                   usuario_id, mesa_id, status, chunks_total,
                                   classificado_por, arquivo, arquivo_tipo,
-                                  arquivo_bytes)
+                                  arquivo_bytes, url)
            VALUES (%(t)s, %(d)s, %(as)s, %(tp)s, %(o)s, %(h)s, %(u)s, %(mid)s,
-                   'processando', %(n)s, %(cp)s, %(arq)s, %(arqt)s, %(arqn)s)
+                   'processando', %(n)s, %(cp)s, %(arq)s, %(arqt)s, %(arqn)s,
+                   %(url)s)
            RETURNING id, titulo, disciplina, assunto, tipo, status, chunks_total,
-                     classificado_por, mesa_id, criado_em""",
+                     classificado_por, mesa_id, criado_em, url""",
         {"t": (titulo or re.sub(r"\.[A-Za-z0-9]{1,5}$", "", nome)).strip()[:200],
          "d": (disciplina or "").strip() or None,
          "as": (assunto or "").strip() or None,
          "tp": tipo, "o": nome, "h": digest, "u": usuario_id, "n": len(chunks),
+         # DE ONDE VEIO (028). Só o caminho por link preenche; arquivo
+         # arrastado fica NULL, e é a diferença que a tela precisa mostrar —
+         # "constituicao.txt" não diz que veio do Planalto.
+         "url": (url or "").strip()[:2000] or None,
          # Mesa de ORIGEM (021). `None` grava no pool comum, que é o que a CLI e
          # qualquer chamador sem contexto de mesa devem fazer — inventar uma mesa
          # aqui prenderia o material num concurso que ninguém escolheu.
@@ -1174,7 +1204,8 @@ def listar(usuario_id: int) -> list[dict]:
     não foi subido por ele e ele não pode apagá-lo."""
     return db.query(
         """SELECT d.id, d.titulo, d.disciplina, d.assunto, d.tipo, d.status,
-                  d.erro, d.classificado_por, d.chunks_total, d.origem, d.criado_em,
+                  d.erro, d.classificado_por, d.chunks_total, d.origem, d.url,
+                  d.criado_em,
                   d.arquivo_bytes, (d.arquivo IS NOT NULL) AS tem_arquivo,
                   d.mesa_id, m.nome AS mesa_nome,
                   count(c.id) AS chunks,

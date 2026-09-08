@@ -5,7 +5,7 @@ import pytest
 
 from core import db, material, retrieval
 
-VERSAO = "test-material-v2"
+VERSAO = "test-material-v3"
 TXT = ("MEU RESUMO PARTICULAR\n\nO mnemônico QUIXOTEBRAVO organiza os prazos "
        "recursais do processo penal conforme minha anotação de aula. " * 10).encode()
 
@@ -858,3 +858,55 @@ def test_listar_diz_qual_material_e_copia_de_lei(client, usuario):
     assert all(m["fatiado_por_artigo"] is False for m in ms), \
         [m["titulo"] for m in ms if m["fatiado_por_artigo"]]
     assert all("fatiado_por_artigo" in m for m in ms), "campo ausente na listagem"
+
+
+def test_material_de_link_guarda_o_endereco(client, usuario):
+    """DE ONDE VEIO (028), e por que a coluna existe.
+
+    `POST /materiais/link` chamava `material.baixar(url)`, que devolve um NOME
+    derivado do endereço, e era esse nome que ia pra `origem`. A URL morria ali:
+    do banco em diante, material vindo de link era indistinguível de arquivo
+    arrastado com o mesmo nome — e "constituicao.txt" não diz que veio do
+    Planalto. O relato foi literal: "ainda não mostra qual arquivo tá com o
+    link".
+
+    Sem rede: `baixar` é substituído. O que se afirma aqui é o ENCANAMENTO da
+    URL até a listagem, não o download."""
+    def falso_baixar(url):
+        return "lei-falsa.txt", TXT
+
+    import core.material as mod
+    original = mod.baixar
+    mod.baixar = falso_baixar
+    try:
+        r = client.post("/materiais/link", headers=usuario["headers"],
+                        json={"url": "https://exemplo.gov.br/pasta/lei-falsa.htm"})
+        assert r.status_code in (200, 201), r.text
+        _esperar_indexacao()
+    finally:
+        mod.baixar = original
+
+    achados = [m for m in material.listar(usuario["id"]) if m["url"]]
+    assert len(achados) == 1, achados
+    do_link = achados[0]
+    assert do_link["url"] == "https://exemplo.gov.br/pasta/lei-falsa.htm"
+    # TÍTULO SEM A EXTENSÃO, igual ao de arquivo arrastado. A rota passava
+    # `titulo=nome`, o que pulava a tira-extensão do `registrar` e deixava
+    # material de link titulado "constituicao.txt" ao lado de "aula-local".
+    assert do_link["titulo"] == "lei-falsa"
+    # `origem` continua sendo o NOME DE ARQUIVO, e isso não é redundância: é
+    # ele que `indexar` passa pro `_extrair`, que escolhe o leitor pela
+    # extensão. Guardar a URL ali quebraria a reextração, silenciosamente.
+    assert do_link["origem"] == "lei-falsa.txt"
+
+    # Arquivo enviado direto não tem URL — é a diferença que a tela mostra.
+    # Conteúdo DIFERENTE do `TXT` de propósito: o duplê de download devolveu
+    # `TXT`, e subir os mesmos bytes cairia na recusa por hash igual — o teste
+    # falharia por duplicata, dizendo `KeyError: 'id'`, que não explica nada.
+    outro = TXT + b"\n\nParagrafo que muda o hash deste arquivo."
+    doc = client.post("/materiais", headers=usuario["headers"],
+                      files={"arquivo": ("Arrastado.txt", outro, "text/plain")},
+                      data={"tipo": "resumo"}).json()
+    _esperar_indexacao()
+    direto = [m for m in material.listar(usuario["id"]) if m["id"] == doc["id"]][0]
+    assert direto["url"] is None

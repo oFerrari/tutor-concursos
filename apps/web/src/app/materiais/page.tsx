@@ -68,6 +68,17 @@ const TIPOS = [
  *  com nome real de matéria. */
 const SEM_DISCIPLINA = " nao-classificado";
 
+/** O host de uma URL, pra caber na linha estreita do material. Devolve a
+ *  string crua se não parsear — endereço estranho é melhor mostrado do que
+ *  escondido por uma exceção. */
+function hostDoLink(url: string): string {
+  try {
+    return new URL(url).host.replace(/^www\./, "");
+  } catch {
+    return url.slice(0, 40);
+  }
+}
+
 function detalhe(m: Material, jaNaAbaDeConsulta = false): string {
   if (m.status === "falha") return m.erro ?? "não deu pra ler";
   if (m.status === "processando") return `${m.chunks} de ${m.chunks_total ?? "?"}`;
@@ -812,6 +823,29 @@ export default function PaginaMateriais() {
                     <p className="mt-0.5 truncate font-mono text-[11px] text-label">
                       {m.assunto ? `${m.titulo} · ` : ""}
                       {detalhe(m, semGrupo)}
+                      {/* DE ONDE VEIO, quando veio de um link (028). O nome do
+                          arquivo não diz: "constituicao.txt" pode ser um
+                          download manual ou o Planalto. Pedido nestas palavras
+                          — "ainda não mostra qual arquivo tá com o link".
+
+                          Só o HOST, não a URL inteira: a linha é monoespaçada e
+                          estreita, e o endereço do Planalto tem 60 caracteres
+                          que empurrariam o resto pro truncamento. O endereço
+                          completo fica no `title` e no href. */}
+                      {m.url && (
+                        <>
+                          {" · "}
+                          <a
+                            href={m.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={m.url}
+                            className="underline decoration-dotted underline-offset-2 hover:text-accent-text"
+                          >
+                            {hostDoLink(m.url)}
+                          </a>
+                        </>
+                      )}
                       {/* Só o PALPITE pede conferência. O que o aluno digitou
                           não precisa de aviso — ele sabe o que escreveu. */}
                       {m.classificado_por === "modelo" && (

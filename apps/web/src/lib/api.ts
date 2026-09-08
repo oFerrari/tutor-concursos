@@ -829,6 +829,13 @@ export type Material = {
    *  apagou a cópia da Constituição e não teve como CONFERIR que não sobrou
    *  nada. Estava limpo, e a tela não sabia dizer nem que estava nem que não. */
   fatiado_por_artigo?: boolean;
+  /** O ENDEREÇO de onde este material foi baixado, quando veio de um link
+   *  (028). NULL em arquivo enviado direto e em material anterior à migração.
+   *
+   *  Existe porque `origem` guarda só o nome derivado da URL — "constituicao
+   *  .txt" não diz que veio do Planalto —, e a URL era descartada. O relato
+   *  foi literal: "ainda não mostra qual arquivo tá com o link". */
+  url?: string | null;
   /** O upload encontrou este arquivo JÁ NO BANCO, parado (`processando` ou
    *  `falha`, sem trecho nenhum), e o recolocou na fila em vez de recusar como
    *  duplicata. Não é erro: é serviço inacabado sendo retomado — foi o que

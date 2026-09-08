@@ -44,7 +44,7 @@ from core import (assunto, auth, conversa, desafio, edital, geracao, material, m
 from core.config import CORS_ORIGINS
 from core.llm import ErroLLM
 
-VERSAO = "api-v6"
+VERSAO = "api-v7"
 
 app = FastAPI(title="Tutor de concursos — API", version=VERSAO)
 
@@ -1223,9 +1223,13 @@ def rota_indexar_link(body: LinkBody, fundo: BackgroundTasks,
     escrito no docstring dele por quê, e o que isso deixa de cobrir."""
     try:
         nome, dados = material.baixar(body.url)
+        # SEM `titulo=nome`: passar o nome explicitamente pulava a tira-extensão
+        # do `registrar`, e material vindo de link ficava titulado
+        # "constituicao.txt" enquanto arquivo arrastado ficava "aula-local".
+        # Mesma origem (um nome de arquivo), dois resultados na tela.
         doc = material.registrar(uid, nome, dados, disciplina=body.disciplina,
-                                 tipo=body.tipo, titulo=nome, assunto=body.assunto,
-                                 mesa_id=m["id"])
+                                 tipo=body.tipo, assunto=body.assunto,
+                                 mesa_id=m["id"], url=body.url)
     except material.ErroMaterial as e:
         raise HTTPException(400, str(e))
     material.enfileirar(doc["id"])

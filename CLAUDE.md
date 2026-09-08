@@ -80,6 +80,7 @@ db/024_arquivo_do_material.sql documento.arquivo (bytea): o PDF original fica gu
 db/025_rotulo_no_lexical.sql chunk.rotulo entra no tsvector: a disciplina/assunto que o ALUNO corrige passa a valer na BUSCA
 db/026_questao_do_aluno.sql questao.usuario_id: questão gerada da APOSTILA dele, privada — NULL segue sendo o acervo de todos
 db/027_referencia_sem_assunto.sql material de REFERÊNCIA (jurisprudência, corpus de norma) não tem assunto — um rótulo único num corpus mentia E afogava a busca
+db/028_url_do_material.sql documento.url: de onde o material veio, quando veio de link — `origem` guarda só o nome derivado
 db/schema.dbml             schema documentado (DBML) — visualização, não fonte de verdade
 core/chunking.py           lei -> chunks por artigo (função pura)
 core/embeddings.py         e5 local, prefixos query:/passage:, cache
@@ -257,7 +258,7 @@ outra medição, não com opinião.
   `test_geracao.py` (proveniência e os CHECKs da 012/013),
   `test_conversa.py` (histórico chegando ao prompt) e `test_perfil.py`
   (perfil inválido nunca chegando ao prompt).
-- **A PRÓXIMA migração é a 028.** Há dois pares com número repetido (`018_edital_cargo`
+- **A PRÓXIMA migração é a 029.** Há dois pares com número repetido (`018_edital_cargo`
   + `018_simulado_resumavel`, `019_material_do_aluno` + `019_simulado_nome`): nasceram
   em paralelo e as quatro rodaram, porque `migrar.py` ordena por NOME e o livro-razão
   chaveia por nome. Funciona, mas o número parou de identificar a migração — não crie
