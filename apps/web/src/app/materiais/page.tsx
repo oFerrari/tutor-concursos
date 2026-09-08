@@ -1209,12 +1209,20 @@ export default function PaginaMateriais() {
                       valor={nomeNovo}
                       aoMudar={setNomeNovo}
                       opcoes={opcoesDiscEdicao}
-                      placeholder="novo nome da matéria"
+                      placeholder={`renomear ${disc === SEM_DISCIPLINA ? "" : disc} para…`}
                       className="field !py-1 text-[12.5px]"
                       caixa="relative w-[220px]"
                       aria={`novo nome para ${disc}`}
                     />
-                    <button type="submit" className="chip !py-1 text-[12px]">
+                    {/* Desabilitado enquanto não há nome NOVO: com o campo
+                        vazio (o estado inicial agora) o clique não fazia nada
+                        e parecia quebrado — botão que aceita clique tem de
+                        fazer algo. */}
+                    <button
+                      type="submit"
+                      disabled={!nomeNovo.trim() || nomeNovo.trim() === disc}
+                      className="chip !py-1 text-[12px] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
                       Renomear
                     </button>
                     <button
@@ -1233,7 +1241,21 @@ export default function PaginaMateriais() {
                         <button
                           onClick={() => {
                             setRenomeando(disc);
-                            setNomeNovo(disc);
+                            // VAZIO, não o nome atual — e isto foi um defeito
+                            // relatado duas vezes na mesma mensagem: "tá
+                            // faltando jurisprudência" e "minha matéria não tá
+                            // pegando sugestão de nenhum dos dois".
+                            //
+                            // Uma causa só: o `Seletor` FILTRA a lista pelo
+                            // que está digitado (é o que faz digitar três
+                            // letras valer a pena com 11 matérias).
+                            // Pré-preencher com "Criminalística" filtrava até
+                            // sobrar "Criminalística" — a única sugestão
+                            // visível era justamente o nome que a pessoa quer
+                            // TROCAR. O nome atual já está no cabeçalho e no
+                            // placeholder; repeti-lo dentro do campo custava a
+                            // lista inteira.
+                            setNomeNovo("");
                           }}
                           title="Renomear esta matéria em todos os materiais dela"
                           aria-label={`renomear ${disc}`}

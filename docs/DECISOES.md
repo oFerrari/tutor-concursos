@@ -2345,6 +2345,41 @@ material, dispara duas threads chamando `indexar` no mesmo documento e afirma o
 número de trechos no fim. Verificado que ele PEGA o defeito: desligando o lock,
 falha com o mesmo `duplicate key ... ordem)=(…, 0)`.
 
+**O LOCK NÃO DESFAZ O DANO JÁ FEITO, e havia dano.** Achado depois, olhando a
+biblioteca do aluno inteira: TRÊS materiais estavam quebrados pelo mesmo erro,
+de antes do lock existir.
+
+```
+856  falha        62/62   "duplicate key ... ordem)=(856, 32)"   Medicina Legal
+849  processando 224/233  (preso no meio)                        Traumatologia forense
+842  falha       192/340  "duplicate key ... ordem)=(842, 0)"    (sem classificar)
+```
+
+O 856 estava COMPLETO e marcado como falha — a tela dizia "Falha na leitura"
+para material que funcionava (apareceu numa captura de tela do aluno, e foi
+assim que dei com os outros dois). Os outros dois estavam pela metade: 224 de
+233 e 192 de 340 trechos, calados. O 842 nunca chegou a ser classificado, então
+estava no grupo "Outros" sem disciplina nem assunto.
+
+Reparados reindexando um por um. Quem procurar por esta classe de dano depois:
+
+```sql
+SELECT d.id, d.status, d.chunks_total,
+       (SELECT count(*) FROM chunk c WHERE c.documento_id = d.id) AS reais
+  FROM documento d
+ WHERE d.usuario_id IS NOT NULL
+   AND (d.status <> 'pronto'
+        OR (SELECT count(*) FROM chunk c WHERE c.documento_id = d.id) <> d.chunks_total);
+```
+
+**E uma coisa a saber ao consertar isto com o servidor de pé:** `uvicorn
+--reload` reinicia a cada edição em `core/*.py` e chama `retomar_pendentes()` no
+startup. Ou seja, editar `material.py` durante o reparo põe um SEGUNDO indexador
+para trabalhar — o que agora é seguro (um pega o lock, o outro desiste e diz
+isso no log) mas não é grátis: dois processos calculando embedding numa máquina
+de 8 GB derrubaram um `pytest` inteiro por OOM (exit 137). Reparo grande: pare o
+servidor, ou faça um documento por vez e espere.
+
 **De passagem, um número que a tela mostrava errado:** `chunks_total` é gravado
 em `registrar` e nunca era reescrito. A CF tinha 1074 (janelas genéricas de uma
 versão anterior de `_dividir`) e reindexou pra 543 artigos, então a tela dizia
@@ -2392,3 +2427,31 @@ acessibilidade porque o `Seletor` já recebe `aria`, que é o nome acessível de
 
 **Classe de erro pra procurar:** qualquer `<label>` que envolva mais que o
 próprio campo. Nesta tela havia três, e só o de Disciplina tinha botão dentro.
+
+### E o campo de renomear vinha PREENCHIDO, o que matava a lista
+
+Relatado na mensagem seguinte, em duas frases que pareciam dois defeitos: "já
+traga todos os tipos de material ali, tá faltando jurisprudência" e "minha
+matéria não tá pegando sugestão de nenhum dos dois".
+
+Uma causa só, e minha: eu pré-preenchia o campo com o nome atual
+(`setNomeNovo(disc)`), e o `Seletor` FILTRA a lista pelo que está digitado — o
+que é bom e existe por medição (com 11 matérias, digitar três letras é melhor
+que rolar). Com "Criminalística" dentro do campo, a lista filtrava até sobrar
+"Criminalística": **a única sugestão visível era justamente o nome que a pessoa
+quer trocar.** E "Direito Constitucional" — a disciplina do material de
+jurisprudência — nunca aparecia, daí a primeira frase.
+
+Conferido antes de mexer, pra não consertar o lugar errado: o backend devolvia
+as quatro disciplinas da biblioteca (`Criminalística`, `Direito
+Constitucional`, `Direito Penal`, `Direito Processual Penal`) mais as sete do
+edital. O dado estava certo; a tela é que o escondia.
+
+O campo passa a nascer VAZIO, com o nome atual no placeholder ("renomear
+Criminalística para…") — ele já está no cabeçalho ao lado, e repeti-lo dentro
+do campo custava a lista inteira. O botão "Renomear" fica desabilitado enquanto
+não há nome novo: com o campo vazio o clique não fazia nada e parecia quebrado.
+
+**Lição geral, que vale pra qualquer combobox com filtro:** pré-preencher com o
+valor atual e filtrar pelo que está escrito são duas decisões boas que se
+anulam. Escolha uma.
