@@ -1680,6 +1680,32 @@ Fica como AVISO — ponteiro pra ir ler o turno, não veredito. E recusa explíc
 positivos, e apontar o tutor por dizer que não tem material é o pior ruído
 possível. Checagem que grita em acerto ensina a ignorar checagem.
 
+**O TUTOR NEGAVA UM RECURSO QUE EXISTE.** Achado no `--refazer`: "quero um
+simulado formal cronometrado" recebeu "não tenho uma ferramenta de cronômetro ou
+interface de simulado formal". É FALSO — o app tem `core/simulado.py` e a tela
+`/simulado`, com cronômetro, correção só no fim e caderno de erros. Errar sobre
+o próprio produto é pior que o jargão que a mesma frase vazou ("ferramenta"): o
+aluno acredita e deixa de usar o que já está pronto.
+
+Dois lados, e os dois estavam abertos. O prompt não dizia que o simulado existe
+— só proibia falar de botão —, então o modelo preencheu o vazio com uma negativa
+inventada. E o `simulado_pedido`, que a API já devolvia desde que `core/pedido.py`
+nasceu, a TELA IGNORAVA: o dado estava na resposta e ninguém desenhava nada com
+ele. Agora o prompt afirma que a tela existe e a conversa mostra o caminho.
+
+Vale como padrão: campo novo na resposta da API sem consumidor na tela é dado
+morto, e dado morto não avisa. Foi a terceira vez nesta série (`retomado`,
+`questoes_fora_do_assunto`, `simulado_pedido`) — os dois primeiros eu liguei no
+mesmo commit; este passou.
+
+**E A `VERSAO` DO `socratic.py` FICOU TRÊS VERSÕES ATRASADA.** Quatro mudanças
+entraram (limpar_questoes, doutrina marcada, o wiring, o simulado) e o número
+continuou em `v42`, porque cada script de edição errava o alvo do bump — o
+conteúdo trocava e a linha da versão não. É exatamente o que a convenção
+existe pra evitar ("o bug mais caro do projeto foi rodar código antigo achando
+que era novo"), e ela falhou no sentido inverso: código novo se anunciando
+velho. Confira `grep '^VERSAO'` depois de editar, não só a mudança.
+
 ## Armadilhas do corpus (Planalto)
 
 - Quebra de linha no meio da frase; `normalizar_lei()` remonta.

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowUp, Pencil, Square } from "lucide-react";
+import { ArrowUp, ClipboardList, Pencil, Square } from "lucide-react";
 import { MarcaGlifo } from "@/components/Marca";
 import { BalaoQuestao } from "@/components/BalaoQuestao";
 import { GerarQuestoes } from "@/components/GerarQuestoes";
@@ -93,6 +93,15 @@ export default function PaginaTutor() {
    *  vocês estavam tratando, e dizer isso é obrigação: sem o aviso, o tutor
    *  abria com "vamos treinar isso" e vinham questões de outra matéria. */
   const [foraDoAssunto, setForaDoAssunto] = useState(false);
+  /** A fala pedia SIMULADO formal (prova cronometrada, correção no fim). O
+   *  servidor reconhece e NÃO gera questão — simulado tem tela própria. A tela
+   *  mostra o caminho, porque o servidor não deve navegar por conta própria no
+   *  meio de um chat.
+   *
+   *  Isto existia na resposta da API e a tela IGNORAVA: o resultado foi o tutor
+   *  dizendo "não tenho uma ferramenta de cronômetro ou interface de simulado
+   *  formal" — falso, e o aluno acredita e deixa de usar o que existe. */
+  const [pediuSimulado, setPediuSimulado] = useState(false);
   const [pensando, setPensando] = useState(false);
   /** Controlador do pedido em voo, pra PARAR. `useRef` e não estado: trocar de
    *  controlador não precisa redesenhar nada, e um `useState` aqui faria o
@@ -302,6 +311,7 @@ export default function PaginaTutor() {
       // do botão faz: questão recém-criada não tem progresso ainda, e é a fila
       // que passa a contá-la.
       setForaDoAssunto(Boolean(r.questoes_fora_do_assunto));
+      setPediuSimulado(Boolean(r.simulado_pedido));
       if (r.questoes?.length) {
         setGeradas(
           r.questoes.map((q) => ({ ...q, caixa: 0, prox_revisao: "" }) as Questao)
@@ -682,6 +692,17 @@ export default function PaginaTutor() {
               com `key` própria: sem isso o React reaproveita a instância e a
               segunda questão abre já mostrando o resultado da primeira — o
               mesmo bug que o /desafio teve. */}
+          {pediuSimulado && !pensando && (
+            <div className="mt-2 pl-[42px]">
+              <Link
+                href="/simulado"
+                className="inline-flex items-center gap-2 rounded-[10px] border border-line-stronger bg-surface-hover px-3 py-2 text-[13.5px] transition-colors hover:border-accent hover:text-accent-text"
+              >
+                <ClipboardList className="h-4 w-4" />
+                Montar simulado com cronômetro
+              </Link>
+            </div>
+          )}
           {geradas.length > 0 && foraDoAssunto && (
             <div className="mt-2 pl-[42px]">
               <p className="callout-warning !p-3 text-[13px]">

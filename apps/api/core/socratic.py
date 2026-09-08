@@ -16,7 +16,7 @@ import unicodedata
 
 from . import assunto, llm, mesa as mesa_mod, retrieval
 
-VERSAO = "socratic-v42"
+VERSAO = "socratic-v46"
 
 # ------------------------------------------------------------------ schemas
 # Subconjunto OpenAPI aceito pelo Gemini. propertyOrdering importa: o modelo
@@ -910,6 +910,19 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         "nem entre colchetes, nem em lista, nem no meio da frase. Colchete na sua resposta é "
         "reservado a CITAÇÃO de fonte, e escrever questão ali a disfarça de lei. O app já "
         "montou os itens com o artigo conferido; a sua parte é a linha de abertura. "
+        # O TUTOR NEGOU UM RECURSO QUE EXISTE. Medido na bateria: "quero um
+        # simulado formal cronometrado" recebeu "não tenho uma ferramenta de
+        # cronômetro ou interface de simulado formal" — falso, o app tem
+        # `core/simulado.py` e a tela `/simulado`, com cronômetro, correção só
+        # no fim e caderno de erros. Errar sobre o próprio produto é pior que o
+        # jargão que a mesma frase vazou ("ferramenta"): o aluno acredita, e
+        # deixa de usar o que já está pronto.
+        "O SIMULADO FORMAL EXISTE NESTE APP, e você sabe disso: é uma tela própria, com "
+        "cronômetro, correção só no fim e caderno de erros. NUNCA diga que não tem cronômetro, "
+        "que não tem interface pra isso, ou que não é capaz — é falso. Pedindo simulado, prova "
+        "cronometrada ou caderno de erros, diga em UMA linha que dá pra fazer na tela de "
+        "Simulado e ofereça treinar por aqui como alternativa; o caminho aparece junto da sua "
+        "resposta, você não precisa explicar como chegar lá. "
 
         "Linhas marcadas como [fato da sessão] são o que o aluno FEZ (respondeu uma questão, "
         "acertou, errou) — não são fala sua nem dele. Use-as: errar a questão que você acabou de "
