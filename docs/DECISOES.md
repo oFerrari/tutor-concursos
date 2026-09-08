@@ -1706,6 +1706,50 @@ existe pra evitar ("o bug mais caro do projeto foi rodar código antigo achando
 que era novo"), e ela falhou no sentido inverso: código novo se anunciando
 velho. Confira `grep '^VERSAO'` depois de editar, não só a mudança.
 
+**A CITAÇÃO SAIU DO MEIO DA EXPLICAÇÃO — E O CONSERTO FOI NA ORIGEM, não na
+saída.** Pedido do dono: "você já cita as referências lá embaixo, não tem
+necessidade de citá-las novamente no meio da explicação". A queixa nasceu com
+uma citação de 47 caracteres na frente:
+`[curso-392569-aula-10-prof-juliana-sganzerla-2cbd-completo]`.
+
+Tentei apagar na saída primeiro, e MUTILOU A FRASE. O modelo escreve o colchete
+como parte da sintaxe — "está prevista no [CP, art. 129]" —, então remover deixa
+ferida: "está prevista no." Costurar isso virou lista de preposições sem fim, e
+uma versão dela comeu "prevista no" inteiro, sobrando "a lesão corporal está.".
+
+O conserto que funcionou foi parar de PEDIR: a instrução anterior ORDENAVA citar
+entre colchetes, e o modelo obedecia. `limpar_citacoes` continua de pé pro
+colchete que ele escrever por hábito.
+
+**E O EXEMPLO ERA A INSTRUÇÃO.** Acrescentei a proibição e deixei o "(ex.: [CF,
+art. 37])" na frase seguinte — o modelo continuou citando, com razão: exemplo
+formatado vale mais que proibição em prosa três linhas antes. Prompt com duas
+ordens opostas obedece a mais concreta.
+
+**REFERÊNCIA DE MATERIAL PASSOU A SER O ASSUNTO, não o nome do arquivo.** O
+classificador (020) já produz "Traumatologia forense", "Balística forense",
+"Lesão corporal", e era o nome do PDF que aparecia. Mudar `referencia()` sem
+mudar `com_fonte()` quebrou o que o docstring da própria função avisa ("as duas
+precisam da MESMA regra de formação"): `limpar_citacoes` passou a apagar citação
+LEGÍTIMA de apostila, porque comparava contra o título. Sintoma sempre igual —
+divergência entre as duas.
+
+**A CHECAGEM 3b MORREU COM A MUDANÇA.** Ela apontava "explicou sem citar nenhuma
+fonte", e a premissa era que ausência de colchete é suspeita — verdade enquanto
+o prompt pedia citação inline. Sem esse pedido, ausência de colchete passou a ser
+o comportamento CORRETO, e a checagem dispararia em todo turno. Já era a de pior
+histórico: quatro iterações, e 7 dos 9 "erros" da bateria completa eram falso
+positivo dela.
+
+O que fica no lugar é a 3c, e ela ficou MAIS importante: sem colchete, o tutor
+nomeia artigo em prosa ("o art. 129 trata de..."), e conferir esse número contra
+os trechos recuperados é a única verificação automática que sobra. O resto é do
+juiz, na dimensão `ancoragem`.
+
+**O QUE SE PERDEU, dito pra ninguém redescobrir:** verificabilidade por
+AFIRMAÇÃO. A lista de fontes embaixo diz de onde a RESPOSTA veio; não diz qual
+frase veio de qual trecho. Foi troca escolhida pelo dono.
+
 ## Armadilhas do corpus (Planalto)
 
 - Quebra de linha no meio da frase; `normalizar_lei()` remonta.

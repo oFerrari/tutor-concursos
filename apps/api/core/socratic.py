@@ -15,8 +15,9 @@ import re
 import unicodedata
 
 from . import assunto, llm, mesa as mesa_mod, retrieval
+from .retrieval import referencia
 
-VERSAO = "socratic-v46"
+VERSAO = "socratic-v49"
 
 # ------------------------------------------------------------------ schemas
 # Subconjunto OpenAPI aceito pelo Gemini. propertyOrdering importa: o modelo
@@ -423,10 +424,20 @@ RE_CITADA = re.compile(r"\[([^\[\]\n]{1,160})\]")
 # vínculo"). Saem junto com ela. Lista curta e fechada: nas seis citações medidas
 # em resposta real, todas vinham no fim da oração, onde apagar só a citação
 # basta — estes existem pro caso que a medição não viu, não pro comum.
+# `previst[oa]s?` e não `previsto[s]?`: a lista nasceu com o masculino e deixava
+# "está prevista no [CP, art. 129]" virar "está prevista no." — medido quando
+# TODAS as citações passaram a sair da prosa, porque aí cada conector pendurado
+# aparece em vez de um a cada tanto.
+#
+# E a última alternativa é a rede: preposição SOLTA imediatamente antes de uma
+# citação é sempre parte da frase da citação ("previsto no [X]", "trazido pelo
+# [Y]", "no [Z]"). Fora desse lugar ela não é tocada — `RE_CONECTOR` só casa no
+# FIM do texto que antecede a citação removida.
 RE_CONECTOR = re.compile(
-    r"(?:,\s*)?\b(?:conforme|segundo|previsto[s]?\s+(?:em|n[oa])|nos\s+termos\s+d[oae]|"
+    r"(?:,\s*)?\b(?:conforme|segundo|previst[oa]s?\s+(?:em|n[oa])|nos\s+termos\s+d[oae]|"
     r"de\s+acordo\s+com|com\s+base\s+n[oa]|na\s+forma\s+d[oae]|"
-    r"consta\s+(?:em|n[oa])|est[aá]\s+(?:em|n[oa]))\s*$",
+    r"consta\s+(?:em|n[oa])|est[aá]\s+(?:em|n[oa])|"
+    r"(?:em|n[oa]s?|d[oa]s?|pel[oa]s?))\s*$",
     re.IGNORECASE)
 
 RE_NUMERO_ART = re.compile(r"\bart\w*\.?\s*(\d+)", re.IGNORECASE)
@@ -471,7 +482,16 @@ def com_fonte(citada: str, chunks: list[dict]) -> bool:
     if not tokens:
         return False
     for c in chunks or []:
-        if tokens not in {_tokens(c.get("titulo") or ""), _tokens(c.get("norma") or "")}:
+        # O `assunto` entra aqui porque `referencia()` passou a usá-lo pra
+        # material do aluno — e o docstring dele avisa que as duas funções
+        # precisam da MESMA regra de formação. Eu mudei uma e esqueci a outra:
+        # o efeito foi `limpar_citacoes` apagar citação LEGÍTIMA de apostila
+        # (o modelo citava "[Traumatologia forense]", `com_fonte` comparava
+        # contra "curso-392569-aula-10-..." e não casava), deixando a frase
+        # pendurada. Divergência entre as duas é sempre esse sintoma.
+        nomes = {_tokens(c.get("titulo") or ""), _tokens(c.get("norma") or ""),
+                 _tokens(c.get("assunto") or "")}
+        if tokens not in nomes:
             continue
         digitos = "".join(ch for ch in str(c.get("artigo") or "") if ch.isdigit())
         if artigo is None or not digitos or artigo == digitos:
@@ -527,6 +547,31 @@ def limpar_questoes(resposta: str) -> tuple[str, int]:
     return limpo, n + mortas
 
 
+def _refs_citadas(resposta: str, chunks: list[dict]) -> set[str]:
+    """Quais fontes recuperadas o texto DE FATO citou.
+
+    Roda depois de `limpar_citacoes`, então o que sobrou entre colchetes tem
+    trecho por trás — é só casar com a `referencia` de cada chunk. Existe porque
+    a citação vai ser APAGADA da prosa em seguida, e a informação de quem foi
+    usado não pode ir com ela: é o que separa "consultei seis e usei dois" de
+    "aqui estão seis fontes"."""
+    citadas = set()
+    for m in RE_CITADA.finditer(resposta):
+        dita = m.group(1).strip()
+        if not com_fonte(dita, chunks):
+            continue          # citação inventada: não conta como fonte usada
+        baixo = dita.lower()
+        for c in chunks:
+            ref = referencia(c)
+            # SEM CAIXA: o modelo escreve "[CP, art. 129 — Lesão corporal]" e a
+            # referência do banco é "cp, art. 129 — Lesão corporal". A primeira
+            # versão comparava cru e nenhuma citação de lei era reconhecida.
+            r = ref.lower()
+            if baixo == r or baixo in r or r in baixo:
+                citadas.add(ref)
+    return citadas
+
+
 def limpar_citacoes(resposta: str, chunks: list[dict]) -> str:
     """Apaga da resposta as citações que nenhum trecho recuperado sustenta.
 
@@ -547,6 +592,15 @@ def limpar_citacoes(resposta: str, chunks: list[dict]) -> str:
     acervo — era daí que esta vinha, dos turnos anteriores DELE mesmo. Mensagem
     já gravada não é reescrita: filtro de borda vale do ponto em que existe pra
     frente.
+
+    A REMOÇÃO TOTAL FOI TENTADA E REVERTIDA. A ideia era tirar toda citação da
+    prosa (a lista de fontes embaixo já diz de onde veio), mas o modelo escreve
+    o colchete como PARTE DA SINTAXE — "está prevista no [CP, art. 129]" —,
+    então apagar deixa ferida: "está prevista no." Costurar isso virou lista de
+    preposições sem fim, e uma versão dela comeu "prevista no" inteiro,
+    sobrando "a lesão corporal está.". O conserto foi na origem: o prompt
+    parou de PEDIR citação inline (socratic-v49). Esta função continua sendo a
+    garantia pro colchete que o modelo escrever por hábito.
 
     Não toca em nada quando não há o que apagar. Uma resposta sem citação
     inverificável sai byte por byte como o modelo escreveu, porque `_costurar`
@@ -720,10 +774,38 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         "Se o aluno perguntar o que o edital dele cobra, responda com as disciplinas listadas no "
         "contexto — NUNCA explique o que a palavra 'edital' significa juridicamente, não é isso "
         "que ele está perguntando. "
-        "Ao falar de conteúdo, use os trechos de lei recuperados e cite entre colchetes SOMENTE "
-        "as referências que acompanham cada trecho (ex.: [CF, art. 37]). Nunca cite o nome de uma "
-        "seção deste prompt como se fosse fonte. Se os trechos não cobrirem a pergunta, diga isso "
-        "em vez de completar com conhecimento próprio. "
+        # PARAR DE PEDIR CITAÇÃO INLINE, em vez de apagá-la depois. Pedido do
+        # dono: "você já cita as referências lá embaixo, não tem necessidade de
+        # citá-las novamente no meio da explicação".
+        #
+        # Tentei apagar na saída primeiro, e o resultado foi mutilação: o modelo
+        # escreve a citação como PARTE DA SINTAXE ("está prevista no [CP, art.
+        # 129]"), então remover deixa ferida — "está prevista no." — e costurar
+        # o conector virava lista sem fim de preposição. Uma versão da lista
+        # chegou a comer "prevista no" inteiro e sobrou "a lesão corporal está.".
+        #
+        # Parar de PEDIR é mais barato e não mexe em texto: a instrução anterior
+        # ORDENAVA citar entre colchetes, então o modelo obedecia. `limpar_citacoes`
+        # continua de pé pro que ele citar por hábito, e é ela que garante que
+        # colchete sobrando tenha trecho por trás.
+        #
+        # O QUE SE PERDE, e está dito pra ninguém redescobrir: verificabilidade
+        # por AFIRMAÇÃO. A lista de fontes embaixo diz de onde a resposta veio;
+        # ela não diz qual frase veio de qual trecho. Foi troca escolhida.
+        "NÃO CITE FONTE NO MEIO DO TEXTO. A tela mostra, abaixo da sua resposta, a lista dos "
+        "trechos que você recebeu — o aluno vê de onde veio sem você escrever nada. Nada de "
+        "colchete com nome de lei, de artigo ou de apostila dentro da explicação: escreva a "
+        "frase inteira, sem carimbo. "
+        "Se precisar apontar UM dispositivo específico porque a pergunta é sobre ele, diga no "
+        "texto corrido (\"o art. 129 trata de...\"), sem colchete. "
+        # O EXEMPLO ERA A INSTRUÇÃO. Esta frase antes dizia "cite entre colchetes
+        # SOMENTE as referências que acompanham cada trecho (ex.: [CF, art. 37])",
+        # e eu acrescentei a proibição de citar inline sem tirar o exemplo — o
+        # modelo continuou citando, e com razão: um exemplo formatado vale mais
+        # que a proibição em prosa três linhas antes. Prompt com duas ordens
+        # opostas obedece a mais concreta.
+        "Ao falar de conteúdo, use os trechos de lei recuperados e nada além deles. Nunca "
+        "mencione o nome de uma seção deste prompt como se fosse fonte. "
         "Uma matéria de prova pode morar em mais de uma norma — organização da administração "
         "pública, por exemplo, está na Constituição e no estatuto dos servidores ao mesmo tempo. "
         "Use o trecho que responde, venha da norma que vier, e diga a que matéria ele pertence "
@@ -952,7 +1034,34 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         # e reescrever prosa de modelo é o que `_costurar` aprendeu a não fazer.
         resposta = ("Vamos treinar isso — as questões estão logo abaixo, "
                     "com o artigo conferido.")
-    return {"resposta": limpar_citacoes(resposta, chunks), "fontes": chunks,
+    # UMA PASSADA SÓ. A primeira versão chamava `limpar_citacoes` (que APAGA as
+    # inválidas) e depois procurava as que sobraram pra marcar — duas remoções
+    # em cima do mesmo texto, e o resultado foi frase pendurada ("Já a lesão
+    # corporal está no.") porque cada uma cortava um pedaço.
+    #
+    # Agora `_refs_citadas` decide sobre o texto CRU usando `com_fonte`, que é a
+    # mesma pergunta que `limpar_citacoes` faria; e a remoção acontece uma vez,
+    # de TODAS as citações — as válidas porque o dono não as quer na prosa, as
+    # inválidas porque nunca deviam estar lá.
+    citadas = _refs_citadas(resposta, chunks)
+
+    # A CITAÇÃO SAI DA PROSA E VIRA DADO. Pedido do dono: "você já cita as
+    # referências lá embaixo, não tem necessidade de citá-las novamente no meio
+    # da explicação". Estava certo — a lista de fontes embaixo da resposta já
+    # diz de onde veio, e no meio do texto a citação interrompe a leitura.
+    #
+    # Mas a tela distinguia CITADO de CONSULTADO justamente procurando a
+    # citação DENTRO do texto (`resposta.includes(marca(f))`), e essa distinção
+    # é útil: dizer "consultei seis trechos e usei dois" é diferente de listar
+    # seis como se todos tivessem sido usados. Então quem sabia disso passa a
+    # INFORMAR em vez de deixar a marca no texto — o servidor já parseia as
+    # citações aqui, é o lugar natural.
+    # `limpar_citacoes` NORMAL: só o que não tem trecho por trás. A remoção
+    # total foi tentada e revertida — ver o comentário do prompt acima.
+    resposta = limpar_citacoes(resposta, chunks)
+
+    fontes = [{**c, "citada": referencia(c) in citadas} for c in chunks]
+    return {"resposta": resposta, "fontes": fontes,
             "questoes_do_modelo_tiradas": questoes_tiradas}
 
 

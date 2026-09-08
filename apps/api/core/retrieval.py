@@ -23,7 +23,7 @@ import re
 from . import db
 from .embeddings import embed_consulta
 
-VERSAO = "retrieval-v4"
+VERSAO = "retrieval-v5"
 RRF_K = 60  # constante de amortecimento padrão do RRF
 
 # Material `historico` (livro de emendas: "Redação Anterior", múltiplas
@@ -74,7 +74,7 @@ GENERICOS = {"art", "arts", "artigo", "artigos", "paragrafo", "parágrafo",
              "lei", "codigo", "código", "cf", "cp", "cpp"}
 
 CAMPOS = """c.id, c.texto, c.norma, c.artigo, c.paragrafo, c.rubrica, c.secao,
-            c.pagina, d.titulo, d.disciplina, d.tipo"""
+            c.pagina, d.titulo, d.disciplina, d.assunto, d.tipo"""
 
 # DONO DO MATERIAL (migração 019). "O público MAIS o meu", e nada além.
 #
@@ -286,7 +286,19 @@ def referencia(c: dict) -> str:
     uma citação da resposta tem trecho por trás (`socratic.limpar_citacoes`)
     precisa da MESMA regra de formação, e duas cópias divergem — mesma decisão
     de `RE_CITACAO` ser importada em vez de copiada em `core/assunto.py`."""
+    # MATERIAL DO ALUNO CITA O ASSUNTO, não o nome do arquivo. O `titulo` de
+    # apostila subida é o nome do PDF, e o resultado era uma citação de 47
+    # caracteres no meio da explicação:
+    #
+    #   "...as implicações legais [curso-392569-aula-10-prof-juliana-sganzerla-2cbd-completo]"
+    #
+    # O classificador (020) já produz o rótulo legível — "Traumatologia
+    # forense", "Balística forense", "Lesão corporal" —, e é ele que serve como
+    # referência: o aluno reconhece o assunto, não o hash do arquivo. Sem
+    # assunto (classificação ainda rodando, ou material antigo), cai no título.
     ref = c["titulo"]
+    if not c.get("artigo") and (c.get("assunto") or "").strip():
+        ref = c["assunto"].strip()
     if c.get("artigo"):
         ref += f", art. {c['artigo']}"
         if c.get("rubrica"):

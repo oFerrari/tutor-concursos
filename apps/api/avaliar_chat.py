@@ -92,7 +92,7 @@ from core import (assunto, auth, conversa, db, geracao, llm, mesa, pedido,
 from core.config import CLI_USUARIO_EMAIL, EMBEDDING_MODEL
 from core.llm import ErroLLM
 
-VERSAO = "avaliar-chat-v24"
+VERSAO = "avaliar-chat-v25"
 
 # Conta descartável, como manda o AGENTS.md: nada aqui pode encostar na conta
 # real. O `ON DELETE CASCADE` da 009 limpa tudo de uma vez em `--limpar`.
@@ -518,67 +518,24 @@ def checar(fala: str, resposta: str, chunks: list[dict],
     if not chunks and retrieval.RE_CITACAO.search(resposta):
         achados.append(("erro", "citou artigo de lei sem nenhum trecho recuperado"))
 
-    # 3b. O BURACO QUE A 3 DEIXAVA, e ele é o pior modo de falha do produto.
+    # 3b MORREU COM O socratic-v49, e vale registrar por que em vez de só
+    #    apagar. Ela apontava "explicou em bloco sem citar NENHUMA fonte", e a
+    #    premissa era que ausência de colchete é suspeita. Isso valia enquanto o
+    #    prompt ORDENAVA citar inline. O dono pediu o contrário ("você já cita as
+    #    referências lá embaixo"), o prompt parou de pedir, e a ausência de
+    #    colchete passou a ser o comportamento CORRETO — a checagem dispararia
+    #    em todo turno.
     #
-    #     A 3 só dispara com `chunks` VAZIO. Medido no cenário `forense_do_zero`:
-    #     o aluno perguntou "e o que é papiloscopia?", a busca devolveu seis
-    #     trechos de CADEIA DE CUSTÓDIA (CPP 158-A a 158-F), e o tutor explicou
-    #     papiloscopia de conhecimento próprio, sem citar nada. `chunks` não
-    #     estava vazio, nenhum colchete apareceu — passou limpo pelas duas
-    #     checagens, e o juiz ainda deu 4 em ancoragem olhando o turno anterior.
+    #    Ela também já era a de pior histórico: quatro iterações, e na bateria
+    #    completa 7 dos 9 "erros" eram falso positivo dela. O que ela tentava
+    #    pegar — afirmar matéria sem trecho por trás — é semântico, e quem pega
+    #    é a dimensão `ancoragem` do juiz, que pegou: "afirma que a lei exige
+    #    duas testemunhas, mas o trecho citado não menciona".
     #
-    #     Não dá pra decidir por regra se a afirmação TEM fonte (é semântico).
-    #     Dá pra apontar o formato de risco: explicação longa, declarativa, com
-    #     ZERO citação, num turno em que havia trecho recuperado pra citar.
-    #     Fica como AVISO e não erro, porque o tutor legitimamente responde sem
-    #     citar quando fala do desempenho do aluno ou do edital dele.
-    #     O `diz_assunto(fala)` saiu da condição: ele fazia a checagem calar
-    #     justamente no turno 2 do cenário `quero_ler`, em que a fala é "só me
-    #     explica o assunto" (nenhuma palavra de conteúdo) e a resposta afirmava
-    #     conteúdo constitucional sem nenhuma fonte. Quem está sob suspeita é a
-    #     RESPOSTA, não a pergunta.
-    #     E PRECISA ESTAR ENSINANDO. A condição "longa e sem colchete" sozinha
-    #     apontava a resposta a "como você funciona?" — "Sou seu professor
-    #     particular para o concurso de Investigador da PC-PR..." —, que é
-    #     legítima, vem do contexto da mesa e não afirma lei nenhuma. Dois sinais
-    #     resolvem, e os dois vieram da bateria: ou a resposta INVOCA AUTORIDADE
-    #     jurídica (artigo, lei, código, súmula, STF/STJ, jurisprudência), ou o
-    #     aluno PEDIU explicação de matéria. Medido nos 6 casos apontados pela
-    #     bateria: pega os 5 reais e solta o único falso positivo.
-    #     E DOUTRINA MARCADA DEIXOU DE SER DEFEITO (socratic-v44). O tutor pode
-    #     ensinar conceito de conhecimento próprio quando não há trecho — o que
-    #     ele não pode é fazer isso CALADO. Então a checagem inverteu de lado:
-    #     ela agora aponta a ausência do aviso, não a ausência da citação.
-    #     E ELA VOLTOU A SER AVISO, depois de quatro iterações produzindo falso
-    #     positivo. Na bateria completa, 7 dos 9 "erros" eram desta regra, e
-    #     nenhum era doutrina sem aviso:
-    #
-    #       "não tenho acesso a súmulas ou jurisprudência no seu material"
-    #       "Sou seu professor particular e foco no seu edital"
-    #       "o artigo 312 aparece em dois lugares distintos no seu edital"
-    #
-    #     Os três são o tutor acertando — recusando, se apresentando, navegando.
-    #     `RE_AUTORIDADE` casa porque eles FALAM de lei, súmula e artigo; o que
-    #     ela não distingue é falar SOBRE o material de afirmar conteúdo. Essa
-    #     distinção é semântica, e regex não a alcança.
-    #
-    #     Quem alcança é o juiz, e ele alcançou: na mesma bateria pontuou
-    #     `ancoragem: 0` com "o tutor afirma que a lei exige duas testemunhas
-    #     para assinar o termo de oitiva, mas o trecho citado [CPP, art. 6º, V]
-    #     não menciona a exigência". Esse é o defeito de verdade, e veio da
-    #     dimensão certa. Aqui fica AVISO — ponteiro pra ir ler o turno, não
-    #     veredito. Checagem que grita em acerto ensina a ignorar checagem.
-    #
-    #     Recusa explícita ("não tenho", "não consta") sai de vez: é o tutor
-    #     fazendo o certo, e apontá-la é o pior tipo de ruído.
-    avisou = bool(RE_SEM_FONTE_AVISADO.search(resposta)
-                  or RE_RECUSA.search(resposta))
-    ensinando = (RE_AUTORIDADE.search(resposta) or assunto.pede_exposicao(fala))
-    if (chunks and len(resposta) > 400 and not RE_COLCHETE.search(resposta)
-            and ensinando and not avisou):
-        achados.append(("aviso", f"explicou em bloco sem citar fonte e sem avisar que não "
-                                 f"veio do material ({len(chunks)} trecho(s) "
-                                 f"recuperado(s)) — leia o turno; doutrina pode, calada não"))
+    #    O que fica no lugar, e é mais importante agora: a 3c abaixo. Sem
+    #    colchete, o tutor passa a nomear artigo em PROSA ("o art. 129 trata
+    #    de..."), e conferir esse número contra os trechos recuperados é a única
+    #    verificação automática que sobra.
 
     # 3c. ARTIGO INVOCADO EM PROSA, sem colchete, que nenhum trecho sustenta.
     #
