@@ -17,9 +17,9 @@ FILTRO — o acervo inteiro, exatamente o comportamento de antes da migração
 010. Mesa recém-criada (antes de subir o PDF) é o caso normal disso, e é
 degradação graciosa, não defeito.
 """
-from . import db
+from . import db, questoes
 
-VERSAO = "mesa-v3"
+VERSAO = "mesa-v4"
 
 NOME_PADRAO = "Mesa principal"
 
@@ -61,7 +61,7 @@ def filtro(coluna: str) -> str:
                       OR md.nome ILIKE '%%' || {coluna} || '%%'))"""
 
 
-def contar_questoes(disciplinas_: list[str] | None) -> int:
+def contar_questoes(disciplinas_: list[str] | None, dono: int | None = None) -> int:
     """
     Quantas questões do acervo caem no recorte. Serve pra tela EXPLICAR o
     vazio em vez de mostrá-lo: uma mesa de TI (ou bancária, ou fiscal) num
@@ -73,8 +73,9 @@ def contar_questoes(disciplinas_: list[str] | None) -> int:
     duas telas precisam. Quem quer o número pede em `GET /mesa`.
     """
     r = db.exec1(
-        f"SELECT count(*) AS n FROM questao q WHERE {filtro('q.disciplina')}",
-        {"disc": disciplinas_},
+        f"""SELECT count(*) AS n FROM questao q
+             WHERE {filtro('q.disciplina')} AND {questoes.do_aluno('q')}""",
+        {"disc": disciplinas_, "dono": dono},
     )
     return r["n"] if r else 0
 
@@ -282,8 +283,8 @@ def listar(usuario_id: int) -> list[dict]:
                        count(DISTINCT q.id) FILTER (WHERE p.caixa >= 3) AS dominadas
                   FROM questao q
                   LEFT JOIN progresso p ON p.questao_id = q.id AND p.usuario_id = %(u)s
-                 WHERE {filtro('q.disciplina')}""",
-            {"u": usuario_id, "disc": disc},
+                 WHERE {filtro('q.disciplina')} AND {questoes.do_aluno('q')}""",
+            {"u": usuario_id, "disc": disc, "dono": usuario_id},
         ) or {"questoes": 0, "dominadas": 0}
         m["questoes"] = r["questoes"]
         m["dominadas"] = r["dominadas"]

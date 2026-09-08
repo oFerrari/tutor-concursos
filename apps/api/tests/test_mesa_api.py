@@ -43,7 +43,18 @@ def _cab(usuario, mesa):
 
 @pytest.fixture
 def duas_disciplinas():
-    linhas = db.query("SELECT DISTINCT disciplina FROM questao ORDER BY 1")
+    """Duas disciplinas do acervo PÚBLICO.
+
+    O `usuario_id IS NULL` não é enfeite — é o mesmo defeito que
+    `test_geracao._disciplina_do_acervo` já documenta, agora na outra ponta.
+    Sem ele, a consulta era `SELECT DISTINCT disciplina FROM questao`, e
+    bastou a 026 existir (questão gerada da apostila do aluno) pra ela
+    devolver "Criminalística" — disciplina com dezenas de questões PRIVADAS e
+    zero públicas. Sete testes de recorte e cobertura quebraram de uma vez,
+    todos afirmando coisas certas sobre um dado que não era acervo comum."""
+    linhas = db.query("""SELECT DISTINCT disciplina FROM questao
+                          WHERE usuario_id IS NULL AND disciplina IS NOT NULL
+                          ORDER BY 1""")
     if len(linhas) < 2:
         pytest.skip("acervo precisa de questões em pelo menos 2 disciplinas")
     return [l["disciplina"] for l in linhas[:2]]
@@ -121,7 +132,7 @@ def test_cartao_mede_progresso_em_topicos_do_edital(client, usuario, duas_discip
     # Dominar = caixa >= 3, o mesmo critério de v_desempenho_disciplina.
     db.query(
         "INSERT INTO progresso (usuario_id, questao_id, caixa) "
-        "SELECT %(u)s, id, 3 FROM questao WHERE disciplina = %(d)s",
+        "SELECT %(u)s, id, 3 FROM questao WHERE disciplina = %(d)s\n           AND usuario_id IS NULL",
         {"u": usuario["id"], "d": dentro},
     )
 
@@ -152,7 +163,7 @@ def test_topicos_cobertos_pesam_pelo_tamanho_da_disciplina(client, usuario, duas
         )
     db.query(
         "INSERT INTO progresso (usuario_id, questao_id, caixa) "
-        "SELECT %(u)s, id, 3 FROM questao WHERE disciplina = %(d)s",
+        "SELECT %(u)s, id, 3 FROM questao WHERE disciplina = %(d)s\n           AND usuario_id IS NULL",
         {"u": usuario["id"], "d": pesada},
     )
 

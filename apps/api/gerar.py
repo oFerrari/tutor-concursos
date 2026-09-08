@@ -34,7 +34,7 @@ import unicodedata
 
 from core import db, geracao, llm, socratic
 
-VERSAO = "gerar-v17"
+VERSAO = "gerar-v18"
 
 MIN_TEXTO = geracao.MIN_TEXTO   # mesma régua da geração sob demanda
 ARTIGOS_POR_LOTE = 3     # artigos enviados por chamada
@@ -105,8 +105,12 @@ WITH cob AS (
     SELECT DISTINCT unnest(fonte_chunks) AS chunk_id
     FROM questao WHERE documento_id = %(d)s
 )
-SELECT c.id, c.texto, c.artigo, c.rubrica, c.secao, c.pagina,
-       d.titulo, d.disciplina, d.tipo
+-- `d.usuario_id AS dono` não é enfeite: é o que `geracao.salvar` lê pra
+-- decidir se a questão nasce pública ou privada (026). Esta CLI roda sobre o
+-- corpus público, mas nada impede um `--doc N` apontando pra apostila de um
+-- aluno, e sem esta coluna aquele lote gravaria material privado como público.
+SELECT c.id, c.texto, c.artigo, c.rubrica, c.secao, c.pagina, c.documento_id,
+       d.titulo, d.disciplina, d.tipo, d.assunto, d.usuario_id AS dono
 FROM chunk c
 JOIN documento d ON d.id = c.documento_id
 LEFT JOIN cob cb ON cb.chunk_id = c.id

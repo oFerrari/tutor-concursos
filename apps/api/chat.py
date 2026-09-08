@@ -42,7 +42,7 @@ from core import auth, desafio as desafio_mod
 from core import llm, mesa as mesa_mod, ritmo, scheduler, simulado as simulado_mod, socratic
 from core.config import CLI_USUARIO_EMAIL
 
-VERSAO = "chat-v21"
+VERSAO = "chat-v22"
 con = Console()
 MAX_DICAS = 3
 # A ÚLTIMA DICA NÃO SAI AUTOMÁTICA. Regra de produto, igual na tela
@@ -271,7 +271,7 @@ def simulado(n: int = simulado_mod.N_PADRAO, minutos: int | None = None,
     m = _mesa(uid)
     if questoes is None:
         _cabecalho_mesa(m)
-        questoes = simulado_mod.selecionar(n, disciplinas=m["disciplinas"])
+        questoes = simulado_mod.selecionar(n, disciplinas=m["disciplinas"], dono=uid)
         if len(questoes) < n:
             con.print(f"[dim]só há {len(questoes)} questões no recorte desta mesa; "
                       f"simulado sai menor.[/]")

@@ -26,11 +26,11 @@ e progresso continua sem qualquer noção de mesa.
 """
 from datetime import date, timedelta
 
-from . import db, mesa
+from . import db, mesa, questoes
 from .scheduler_regras import (INTERVALOS, conta_como_erro, dias_ate_revisao,
                                orcamento_novas, proxima_caixa)
 
-VERSAO = "scheduler-v25"
+VERSAO = "scheduler-v26"
 
 # TETO_DIARIO: quantas questões por dia. NOVAS_POR_DIA=None significa "todo o
 # orçamento que sobrar depois das revisões" — cota fixa perdeu em todos os
@@ -101,9 +101,10 @@ def fila(usuario_id: int, teto: int = TETO_DIARIO, novas: int | None = NOVAS_POR
             WHERE NOT EXISTS (SELECT 1 FROM progresso p
                               WHERE p.usuario_id = %(u)s AND p.questao_id = q.id)
               AND {mesa.filtro('q.disciplina')}
+              AND {questoes.do_aluno('q')}
             ORDER BY q.id
             LIMIT %(l)s""",
-        {"u": usuario_id, "l": sobra, "disc": disciplinas},
+        {"u": usuario_id, "l": sobra, "disc": disciplinas, "dono": usuario_id},
     )
     return revisoes + inéditas
 
@@ -173,8 +174,9 @@ def carga_hoje(usuario_id: int, disciplinas: list[str] | None = None) -> dict:
         f"""SELECT count(*) AS n FROM questao q
            WHERE NOT EXISTS (SELECT 1 FROM progresso p
                              WHERE p.usuario_id = %(u)s AND p.questao_id = q.id)
-             AND {mesa.filtro('q.disciplina')}""",
-        {"u": usuario_id, "disc": disciplinas},
+             AND {mesa.filtro('q.disciplina')}
+             AND {questoes.do_aluno('q')}""",
+        {"u": usuario_id, "disc": disciplinas, "dono": usuario_id},
     )["n"]
     r["teto"] = TETO_DIARIO
     r["atraso"] = max(0, r["revisoes"] - TETO_DIARIO)

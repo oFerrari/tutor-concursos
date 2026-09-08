@@ -70,8 +70,12 @@ def questao_id():
     """Reaproveita uma questão real do acervo compartilhado — gerar questão
     nova custa cota de LLM (core/socratic.py `gerar_questoes`), e os testes
     de scheduler/multiusuário não precisam de uma questão NOVA, só de uma
-    que já exista pra registrar tentativa contra ela."""
-    r = db.exec1("SELECT id FROM questao ORDER BY id LIMIT 1")
+    que já exista pra registrar tentativa contra ela.
+
+    PÚBLICA, explicitamente: desde a 026 a tabela também guarda questão com
+    dono (gerada da apostila de um aluno), e "uma questão qualquer" passou a
+    poder ser a de outra pessoa."""
+    r = db.exec1("SELECT id FROM questao WHERE usuario_id IS NULL ORDER BY id LIMIT 1")
     if not r:
         pytest.skip("acervo vazio — ingira e gere ao menos uma questão antes de rodar isto")
     return r["id"]
@@ -79,7 +83,7 @@ def questao_id():
 
 @pytest.fixture
 def duas_questoes():
-    linhas = db.query("SELECT id FROM questao ORDER BY id LIMIT 2")
+    linhas = db.query("SELECT id FROM questao WHERE usuario_id IS NULL ORDER BY id LIMIT 2")
     if len(linhas) < 2:
         pytest.skip("acervo precisa de pelo menos 2 questões")
     return [r["id"] for r in linhas]

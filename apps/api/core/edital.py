@@ -47,9 +47,9 @@ from collections import Counter
 from datetime import date
 from pathlib import Path
 
-from . import db, mesa as mesa_mod
+from . import db, mesa as mesa_mod, questoes
 
-VERSAO = "edital-v7"
+VERSAO = "edital-v8"
 
 MESES = {"janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5,
          "junho": 6, "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10,
@@ -1019,12 +1019,12 @@ def cobertura(edital_id: int, usuario_id: int) -> list[dict]:
     resultado = []
     for t in topicos:
         r = db.exec1(
-            """SELECT count(DISTINCT q.id) AS total,
-                      count(DISTINCT q.id) FILTER (WHERE p.caixa >= 3) AS dominadas
-               FROM questao q
-               LEFT JOIN progresso p ON p.questao_id = q.id AND p.usuario_id = %(u)s
-               WHERE q.disciplina ILIKE %(d)s""",
-            {"d": f"%{t['disciplina']}%", "u": usuario_id},
+            f"""SELECT count(DISTINCT q.id) AS total,
+                       count(DISTINCT q.id) FILTER (WHERE p.caixa >= 3) AS dominadas
+                FROM questao q
+                LEFT JOIN progresso p ON p.questao_id = q.id AND p.usuario_id = %(u)s
+                WHERE q.disciplina ILIKE %(d)s AND {questoes.do_aluno('q')}""",
+            {"d": f"%{t['disciplina']}%", "u": usuario_id, "dono": usuario_id},
         ) or {"total": 0, "dominadas": 0}
         cobertura_pct = 100 * r["dominadas"] / r["total"] if r["total"] else 0.0
         resultado.append({

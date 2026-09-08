@@ -44,7 +44,7 @@ from core import (assunto, auth, conversa, desafio, edital, geracao, material, m
 from core.config import CORS_ORIGINS
 from core.llm import ErroLLM
 
-VERSAO = "api-v5"
+VERSAO = "api-v6"
 
 app = FastAPI(title="Tutor de concursos — API", version=VERSAO)
 
@@ -161,7 +161,8 @@ class MesaBody(BaseModel):
 
 
 @app.get("/mesa")
-def rota_mesa_atual(m: dict = Depends(mesa_atual)):
+def rota_mesa_atual(uid: int = Depends(usuario_atual),
+                    m: dict = Depends(mesa_atual)):
     """
     Qual mesa ESTA requisição está usando, já resolvida. Existe pra o
     cliente não precisar reimplementar a regra de fallback ("sem header =
@@ -173,7 +174,7 @@ def rota_mesa_atual(m: dict = Depends(mesa_atual)):
     ("o acervo ainda não cobre estas disciplinas") em vez de mostrar uma
     lista vazia sem motivo. É a única rota que paga esse COUNT.
     """
-    return {**m, "questoes": mesa.contar_questoes(m["disciplinas"])}
+    return {**m, "questoes": mesa.contar_questoes(m["disciplinas"], uid)}
 
 
 @app.get("/disciplinas")
@@ -447,7 +448,7 @@ def rota_avaliar(qid: int, body: AvaliarBody, uid: int = Depends(usuario_atual))
     O cliente decide, com essa resposta, se chama de novo (turno seguinte) ou
     fecha a questão em /registrar.
     """
-    q = questoes.obter(qid)
+    q = questoes.obter(qid, uid)
     if not q:
         raise HTTPException(404, "questão não encontrada")
     try:
@@ -494,7 +495,7 @@ def rota_registrar_tentativa(qid: int, body: RegistrarBody, uid: int = Depends(u
         raise HTTPException(404, str(e))
 
     if body.conversa_id is not None and conversa.obter(uid, body.conversa_id):
-        q = questoes.obter(qid) or {}
+        q = questoes.obter(qid, uid) or {}
         # O TEXTO do evento é curto e factual de propósito: o modelo não
         # precisa do enunciado inteiro de volta (ele acabou de propô-lo), e
         # sim do veredito e do assunto — é isso que muda a próxima frase.
@@ -553,10 +554,10 @@ def rota_iniciar_simulado(body: IniciarSimuladoBody, uid: int = Depends(usuario_
         # Lista pronta vem do /desafio, que JÁ montou dentro do recorte da
         # mesa — refiltrar aqui só arriscaria descartar em silêncio o que
         # aquele bloco escolheu de propósito.
-        mapa = questoes.obter_varias(body.questao_ids)
+        mapa = questoes.obter_varias(body.questao_ids, uid)
         qs = [mapa[i] for i in body.questao_ids if i in mapa]
     else:
-        qs = simulado.selecionar(body.n, body.disciplina, m["disciplinas"])
+        qs = simulado.selecionar(body.n, body.disciplina, m["disciplinas"], dono=uid)
     if not qs:
         raise HTTPException(404, "nenhuma questão no acervo (ou disciplina inexistente)")
     sid = simulado.iniciar(uid, len(qs), body.minutos, m["id"], questao_ids=[q["id"] for q in qs],
@@ -786,7 +787,8 @@ def rota_perguntar(body: PerguntaBody, uid: int = Depends(usuario_atual),
         tema = assunto.em_foco(historico, disciplinas=m["disciplinas"])
         try:
             tipo = p["tipo"] or geracao.tipo_da_banca(m.get("banca"))
-            g = geracao.sob_demanda(m["disciplinas"], tema, p["quantidade"], tipo)
+            g = geracao.sob_demanda(m["disciplinas"], tema, p["quantidade"], tipo,
+                                    usuario_id=uid)
             questoes = g["questoes"]
             # A TROCA DE ASSUNTO VIAJA ATÉ A TELA. O acervo não tinha trecho do
             # que a conversa tratava, o gerador caiu pro recorte da mesa (certo)
@@ -911,7 +913,8 @@ def rota_gerar_questoes(body: GerarQuestaoBody, uid: int = Depends(usuario_atual
 
     try:
         tipo = body.tipo or geracao.tipo_da_banca(m.get("banca"))
-        r = geracao.sob_demanda(m["disciplinas"], tema, body.quantidade, tipo)
+        r = geracao.sob_demanda(m["disciplinas"], tema, body.quantidade, tipo,
+                                usuario_id=uid)
     except geracao.SemMaterial as e:
         # 409, não 500: o pedido é válido e o sistema está são — o acervo é
         # que não tem material dessa matéria. A tela precisa distinguir isso
@@ -1234,6 +1237,35 @@ class ClassificarBody(BaseModel):
     assunto: str | None = None
 
 
+class RenomearDisciplinaBody(BaseModel):
+    de: str
+    para: str | None = None
+
+
+@app.patch("/materiais/disciplina")
+def rota_renomear_disciplina(body: RenomearDisciplinaBody,
+                             uid: int = Depends(usuario_atual)):
+    """Renomeia uma disciplina em TODO o material do aluno que a usa.
+
+    Declarada ANTES de `/materiais/{documento_id}` de propósito: o FastAPI casa
+    na ordem, e `disciplina` cairia no parâmetro de path se viesse depois — o
+    mesmo cuidado que `/materiais/sugestoes` já documenta.
+
+    Reindexa em background porque `chunk.rotulo` entra no tsvector (025):
+    trocar o nome sem reindexar deixaria a lista dizendo um e a busca
+    respondendo pelo outro.
+
+    `para` vazio ou ausente TIRA a disciplina — volta pro grupo "sem matéria",
+    que é o que a tela já faz ao soltar um material fora dos grupos.
+    """
+    ids = material.renomear_disciplina(uid, body.de, body.para)
+    if not ids:
+        raise HTTPException(404, f"nenhum material seu está em \"{body.de}\"")
+    for doc_id in ids:
+        material.enfileirar(doc_id)
+    return {"renomeados": len(ids), "de": body.de, "para": (body.para or "").strip() or None}
+
+
 @app.patch("/materiais/{documento_id}")
 def rota_classificar_material(documento_id: int, body: ClassificarBody,
                               tarefas: BackgroundTasks,
@@ -1262,7 +1294,8 @@ def rota_classificar_material(documento_id: int, body: ClassificarBody,
 
 
 @app.get("/materiais/{documento_id}/arquivo")
-def rota_baixar_material(documento_id: int, uid: int = Depends(usuario_atual)):
+def rota_baixar_material(documento_id: int, baixar: bool = False,
+                         uid: int = Depends(usuario_atual)):
     """O arquivo ORIGINAL de volta (024) — pra reler a apostila sem guardá-la no
     computador, que era o pedido.
 
@@ -1286,10 +1319,19 @@ def rota_baixar_material(documento_id: int, uid: int = Depends(usuario_atual)):
     if not a:
         raise HTTPException(404, "arquivo não encontrado")
     nome = (a["origem"] or a["titulo"] or "material").replace('"', "")
+    # `inline` ABRE no navegador; `attachment` força baixar. O padrão era
+    # attachment, e o pedido foi claro: "se eu clicar em cima do material eu
+    # deveria abrir o pdf num popup, em vez de ser obrigado a baixar". Ler a
+    # apostila é o caso comum; guardar uma cópia é o raro — e o raro continua
+    # possível com `?baixar=1`, que é o que o ícone de download usa.
+    #
+    # O nome vai nos dois casos: no `inline` ele nomeia a aba e o arquivo se a
+    # pessoa mandar salvar de dentro do leitor.
+    como = "attachment" if baixar else "inline"
     return Response(
         content=bytes(a["arquivo"]),
         media_type=a["arquivo_tipo"] or "application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{nome}"',
+        headers={"Content-Disposition": f'{como}; filename="{nome}"',
                  "Content-Length": str(a["arquivo_bytes"] or len(a["arquivo"]))})
 
 

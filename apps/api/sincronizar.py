@@ -88,7 +88,7 @@ from pathlib import Path
 from core import auth, db
 from core.config import CLI_USUARIO_EMAIL
 
-VERSAO = "sincronizar-v3"
+VERSAO = "sincronizar-v4"
 ARQUIVO = Path("dados/progresso.json")
 
 # OS ARQUIVOS ORIGINAIS VIAJAM COMO BLOBS, FORA DO JSON.
@@ -235,10 +235,18 @@ def exportar(com_material: bool = True, com_senha: bool = True) -> int:
         for c in ctx_rows
     ]
 
-    # ---- questões (banco COMPARTILHADO, sem usuario_id — decisão da 008)
+    # ---- questões: compartilhadas por padrão (008) e, desde a 026, também
+    #      privadas — as geradas da apostila do aluno. As duas viajam, e o
+    #      `usuario` (email, ou None) é o que preserva a diferença: importar
+    #      questão privada como pública a publicaria no acervo comum da outra
+    #      máquina, com trecho de material pago dentro do enunciado. O material
+    #      privado já viaja neste mesmo pacote (a seção `materiais`, com o PDF),
+    #      então não é conteúdo novo saindo — é conteúdo saindo com o dono
+    #      certo.
     q_rows = db.query(
         """SELECT id, documento_id, disciplina, tema, enunciado, gabarito, dicas,
-                  fonte_chunks, criada_em, tipo, gabarito_ce, contexto_id, ordem_no_contexto
+                  fonte_chunks, criada_em, tipo, gabarito_ce, contexto_id,
+                  ordem_no_contexto, usuario_id
            FROM questao ORDER BY id"""
     )
     q_chave = {q["id"]: chave(q["enunciado"]) for q in q_rows}
@@ -247,6 +255,7 @@ def exportar(com_material: bool = True, com_senha: bool = True) -> int:
          "enunciado": q["enunciado"], "gabarito": q["gabarito"], "dicas": q["dicas"],
          "criada_em": q["criada_em"], "doc_titulo": doc_titulo.get(q["documento_id"]),
          "tipo": q["tipo"], "gabarito_ce": q["gabarito_ce"],
+         "usuario": emails.get(q["usuario_id"]),
          "contexto": ctx_chave.get(q["contexto_id"]),
          "ordem_no_contexto": q["ordem_no_contexto"],
          "fontes": [ref_chunk[i] for i in (q["fonte_chunks"] or []) if i in ref_chunk],
@@ -748,8 +757,13 @@ def _importar_tudo(pacote, indexar_material: bool = True) -> dict:
     existentes = {chave(r["enunciado"]): r["id"]
                   for r in db.query("SELECT id, enunciado FROM questao")}
     id_por_chave = dict(existentes)
-    novas = atualizadas = sem_fonte = 0
+    novas = atualizadas = sem_fonte = sem_dono = 0
     for q in pacote["questoes"]:
+        # Questão privada cujo dono não veio no pacote não entra: publicá-la
+        # seria vazar material de alguém que esta máquina nem conhece.
+        if q.get("usuario") and q["usuario"] not in uid:
+            sem_dono += 1
+            continue
         refs = _refs(q)
         chunks = [mapa[x] for x in refs if x in mapa]
         if refs and not chunks:
@@ -764,12 +778,18 @@ def _importar_tudo(pacote, indexar_material: bool = True) -> dict:
         r = db.exec1(
             """INSERT INTO questao (documento_id, disciplina, tema, enunciado, gabarito,
                                     dicas, fonte_chunks, criada_em, tipo, gabarito_ce,
-                                    contexto_id, ordem_no_contexto)
+                                    contexto_id, ordem_no_contexto, usuario_id)
                VALUES (%(d)s, %(disc)s, %(t)s, %(e)s, %(g)s, %(dic)s, %(f)s,
                        COALESCE(%(cr)s, now()), COALESCE(%(tp)s, 'resposta_livre'),
-                       %(ce)s, %(ctx)s, %(ord)s)
+                       %(ce)s, %(ctx)s, %(ord)s, %(dono)s)
                RETURNING id""",
+            # `dono` só é preenchido pra questão que JÁ era privada e cujo dono
+            # existe neste banco. Pacote da era anterior à 026 não tem o campo:
+            # `.get` devolve None e a questão entra pública, que é o que ela
+            # era. Dono que não veio no pacote também cai em None — mas aí a
+            # questão perderia o sigilo, então é descarte, não publicação.
             {"d": docs.get(q.get("doc_titulo")), "disc": q["disciplina"], "t": q["tema"],
+             "dono": uid.get(q["usuario"]) if q.get("usuario") else None,
              "e": q["enunciado"], "g": q["gabarito"], "dic": json.dumps(q["dicas"]),
              "f": chunks, "cr": q.get("criada_em"), "tp": q.get("tipo"),
              "ce": q.get("gabarito_ce"),
@@ -898,12 +918,13 @@ def _importar_tudo(pacote, indexar_material: bool = True) -> dict:
             "tentativas": inseridas, "conversas": conv_novas, "mensagens": msg_novas,
             "mat_novos": mat_novos, "mat_reindex": mat_reindex,
             "mat_pulados": mat_pulados, "sem_fonte": sem_fonte,
+            "sem_dono": sem_dono,
             "indexou_material": indexar_material}
 
 
 def _relatorio(pacote, contas, mesas, editais, q_novas, q_atualizadas, prog, tentativas,
                conversas, mensagens, mat_novos, mat_reindex, mat_pulados, sem_fonte,
-               indexou_material) -> int:
+               sem_dono, indexou_material) -> int:
     print(f"pacote {pacote.get('versao', '?')} · {len(contas)} conta(s): {', '.join(contas)}")
     print(f"  mesas: {mesas} resolvidas · editais: {editais} novos")
     print(f"  questoes: {q_novas} novas, {q_atualizadas} atualizadas")
@@ -916,6 +937,11 @@ def _relatorio(pacote, contas, mesas, editais, q_novas, q_atualizadas, prog, ten
     if sem_fonte:
         print(f"ATENCAO: {sem_fonte} questoes sem chunk correspondente. "
               f"Ingira o material antes de importar, senao a cobertura mente.")
+    if sem_dono:
+        # Não é erro do pacote: é a conta do dono não existir aqui. Publicar
+        # a questão resolveria o número e vazaria o material (026).
+        print(f"  {sem_dono} questao(oes) privada(s) puladas: a conta do dono "
+              f"nao existe neste banco (nao entram como publicas).")
     return 0
 
 

@@ -109,7 +109,12 @@ def semear(email: str, senha: str, semente: int):
     for mid in ids:
         disc = mesa_mod.disciplinas(mid)
         linhas = db.query(
-            f"SELECT id FROM questao q WHERE {mesa_mod.filtro('q.disciplina')} ORDER BY id",
+            # `usuario_id IS NULL`: a conta de demonstração é semeada com o acervo
+            # PÚBLICO. Sem isso ela pegaria questão gerada da apostila de outro
+            # aluno (026) e a tela de demo mostraria material privado alheio.
+            f"""SELECT id FROM questao q
+                 WHERE {mesa_mod.filtro('q.disciplina')} AND q.usuario_id IS NULL
+                 ORDER BY id""",
             {"disc": disc},
         )
         pools[mid] = [l["id"] for l in linhas]

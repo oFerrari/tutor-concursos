@@ -137,7 +137,7 @@ def test_resposta_a_questao_entra_na_linha_do_tempo(client, usuario, llm_falso):
     _resposta_falsa(llm_falso)
     cid = client.post("/perguntar", json={"pergunta": "peculato"},
                       headers=usuario["headers"]).json()["conversa_id"]
-    q = db.exec1("SELECT id, tema FROM questao LIMIT 1")
+    q = db.exec1("SELECT id, tema FROM questao WHERE usuario_id IS NULL LIMIT 1")
     if not q:
         return
 
@@ -162,7 +162,7 @@ def test_evento_chega_ao_prompt_rotulado_como_fato(client, usuario, llm_falso):
     _resposta_falsa(llm_falso)
     cid = client.post("/perguntar", json={"pergunta": "peculato"},
                       headers=usuario["headers"]).json()["conversa_id"]
-    q = db.exec1("SELECT id FROM questao LIMIT 1")
+    q = db.exec1("SELECT id FROM questao WHERE usuario_id IS NULL LIMIT 1")
     if not q:
         return
     client.post(f"/questoes/{q['id']}/registrar",
@@ -184,7 +184,7 @@ def test_registrar_sem_conversa_nao_cria_evento(client, usuario, llm_falso):
     _resposta_falsa(llm_falso)
     cid = client.post("/perguntar", json={"pergunta": "oi"},
                       headers=usuario["headers"]).json()["conversa_id"]
-    q = db.exec1("SELECT id FROM questao LIMIT 1")
+    q = db.exec1("SELECT id FROM questao WHERE usuario_id IS NULL LIMIT 1")
     if not q:
         return
     client.post(f"/questoes/{q['id']}/registrar",
@@ -201,7 +201,7 @@ def test_conversa_de_outro_usuario_nao_recebe_evento(client, usuario, outro_usua
     _resposta_falsa(llm_falso)
     cid = client.post("/perguntar", json={"pergunta": "minha"},
                       headers=usuario["headers"]).json()["conversa_id"]
-    q = db.exec1("SELECT id FROM questao LIMIT 1")
+    q = db.exec1("SELECT id FROM questao WHERE usuario_id IS NULL LIMIT 1")
     if not q:
         return
     client.post(f"/questoes/{q['id']}/registrar",

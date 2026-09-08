@@ -78,6 +78,7 @@ db/022_conceito_faltante.sql tentativa.conceito_faltante: o que o aluno CONFUNDE
 db/023_migracao.sql        livro-razão: quais migrações já rodaram NESTE banco
 db/024_arquivo_do_material.sql documento.arquivo (bytea): o PDF original fica guardado, e dá pra baixar de volta
 db/025_rotulo_no_lexical.sql chunk.rotulo entra no tsvector: a disciplina/assunto que o ALUNO corrige passa a valer na BUSCA
+db/026_questao_do_aluno.sql questao.usuario_id: questão gerada da APOSTILA dele, privada — NULL segue sendo o acervo de todos
 db/schema.dbml             schema documentado (DBML) — visualização, não fonte de verdade
 core/chunking.py           lei -> chunks por artigo (função pura)
 core/embeddings.py         e5 local, prefixos query:/passage:, cache
@@ -88,7 +89,8 @@ core/questoes.py           lookup simples do banco de questões (compartilhado, 
 core/auth.py               hash de senha (bcrypt), token de sessão (JWT), usuário fixo da CLI
 core/mesa.py               mesa de estudo (o concurso-alvo) e o predicado de recorte por disciplina
 core/rascunho.py           curadoria do edital: extrai pra rascunho, pessoa escolhe o cargo, confirma
-core/geracao.py            gera questão do ACERVO sob demanda e grava com proveniência
+core/geracao.py            gera questão do ACERVO **e da apostila do aluno** sob demanda, com
+                           proveniência por artigo OU por número do trecho (026)
 core/conversa.py           conversa persistida do tutor + janela de histórico pro prompt + desfazer o último turno (parar/editar)
 core/assunto.py            o assunto em foco da conversa — a consulta que vai à BUSCA (PURO)
 core/pedido.py             o aluno pediu treino? quantas? simulado formal? — REGRA PURA que aciona a geração sem botão
@@ -160,6 +162,15 @@ outra medição, não com opinião.
 - Questão com `contexto_id` tem `ordem_no_contexto`, e vice-versa (CHECK, 013).
 - Item C/E nunca recebe veredito `parcial`: metade de um booleano não é nada,
   e `parcial` desce uma caixa.
+- Questão com `usuario_id` (026, gerada da apostila do aluno) NUNCA aparece pra
+  outra pessoa. O predicado é `questoes.do_aluno()`, num lugar só, e TODA
+  consulta que escolhe questão de um pool passa por ele — fila, desafio,
+  simulado, lookup por id, cobertura, geração. Consulta que sai de
+  `progresso`/`tentativa`/`erro_caderno` não precisa: aquelas já são por
+  usuário. `tests/test_questao_da_apostila.py` enumera as rotas; rota nova de
+  pool entra lá.
+- O dono da questão sai do CHUNK, nunca de parâmetro (`geracao.salvar`). É o que
+  faz não existir a chamada que grava apostila como pública por esquecimento.
 - Erro de transporte não escapa de `core/llm.py` como exceção httpx.
 
 ## Convenções
@@ -236,7 +247,7 @@ outra medição, não com opinião.
   `test_geracao.py` (proveniência e os CHECKs da 012/013),
   `test_conversa.py` (histórico chegando ao prompt) e `test_perfil.py`
   (perfil inválido nunca chegando ao prompt).
-- **A PRÓXIMA migração é a 026.** Há dois pares com número repetido (`018_edital_cargo`
+- **A PRÓXIMA migração é a 027.** Há dois pares com número repetido (`018_edital_cargo`
   + `018_simulado_resumavel`, `019_material_do_aluno` + `019_simulado_nome`): nasceram
   em paralelo e as quatro rodaram, porque `migrar.py` ordena por NOME e o livro-razão
   chaveia por nome. Funciona, mas o número parou de identificar a migração — não crie
@@ -371,6 +382,14 @@ curl -s localhost:8000/materiais/sugestoes -H "Authorization: Bearer $TOKEN"
 
 # o que o aluno CONFUNDE (022) — agregado do conceito_faltante das tentativas
 curl -s localhost:8000/conceitos -H "Authorization: Bearer $TOKEN"
+
+# renomear a matéria de TODO o material dela (o mesmo assunto cai com nomes
+# diferentes de edital pra edital) — reindexa, porque o rótulo entra na busca (025)
+curl -s -X PATCH localhost:8000/materiais/disciplina -H "Authorization: Bearer $TOKEN" \
+     -H 'content-type: application/json' \
+     -d '{"de":"Criminalística","para":"Ciências Forenses"}'
+# o PDF ABERTO na tela (inline) em vez de baixado; ?baixar=1 força o download
+curl -s localhost:8000/materiais/12/arquivo -H "Authorization: Bearer $TOKEN"
 
 # editar o alvo DEPOIS de o edital estar valendo, sem subir o PDF de novo
 curl -s -X PATCH localhost:8000/edital/disciplinas -H "Authorization: Bearer $TOKEN" \

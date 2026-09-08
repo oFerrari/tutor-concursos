@@ -2045,3 +2045,166 @@ fallback certo na borda HTTP é `UploadFile.filename` (o nome que o usuário
 enviou); o `stem` do caminho só faz sentido na CLI, onde o caminho é um
 arquivo de verdade. Classe de erro a procurar em qualquer rota que grave
 upload: caminho interno do servidor não é dado do usuário.
+
+---
+
+## A questão passou a sair da apostila (026)
+
+**O relato.** "O ideal não seria pegar dos dois lugares? Se você está trazendo a
+fonte de um lugar, o certo é trazer questões dali também." O tutor explicava
+traumatologia forense pela aula da professora — `socratic.explicar` sempre leu a
+biblioteca privada — e, na hora de treinar, gerava questão de Direito Penal.
+
+**A causa era uma linha.** `geracao.FILTRO_UTIL` exigia `c.artigo IS NOT NULL`, e
+chunk de apostila é janela de texto: não tem artigo. A apostila era ingerável
+por definição, porque a proveniência (`questao.fonte_chunks`) era casada pelo
+ARTIGO que o modelo dizia ter usado. Sem artigo, todo candidato caía no descarte
+"artigo None não está no lote".
+
+**Por que não bastava tirar a linha.** `questao` era acervo estritamente
+compartilhado (008, sem `usuario_id`). Gerar da apostila enfiaria o material
+pago de um aluno no banco de questões de todos, com proveniência apontando pra
+um chunk que os outros não podem ler. O comentário que dizia isso estava no
+código e estava certo — o que ele descrevia não era uma escolha de gosto, era a
+consequência de a tabela não ter dono.
+
+**A 026 removeu a causa, não o sintoma:** `questao.usuario_id`, NULL = público
+como sempre, preenchido = privado daquele aluno. Duas decisões sustentam o
+resto:
+
+1. **O dono sai do CHUNK, nunca de parâmetro** (`geracao.salvar`). É o mesmo
+   raciocínio de `documento_id` e `disciplina`, com mais consequência: com
+   parâmetro existiria a chamada que grava apostila como pública por
+   esquecimento, e o esquecimento aqui é vazamento. Derivado do chunk, a
+   chamada errada não existe.
+2. **O predicado mora num lugar só** (`questoes.do_aluno()`), como
+   `mesa.filtro()`. Aqui divergir entre duas cópias não devolve número errado:
+   devolve o material de outra pessoa. Toda consulta que escolhe questão de um
+   POOL passa por ele — fila, desafio, simulado, lookup por id, cobertura da
+   mesa, cobertura do edital, geração. Consulta que sai de
+   `progresso`/`tentativa`/`erro_caderno` não precisa, porque aquelas tabelas
+   já são por usuário; `test_questao_da_apostila.py` enumera as rotas em vez de
+   checar uma, porque o valor do teste é ser a LISTA.
+
+**Uma brecha latente fechou de lado.** O filtro antigo aceitava qualquer chunk
+com artigo, e apostila cujo PDF traz "Art. N" é fatiada por artigo — 543 chunks
+assim no banco de desenvolvimento. `_por_disciplina` não olhava dono nenhum:
+bastava a apostila cair no recorte da mesa pra virar questão PÚBLICA. Nunca
+aconteceu (conferido: zero questões de documento privado antes da mudança),
+porque a busca por tema não abria a biblioteca. Era um `AND` de distância.
+
+### Proveniência sem artigo: o número do trecho
+
+`retrieval.formatar_numerado` numera os excertos do lote e o modelo devolve
+`trecho: N`. Não é o modelo dizendo onde estava — é escolhendo entre o que nós
+mandamos, então número fora da faixa é descarte, igual a artigo fora do lote.
+Ficou separado de `formatar_contexto` de propósito: numerar o prompt do tutor
+seria ruído, e mexer naquela função mexe na regra de citação
+(`limpar_citacoes`), onde este projeto já se queimou.
+
+**A ORDEM das duas chaves é a decisão inteira, e ela foi medida.** Primeira
+rodada real com o Gemini, pedidas 3 questões sobre "lesão corporal grave": o
+lote veio todo da apostila e o modelo devolveu `artigo: "129"` em duas delas —
+porque a aula TRANSCREVE o art. 129. As duas foram descartadas por "artigo não
+está no lote", e eram boas. Ali o campo `artigo` não é proveniência, é CONTEÚDO
+do material. Então: **trecho apontando chunk sem artigo manda, inclusive sobre
+um `artigo` que o modelo tenha preenchido**; nada se perde, porque `salvar` não
+guarda `artigo` em coluna alguma. O prompt já manda deixar o campo vazio nesse
+caso e o modelo preenche mesmo assim — situação exata em que este projeto decide
+no código.
+
+O que a ordem NÃO permite: trecho apontando LEI sem citar o artigo é descarte.
+Sem essa trava, o número seria o jeito de gravar questão de dispositivo sem
+dizer qual — o afrouxamento que o módulo existe pra não fazer, entrando pela
+porta lateral. Depois do conserto: 3 de 3 gravadas, zero descartes.
+
+### "Dos dois lugares" precisou de mais que abrir a porta
+
+Aberta a apostila, o pêndulo foi todo pro outro lado. Medido, tema "lesão
+corporal grave: conceito e classificação" com a biblioteca indexada: **os 24
+primeiros colocados são todos da apostila e o art. 129 não aparece em nenhuma
+posição**. A causa é a 025 — o rótulo do material entrou no tsvector —, e ela
+está certa: é o que faz "traumatologia forense" achar a aula. O efeito colateral
+é aritmético: um rótulo repetido em 78 chunks produz 78 acertos lexicais, e o
+único artigo sobre o assunto não tem como competir.
+
+Duas peças, e a segunda é a que quase deu errado:
+
+**`_misturar` reserva uma vaga pra cada lado** — mínimo, não cota. O primeiro
+colocado da busca nunca perde a vaga (é a trava que devolveu "concussão" pra
+quem pediu concussão); o lado ausente entra na ÚLTIMA. Pedido de 1 questão não
+mistura, e assunto que existe num lugar só sai inteiro dali: reservar vaga pra
+lado sem candidato devolveria menos questão do que o aluno pediu. Função pura,
+cinco casos em tabela.
+
+**`_lei_do_assunto` é o reforço, e ele precisou de trava.** A mistura não tinha
+o que misturar: sem candidato de lei no pool, não há vaga a preencher. Uma
+segunda busca, só no acervo público, resolve — mas a busca pública devolve
+alguma coisa pra QUALQUER pergunta, porque é ranking, não julgamento. Medido:
+
+| consulta | 1º colocado público | veredito |
+|---|---|---|
+| `peculato` | CP 312 Peculato | certo |
+| `lesão corporal grave` | CP 129 Lesão corporal | certo |
+| `lesão corporal grave: conceito e classificação` | CP 131 Perigo de contágio | **errado** (o 129 caiu pra 2º com o sufixo) |
+| `asfixiologia forense: mecanismos de asfixia mecânica` | CP 252 Uso de gás asfixiante | **errado**, e não existe artigo do assunto |
+
+Aceitar o 1º colocado teria recriado a reclamação original — "trouxe questões
+aleatórias de outro assunto" — agora do lado da lei. A trava é a RUBRICA
+compartilhar palavra de conteúdo com o tema, e **por CONTAGEM, não por
+booleano**: "Perigo de contágio de moléstia GRAVE" passa o teste de "alguma
+palavra" por causa de um adjetivo, e vinha à frente de "LESÃO CORPORAL", que
+casa duas. Ordenar pela contagem põe o certo na frente sem que ninguém precise
+decidir que "grave" é palavra fraca — a alternativa era mais uma palavra na
+lista `VAZIAS`, o remendo que `core/assunto.py` já documenta como o que nunca
+acaba.
+
+`por_rubrica`, que existe e é a estratégia precisa, não serve de trava: exige
+TODOS os termos da consulta na rubrica (`websearch_to_tsquery` é AND), então
+"lesão corporal grave" não casa "Lesão corporal" por causa do "grave" — medido,
+devolve vazio. Sobreposição de palavras é o mesmo espírito com o limiar no lugar
+certo.
+
+Sete de sete corretos depois disso, e o resultado ponta a ponta:
+
+```
+lesão corporal grave      -> 1 da apostila + 2 do CP art. 129   (os dois lugares)
+asfixiologia forense      -> 3 da apostila, ZERO de lei         (a lei não trata)
+```
+
+O segundo caso é o que prova a trava: sem ela, o aluno receberia questão de
+"uso de gás tóxico" estudando asfixiologia forense.
+
+### A assimetria é medida, não estética
+
+Só a LEI leva reforço. O material afoga, nunca falta — se ele não apareceu na
+busca é porque não existe material do assunto, e aí não há o que reforçar.
+Custo do reforço: uma consulta de busca a mais, e só quando a lei ficou de
+fora. Zero chamadas de LLM.
+
+### O que a 026 quebrou nos TESTES, e a lição repetida
+
+Sete testes de `test_mesa_api.py` caíram de uma vez, todos afirmando coisas
+certas. A fixture `duas_disciplinas` fazia `SELECT DISTINCT disciplina FROM
+questao` sem filtro de dono, e minhas questões privadas de Criminalística
+entraram nela — disciplina com dezenas de questões PRIVADAS e zero públicas.
+
+É a MESMA classe já documentada em `test_geracao._disciplina_do_acervo` (o
+`LIMIT 1` sem `ORDER BY` nem filtro de dono, que quebrava na segunda execução
+no mesmo banco). Fixture que diz "uma questão do acervo" tem de dizer QUAL
+acervo. Fechadas todas: `conftest.questao_id`, `duas_questoes`,
+`test_intervencao`, `test_desafio_orcamento`, `test_conversa`, `test_mesa_api`,
+e `semear_demo.py` — a conta de demonstração pegaria questão da apostila de
+outro aluno e mostraria material privado alheio na tela.
+
+### A sincronização leva questão privada como PRIVADA
+
+`sincronizar.py` já exportava material privado com o PDF (decisão anterior). A
+questão gerada dele viaja no mesmo pacote, com o email do dono; importar como
+pública a publicaria no acervo comum da outra máquina, com trecho de material
+pago dentro do enunciado. Questão privada cujo dono não existe no banco de
+destino é PULADA e reportada — publicá-la resolveria o número e vazaria o
+material. Pacote da era anterior à 026 não tem o campo: entra público, que é o
+que ele era. Conferido exportando de verdade: 259 questões, 13 marcadas com
+dono, as públicas com `usuario: null`. Sem cobertura de teste automatizado — o
+`sincronizar` não tem suíte.

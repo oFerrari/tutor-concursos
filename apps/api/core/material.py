@@ -42,7 +42,7 @@ import re
 
 from . import chunking, db, embeddings
 
-VERSAO = "material-v11"
+VERSAO = "material-v12"
 
 LOTE = 32
 MIN_CHARS = 200
@@ -964,6 +964,35 @@ def retomar_pendentes() -> int:
     for d in pend:
         enfileirar(d["id"])
     return len(pend)
+
+
+def renomear_disciplina(usuario_id: int, de: str, para: str | None = None) -> list[int]:
+    """Renomeia a disciplina em TODO o material do aluno que a usa. Devolve quantos.
+
+    Pedido, e a razão é do domínio: "às vezes o mesmo assunto cai em nomes de
+    matérias diferentes". Criminalística num edital é Ciências Forenses no
+    outro, Direito Administrativo é "Noções de Direito Administrativo" num
+    terceiro. Corrigir material por material é o que existia — treze cliques
+    pra treze aulas do mesmo curso.
+
+    A reindexação é NECESSÁRIA e é o custo real disto: `chunk.rotulo` entra no
+    tsvector (025), então trocar a disciplina sem reindexar deixaria a lista
+    dizendo um nome e a BUSCA respondendo pelo outro — o mesmo estado
+    inexplicável que `atualizar` já evita pra um documento só. Quem chama
+    enfileira; aqui só se troca o rótulo e se devolve a lista de ids.
+
+    `para` vazio TIRA a disciplina (volta pro grupo "sem matéria"), que é o que
+    a tela já faz ao soltar um material fora dos grupos."""
+    de = (de or "").strip()
+    if not de:
+        return []
+    novo = (para or "").strip()[:120] or None
+    linhas = db.query(
+        """UPDATE documento SET disciplina = %(p)s, classificado_por = 'aluno'
+            WHERE usuario_id = %(u)s AND disciplina = %(d)s
+        RETURNING id""",
+        {"u": usuario_id, "d": de, "p": novo})
+    return [r["id"] for r in linhas]
 
 
 def para_reindexar(usuario_id: int, documento_id: int) -> dict | None:

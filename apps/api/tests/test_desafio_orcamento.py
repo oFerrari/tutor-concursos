@@ -53,7 +53,7 @@ def test_minutos_usam_a_velocidade_real_do_aluno(client, usuario):
     responde em 30s rende mais que de quem responde em 120s. Prometer "10
     questões em 20 min" pra todo mundo seria número fixo onde existe medida.
     """
-    qs = db.query("SELECT id FROM questao LIMIT 2")
+    qs = db.query("SELECT id FROM questao WHERE usuario_id IS NULL LIMIT 2")
     if len(qs) < 2:
         pytest.skip("acervo sem questões")
 

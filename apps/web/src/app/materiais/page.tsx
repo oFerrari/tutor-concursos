@@ -11,6 +11,8 @@ import {
   Mesa,
   SugestoesMaterial,
   apagarMaterial,
+  abrirMaterial,
+  renomearDisciplina,
   baixarMaterial,
   classificarMaterial,
   getMateriais,
@@ -576,6 +578,34 @@ export default function PaginaMateriais() {
     }
   }
 
+  const [renomeando, setRenomeando] = useState<string | null>(null);
+  const [nomeNovo, setNomeNovo] = useState("");
+
+  async function confirmarRenome(de: string) {
+    const para = nomeNovo.trim();
+    setRenomeando(null);
+    if (!para || para === de) return;
+    setErro(null);
+    try {
+      await renomearDisciplina(de, para);
+      // Recarrega tudo: a renomeação mexe em VÁRIAS linhas e reenfileira a
+      // indexação de cada uma, então o estado local não dá pra remendar — os
+      // materiais voltam a `processando` e a lista tem de refletir isso.
+      await carregar();
+      await carregarSugestoes();
+    } catch (e) {
+      setErro(e instanceof ErroApi ? e.message : "não consegui renomear");
+    }
+  }
+
+  async function abrir(m: Material) {
+    try {
+      await abrirMaterial(m.id);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "não consegui abrir o arquivo");
+    }
+  }
+
   async function baixar(m: Material) {
     // Sem estado de "baixando": a resposta é local (o arquivo está no banco) e
     // um spinner que pisca por 200ms cansa mais do que informa. Erro, sim —
@@ -859,15 +889,64 @@ export default function PaginaMateriais() {
                   grupo ainda está processando. Terminado o classificador, o que
                   sobrou sem rótulo é "Outros" — dizer que ainda está
                   identificando seria esperar por algo que não vai acontecer. */}
-              <p className="text-[13.5px] font-medium">
-                {disc !== SEM_DISCIPLINA ? (
-                  disc
-                ) : itens.some((m) => m.status === "processando") ? (
-                  <span className="text-muted">Identificando a matéria...</span>
-                ) : (
-                  <span className="text-muted">Outros</span>
-                )}
-              </p>
+              {/* O NOME DO GRUPO É EDITÁVEL. Pedido: "às vezes o mesmo assunto
+                  cai em nomes de matérias diferentes" — Criminalística num
+                  edital é Ciências Forenses no outro. Corrigir material por
+                  material existia e custava treze cliques pra treze aulas do
+                  mesmo curso. O grupo "Outros" não se renomeia: ele não é uma
+                  matéria, é a ausência dela (arraste pra dar nome). */}
+              {renomeando === disc ? (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    confirmarRenome(disc);
+                  }}
+                  className="flex items-center gap-1.5"
+                >
+                  <input
+                    autoFocus
+                    value={nomeNovo}
+                    onChange={(e) => setNomeNovo(e.target.value)}
+                    onKeyDown={(e) => e.key === "Escape" && setRenomeando(null)}
+                    maxLength={120}
+                    className="field !py-1 w-[220px] text-[12.5px]"
+                    aria-label={`novo nome para ${disc}`}
+                  />
+                  <button type="submit" className="chip !py-1 text-[12px]">
+                    Renomear
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRenomeando(null)}
+                    className="chip !py-1 text-[12px]"
+                  >
+                    Cancelar
+                  </button>
+                </form>
+              ) : (
+                <p className="group/gr flex items-center gap-1.5 text-[13.5px] font-medium">
+                  {disc !== SEM_DISCIPLINA ? (
+                    <>
+                      {disc}
+                      <button
+                        onClick={() => {
+                          setRenomeando(disc);
+                          setNomeNovo(disc);
+                        }}
+                        title="Renomear esta matéria em todos os materiais dela"
+                        aria-label={`renomear ${disc}`}
+                        className="flex h-5 w-5 items-center justify-center rounded-[6px] text-label opacity-0 transition-all hover:bg-surface-hover hover:text-accent-text focus-visible:opacity-100 group-hover/gr:opacity-100"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                    </>
+                  ) : itens.some((m) => m.status === "processando") ? (
+                    <span className="text-muted">Identificando a matéria...</span>
+                  ) : (
+                    <span className="text-muted">Outros</span>
+                  )}
+                </p>
+              )}
               <p className="font-mono text-[11px] text-label">
                 {itens.length} {itens.length === 1 ? "material" : "materiais"}
               </p>
@@ -934,7 +1013,23 @@ export default function PaginaMateriais() {
                       {/* O ASSUNTO é o título visível quando existe: dentro de
                           um bloco de disciplina, "Remédios constitucionais"
                           identifica a aula e "curso-392722-aula-03-6ca6" não. */}
-                      <p className="truncate text-[13.5px]">{m.assunto ?? m.titulo}</p>
+                      {/* O TÍTULO ABRE O ARQUIVO. Pedido: "se eu clicar em cima
+                          do material eu deveria abrir o pdf num popup, em vez
+                          de ser obrigado a baixar". Ler a apostila é o caso
+                          comum; guardar cópia é o raro, e continua no ícone de
+                          download ao lado. Só é botão onde há arquivo —
+                          material anterior à 024 não tem os bytes. */}
+                      {m.tem_arquivo ? (
+                        <button
+                          onClick={() => abrir(m)}
+                          title="Abrir o arquivo"
+                          className="max-w-full truncate text-left text-[13.5px] underline-offset-2 hover:text-accent-text hover:underline"
+                        >
+                          {m.assunto ?? m.titulo}
+                        </button>
+                      ) : (
+                        <p className="truncate text-[13.5px]">{m.assunto ?? m.titulo}</p>
+                      )}
                       <p className="mt-0.5 truncate font-mono text-[11px] text-label">
                         {m.assunto ? `${m.titulo} · ` : ""}
                         {detalhe(m)}

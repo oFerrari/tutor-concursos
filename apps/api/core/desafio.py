@@ -22,10 +22,10 @@ Sem histórico ainda (usuário novo), cai num default documentado abaixo.
 """
 import re
 
-from . import db, mesa
+from . import db, mesa, questoes
 from .scheduler import CAMPOS_Q, JOIN_CTX
 
-VERSAO = "desafio-v5"
+VERSAO = "desafio-v6"
 
 _RE_HORAS = re.compile(r"^(\d+(?:\.\d)?)h\+?$")
 
@@ -149,8 +149,10 @@ def _novas(usuario_id: int, limite: int, excluir: set[int],
                               WHERE p.usuario_id = %(u)s AND p.questao_id = q.id)
               AND q.id <> ALL(%(ex)s)
               AND {mesa.filtro('q.disciplina')}
+              AND {questoes.do_aluno('q')}
             ORDER BY q.id LIMIT %(l)s""",
-        {"u": usuario_id, "l": limite, "ex": list(excluir) or [-1], "disc": disciplinas},
+        {"u": usuario_id, "l": limite, "ex": list(excluir) or [-1],
+         "disc": disciplinas, "dono": usuario_id},
     )
 
 
@@ -172,13 +174,13 @@ def _reincidentes(usuario_id: int, limite: int,
     )
 
 
-def _mini_simulado(limite: int, excluir: set[int],
+def _mini_simulado(usuario_id: int, limite: int, excluir: set[int],
                    disciplinas: list[str] | None = None) -> list[dict]:
     """
-    Amostra ALEATÓRIA sobre o acervo compartilhado todo (mesmo espírito de
-    simulado.selecionar: é a prova real que não escolhe o que cai) — por
-    isso NÃO recebe usuario_id, só exclui o que já entrou nos outros dois
-    blocos. Recebe `disciplinas` porque "a prova não escolhe o que cai"
+    Amostra ALEATÓRIA sobre o acervo que ESTE aluno pode ver (mesmo espírito
+    de simulado.selecionar: é a prova real que não escolhe o que cai), só
+    excluindo o que já entrou nos outros dois blocos. Recebe `usuario_id`
+    apenas pra isso — não pra olhar progresso: sortear é sortear. Recebe `disciplinas` porque "a prova não escolhe o que cai"
     vale DENTRO do edital: sortear Direito Penal num concurso que não cobra
     Penal não é imprevisibilidade, é ruído. Busca um pouco mais que o
     pedido porque parte pode colidir com o que já entrou em
@@ -191,8 +193,10 @@ def _mini_simulado(limite: int, excluir: set[int],
         f"""SELECT {CAMPOS_Q}
             FROM questao q {JOIN_CTX}
             WHERE q.id <> ALL(%(ex)s) AND {mesa.filtro('q.disciplina')}
+              AND {questoes.do_aluno('q')}
             ORDER BY random() LIMIT %(l)s""",
-        {"l": limite * 2, "ex": list(excluir) or [-1], "disc": disciplinas},
+        {"l": limite * 2, "ex": list(excluir) or [-1], "disc": disciplinas,
+         "dono": usuario_id},
     )
     return candidatos[:limite]
 
@@ -225,7 +229,7 @@ def montar(usuario_id: int, n_reincidentes: int = 3, n_novas: int = 5,
     novas = _novas(usuario_id, n_novas, usados, disciplinas)
     usados |= {q["id"] for q in novas}
 
-    mini_simulado = _mini_simulado(n_simulado, usados, disciplinas)
+    mini_simulado = _mini_simulado(usuario_id, n_simulado, usados, disciplinas)
 
     total = len(reincidentes) + len(novas) + len(mini_simulado)
     return {

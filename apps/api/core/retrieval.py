@@ -23,7 +23,7 @@ import re
 from . import db
 from .embeddings import embed_consulta
 
-VERSAO = "retrieval-v5"
+VERSAO = "retrieval-v6"
 RRF_K = 60  # constante de amortecimento padrão do RRF
 
 # Material `historico` (livro de emendas: "Redação Anterior", múltiplas
@@ -276,6 +276,35 @@ def formatar_contexto(chunks: list[dict]) -> str:
     ao §1º o que está no caput. Errar dispositivo é grave para concurseiro.
     """
     return "\n\n---\n\n".join(f"[{referencia(c)}]\n{c['texto']}" for c in chunks)
+
+
+def formatar_numerado(chunks: list[dict]) -> str:
+    """
+    Como `formatar_contexto`, mas com cada trecho NUMERADO — e é o formato que
+    a GERAÇÃO de questão usa, não a explicação.
+
+    POR QUE O NÚMERO
+    ----------------
+    A proveniência da questão (`fonte_chunks`) era casada pelo `artigo` que o
+    modelo diz ter usado. Isso funciona pra lei e é INAPLICÁVEL a apostila:
+    chunk de material do aluno é janela de texto, sem artigo nenhum. O efeito
+    era o aluno pedir questão de "traumatologia forense" e receber Direito
+    Penal, porque o único material do assunto não tinha como provar de onde a
+    questão saiu.
+
+    O número resolve isso sem afrouxar nada: o modelo aponta o trecho, e o
+    trecho é lido do LOTE que nós mesmos mandamos — não é o modelo dizendo
+    onde estava, é o modelo escolhendo entre o que foi dado. Continua sendo
+    possível descartar (número fora da faixa é descarte, igual a artigo fora
+    do lote).
+
+    Separado de `formatar_contexto` de propósito: o prompt do tutor não deve
+    ganhar numeração: a numeração é ruído pra quem só vai explicar, e mexer
+    naquela função mexe também na regra de citação (`limpar_citacoes`), que é
+    onde este projeto já se queimou uma vez.
+    """
+    return "\n\n---\n\n".join(
+        f"[{i} · {referencia(c)}]\n{c['texto']}" for i, c in enumerate(chunks, 1))
 
 
 def referencia(c: dict) -> str:

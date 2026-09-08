@@ -17,7 +17,7 @@ import unicodedata
 from . import assunto, llm, mesa as mesa_mod, retrieval
 from .retrieval import referencia
 
-VERSAO = "socratic-v49"
+VERSAO = "socratic-v50"
 
 # ------------------------------------------------------------------ schemas
 # Subconjunto OpenAPI aceito pelo Gemini. propertyOrdering importa: o modelo
@@ -45,13 +45,18 @@ ESQUEMA_QUESTOES = {
             # que permite medir cobertura — sem proveniência não há como saber
             # quais artigos já foram cobrados.
             "artigo": {"type": "STRING"},
+            # `trecho` é o NÚMERO do excerto do lote (1, 2, 3...). É a
+            # proveniência que funciona pra apostila, onde não há artigo pra
+            # citar — ver `retrieval.formatar_numerado`. Obrigatório nos dois
+            # casos porque campo opcional é campo que o modelo omite.
+            "trecho": {"type": "INTEGER"},
             "tema": {"type": "STRING"},
             "enunciado": {"type": "STRING"},
             "gabarito": {"type": "STRING"},
             "dicas": {"type": "ARRAY", "items": {"type": "STRING"}},
         },
-        "required": ["artigo", "tema", "enunciado", "gabarito", "dicas"],
-        "propertyOrdering": ["artigo", "tema", "enunciado", "gabarito", "dicas"],
+        "required": ["trecho", "tema", "enunciado", "gabarito", "dicas"],
+        "propertyOrdering": ["trecho", "artigo", "tema", "enunciado", "gabarito", "dicas"],
     },
 }
 
@@ -85,9 +90,13 @@ não junte dois pedidos com "e".
 - Exatamente 3 dicas, em ordem crescente de ajuda, e NENHUMA delas contém o gabarito \
 completo: a primeira reorienta o olhar, a segunda restringe o campo, a terceira quase entrega.
 - Enunciado com no máximo 2 frases. Gabarito com no máximo 3 frases.
-- O campo `artigo` recebe SÓ o número do dispositivo de onde a questão saiu, \
-como aparece no material: "312", "121-A", "8º". Nunca invente número, nunca escreva "Art.".
-- Uma questão por artigo. Se pedirem 3 questões, use 3 artigos diferentes do material."""
+- O campo `trecho` recebe o NÚMERO do excerto de onde a questão saiu — o número que \
+aparece entre colchetes no começo dele. É obrigatório e é o que prova a origem da questão.
+- O campo `artigo` recebe SÓ o número do dispositivo, como aparece no material: "312", \
+"121-A", "8º" — e SOMENTE quando o excerto usado for texto de lei com artigo. Material de \
+aula, apostila ou resumo NÃO tem artigo: nesse caso deixe `artigo` vazio. Nunca invente \
+número, nunca escreva "Art.", nunca cite artigo que não esteja escrito no excerto que você usou.
+- Uma questão por excerto. Se pedirem 3 questões, use 3 excertos diferentes do material."""
 
 ESQUEMA_QUESTOES_CE = {
     "type": "ARRAY",
@@ -95,13 +104,15 @@ ESQUEMA_QUESTOES_CE = {
         "type": "OBJECT",
         "properties": {
             "artigo": {"type": "STRING"},
+            "trecho": {"type": "INTEGER"},
             "tema": {"type": "STRING"},
             "enunciado": {"type": "STRING"},
             "gabarito_ce": {"type": "BOOLEAN"},
             "justificativa": {"type": "STRING"},
         },
-        "required": ["artigo", "tema", "enunciado", "gabarito_ce", "justificativa"],
-        "propertyOrdering": ["artigo", "tema", "enunciado", "gabarito_ce", "justificativa"],
+        "required": ["trecho", "tema", "enunciado", "gabarito_ce", "justificativa"],
+        "propertyOrdering": ["trecho", "artigo", "tema", "enunciado", "gabarito_ce",
+                             "justificativa"],
     },
 }
 
@@ -1076,7 +1087,7 @@ def gerar_questoes(chunks: list[dict], quantidade: int = 5,
     correções futuras do laço valerem só pra metade.
     """
     ce = tipo == "certo_errado"
-    contexto = retrieval.formatar_contexto(chunks)
+    contexto = retrieval.formatar_numerado(chunks)
     modelo = llm.obter()
     coletadas: list[dict] = []
     restante = quantidade
@@ -1108,6 +1119,19 @@ def _artigo_limpo(q) -> str | None:
     return (q.get("artigo") or "").strip().replace("Art.", "").strip() or None
 
 
+def _trecho_limpo(q) -> int | None:
+    """O número do excerto, 1-based, ou None. Vem como INTEGER no schema, mas
+    modelo devolve string quando quer ("2", "trecho 2") — converter aqui é
+    mais barato que descobrir depois que a proveniência falhou por tipo."""
+    v = q.get("trecho")
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, int):
+        return v if v > 0 else None
+    m = re.search(r"\d+", str(v or ""))
+    return int(m.group()) if m and int(m.group()) > 0 else None
+
+
 def _validar(itens) -> list[dict]:
     validas = []
     for q in itens or []:
@@ -1117,6 +1141,7 @@ def _validar(itens) -> list[dict]:
         validas.append({
             "tipo": "resposta_livre",
             "artigo": _artigo_limpo(q),
+            "trecho": _trecho_limpo(q),
             "tema": (q.get("tema") or "Sem tema").strip(),
             "enunciado": q["enunciado"].strip(),
             "gabarito": q["gabarito"].strip(),
@@ -1147,6 +1172,7 @@ def _validar_ce(itens) -> list[dict]:
         validas.append({
             "tipo": "certo_errado",
             "artigo": _artigo_limpo(q),
+            "trecho": _trecho_limpo(q),
             "tema": (q.get("tema") or "Sem tema").strip(),
             "enunciado": q["enunciado"].strip(),
             "gabarito": q["justificativa"].strip(),
@@ -1225,4 +1251,9 @@ def gerar_serie_ce(chunks: list[dict], n_itens: int = 3) -> dict | None:
     for i, item in enumerate(itens, 1):
         item["artigo"] = artigo
         item["ordem_no_contexto"] = i
-    return {"artigo": artigo, "contexto": d["contexto"].strip(), "itens": itens}
+    # `trecho` fixo em 1 porque a série nasce de UM chunk só (`lote[:1]` em
+    # `geracao.sob_demanda`): não há o que o modelo escolher, e declarar aqui
+    # deixa a série passar pela MESMA regra de proveniência das avulsas —
+    # inclusive quando o material é apostila e não há artigo pra citar.
+    return {"artigo": artigo, "trecho": 1,
+            "contexto": d["contexto"].strip(), "itens": itens}

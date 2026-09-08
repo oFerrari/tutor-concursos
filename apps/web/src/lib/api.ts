@@ -904,9 +904,63 @@ export function apagarMaterial(id: number): Promise<{ ok: true }> {
  * inteiro preso na memória da aba até o reload, e aqui os arquivos são
  * apostilas de vários MB.
  */
-export async function baixarMaterial(id: number, nomeSugerido: string): Promise<void> {
+/**
+ * Abre o arquivo do material numa aba/visualizador, sem baixar.
+ *
+ * A rota serve `inline` por padrão, mas o link não pode ser um `<a href>`
+ * direto: ela exige `Authorization`, e link de navegador não manda header
+ * (token na query string entraria no histórico e nos logs). Então busca com o
+ * header, vira blob e abre a URL do blob.
+ *
+ * `revokeObjectURL` só depois de um tempo: revogar na hora fecha o leitor antes
+ * de ele terminar de carregar — o blob é a fonte da aba, não uma cópia.
+ */
+/**
+ * Renomeia uma disciplina em TODO o material do aluno que a usa.
+ *
+ * O mesmo assunto cai com nomes diferentes de edital pra edital
+ * (Criminalística × Ciências Forenses), e corrigir material por material
+ * custava um clique por aula. Reindexa em background porque o rótulo entra na
+ * busca (025) — os materiais voltam a `processando`.
+ *
+ * `para` vazio TIRA a disciplina, devolvendo o material ao grupo sem matéria.
+ */
+export function renomearDisciplina(
+  de: string,
+  para: string | null
+): Promise<{ renomeados: number; de: string; para: string | null }> {
+  return chamar("/materiais/disciplina", {
+    method: "PATCH",
+    body: JSON.stringify({ de, para }),
+  });
+}
+
+export async function abrirMaterial(id: number): Promise<void> {
   const token = getToken();
   const resposta = await fetch(`${API_URL}/materiais/${id}/arquivo`, {
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...cabecalhoMesa() },
+  });
+  if (!resposta.ok) {
+    const corpo = await resposta.json().catch(() => ({}));
+    throw new ErroApi(resposta.status, corpo.detail ?? `erro ${resposta.status}`);
+  }
+  const url = URL.createObjectURL(await resposta.blob());
+  const aba = window.open(url, "_blank", "noopener");
+  if (!aba) {
+    // Bloqueador de popup. Cair pro download é melhor que não fazer nada e
+    // deixar a pessoa achando que o clique não funcionou.
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.click();
+  }
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+export async function baixarMaterial(id: number, nomeSugerido: string): Promise<void> {
+  const token = getToken();
+  const resposta = await fetch(`${API_URL}/materiais/${id}/arquivo?baixar=1`, {
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...cabecalhoMesa() },
   });
   if (!resposta.ok) {

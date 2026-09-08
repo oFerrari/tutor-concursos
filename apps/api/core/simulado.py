@@ -27,15 +27,20 @@ Limitação conhecida: `sincronizar.py` não exporta `simulado`/`simulado_id`.
 Aceitável porque simulado é snapshot de desempenho, não fonte de verdade —
 o que importa (caixa, prox_revisao) já viaja pela tentativa comum.
 """
-from . import db, mesa, scheduler, socratic
+from . import db, mesa, questoes as questoes_mod, scheduler, socratic
 
-VERSAO = "simulado-v8"
+VERSAO = "simulado-v9"
 
 N_PADRAO = 20
 
 
 def selecionar(n: int = N_PADRAO, disciplina: str | None = None,
-               disciplinas: list[str] | None = None) -> list[dict]:
+               # `dono` NÃO é "de quem é o simulado": é só o predicado da 026,
+               # pra questão gerada da apostila deste aluno poder cair na
+               # prova dele (e nunca na de outro). O sorteio segue cego.
+
+               disciplinas: list[str] | None = None,
+               dono: int | None = None) -> list[dict]:
     """
     DOIS filtros de disciplina, que respondem a perguntas diferentes:
     `disciplina` é escolha explícita de quem pediu a prova ("simulado só de
@@ -50,9 +55,10 @@ def selecionar(n: int = N_PADRAO, disciplina: str | None = None,
            LEFT JOIN contexto x ON x.id = q.contexto_id
            WHERE (%(d)s::text IS NULL OR q.disciplina = %(d)s)
              AND {mesa.filtro('q.disciplina')}
+             AND {questoes_mod.do_aluno('q')}
            ORDER BY random()
            LIMIT %(n)s""",
-        {"n": n, "d": disciplina, "disc": disciplinas},
+        {"n": n, "d": disciplina, "disc": disciplinas, "dono": dono},
     )
 
 

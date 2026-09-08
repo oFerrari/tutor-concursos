@@ -70,7 +70,7 @@ def test_rota_devolve_sugestao_e_intervencao_juntas(client, usuario):
     assert set(r) == {"sugestao", "intervencao"}
     assert r["intervencao"] is None          # conta nova, sem tentativa
 
-    qs = db.query("SELECT id FROM questao LIMIT 3")
+    qs = db.query("SELECT id FROM questao WHERE usuario_id IS NULL LIMIT 3")
     if len(qs) < 3:
         return
     for q in qs:
@@ -87,12 +87,15 @@ def test_rota_devolve_sugestao_e_intervencao_juntas(client, usuario):
 def test_intervencao_respeita_a_mesa(client, usuario):
     """Errar em Penal não deve parar a sessão de quem sentou na mesa que só
     cobre Constitucional — mesmo recorte do resto de `ritmo`."""
-    linhas = db.query("SELECT DISTINCT disciplina FROM questao ORDER BY 1")
+    linhas = db.query("""SELECT DISTINCT disciplina FROM questao
+                          WHERE usuario_id IS NULL AND disciplina IS NOT NULL
+                          ORDER BY 1""")
     if len(linhas) < 2:
         return
     errada, outra = linhas[0]["disciplina"], linhas[1]["disciplina"]
 
-    for q in db.query("SELECT id FROM questao WHERE disciplina = %(d)s LIMIT 3", {"d": errada}):
+    for q in db.query("""SELECT id FROM questao WHERE disciplina = %(d)s
+                               AND usuario_id IS NULL LIMIT 3""", {"d": errada}):
         db.query(
             "INSERT INTO tentativa (usuario_id, questao_id, resposta, veredito, "
             "dicas_usadas, segundos) VALUES (%(u)s, %(q)s, 'x', 'incorreta', 0, 30)",
