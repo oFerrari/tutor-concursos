@@ -92,7 +92,7 @@ from core import (assunto, auth, conversa, db, geracao, llm, mesa, pedido,
 from core.config import CLI_USUARIO_EMAIL, EMBEDDING_MODEL
 from core.llm import ErroLLM
 
-VERSAO = "avaliar-chat-v22"
+VERSAO = "avaliar-chat-v23"
 
 # Conta descartável, como manda o AGENTS.md: nada aqui pode encostar na conta
 # real. O `ON DELETE CASCADE` da 009 limpa tudo de uma vez em `--limpar`.
@@ -398,6 +398,16 @@ VOCABULARIO_SISTEMA = [
 # A resposta está INVOCANDO AUTORIDADE — norma, dispositivo ou tribunal? É o que
 # separa "estou te ensinando Direito" de "estou te dizendo quem eu sou". Só o
 # primeiro precisa de trecho por trás.
+# O AVISO de que o conteúdo não veio do material. A partir do socratic-v44 o
+# tutor PODE ensinar doutrina de conhecimento próprio, e a licença tem preço:
+# dizer que é isso. Sem o aviso, o aluno não distingue o que dá pra conferir.
+RE_SEM_FONTE_AVISADO = re.compile(
+    r"(?i)(n[ãa]o\s+(?:est[áa]|consta|vem|veio|t[ýi]nha)\s+(?:no|em)\s+seu\s+material"
+    r"|n[ãa]o\s+(?:est[áa]|consta)\s+no\s+material"
+    r"|isto\s+[ée]\s+doutrina|isso\s+[ée]\s+doutrina"
+    r"|n[ãa]o\s+est[áa]\s+em\s+artigo|fora\s+do\s+seu\s+material"
+    r"|confira\s+na\s+sua\s+apostila|n[ãa]o\s+tenho\s+trecho)")
+
 RE_AUTORIDADE = re.compile(
     r"(?i)\b(art\w*\.?\s*\d|lei\s|leis\s|c[óo]digo|constitui[çc][ãa]o|s[úu]mula|"
     r"jurisprud[êe]ncia|STF|STJ|§|inciso|par[áa]grafo|decreto|estatuto)\b")
@@ -527,11 +537,17 @@ def checar(fala: str, resposta: str, chunks: list[dict],
     #     jurídica (artigo, lei, código, súmula, STF/STJ, jurisprudência), ou o
     #     aluno PEDIU explicação de matéria. Medido nos 6 casos apontados pela
     #     bateria: pega os 5 reais e solta o único falso positivo.
+    #     E DOUTRINA MARCADA DEIXOU DE SER DEFEITO (socratic-v44). O tutor pode
+    #     ensinar conceito de conhecimento próprio quando não há trecho — o que
+    #     ele não pode é fazer isso CALADO. Então a checagem inverteu de lado:
+    #     ela agora aponta a ausência do aviso, não a ausência da citação.
+    avisou = bool(RE_SEM_FONTE_AVISADO.search(resposta))
     ensinando = (RE_AUTORIDADE.search(resposta) or assunto.pede_exposicao(fala))
-    if chunks and len(resposta) > 400 and not RE_COLCHETE.search(resposta) and ensinando:
-        achados.append(("aviso", "explicou em bloco sem citar NENHUMA fonte, tendo "
-                                 f"{len(chunks)} trecho(s) recuperado(s) — confira se "
-                                 "afirmou matéria de conhecimento próprio"))
+    if (chunks and len(resposta) > 400 and not RE_COLCHETE.search(resposta)
+            and ensinando and not avisou):
+        achados.append(("erro", f"explicou em bloco sem citar fonte E sem avisar que não "
+                                f"veio do material, tendo {len(chunks)} trecho(s) "
+                                f"recuperado(s) — doutrina pode, calada não"))
 
     # 3c. ARTIGO INVOCADO EM PROSA, sem colchete, que nenhum trecho sustenta.
     #

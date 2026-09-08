@@ -20,8 +20,16 @@
  * mostrar onde olhar quando desconfiar — no meio da prosa ela se perdia.
  */
 
-/** `**negrito**` e `[Citação, art. N]`. O resto do texto passa intacto. */
-const PEDACOS = /(\*\*[^*\n]+\*\*|\[[^\]\n]{1,160}\])/g;
+/** `**negrito**`, `*itálico*` e `[Citação, art. N]`. O resto passa intacto.
+ *
+ *  O negrito vem PRIMEIRO na alternância de propósito: `*` casaria a primeira
+ *  metade de `**` e transformaria "**LIMPE**" em itálico com asterisco sobrando.
+ *
+ *  O itálico entrou porque o socratic-v44 o usa pra uma coisa importante — o
+ *  aviso de que o conteúdo é doutrina e não veio do material do aluno. Ele
+ *  fechava a resposta com "*Vale lembrar: isto é doutrina...*" e a tela mostrava
+ *  os asteriscos, justamente na frase que existe pra ser lida. */
+const PEDACOS = /(\*\*[^*\n]+\*\*|\*[^*\n]+\*|\[[^\]\n]{1,160}\])/g;
 
 /**
  * O que dentro de `[...]` é de fato uma CITAÇÃO.
@@ -48,6 +56,16 @@ function formatar(linha: string, chave: string) {
         <strong key={k} className="font-semibold text-foreground">
           {p.slice(2, -2)}
         </strong>
+      );
+    }
+    if (p.startsWith("*") && p.endsWith("*") && p.length > 2) {
+      // Itálico é o aviso de "isto não veio do seu material". Cor de rótulo em
+      // vez de itálico puro: a frase precisa se distinguir do conteúdo, e
+      // itálico sozinho passa batido num parágrafo longo.
+      return (
+        <em key={k} className="text-[14px] not-italic text-label">
+          {p.slice(1, -1)}
+        </em>
       );
     }
     if (p.startsWith("[") && p.endsWith("]") && CITACAO.test(p.slice(1, -1))) {

@@ -1612,6 +1612,41 @@ Ancorar no primeiro é o que torna a soma segura (número antes dele pode ser
 "caixa" é pulado. Pedir "uma de cada" é a forma natural de cobrir dois pontos, e
 entregar metade é o erro que a pessoa não reporta — ela só acha que o app é ruim.
 
+**DOUTRINA DE CONHECIMENTO PRÓPRIO PASSA A SER PERMITIDA — MARCADA.** Decisão do
+dono, com a razão dele: "se eu for no Gemini e pedir os princípios ele vai saber
+me responder". A regra anterior proibia TODO conteúdo sem trecho recuperado, e o
+efeito ficou pior que o risco que ela evitava: Supremacia do Interesse Público,
+Indisponibilidade e Autotutela não estão em artigo NENHUM da Constituição, então
+"não tenho o texto" virava "não te ensino".
+
+O que se conserva é exatamente o que a proibição existia pra dar — saber o que
+dá pra CONFERIR. Por isso a licença é só pra CONCEITO (doutrina, classificação,
+definição), vem com aviso obrigatório em uma linha, e **não pode usar colchete**,
+que continua reservado a fonte recuperada.
+
+O QUE SEGUE PROIBIDO SEM TRECHO, sem exceção: número de artigo, número de
+súmula, pena, prazo, valor e posição de tribunal. É ali que a invenção é
+irrecuperável, e os dois casos medidos são desses: o modelo afirmou entendimento
+do STJ sobre peculato de uso que não existe, e citou "art. 37" numa conversa sem
+CF recuperada. Errar um número estraga a prova; errar uma explicação o aluno
+descobre na primeira apostila.
+
+Verificado com o tutor real: ele ensinou os três princípios implícitos com
+clareza e fechou com "*Vale lembrar: isto é doutrina e não está no seu material;
+confira na sua apostila.*"
+
+**A CHECAGEM INVERTEU DE LADO junto com a regra.** "Explicou em bloco sem citar
+nenhuma fonte" era AVISO e virou ERRO — mas só quando falta o aviso. Doutrina
+pode; doutrina calada não. A regra que muda tem de levar o instrumento com ela,
+senão o avaliador passa a apontar o comportamento correto.
+
+**E A CF NÃO ESTAVA SENDO IGNORADA.** A queixa era razoável e a medição mostrou
+outra coisa: para "princípios expressos da administração pública" e "principios
+explicitos e implicitos", o `art. 37` volta na POSIÇÃO 1. O que falha é a
+consulta curta — "princípios explícitos" sozinho não acha, e "LIMPE legalidade
+impessoalidade" também não. O acervo tem o artigo; o e5 é que não liga essas
+palavras a ele.
+
 ## Armadilhas do corpus (Planalto)
 
 - Quebra de linha no meio da frase; `normalizar_lei()` remonta.

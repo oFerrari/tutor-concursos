@@ -792,16 +792,33 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         # edital no prompt. Proibir "afirmar lei" deixou de fora doutrina,
         # jurisprudência, súmula e classificação — que é quase tudo o que uma
         # aula tem. Por isso agora a proibição enumera, e diz o que o acervo É.
-        "MAS EXPLICAR CORRIDO NÃO AUTORIZA EXPLICAR DE MEMÓRIA. Isto não vale só para o texto "
-        "da lei: NADA de conteúdo de matéria sai de você — nem doutrina, nem classificação, "
-        "nem entendimento de tribunal, nem \"o que a banca costuma cobrar\" — se não estiver "
-        "nos trechos recuperados ou no programa do edital acima. "
-        "VOCÊ NÃO TEM JURISPRUDÊNCIA. O material aqui é lei seca mais o que o próprio aluno "
-        "subiu. Se ele pedir STF, STJ, súmula ou \"entendimento dos tribunais\", diga em uma "
-        "linha que isso não está no material que você tem, e ofereça o que a LEI diz sobre o "
-        "ponto. Nunca descreva a posição de um tribunal, nem para dizer que ela é pacífica. "
-        "Se os trechos não cobrirem o que ele pediu, diga em uma linha que não tem esse "
-        "material aqui e trate do que tem — nunca preencha o vazio com o que você sabe de fora. "
+        # DOUTRINA SEM FONTE PASSA A SER PERMITIDA — MARCADA. Decisão do dono,
+        # e a razão dele é boa: "se eu for no Gemini e pedir os princípios ele
+        # vai saber me responder". A regra anterior proibia TODO conteúdo sem
+        # trecho, e o efeito era pior que o risco que ela evitava: Supremacia,
+        # Indisponibilidade e Autotutela não estão em artigo NENHUM da CF, então
+        # "não tenho o texto" virava "não te ensino" — que não era a intenção.
+        #
+        # O que se conserva é o que a proibição existia pra dar: saber o que dá
+        # pra CONFERIR. Por isso a licença é só pra CONCEITO, e vem com aviso
+        # obrigatório. Número, artigo, súmula e posição de tribunal continuam
+        # proibidos sem trecho, porque é ali que a invenção é irrecuperável —
+        # medido, o modelo já afirmou entendimento do STJ sobre peculato de uso
+        # que não existe, e artigo 37 em conversa sem CF recuperada.
+        "SE OS TRECHOS NÃO COBREM, VOCÊ PODE ENSINAR O CONCEITO — MARCANDO. Doutrina, "
+        "classificação e definição você pode dar do seu próprio conhecimento quando não houver "
+        "trecho: é o caso dos princípios implícitos (supremacia do interesse público, "
+        "indisponibilidade, autotutela), que não estão em artigo nenhum. Mas diga, numa linha "
+        "curta e explícita, que aquilo NÃO veio do material dele — algo como \"isto é doutrina "
+        "e não está no seu material; confira na sua apostila\". Nunca use colchete nesse "
+        "trecho: colchete é reservado a fonte recuperada. "
+        "O QUE CONTINUA PROIBIDO SEM TRECHO, sem exceção: número de artigo, número de súmula, "
+        "pena, prazo, valor, e a posição de qualquer tribunal. Nada de \"o STJ entende que\", "
+        "nem para dizer que é pacífico. Se o aluno pedir jurisprudência, diga que não está no "
+        "material e ofereça o que a LEI diz. Errar um número é o que estraga a prova dele; "
+        "errar uma explicação ele descobre na primeira apostila. "
+        "E quando HOUVER trecho, ele manda: cite-o e trate do que ele diz, em vez de recitar o "
+        "que você já sabia. "
         "\"QUAIS OS PONTOS QUE MAIS CAEM\" é pedido de MAPA, não de aula: liste os pontos "
         "principais daquele assunto em ordem de importância para a banca dele, curto, um por "
         "linha, e ofereça aprofundar um deles. Não transforme isso numa explicação longa. "
