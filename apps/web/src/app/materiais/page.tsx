@@ -438,26 +438,28 @@ export default function PaginaMateriais() {
     return sugestoes.assuntos_por_disciplina[disciplina.trim()] ?? sugestoes.assuntos;
   }, [usandoAlvo, sugestoes, disciplina]);
 
-  /** O interruptor MANDA na ordem, não no conteúdo — e isso é o ajuste pedido:
-   *  "o botão de usar meu edital também deve servir pra dar sugestão para a
-   *  alteração da matéria".
+  /** O interruptor FILTRA — uma fonte por vez, a que ele diz.
    *
-   *  As duas fontes continuam entrando juntas, e essa parte da decisão
-   *  anterior fica de pé pelo motivo dela: esconder metade das grafias atrás
-   *  de um botão de modo faria a correção depender de um estado que está no
-   *  outro canto da tela — e aí renomear pra um nome que você JÁ usa exigiria
-   *  descobrir que existe um interruptor. O que muda é qual lado aparece
-   *  primeiro, que é o que "dar sugestão" quer dizer numa lista.
+   *  Duas versões antes disto, e as duas foram corrigidas pelo mesmo relato,
+   *  cada vez mais direto:
    *
-   *  Sem `.sort()` no fim de propósito: ordenar alfabeticamente desfazia
-   *  exatamente a preferência que o interruptor acabou de expressar. Dentro de
-   *  cada lado a ordem é alfabética. */
-  const opcoesDiscEdicao = useMemo(() => {
-    const daMesa = [...materiasDoAlvo].sort();
-    const daBiblioteca = [...(sugestoes?.disciplinas ?? [])].sort();
-    const [primeiro, depois] = usandoAlvo ? [daMesa, daBiblioteca] : [daBiblioteca, daMesa];
-    return [...new Set([...primeiro, ...depois])];
-  }, [materiasDoAlvo, sugestoes, usandoAlvo]);
+   *  1. as duas fontes juntas, sem o interruptor valer aqui. Argumento: no
+   *     lápis, esconder metade das grafias atrás de um botão de modo faria a
+   *     correção depender de um estado no outro canto da tela;
+   *  2. as duas juntas, com o interruptor mandando na ORDEM. Resposta: "eu
+   *     marquei usar sugestões daqui e ainda assim ele tá trazendo o do
+   *     edital".
+   *
+   *  A objeção do item 1 continua verdadeira e deixou de importar, porque o
+   *  campo é LIVRE: qualquer nome pode ser digitado, esteja ou não na lista.
+   *  Nada fica inalcançável — o que muda é que a lista para de misturar o que
+   *  o interruptor acabou de dizer para não usar. Interruptor que só reordena
+   *  é interruptor que não obedece.
+   *
+   *  Este é o MESMO `opcoesDisc` do formulário de cima, e agora é uma
+   *  constante só: dois lugares que dizem "sugestões daqui" não podem sugerir
+   *  coisas diferentes. */
+  const opcoesDiscEdicao = opcoesDisc;
   const opcoesAssuntoEdicao = useMemo(() => {
     if (!sugestoes) return [];
     return sugestoes.assuntos_por_disciplina[editDisc.trim()] ?? sugestoes.assuntos;
@@ -683,20 +685,21 @@ export default function PaginaMateriais() {
     return mapa;
   }, [materiais]);
 
-  /** Só os tipos que TÊM material. Aba vazia é promessa de conteúdo que não
-   *  existe, e com três tipos fixos duas delas ficariam vazias na conta
-   *  normal. */
-  const abas = useMemo(
-    () => TIPOS.filter((x) => (porTipo.get(x.valor)?.length ?? 0) > 0),
-    [porTipo]
-  );
+  /** OS TRÊS TIPOS, sempre — inclusive o que está em zero.
+   *
+   *  A versão anterior escondia aba vazia, com o argumento de que ela é
+   *  promessa de conteúdo que não existe. O relato desfez: "o que eu pedi foi
+   *  que agrupasse os 3 tópicos também ali embaixo", com o seletor de Tipo (os
+   *  três) e as abas (duas) lado a lado na mesma captura.
+   *
+   *  E o argumento é melhor que o meu: as abas ESPELHAM o seletor de cima. Se
+   *  o seletor oferece três tipos e a lista mostra dois, o terceiro parece não
+   *  existir — e ele existe, você só não subiu nada dele ainda. Aba em zero
+   *  informa isso; aba ausente esconde. */
+  const abas = TIPOS;
 
   const [abaPedida, setAba] = useState<string>("aula");
-  /** A aba EFETIVA. `abaPedida` pode apontar pra um tipo que ficou sem
-   *  material (o último resumo foi apagado, ou a lista ainda está
-   *  carregando), e uma aba selecionada mostrando lista vazia parece
-   *  biblioteca vazia. Cai na primeira que tem algo. */
-  const aba = porTipo.has(abaPedida) ? abaPedida : (abas[0]?.valor ?? "aula");
+  const aba = abaPedida;
   const daAba = useMemo(() => porTipo.get(aba) ?? [], [porTipo, aba]);
 
   /** Jurisprudência não se agrupa por matéria — é o pedido, e é coerente com o
@@ -1125,7 +1128,7 @@ export default function PaginaMateriais() {
             `TIPOS`. Só aparece com mais de um tipo no acervo: uma aba
             solitária não é escolha, é ruído. A contagem no rótulo diz que
             existe algo do outro lado antes de alguém clicar pra descobrir. */}
-        {abas.length > 1 ? (
+        {(materiais?.length ?? 0) > 0 ? (
           <div className="flex flex-wrap items-center gap-1" role="tablist"
                aria-label="tipo de material">
             {abas.map((x) => (
@@ -1137,7 +1140,11 @@ export default function PaginaMateriais() {
                 className={aba === x.valor ? "chip-ativo" : "chip"}
               >
                 {x.rotulo}{" "}
-                <span className="font-mono text-[11px] opacity-70">
+                <span
+                  className={`font-mono text-[11px] ${
+                    (porTipo.get(x.valor)?.length ?? 0) > 0 ? "opacity-70" : "opacity-35"
+                  }`}
+                >
                   {porTipo.get(x.valor)?.length ?? 0}
                 </span>
               </button>
@@ -1161,6 +1168,19 @@ export default function PaginaMateriais() {
         <p className="text-[13.5px] text-muted">
           Nada aqui ainda. Suba uma apostila ou cole um link, e o tutor passa a citá-lo nas
           respostas, junto da lei.
+        </p>
+      )}
+
+      {/* ABA EM ZERO diz o que fazer, não fica em branco. Existe porque as três
+          abas agora aparecem sempre (espelhando o seletor de Tipo), e uma delas
+          costuma estar vazia — lista vazia sem explicação parece defeito de
+          carregamento. */}
+      {(materiais?.length ?? 0) > 0 && daAba.length === 0 && (
+        <p className="text-[13.5px] text-muted">
+          Nenhum material como <strong className="font-medium text-body">
+            {TIPOS.find((x) => x.valor === aba)?.rotulo ?? aba}
+          </strong>{" "}
+          ainda. Escolha esse tipo lá em cima antes de arrastar o arquivo.
         </p>
       )}
 
@@ -1221,8 +1241,10 @@ export default function PaginaMateriais() {
                         "Criminalística" e "Ciências Forenses", e digitar o
                         nome de novo, à mão, é o convite pra criar uma
                         terceira grafia — o problema que ela veio resolver.
-                        A ordem da lista é a que o interruptor manda (ver
-                        `opcoesDiscEdicao`); digitar livre continua valendo. */}
+                        A lista é a que o interruptor lá em cima escolhe — só
+                        o edital, ou só a biblioteca (ver `opcoesDiscEdicao`).
+                        Digitar um nome fora dela continua valendo, e é isso
+                        que deixa o filtro ser filtro sem prender ninguém. */}
                     <Seletor
                       valor={nomeNovo}
                       aoMudar={setNomeNovo}

@@ -2461,6 +2461,45 @@ isso e repetir é ruído.
 que o usuário já usou em outro lugar do produto — de preferência lida da mesma
 constante, pra não poder divergir.
 
+**E as TRÊS abas aparecem, inclusive a que está em zero.** Escondi a vazia na
+primeira versão, argumentando que aba vazia é promessa de conteúdo que não
+existe. O relato desfez, com o seletor de Tipo (três opções) e as abas (duas)
+lado a lado na mesma captura: "o que eu pedi foi que agrupasse os 3 tópicos
+também ali embaixo".
+
+O argumento dele é melhor. As abas ESPELHAM o seletor: se o seletor oferece três
+tipos e a lista mostra dois, o terceiro parece não existir — e ele existe, só
+está vazio. Aba em zero informa; aba ausente esconde. A contagem em zero fica
+mais apagada (`opacity-35`) pra a aba cheia continuar sendo a óbvia, e a aba
+vazia diz o que fazer em vez de ficar em branco ("escolha esse tipo lá em cima
+antes de arrastar o arquivo") — lista vazia sem explicação parece defeito de
+carregamento.
+
+### O interruptor FILTRA, e essa foi a terceira tentativa
+
+Três versões do mesmo campo, cada correção mais direta que a anterior:
+
+1. **as duas fontes juntas, interruptor sem efeito no lápis.** Argumento meu:
+   esconder metade das grafias atrás de um botão de modo faria a correção
+   depender de um estado no outro canto da tela;
+2. **as duas juntas, interruptor mandando na ORDEM.** Resposta: "eu marquei usar
+   sugestões daqui e ainda assim ele tá trazendo somente o do edital";
+3. **uma fonte por vez, a que o interruptor diz.**
+
+A objeção do item 1 continuou verdadeira e deixou de importar, e é isso que
+faltava eu ver: o campo é LIVRE — qualquer nome pode ser digitado, esteja ou não
+na lista. Nada fica inalcançável. O que a filtragem tira é a lista misturar
+justamente o que o interruptor acabou de dizer para não usar.
+
+**Interruptor que só reordena é interruptor que não obedece.** Ele promete duas
+fontes exclusivas ("usar meu edital" × "usar sugestões daqui"), e uma promessa
+de exclusividade cumprida como preferência de ordenação é lida como defeito —
+corretamente. Se as duas fontes tivessem de aparecer juntas, o controle não
+devia ser um interruptor de modo.
+
+Sobrou uma constante só (`opcoesDiscEdicao = opcoesDisc`): dois lugares que
+dizem "sugestões daqui" não podem sugerir coisas diferentes.
+
 ### E o campo de renomear vinha PREENCHIDO, o que matava a lista
 
 Relatado na mensagem seguinte, em duas frases que pareciam dois defeitos: "já
