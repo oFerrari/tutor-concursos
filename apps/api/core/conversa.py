@@ -28,7 +28,7 @@ pergunta é honesto e reconhecível na lista.
 """
 from . import db
 
-VERSAO = "conversa-v2"
+VERSAO = "conversa-v3"
 
 JANELA = 8          # turnos (aluno+tutor) devolvidos como histórico
 MAX_TITULO = 60
@@ -150,6 +150,48 @@ def historico_para_prompt(conversa_id: int, janela: int = JANELA) -> list[dict]:
     """
     return [{"autor": m["autor"], "texto": m["texto"]}
             for m in mensagens(conversa_id, limite=janela)]
+
+
+def desfazer_ultimo_turno(usuario_id: int, conversa_id: int) -> dict | None:
+    """Apaga o último turno e devolve a fala do aluno que estava nele.
+
+    Existe pra dois gestos que o chat não tinha e o aluno espera de qualquer
+    chat: PARAR a resposta e EDITAR a pergunta. Os dois deixam o histórico numa
+    situação que a gravação em dois lados (014) não previa — a pergunta é
+    gravada ANTES de chamar o modelo, de propósito, pra ninguém reabrir a
+    conversa e não achar o que escreveu. Parando no meio, sobra uma pergunta
+    sem resposta; editando, sobraria a versão errada junto da certa.
+
+    Devolve a fala pra tela poder pré-preencher o campo — é o que faz "editar"
+    ser editar, e não digitar tudo de novo.
+
+    Apaga do FIM pra trás, e só o último par: apagar por texto igual pegaria a
+    pergunta repetida três turnos antes, que é justamente o que acontece quando
+    alguém insiste no mesmo assunto.
+
+    `evento` entra na conta ("[fato da sessão]", 016): se o turno propôs
+    questões, o fato de tê-las proposto vai junto — senão o prompt seguinte
+    afirmaria uma proposta que não existe mais."""
+    conv = obter(usuario_id, conversa_id)
+    if not conv:
+        return None
+    linhas = db.query(
+        """SELECT id, autor, texto FROM mensagem
+            WHERE conversa_id = %(c)s ORDER BY id DESC LIMIT 6""",
+        {"c": conversa_id})
+    if not linhas:
+        return None
+    # Anda de trás pra frente até (e incluindo) a última fala do ALUNO.
+    apagar_ids, fala = [], None
+    for m in linhas:
+        apagar_ids.append(m["id"])
+        if m["autor"] == "aluno":
+            fala = m["texto"]
+            break
+    if fala is None:
+        return None
+    db.query("DELETE FROM mensagem WHERE id = ANY(%(ids)s)", {"ids": apagar_ids})
+    return {"pergunta": fala, "apagadas": len(apagar_ids)}
 
 
 def apagar(usuario_id: int, conversa_id: int) -> bool:

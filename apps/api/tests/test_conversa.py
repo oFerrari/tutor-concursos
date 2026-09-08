@@ -210,3 +210,45 @@ def test_conversa_de_outro_usuario_nao_recebe_evento(client, usuario, outro_usua
                 headers=outro_usuario["headers"])
     msgs = client.get(f"/conversas/{cid}", headers=usuario["headers"]).json()["mensagens"]
     assert not [m for m in msgs if m["autor"] == "evento"]
+
+
+def test_desfazer_ultimo_turno_devolve_a_pergunta_e_limpa_o_historico(client, usuario,
+                                                                      llm_falso):
+    """PARAR e EDITAR são o mesmo problema visto de dois lados.
+
+    A pergunta é gravada ANTES de o modelo ser chamado (014), de propósito: quem
+    reabre a conversa tem de achar o que escreveu, mesmo se o LLM caiu no meio.
+    O preço disso é que interromper deixa pergunta sem resposta, e editar
+    deixaria a versão errada no histórico junto da certa — e o prompt do turno
+    seguinte leria as duas como parte da conversa.
+
+    Devolver a PERGUNTA é o que faz "editar" ser editar em vez de digitar tudo
+    de novo. E o par inteiro sai: pergunta + resposta (+ evento, quando o turno
+    propôs questões, senão o prompt afirmaria uma proposta que não existe mais).
+    """
+    r = client.post("/perguntar", headers=usuario["headers"],
+                    json={"pergunta": "me explica peculato"})
+    assert r.status_code == 200, r.text
+    cid = r.json()["conversa_id"]
+    assert len(conversa.mensagens(cid)) == 2
+
+    d = client.post(f"/conversas/{cid}/desfazer", headers=usuario["headers"])
+    assert d.status_code == 200, d.text
+    assert d.json()["pergunta"] == "me explica peculato"
+    assert conversa.mensagens(cid) == []
+
+    # Nada a desfazer é 404, não sucesso vazio: a tela precisa distinguir
+    # "desfiz" de "não havia nada", pra não limpar o campo por engano.
+    assert client.post(f"/conversas/{cid}/desfazer",
+                       headers=usuario["headers"]).status_code == 404
+
+
+def test_desfazer_turno_de_outro_dono_da_404(client, usuario, outro_usuario, llm_falso):
+    """404 e não 403: mesma escolha do resto da biblioteca — não confirmar a
+    quem chuta um id que ele existe."""
+    r = client.post("/perguntar", headers=usuario["headers"], json={"pergunta": "bom dia"})
+    cid = r.json()["conversa_id"]
+    assert client.post(f"/conversas/{cid}/desfazer",
+                       headers=outro_usuario["headers"]).status_code == 404
+    # E o turno do dono continua lá.
+    assert len(conversa.mensagens(cid)) == 2

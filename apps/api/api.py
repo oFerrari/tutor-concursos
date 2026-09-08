@@ -829,6 +829,25 @@ def rota_obter_conversa(cid: int, uid: int = Depends(usuario_atual)):
     return {**conv, "mensagens": conversa.mensagens(cid)}
 
 
+@app.post("/conversas/{cid}/desfazer")
+def rota_desfazer_turno(cid: int, uid: int = Depends(usuario_atual)):
+    """Apaga o último turno e devolve a pergunta, pra tela pré-preencher.
+
+    Serve a PARAR e a EDITAR, que são o mesmo problema visto de dois lados: a
+    pergunta é gravada antes de chamar o modelo (014, pra ninguém reabrir a
+    conversa e não achar o que escreveu), então interromper deixa pergunta sem
+    resposta e editar deixaria a versão errada no histórico.
+
+    POST e não DELETE porque isto não é "apagar um recurso": é uma OPERAÇÃO com
+    retorno útil — a pergunta de volta. Um DELETE que devolve corpo pra ser
+    usado engana quem lê a rota.
+    """
+    r = conversa.desfazer_ultimo_turno(uid, cid)
+    if not r:
+        raise HTTPException(404, "conversa não encontrada ou já sem turnos")
+    return r
+
+
 @app.delete("/conversas/{cid}")
 def rota_apagar_conversa(cid: int, uid: int = Depends(usuario_atual)):
     if not conversa.apagar(uid, cid):

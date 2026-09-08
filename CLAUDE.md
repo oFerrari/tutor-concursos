@@ -89,7 +89,7 @@ core/auth.py               hash de senha (bcrypt), token de sessão (JWT), usuá
 core/mesa.py               mesa de estudo (o concurso-alvo) e o predicado de recorte por disciplina
 core/rascunho.py           curadoria do edital: extrai pra rascunho, pessoa escolhe o cargo, confirma
 core/geracao.py            gera questão do ACERVO sob demanda e grava com proveniência
-core/conversa.py           conversa persistida do tutor + janela de histórico pro prompt
+core/conversa.py           conversa persistida do tutor + janela de histórico pro prompt + desfazer o último turno (parar/editar)
 core/assunto.py            o assunto em foco da conversa — a consulta que vai à BUSCA (PURO)
 core/pedido.py             o aluno pediu treino? quantas? simulado formal? — REGRA PURA que aciona a geração sem botão
 core/scheduler_regras.py   regras de promoção — FUNÇÕES PURAS

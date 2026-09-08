@@ -1526,6 +1526,39 @@ contra o acervo público. Batendo 60%, o upload é recusado com a razão — sub
 cópia não acrescenta nada e piora a busca. O limiar tem folga porque emenda muda
 redação, e 25 amostras não confundem apostila que transcreve uns poucos artigos.
 
+**PARAR E EDITAR SÃO O MESMO PROBLEMA, visto de dois lados.** Pedido: "digitei
+errado, deveria ter um quadradinho pra parar e um lapizinho pra editar".
+
+O que torna os dois não-triviais aqui é a gravação em dois lados da 014: a
+pergunta entra no banco ANTES de o modelo ser chamado, de propósito — quem
+reabre a conversa tem de achar o que escreveu, mesmo se o LLM caiu no meio. O
+preço é que interromper deixa pergunta sem resposta, e editar deixaria a versão
+errada no histórico junto da certa. As duas seriam lidas pelo prompt do turno
+seguinte como parte da conversa.
+
+Daí `conversa.desfazer_ultimo_turno`, que atende os dois: apaga o par do FIM pra
+trás (nunca por texto igual — a mesma pergunta pode ter sido feita três turnos
+antes, que é o que acontece quando alguém insiste no assunto) e DEVOLVE a
+pergunta, que é o que faz "editar" ser editar em vez de digitar tudo de novo. O
+evento de "propus N questões" (016) entra na conta: sem ele o prompt afirmaria
+uma proposta que não existe mais.
+
+POST e não DELETE na rota: não é "apagar um recurso", é operação com retorno
+útil. DELETE que devolve corpo pra ser usado engana quem lê a rota.
+
+**O QUE O BOTÃO DE PARAR NÃO FAZ, e é honesto dizer:** não recupera a chamada ao
+modelo. Ela sai no início do turno, então parar não a desfaz — o que se evita é
+o que vem DEPOIS (gerar questões, gravar a resposta) e, principalmente, a pessoa
+presa numa tela cuja resposta ela já sabe que não quer. Prometer economia de
+token seria mentira.
+
+Aborto NÃO desenha balão de erro: quem clicou em parar sabe o que aconteceu, e
+"não deu pra conectar com a API" culparia a rede por uma decisão dela.
+
+O lápis aparece só na ÚLTIMA pergunta e só com a conversa parada. Editar uma do
+meio significaria descartar tudo o que veio depois, e ninguém pede isso ao
+clicar num lápis.
+
 ## Armadilhas do corpus (Planalto)
 
 - Quebra de linha no meio da frase; `normalizar_lei()` remonta.

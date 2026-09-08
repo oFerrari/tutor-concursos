@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowUp } from "lucide-react";
+import { ArrowUp, Pencil, Square } from "lucide-react";
 import { MarcaGlifo } from "@/components/Marca";
 import { BalaoQuestao } from "@/components/BalaoQuestao";
 import { GerarQuestoes } from "@/components/GerarQuestoes";
@@ -16,6 +16,7 @@ import {
   getConversa,
   getFila,
   getToken,
+  desfazerTurno,
   perguntar,
 } from "@/lib/api";
 import { sair } from "@/lib/cache";
@@ -93,6 +94,10 @@ export default function PaginaTutor() {
    *  abria com "vamos treinar isso" e vinham questões de outra matéria. */
   const [foraDoAssunto, setForaDoAssunto] = useState(false);
   const [pensando, setPensando] = useState(false);
+  /** Controlador do pedido em voo, pra PARAR. `useRef` e não estado: trocar de
+   *  controlador não precisa redesenhar nada, e um `useState` aqui faria o
+   *  botão remontar no meio do clique. */
+  const abortar = useRef<AbortController | null>(null);
   const fim = useRef<HTMLDivElement>(null);
   // O CONTAINER que rola, não o `window`. Há DOIS scrollers aninhados aqui (o
   // <main> do AppShell e este), e `scrollIntoView` decide sozinho qual ancestral
@@ -159,6 +164,108 @@ export default function PaginaTutor() {
       });
   }, [router]);
 
+  /** PARA a resposta em voo e desfaz o turno no servidor.
+
+   *
+
+   *  Duas metades, e as duas importam. Abortar o fetch libera a pessoa; desfazer
+
+   *  o turno tira do histórico a pergunta que ela não quis — ela é gravada ANTES
+
+   *  de o modelo ser chamado (014), então sem isto sobraria pergunta sem resposta,
+
+   *  e o prompt do turno seguinte a leria como parte da conversa.
+
+   *
+
+   *  O que NÃO se recupera: o pedido ao modelo que já saiu. Ele é feito no início
+
+   *  do turno, então não há promessa de economizar essa chamada — o que se evita é
+
+   *  a geração de questões e o resto do turno.
+
+   */
+
+  async function parar() {
+
+    abortar.current?.abort();
+
+    abortar.current = null;
+
+    setPensando(false);
+
+    setMensagens((ms) => ms.slice(0, -1));
+
+    if (conversaId === null) return;
+
+    try {
+
+      const r = await desfazerTurno(conversaId);
+
+      setPergunta(r.pergunta);
+    campo.current?.focus();
+
+    } catch {
+
+      // O turno pode nem ter sido gravado ainda (parada muito rápida). Nada a
+
+      // desfazer é sucesso, não erro.
+
+    }
+
+  }
+
+
+  /** EDITAR a última pergunta: desfaz o turno e devolve o texto ao campo.
+
+   *
+
+   *  É o gesto do "digitei errado" — sem ele a pessoa reescreve a pergunta inteira
+
+   *  e a versão errada fica no histórico, sendo lida pelo prompt do próximo turno
+
+   *  como se fizesse parte da conversa.
+
+   */
+
+  async function editarUltima() {
+
+    if (conversaId === null || pensando) return;
+
+    try {
+
+      const r = await desfazerTurno(conversaId);
+
+      // Tira o par (pergunta + resposta) da tela. `filter` seria errado: a
+
+      // mesma pergunta pode ter sido feita antes, e sumiriam as duas.
+
+      setMensagens((ms) => {
+
+        const corte = [...ms];
+
+        while (corte.length && corte[corte.length - 1].autor !== "usuario") corte.pop();
+
+        corte.pop();
+
+        return corte;
+
+      });
+
+      setGeradas([]);
+
+      setPergunta(r.pergunta);
+    campo.current?.focus();
+
+    } catch (e) {
+
+      setErroQuestao(e instanceof ErroApi ? e.message : "Não deu pra editar a pergunta");
+
+    }
+
+  }
+
+
   const perguntarAoTutor = useCallback(async (texto: string) => {
     if (!texto) return;
     setMensagens((m) => [...m, { autor: "usuario", texto }]);
@@ -167,8 +274,10 @@ export default function PaginaTutor() {
     // já empurram o fim da conversa pra fora da tela, e era aí que começava o
     // "tenho que ficar scrollando pra baixo".
     irAoFim(true);
+    const controlador = new AbortController();
+    abortar.current = controlador;
     try {
-      const r = await perguntar(texto, conversaId ?? undefined);
+      const r = await perguntar(texto, conversaId ?? undefined, controlador.signal);
       // Guardar o id é o que faz o SEGUNDO turno ter memória do
       // primeiro: sem ele cada pergunta abriria conversa nova e o
       // histórico não voltaria pro modelo.
@@ -210,6 +319,10 @@ export default function PaginaTutor() {
         );
       }
     } catch (err) {
+      // ABORTO NÃO É ERRO. Quem clicou em parar já sabe o que
+      // aconteceu; um balão vermelho dizendo "não deu pra conectar"
+      // culparia a rede por uma decisão da pessoa.
+      if (err instanceof DOMException && err.name === "AbortError") return;
       if (err instanceof ErroApi && err.status === 401) {
         sair();
         router.push("/login");
@@ -225,6 +338,7 @@ export default function PaginaTutor() {
         },
       ]);
     } finally {
+      abortar.current = null;
       setPensando(false);
       irAoFim(true);
     }
@@ -503,7 +617,21 @@ export default function PaginaTutor() {
           {/* --------------------------------------------- conversa real */}
           {mensagens.map((m, i) =>
             m.autor === "usuario" ? (
-              <div key={i} className="flex justify-end">
+              <div key={i} className="group/msg flex items-center justify-end gap-1.5">
+                {/* O lápis só na ÚLTIMA pergunta, e só com a conversa parada.
+                    Editar uma pergunta do meio significaria descartar tudo o
+                    que veio depois dela — e a pessoa não pediu isso ao clicar
+                    num lápis. */}
+                {i === mensagens.length - 1 && !pensando && conversaId !== null && (
+                  <button
+                    onClick={editarUltima}
+                    title="Editar esta pergunta"
+                    aria-label="editar a última pergunta"
+                    className="flex h-6 w-6 items-center justify-center rounded-[7px] text-label opacity-0 transition-all hover:bg-surface-hover hover:text-accent-text focus-visible:opacity-100 group-hover/msg:opacity-100"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                )}
                 <div className="balao-usuario">{m.texto}</div>
               </div>
             ) : (
@@ -541,7 +669,24 @@ export default function PaginaTutor() {
           )}
 
           {pensando && (
-            <p className="rotulo animate-[pxPulse_1.4s_ease-in-out_infinite] pl-[42px]">consultando o acervo</p>
+            <div className="flex items-center gap-3 pl-[42px]">
+              <p className="rotulo animate-[pxPulse_1.4s_ease-in-out_infinite]">
+                consultando o acervo
+              </p>
+              {/* PARAR. O quadradinho é a convenção de todo chat, e a razão é
+                  prática: digitou errado, viu na hora, e não quer esperar a
+                  resposta inteira pra reescrever. Parar também DESFAZ o turno,
+                  senão a pergunta indesejada fica no histórico e o prompt do
+                  turno seguinte a lê como parte da conversa. */}
+              <button
+                onClick={parar}
+                title="Parar e editar a pergunta"
+                aria-label="parar a resposta"
+                className="flex h-6 w-6 items-center justify-center rounded-[6px] border border-line-stronger text-label transition-colors hover:border-danger hover:text-danger"
+              >
+                <Square className="h-2.5 w-2.5 fill-current" />
+              </button>
+            </div>
           )}
 
           {/* As questões criadas nesta conversa, respondidas AQUI. Cada uma

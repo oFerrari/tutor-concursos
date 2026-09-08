@@ -559,7 +559,12 @@ export type Fonte = {
  *  devolve o id — o cliente não paga uma chamada a mais só pra existir. */
 export function perguntar(
   pergunta: string,
-  conversaId?: number
+  conversaId?: number,
+  /** Pra PARAR a resposta. Aborta o fetch — o pedido ao modelo que já saiu não
+   *  volta atrás, mas o que vem DEPOIS dele (gerar questões, gravar a resposta)
+   *  é o que se evita, e a pessoa deixa de ficar presa numa tela que ela já
+   *  sabe que não quer. */
+  sinal?: AbortSignal
 ): Promise<{
   resposta: string;
   fontes: Fonte[];
@@ -583,6 +588,7 @@ export function perguntar(
 }> {
   return chamar("/perguntar", {
     method: "POST",
+    signal: sinal,
     body: JSON.stringify({ pergunta, conversa_id: conversaId }),
   });
 }
@@ -617,6 +623,20 @@ export function getConversa(
   id: number
 ): Promise<ConversaNaLista & { mensagens: MensagemSalva[] }> {
   return chamar(`/conversas/${id}`);
+}
+
+/**
+ * Apaga o último turno e devolve a pergunta.
+ *
+ * É a metade servidor de PARAR e de EDITAR: a pergunta é gravada antes de o
+ * modelo ser chamado (pra ninguém reabrir a conversa e não achar o que
+ * escreveu), então interromper deixa pergunta sem resposta, e editar deixaria a
+ * versão errada no histórico junto da certa.
+ */
+export function desfazerTurno(
+  conversaId: number
+): Promise<{ pergunta: string; apagadas: number }> {
+  return chamar(`/conversas/${conversaId}/desfazer`, { method: "POST" });
 }
 
 export function apagarConversa(id: number): Promise<{ ok: boolean }> {
