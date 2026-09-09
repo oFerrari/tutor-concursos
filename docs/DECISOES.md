@@ -2607,3 +2607,83 @@ não há nome novo: com o campo vazio o clique não fazia nada e parecia quebrad
 **Lição geral, que vale pra qualquer combobox com filtro:** pré-preencher com o
 valor atual e filtrar pelo que está escrito são duas decisões boas que se
 anulam. Escolha uma.
+
+---
+
+## `sincronizar.sh`: onde o hook avisa, o script para
+
+Pergunta que originou: "quando eu der um pull, eu tenho que rodar qual comando
+pra atualizar minha máquina?". A resposta era `./setup.sh --subir`, e a resposta
+seguinte foi "coloca tudo num sincronizar.sh".
+
+**A automação já existia, e continua sendo o caminho principal.** `.githooks/`
+tem `pre-push` (exporta e manda o estado num ref próprio) e `post-merge` (traz o
+ref, migra, importa em duas fases, indexa o material em segundo plano). O script
+NÃO reimplementa nada disso — ele faz `source` do `_comum.sh` e chama
+`estado_enviar` / `estado_receber`, as mesmas funções.
+
+**O que ele acrescenta é um portão onde o hook tem um aviso.** A decisão dos
+hooks está certa e é explícita no código deles: "falha aqui NUNCA derruba a
+operação do git, porque banco desligado não pode impedir commit". A consequência
+é que um `git pull` com migração pendente imprime
+
+```
+  [tutor] migracao pendente nao aplicada — rode ./setup.sh --subir
+```
+
+no meio da saída do git, e segue. A linha passa batida, o código novo conversa
+com o schema velho, e a aplicação SOBE pra quebrar depois — exatamente o modo de
+falha que a migração 023 existe pra fechar. No script a mesma falha para o
+comando, com a razão e o próximo passo. É a diferença entre um aviso e um
+portão, e é a única justificativa dele existir.
+
+Três decisões pequenas dentro:
+
+- **`git pull --ff-only`.** Merge automático nas costas de quem chamou um script
+  de conveniência é a última coisa que ele deve fazer. Divergência para, dizendo
+  qual comando resolve.
+- **O estado vai sozinho; o CÓDIGO pergunta.** `--sair` manda o estado sem
+  perguntar (é rotina de dado, e o hook faria igual), mas commit de código não:
+  publicar código é decisão de quem escreveu. E a pergunta só acontece com
+  terminal (`[ -t 0 ]`) — sem TTY o `read` falha, e com `set -e` isso abortaria
+  o script DEPOIS de o estado já ter subido, parando no meio da única parte que
+  não se repete de graça.
+- **Um relatório de pendências no fim.** Duas coisas terminam em segundo plano
+  aqui: o embedding do material que veio no pacote e a reindexação que a 027
+  pede. Sem essa linha, "acabou" e "está trabalhando" ficam iguais na tela.
+
+### Dois defeitos no próprio script, achados rodando
+
+**Backtick dentro de aspas duplas EXECUTA.** Duas mensagens de erro tinham
+`` `git rebase` `` e `` `docker compose logs` `` entre aspas duplas — a de
+divergência rodaria `git rebase` de verdade, dentro da mensagem que explica a
+divergência. Trocadas por aspas simples. Vale como classe: crase em mensagem de
+shell é código, não tipografia.
+
+**Heredoc de Python rodando da raiz.** A contagem de material pendente saía como
+`?` porque `from core import db` só resolve em `apps/api` — e `load_dotenv()`
+procura do diretório ATUAL. Mesmo `cd` que o `testar.sh` e o `./tutor`
+documentam, pelo mesmo motivo.
+
+### E o livro-razão que eu mesmo desalinhei
+
+`migrar.py --listar` passou a avisar que a 027 "foi EDITADO depois de aplicado".
+Verdade: apliquei, medi, descobri que faltava tirar a disciplina do rótulo, e
+editei o arquivo em vez de criar uma 028 — aplicando o delta à mão.
+
+O aviso é bom e a mensagem dele é honesta ("o efeito da edição NÃO está neste
+banco. Se ela importa, faça uma migração nova"), mas ali ela afirmava o
+contrário do que o banco mostrava. Conferido antes de tocar em nada: nenhum
+material de referência com assunto ou rótulo — o efeito da versão FINAL está
+presente. E a versão antiga nunca saiu desta máquina: a 027 foi commitada uma
+vez só, já na forma final, então toda outra máquina roda a certa de primeira.
+
+Com isso o checksum do livro-razão foi atualizado à mão, nesta máquina, porque
+registrar o hash novo é dizer a verdade sobre este banco. O que NÃO se faz é
+generalizar isso pro `migrar.py`: ele avisa e segue justamente porque, no caso
+geral, não dá pra saber se a edição já teve efeito — e adivinhar é o que aquele
+script existe pra não fazer. Aqui não houve adivinhação, houve verificação.
+
+**A lição verdadeira é anterior:** eu não devia ter editado migração aplicada.
+Custou uma verificação, um UPDATE manual e este parágrafo. A regra do CLAUDE.md
+("a PRÓXIMA migração é a N") existe pra isso.

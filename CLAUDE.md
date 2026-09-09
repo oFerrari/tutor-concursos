@@ -118,6 +118,8 @@ sincronizar.py             exporta/importa questões e progresso de UM usuário 
 semear_demo.py             semeia conta descartável com 3 mesas e 15 dias, pra olhar a TELA
 avaliar_chat.py            aluno SINTÉTICO conversa com o tutor; mostra o que virou vetor e o que a resposta tem de errado
 testar.sh (raiz)           ./testar.sh — o comando único da avaliação do chat (banco, venv, chave, e a suíte em --pytest)
+sincronizar.sh (raiz)      trocar de máquina num comando: --sair / (nada) / --subir / --status.
+                           Orquestra os hooks de .githooks/, e PARA onde eles só avisam
 migrar.py                  aplica as migrações de db/ que faltam (único mecanismo)
 atualizar.sh               instala arquivos baixados do chat
 Dockerfile (apps/api)      backend containerizado — torch CPU-only, modelo DENTRO da imagem
@@ -242,8 +244,12 @@ outra medição, não com opinião.
   inexistente, `stats --json` devolvendo `Decimal` que quebra `json.dumps`)
   até alguém tentar de verdade. `./setup.sh` chama o `migrar.py` antes do
   corpus, então "cheguei na outra máquina" voltou a ser um comando.
-- Ao sair de uma máquina: `python sincronizar.py exportar` antes do commit/push,
-  sempre — senão a próxima exportação (de qualquer lado) sobrescreve progresso.
+- **Trocar de máquina é `./sincronizar.sh`**: `--sair` na que você deixa,
+  sem argumento na que você senta. Os hooks (`.githooks/`) já fazem isso no
+  push/pull; o script existe porque hook NÃO derruba operação de git — migração
+  pendente vira uma linha de aviso no meio da saída do `git pull`, e o código
+  novo passa a conversar com o schema velho. No script, a mesma falha PARA.
+  `./sincronizar.sh --status` diagnostica sem tocar em nada.
 - Testar qualquer coisa que grave em `tentativa`/`progresso`/`simulado`/`edital`/`mesa`
   contra um usuário DESCARTÁVEL (`auth.usuario_da_cli("teste-x@local")`),
   nunca contra a conta real (`CLI_USUARIO_EMAIL`). Apagar com
@@ -337,11 +343,16 @@ export DATABASE_URL='postgresql://...'   # Postgres com pgvector (Neon/Supabase)
 ./subir-vercel.sh --status               # o que está de pé, aqui e lá
 API_PUBLICA=https://sua-api ./subir-vercel.sh --status
 
-# ao sair de uma máquina
-python sincronizar.py exportar && git add -A && git commit -m "progresso" && git push
+# TROCAR DE MÁQUINA — um comando de cada lado (de qualquer pasta do repo)
+./sincronizar.sh --sair       # na que você deixa: manda estado (e pergunta do código)
+./sincronizar.sh              # na que você senta: pull + schema + estado + relatório
+./sincronizar.sh --subir      # o mesmo, e ainda sobe API e frontend
+./sincronizar.sh --status     # o que está fora de sincronia, sem tocar em nada
 
-# ao chegar na outra (ingira o material antes, se ainda não ingeriu)
-git pull && python sincronizar.py importar
+# as peças, se quiser rodar isolado
+python sincronizar.py exportar        # o pacote, do banco pro dados/progresso.json
+python sincronizar.py importar        # o pacote pro banco (união, idempotente)
+python sincronizar.py estado          # o que tem no banco e no arquivo, sem escrever
 
 # API (o apps/web consome de verdade; curl abaixo pra testar sem o front)
 uvicorn api:app --reload --port 8000
