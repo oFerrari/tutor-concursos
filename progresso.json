@@ -1,6 +1,6 @@
 {
  "versao": "sincronizar-v4",
- "gerado_em": "2026-09-09T11:13:21",
+ "gerado_em": "2026-09-10T10:09:40",
  "usuario_email": "estudante@local",
  "usuarios": [
   {
@@ -7043,6 +7043,26 @@
    ],
    "doc_titulo": "cp",
    "criada_em": "2026-09-08T12:40:29.030752+00:00"
+  },
+  {
+   "chave": "d2b7ae6b66d23dbb",
+   "disciplina": "Direito Penal",
+   "texto": "João, funcionário público de uma autarquia federal e responsável pela guarda de notebooks institucionais, deixou a porta do depósito aberta por negligência ao final do expediente. Aproveitando-se dessa facilidade, um terceiro estranho à administração pública entrou no local e subtraiu três aparelhos. Antes do trânsito em julgado de eventual sentença penal condenatória, João ressarciu integralmente o valor dos notebooks à administração.",
+   "fontes": [
+    "art:CP|312"
+   ],
+   "doc_titulo": "cp",
+   "criada_em": "2026-09-10T13:28:16.564001+00:00"
+  },
+  {
+   "chave": "cbb5f6a71218ad90",
+   "disciplina": "Direito Penal",
+   "texto": "João, funcionário público, aproveitando-se de sua função, subtraiu um computador do órgão onde trabalha, embora não tivesse a posse direta do bem. Em outra situação, Maria, também funcionária pública, agindo com negligência, deixou a porta do almoxarifado aberta, facilitando que um terceiro subtraísse materiais de escritório, vindo a reparar o dano causado antes da sentença irrecorrível.",
+   "fontes": [
+    "art:CP|312"
+   ],
+   "doc_titulo": "cp",
+   "criada_em": "2026-09-10T13:48:51.413642+00:00"
   }
  ],
  "questoes": [
@@ -12798,10 +12818,10 @@
    "contexto": null,
    "ordem_no_contexto": null,
    "fontes": [
-    "art:CP|312"
+    "art:CP|178"
    ],
    "artigos": [
-    "CP|312"
+    "CP|178"
    ]
   },
   {
@@ -13750,6 +13770,915 @@
    ],
    "artigos": [
     "CF|1º"
+   ]
+  },
+  {
+   "chave": "08fcba2ab8d28883",
+   "disciplina": "Direito Penal",
+   "tema": "Peculato culposo",
+   "enunciado": "Qual é o efeito jurídico da reparação do dano no crime de peculato culposo quando realizada após a sentença irrecorrível?",
+   "gabarito": "A reparação do dano posterior à sentença irrecorrível reduz de metade a pena imposta ao funcionário público. O dispositivo legal prevê essa causa de redução específica para a modalidade culposa.",
+   "dicas": [
+    "Observe o parágrafo terceiro do artigo 312 do Código Penal.",
+    "O texto diferencia o momento da reparação em relação à sentença irrecorrível.",
+    "A reparação após a sentença não extingue a punibilidade, mas incide sobre a pena."
+   ],
+   "criada_em": "2026-09-10T13:22:57.644848+00:00",
+   "doc_titulo": "cp",
+   "tipo": "resposta_livre",
+   "gabarito_ce": null,
+   "usuario": null,
+   "contexto": null,
+   "ordem_no_contexto": null,
+   "fontes": [
+    "art:CP|312"
+   ],
+   "artigos": [
+    "CP|312"
+   ]
+  },
+  {
+   "chave": "f940453df9517619",
+   "disciplina": "Direito Penal",
+   "tema": "Peculato culposo",
+   "enunciado": "No crime de peculato culposo, qual é a consequência jurídica se o agente realizar a reparação do dano antes da sentença irrecorrível?",
+   "gabarito": "A reparação do dano que precede à sentença irrecorrível extingue a punibilidade do agente.",
+   "dicas": [
+    "Analise as regras específicas do peculato culposo previstas no parágrafo terceiro do artigo 312.",
+    "A consequência varia a depender do momento em que ocorre a reparação, se antes ou depois da sentença irrecorrível.",
+    "Se a reparação do dano é anterior à sentença irrecorrível, o efeito é a extinção da punibilidade."
+   ],
+   "criada_em": "2026-09-10T13:27:45.238757+00:00",
+   "doc_titulo": "cp",
+   "tipo": "resposta_livre",
+   "gabarito_ce": null,
+   "usuario": null,
+   "contexto": null,
+   "ordem_no_contexto": null,
+   "fontes": [
+    "art:CP|312"
+   ],
+   "artigos": [
+    "CP|312"
+   ]
+  },
+  {
+   "chave": "ca6c292177efa895",
+   "disciplina": "Direito Penal",
+   "tema": "Emissão irregular de conhecimento de depósito ou warrant",
+   "enunciado": "Qual é a pena privativa de liberdade prevista para o crime de emissão irregular de conhecimento de depósito ou warrant?",
+   "gabarito": "A pena privativa de liberdade prevista para este crime é de reclusão, de um a quatro anos.",
+   "dicas": [
+    "Verifique o preceito secundário do artigo 178 do Código Penal.",
+    "A modalidade de pena de prisão cominada a este delito é a reclusão.",
+    "O limite mínimo da reclusão é de um ano e o máximo é de quatro anos."
+   ],
+   "criada_em": "2026-09-10T13:27:45.242376+00:00",
+   "doc_titulo": "cp",
+   "tipo": "resposta_livre",
+   "gabarito_ce": null,
+   "usuario": null,
+   "contexto": null,
+   "ordem_no_contexto": null,
+   "fontes": [
+    "art:CP|178"
+   ],
+   "artigos": [
+    "CP|178"
+   ]
+  },
+  {
+   "chave": "61c682cd35364069",
+   "disciplina": "Direito Penal",
+   "tema": "Peculato",
+   "enunciado": "Qual é a conduta típica do crime de peculato prevista no caput do artigo 312 do Código Penal?",
+   "gabarito": "A conduta consiste em apropriar-se o funcionário público de dinheiro, valor ou qualquer outro bem móvel, público ou particular, de que tem a posse em razão do cargo, ou desviá-lo em proveito próprio ou alheio.",
+   "dicas": [
+    "Observe o verbo principal do tipo penal.",
+    "O crime exige que o agente tenha a posse do bem em razão do cargo.",
+    "O tipo penal descreve as condutas de apropriação e desvio de bens móveis."
+   ],
+   "criada_em": "2026-09-10T13:27:49.664316+00:00",
+   "doc_titulo": "cp",
+   "tipo": "resposta_livre",
+   "gabarito_ce": null,
+   "usuario": null,
+   "contexto": null,
+   "ordem_no_contexto": null,
+   "fontes": [
+    "art:CP|312"
+   ],
+   "artigos": [
+    "CP|312"
+   ]
+  },
+  {
+   "chave": "f268af90d480b301",
+   "disciplina": "Direito Penal",
+   "tema": "Emissão irregular de conhecimento de depósito",
+   "enunciado": "Qual é a pena cominada ao crime de emissão irregular de conhecimento de depósito ou warrant?",
+   "gabarito": "A pena prevista é de reclusão, de um a quatro anos, e multa.",
+   "dicas": [
+    "Verifique o final do artigo 178.",
+    "A pena privativa de liberdade é de reclusão.",
+    "O intervalo da pena de reclusão é de um a quatro anos."
+   ],
+   "criada_em": "2026-09-10T13:27:49.669373+00:00",
+   "doc_titulo": "cp",
+   "tipo": "resposta_livre",
+   "gabarito_ce": null,
+   "usuario": null,
+   "contexto": null,
+   "ordem_no_contexto": null,
+   "fontes": [
+    "art:CP|178"
+   ],
+   "artigos": [
+    "CP|178"
+   ]
+  },
+  {
+   "chave": "a32dc86a73680e0f",
+   "disciplina": "Direito Penal",
+   "tema": "Peculato mediante erro de outrem",
+   "enunciado": "Qual é a conduta típica do crime de peculato mediante erro de outrem?",
+   "gabarito": "A conduta consiste em apropriar-se de dinheiro ou qualquer utilidade que, no exercício do cargo, o funcionário recebeu por erro de outrem.",
+   "dicas": [
+    "Analise o verbo do tipo penal.",
+    "O crime ocorre quando o funcionário recebe algo indevidamente por um equívoco de terceiros.",
+    "O agente se apropria de algo recebido por erro de outrem durante o exercício do cargo."
+   ],
+   "criada_em": "2026-09-10T13:27:49.673198+00:00",
+   "doc_titulo": "cp",
+   "tipo": "resposta_livre",
+   "gabarito_ce": null,
+   "usuario": null,
+   "contexto": null,
+   "ordem_no_contexto": null,
+   "fontes": [
+    "art:CP|313"
+   ],
+   "artigos": [
+    "CP|313"
+   ]
+  },
+  {
+   "chave": "ad5a304c31b85519",
+   "disciplina": "Direito Penal",
+   "tema": "Peculato culposo e extinção da punibilidade",
+   "enunciado": "Na situação hipotética apresentada, a conduta de João configura peculato culposo, e a reparação do dano realizada antes da sentença irrecorrível extingue a sua punibilidade.",
+   "gabarito": "A conduta negligente de João que permitiu a subtração por terceiro caracteriza o peculato culposo (art. 312, § 2º, do CP). Como a reparação do dano ocorreu antes da sentença irrecorrível, a punibilidade é extinta, nos termos do art. 312, § 3º, do CP.",
+   "dicas": [],
+   "criada_em": "2026-09-10T13:28:16.569499+00:00",
+   "doc_titulo": "cp",
+   "tipo": "certo_errado",
+   "gabarito_ce": true,
+   "usuario": null,
+   "contexto": "d2b7ae6b66d23dbb",
+   "ordem_no_contexto": 1,
+   "fontes": [
+    "art:CP|312"
+   ],
+   "artigos": [
+    "CP|312"
+   ]
+  },
+  {
+   "chave": "f93ab79ef7bf7025",
+   "disciplina": "Direito Penal",
+   "tema": "Efeitos da reparação do dano posterior no peculato culposo",
+   "enunciado": "Caso João realizasse a reparação do dano somente após o trânsito em julgado da sentença condenatória, tal ato não produziria qualquer efeito sobre a sanção penal, visto que a reparação tardia é irrelevante para a dosimetria da pena.",
+   "gabarito": "A afirmação está incorreta porque, nos termos do art. 312, § 3º, do Código Penal, se a reparação do dano for posterior à sentença irrecorrível, ela reduz de metade a pena imposta.",
+   "dicas": [],
+   "criada_em": "2026-09-10T13:28:16.573009+00:00",
+   "doc_titulo": "cp",
+   "tipo": "certo_errado",
+   "gabarito_ce": false,
+   "usuario": null,
+   "contexto": "d2b7ae6b66d23dbb",
+   "ordem_no_contexto": 2,
+   "fontes": [
+    "art:CP|312"
+   ],
+   "artigos": [
+    "CP|312"
+   ]
+  },
+  {
+   "chave": "08fcba2ab8d28883",
+   "disciplina": "Direito Penal",
+   "tema": "Peculato culposo",
+   "enunciado": "Qual é o efeito jurídico da reparação do dano no crime de peculato culposo quando realizada após a sentença irrecorrível?",
+   "gabarito": "A reparação do dano posterior à sentença irrecorrível reduz de metade a pena imposta ao funcionário público.",
+   "dicas": [
+    "Observe o parágrafo terceiro do artigo 312.",
+    "O dispositivo trata de duas situações temporais distintas para a reparação do dano.",
+    "A reparação após a sentença não extingue a punibilidade, mas gera um benefício na dosimetria da pena."
+   ],
+   "criada_em": "2026-09-10T13:28:49.954310+00:00",
+   "doc_titulo": "cp",
+   "tipo": "resposta_livre",
+   "gabarito_ce": null,
+   "usuario": null,
+   "contexto": null,
+   "ordem_no_contexto": null,
+   "fontes": [
+    "art:CP|312"
+   ],
+   "artigos": [
+    "CP|312"
+   ]
+  },
+  {
+   "chave": "b40e3dc617328020",
+   "disciplina": "Direito Penal",
+   "tema": "Peculato mediante erro de outrem",
+   "enunciado": "Qual é a conduta típica descrita no crime de peculato mediante erro de outrem?",
+   "gabarito": "A conduta consiste em apropriar-se de dinheiro ou qualquer utilidade que o funcionário público recebeu por erro de outrem no exercício do cargo.",
+   "dicas": [
+    "Analise o núcleo do tipo penal previsto no artigo 313.",
+    "O crime ocorre quando o agente recebe algo indevidamente devido a uma falha de terceiros.",
+    "O verbo principal é o mesmo utilizado no caput do crime de peculato comum."
+   ],
+   "criada_em": "2026-09-10T13:28:49.959052+00:00",
+   "doc_titulo": "cp",
+   "tipo": "resposta_livre",
+   "gabarito_ce": null,
+   "usuario": null,
+   "contexto": null,
+   "ordem_no_contexto": null,
+   "fontes": [
+    "art:CP|313"
+   ],
+   "artigos": [
+    "CP|313"
+   ]
+  },
+  {
+   "chave": "6ab4507a929ebac3",
+   "disciplina": "Direito Penal",
+   "tema": "Induzimento à especulação",
+   "enunciado": "Quais são as condições pessoais da vítima exigidas para a configuração do crime de induzimento à especulação?",
+   "gabarito": "O crime exige que o agente abuse da inexperiência, da simplicidade ou da inferioridade mental da vítima.",
+   "dicas": [
+    "Verifique as elementares do tipo penal no artigo 174.",
+    "O dispositivo protege pessoas em situação de vulnerabilidade cognitiva ou social.",
+    "São três as condições alternativas listadas no texto legal."
+   ],
+   "criada_em": "2026-09-10T13:28:49.962862+00:00",
+   "doc_titulo": "cp",
+   "tipo": "resposta_livre",
+   "gabarito_ce": null,
+   "usuario": null,
+   "contexto": null,
+   "ordem_no_contexto": null,
+   "fontes": [
+    "art:CP|174"
+   ],
+   "artigos": [
+    "CP|174"
+   ]
+  },
+  {
+   "chave": "ca6c292177efa895",
+   "disciplina": "Direito Penal",
+   "tema": "Emissão irregular de conhecimento de depósito ou warrant",
+   "enunciado": "Qual é a pena privativa de liberdade prevista para o crime de emissão irregular de conhecimento de depósito ou warrant?",
+   "gabarito": "A pena prevista é de reclusão, de um a quatro anos, além da multa.",
+   "dicas": [
+    "O crime está inserido no capítulo de estelionato e outras fraudes.",
+    "A sanção penal é composta por reclusão e multa.",
+    "O limite máximo da pena de reclusão é de quatro anos."
+   ],
+   "criada_em": "2026-09-10T13:28:49.965675+00:00",
+   "doc_titulo": "cp",
+   "tipo": "resposta_livre",
+   "gabarito_ce": null,
+   "usuario": null,
+   "contexto": null,
+   "ordem_no_contexto": null,
+   "fontes": [
+    "art:CP|178"
+   ],
+   "artigos": [
+    "CP|178"
+   ]
+  },
+  {
+   "chave": "08fcba2ab8d28883",
+   "disciplina": "Direito Penal",
+   "tema": "Peculato culposo",
+   "enunciado": "Qual é o efeito jurídico da reparação do dano no crime de peculato culposo quando realizada após a sentença irrecorrível?",
+   "gabarito": "A reparação do dano posterior à sentença irrecorrível reduz de metade a pena imposta ao funcionário público. Trata-se de causa de diminuição de pena específica prevista no parágrafo terceiro do artigo 312.",
+   "dicas": [
+    "Observe as consequências previstas para o peculato culposo.",
+    "O dispositivo trata de duas situações temporais distintas para a reparação do dano.",
+    "O texto menciona expressamente o que ocorre com a pena quando a reparação é posterior à sentença."
+   ],
+   "criada_em": "2026-09-10T13:28:52.940880+00:00",
+   "doc_titulo": "cp",
+   "tipo": "resposta_livre",
+   "gabarito_ce": null,
+   "usuario": null,
+   "contexto": null,
+   "ordem_no_contexto": null,
+   "fontes": [
+    "art:CP|312"
+   ],
+   "artigos": [
+    "CP|312"
+   ]
+  },
+  {
+   "chave": "fa0804fe7a651edb",
+   "disciplina": "Direito Penal",
+   "tema": "Peculato culposo",
+   "enunciado": "Qual é a consequência jurídica da reparação do dano no crime de peculato culposo quando esta ocorre após a sentença irrecorrível?",
+   "gabarito": "A reparação do dano posterior à sentença irrecorrível reduz de metade a pena imposta ao funcionário público.",
+   "dicas": [
+    "Observe o parágrafo terceiro do artigo 312.",
+    "O dispositivo trata de duas situações temporais distintas em relação à sentença.",
+    "A reparação após o trânsito em julgado não extingue a punibilidade, mas gera um benefício penal."
+   ],
+   "criada_em": "2026-09-10T13:29:14.288386+00:00",
+   "doc_titulo": "cp",
+   "tipo": "resposta_livre",
+   "gabarito_ce": null,
+   "usuario": null,
+   "contexto": null,
+   "ordem_no_contexto": null,
+   "fontes": [
+    "art:CP|312"
+   ],
+   "artigos": [
+    "CP|312"
+   ]
+  },
+  {
+   "chave": "b40e3dc617328020",
+   "disciplina": "Direito Penal",
+   "tema": "Peculato mediante erro de outrem",
+   "enunciado": "Qual é a conduta típica descrita no crime de peculato mediante erro de outrem?",
+   "gabarito": "A conduta consiste em apropriar-se de dinheiro ou qualquer utilidade que o funcionário público recebeu por erro de outrem, no exercício do cargo.",
+   "dicas": [
+    "Analise o verbo principal do tipo penal no artigo 313.",
+    "O crime ocorre quando o funcionário público recebe algo indevidamente devido a um equívoco de terceiro.",
+    "O núcleo do tipo é a apropriação de bem recebido por erro alheio durante o exercício da função."
+   ],
+   "criada_em": "2026-09-10T13:29:14.294417+00:00",
+   "doc_titulo": "cp",
+   "tipo": "resposta_livre",
+   "gabarito_ce": null,
+   "usuario": null,
+   "contexto": null,
+   "ordem_no_contexto": null,
+   "fontes": [
+    "art:CP|313"
+   ],
+   "artigos": [
+    "CP|313"
+   ]
+  },
+  {
+   "chave": "bde6d5cc373560ed",
+   "disciplina": "Direito Administrativo",
+   "tema": "Processo Administrativo Disciplinar",
+   "enunciado": "Qual é o objetivo da comissão durante a fase de inquérito no processo administrativo disciplinar?",
+   "gabarito": "O objetivo é a coleta de prova para permitir a completa elucidação dos fatos.",
+   "dicas": [
+    "Consulte as atribuições da comissão na fase de inquérito.",
+    "A comissão utiliza diversos meios como depoimentos e perícias.",
+    "O foco da atuação da comissão é o esclarecimento total do que aconteceu."
+   ],
+   "criada_em": "2026-09-10T13:29:14.299135+00:00",
+   "doc_titulo": "Lei 8.112/1990",
+   "tipo": "resposta_livre",
+   "gabarito_ce": null,
+   "usuario": null,
+   "contexto": null,
+   "ordem_no_contexto": null,
+   "fontes": [
+    "art:L8112|155"
+   ],
+   "artigos": [
+    "L8112|155"
+   ]
+  },
+  {
+   "chave": "ef6f75c61ec6360c",
+   "disciplina": "Direito Penal",
+   "tema": "Peculato-furto",
+   "enunciado": "Qual é a conduta típica do funcionário público que, embora não possua a posse do bem, concorre para que ele seja subtraído valendo-se da facilidade proporcionada pelo cargo?",
+   "gabarito": "A conduta consiste em subtrair o bem ou concorrer para a sua subtração, valendo-se da facilidade que a qualidade de funcionário público lhe proporciona. Esta modalidade é equiparada ao peculato próprio.",
+   "dicas": [
+    "Observe o parágrafo primeiro do artigo 312.",
+    "O agente não detém a posse legítima do bem antes da conduta.",
+    "O tipo penal descreve a subtração ou a concorrência para a subtração facilitada pelo cargo."
+   ],
+   "criada_em": "2026-09-10T13:29:14.303139+00:00",
+   "doc_titulo": "cp",
+   "tipo": "resposta_livre",
+   "gabarito_ce": null,
+   "usuario": null,
+   "contexto": null,
+   "ordem_no_contexto": null,
+   "fontes": [
+    "art:CP|312"
+   ],
+   "artigos": [
+    "CP|312"
+   ]
+  },
+  {
+   "chave": "ca6c292177efa895",
+   "disciplina": "Direito Penal",
+   "tema": "Emissão irregular de conhecimento de depósito ou warrant",
+   "enunciado": "Qual é a pena privativa de liberdade prevista para o crime de emissão irregular de conhecimento de depósito ou warrant?",
+   "gabarito": "A pena prevista é de reclusão, de um a quatro anos, além da multa.",
+   "dicas": [
+    "Consulte o artigo 178 do Código Penal.",
+    "A sanção é composta por reclusão e multa.",
+    "O limite máximo da pena privativa de liberdade é de quatro anos."
+   ],
+   "criada_em": "2026-09-10T13:29:14.310134+00:00",
+   "doc_titulo": "cp",
+   "tipo": "resposta_livre",
+   "gabarito_ce": null,
+   "usuario": null,
+   "contexto": null,
+   "ordem_no_contexto": null,
+   "fontes": [
+    "art:CP|178"
+   ],
+   "artigos": [
+    "CP|178"
+   ]
+  },
+  {
+   "chave": "08fcba2ab8d28883",
+   "disciplina": "Direito Penal",
+   "tema": "Peculato culposo",
+   "enunciado": "Qual é o efeito jurídico da reparação do dano no crime de peculato culposo quando realizada após a sentença irrecorrível?",
+   "gabarito": "A reparação do dano posterior à sentença irrecorrível reduz de metade a pena imposta ao funcionário público. Trata-se de causa de diminuição de pena prevista no parágrafo terceiro do artigo 312.",
+   "dicas": [
+    "Observe as consequências da reparação do dano no peculato culposo.",
+    "O parágrafo terceiro do artigo 312 trata de dois momentos distintos para a reparação do dano.",
+    "A reparação após a sentença irrecorrível não extingue a punibilidade, mas gera um benefício na pena."
+   ],
+   "criada_em": "2026-09-10T13:47:47.032418+00:00",
+   "doc_titulo": "cp",
+   "tipo": "resposta_livre",
+   "gabarito_ce": null,
+   "usuario": null,
+   "contexto": null,
+   "ordem_no_contexto": null,
+   "fontes": [
+    "art:CP|312"
+   ],
+   "artigos": [
+    "CP|312"
+   ]
+  },
+  {
+   "chave": "61c682cd35364069",
+   "disciplina": "Direito Penal",
+   "tema": "Peculato",
+   "enunciado": "Qual é a conduta típica do crime de peculato prevista no caput do artigo 312 do Código Penal?",
+   "gabarito": "A conduta consiste em o funcionário público apropriar-se de dinheiro, valor ou qualquer outro bem móvel, público ou particular, de que tem a posse em razão do cargo, ou desviá-lo em proveito próprio ou alheio.",
+   "dicas": [
+    "Observe o verbo principal do tipo penal.",
+    "O crime exige que o agente tenha a posse do bem em razão do cargo.",
+    "A conduta envolve a apropriação ou o desvio do bem."
+   ],
+   "criada_em": "2026-09-10T13:48:34.820768+00:00",
+   "doc_titulo": "cp",
+   "tipo": "resposta_livre",
+   "gabarito_ce": null,
+   "usuario": null,
+   "contexto": null,
+   "ordem_no_contexto": null,
+   "fontes": [
+    "art:CP|312"
+   ],
+   "artigos": [
+    "CP|312"
+   ]
+  },
+  {
+   "chave": "f268af90d480b301",
+   "disciplina": "Direito Penal",
+   "tema": "Emissão irregular de conhecimento de depósito ou warrant",
+   "enunciado": "Qual é a pena cominada ao crime de emissão irregular de conhecimento de depósito ou warrant?",
+   "gabarito": "A pena prevista é de reclusão, de um a quatro anos, e multa.",
+   "dicas": [
+    "Verifique o final do dispositivo legal citado.",
+    "A pena é composta por privativa de liberdade e pecuniária.",
+    "O limite máximo da reclusão é de quatro anos."
+   ],
+   "criada_em": "2026-09-10T13:48:34.827221+00:00",
+   "doc_titulo": "cp",
+   "tipo": "resposta_livre",
+   "gabarito_ce": null,
+   "usuario": null,
+   "contexto": null,
+   "ordem_no_contexto": null,
+   "fontes": [
+    "art:CP|178"
+   ],
+   "artigos": [
+    "CP|178"
+   ]
+  },
+  {
+   "chave": "61c682cd35364069",
+   "disciplina": "Direito Penal",
+   "tema": "Peculato",
+   "enunciado": "Qual é a conduta típica do crime de peculato prevista no caput do artigo 312 do Código Penal?",
+   "gabarito": "A conduta consiste em apropriar-se o funcionário público de dinheiro, valor ou qualquer outro bem móvel, público ou particular, de que tem a posse em razão do cargo, ou desviá-lo em proveito próprio ou alheio.",
+   "dicas": [
+    "Observe o verbo principal do tipo penal.",
+    "O crime envolve a relação do funcionário com a posse do bem.",
+    "O tipo penal descreve a apropriação ou o desvio de bens sob posse do funcionário em razão do cargo."
+   ],
+   "criada_em": "2026-09-10T13:48:42.687191+00:00",
+   "doc_titulo": "cp",
+   "tipo": "resposta_livre",
+   "gabarito_ce": null,
+   "usuario": null,
+   "contexto": null,
+   "ordem_no_contexto": null,
+   "fontes": [
+    "art:CP|312"
+   ],
+   "artigos": [
+    "CP|312"
+   ]
+  },
+  {
+   "chave": "f268af90d480b301",
+   "disciplina": "Direito Penal",
+   "tema": "Emissão irregular de conhecimento de depósito ou warrant",
+   "enunciado": "Qual é a pena cominada ao crime de emissão irregular de conhecimento de depósito ou warrant?",
+   "gabarito": "A pena é de reclusão, de um a quatro anos, e multa.",
+   "dicas": [
+    "Consulte o capítulo sobre estelionato e outras fraudes.",
+    "A pena privativa de liberdade é de reclusão.",
+    "O limite temporal da pena de reclusão é de um a quatro anos."
+   ],
+   "criada_em": "2026-09-10T13:48:42.694573+00:00",
+   "doc_titulo": "cp",
+   "tipo": "resposta_livre",
+   "gabarito_ce": null,
+   "usuario": null,
+   "contexto": null,
+   "ordem_no_contexto": null,
+   "fontes": [
+    "art:CP|178"
+   ],
+   "artigos": [
+    "CP|178"
+   ]
+  },
+  {
+   "chave": "9f164a293e305918",
+   "disciplina": "Direito Penal",
+   "tema": "Peculato mediante erro de outrem",
+   "enunciado": "Qual é o elemento circunstancial necessário para a configuração do crime de peculato mediante erro de outrem?",
+   "gabarito": "O funcionário deve apropriar-se de dinheiro ou utilidade que recebeu por erro de outrem no exercício do cargo.",
+   "dicas": [
+    "Analise a origem do recebimento do bem pelo funcionário.",
+    "O tipo penal exige uma falha de terceiro.",
+    "O recebimento do bem ocorre no exercício do cargo devido a uma percepção equivocada de outra pessoa."
+   ],
+   "criada_em": "2026-09-10T13:48:42.701417+00:00",
+   "doc_titulo": "cp",
+   "tipo": "resposta_livre",
+   "gabarito_ce": null,
+   "usuario": null,
+   "contexto": null,
+   "ordem_no_contexto": null,
+   "fontes": [
+    "art:CP|313"
+   ],
+   "artigos": [
+    "CP|313"
+   ]
+  },
+  {
+   "chave": "7b24ea6a5706c275",
+   "disciplina": "Direito Penal",
+   "tema": "Peculato-furto",
+   "enunciado": "A conduta de João configura crime de peculato, sujeitando-o à mesma pena prevista para o funcionário que se apropria de bem de que tem a posse em razão do cargo.",
+   "gabarito": "O parágrafo 1º do artigo 312 estabelece que se aplica a mesma pena do peculato ao funcionário que, embora não tendo a posse, subtrai o bem valendo-se da facilidade proporcionada pela qualidade de funcionário.",
+   "dicas": [],
+   "criada_em": "2026-09-10T13:48:51.421673+00:00",
+   "doc_titulo": "cp",
+   "tipo": "certo_errado",
+   "gabarito_ce": true,
+   "usuario": null,
+   "contexto": "cbb5f6a71218ad90",
+   "ordem_no_contexto": 1,
+   "fontes": [
+    "art:CP|312"
+   ],
+   "artigos": [
+    "CP|312"
+   ]
+  },
+  {
+   "chave": "7929b03ad9d64024",
+   "disciplina": "Direito Penal",
+   "tema": "Peculato culposo",
+   "enunciado": "A reparação do dano realizada por Maria, por ter ocorrido antes da sentença irrecorrível, reduz a pena imposta pela metade.",
+   "gabarito": "Conforme o parágrafo 3º do artigo 312, a reparação do dano que precede a sentença irrecorrível extingue a punibilidade, e não apenas reduz a pena.",
+   "dicas": [],
+   "criada_em": "2026-09-10T13:48:51.426140+00:00",
+   "doc_titulo": "cp",
+   "tipo": "certo_errado",
+   "gabarito_ce": false,
+   "usuario": null,
+   "contexto": "cbb5f6a71218ad90",
+   "ordem_no_contexto": 2,
+   "fontes": [
+    "art:CP|312"
+   ],
+   "artigos": [
+    "CP|312"
+   ]
+  },
+  {
+   "chave": "a1c5af36c1bb8276",
+   "disciplina": "Direito Penal",
+   "tema": "Tema 312",
+   "enunciado": "Enunciado?",
+   "gabarito": "Gabarito.",
+   "dicas": [
+    "d1",
+    "d2",
+    "d3"
+   ],
+   "criada_em": "2026-09-10T13:52:20.367073+00:00",
+   "doc_titulo": "cp",
+   "tipo": "resposta_livre",
+   "gabarito_ce": null,
+   "usuario": null,
+   "contexto": null,
+   "ordem_no_contexto": null,
+   "fontes": [
+    "art:CP|312"
+   ],
+   "artigos": [
+    "CP|312"
+   ]
+  },
+  {
+   "chave": "a1c5af36c1bb8276",
+   "disciplina": "Direito Penal",
+   "tema": "Tema 178",
+   "enunciado": "Enunciado?",
+   "gabarito": "Gabarito.",
+   "dicas": [
+    "d1",
+    "d2",
+    "d3"
+   ],
+   "criada_em": "2026-09-10T13:52:20.370904+00:00",
+   "doc_titulo": "cp",
+   "tipo": "resposta_livre",
+   "gabarito_ce": null,
+   "usuario": null,
+   "contexto": null,
+   "ordem_no_contexto": null,
+   "fontes": [
+    "art:CP|178"
+   ],
+   "artigos": [
+    "CP|178"
+   ]
+  },
+  {
+   "chave": "a1c5af36c1bb8276",
+   "disciplina": "Direito Penal",
+   "tema": "Tema 312",
+   "enunciado": "Enunciado?",
+   "gabarito": "Gabarito.",
+   "dicas": [
+    "d1",
+    "d2",
+    "d3"
+   ],
+   "criada_em": "2026-09-10T13:58:56.979758+00:00",
+   "doc_titulo": "cp",
+   "tipo": "resposta_livre",
+   "gabarito_ce": null,
+   "usuario": null,
+   "contexto": null,
+   "ordem_no_contexto": null,
+   "fontes": [
+    "art:CP|312"
+   ],
+   "artigos": [
+    "CP|312"
+   ]
+  },
+  {
+   "chave": "a1c5af36c1bb8276",
+   "disciplina": "Direito Penal",
+   "tema": "Tema 178",
+   "enunciado": "Enunciado?",
+   "gabarito": "Gabarito.",
+   "dicas": [
+    "d1",
+    "d2",
+    "d3"
+   ],
+   "criada_em": "2026-09-10T13:58:56.983055+00:00",
+   "doc_titulo": "cp",
+   "tipo": "resposta_livre",
+   "gabarito_ce": null,
+   "usuario": null,
+   "contexto": null,
+   "ordem_no_contexto": null,
+   "fontes": [
+    "art:CP|178"
+   ],
+   "artigos": [
+    "CP|178"
+   ]
+  },
+  {
+   "chave": "02de4a1b1854a8e6",
+   "disciplina": "Direito Constitucional",
+   "tema": "Instrumento contundente",
+   "enunciado": "O que caracteriza a ação do instrumento contundente?",
+   "gabarito": "Age por pressão, tração ou torção.",
+   "dicas": [
+    "a",
+    "b",
+    "c"
+   ],
+   "criada_em": "2026-09-10T13:59:01.717968+00:00",
+   "doc_titulo": "cf",
+   "tipo": "resposta_livre",
+   "gabarito_ce": null,
+   "usuario": null,
+   "contexto": null,
+   "ordem_no_contexto": null,
+   "fontes": [
+    "art:CF|1º"
+   ],
+   "artigos": [
+    "CF|1º"
+   ]
+  },
+  {
+   "chave": "b1d2b0c6c8bd91a7",
+   "disciplina": "Direito Processual Penal",
+   "tema": "Aplicação do Código de Processo Penal",
+   "enunciado": "O Código de Processo Penal possui aplicação geral no território brasileiro. Quais processos, previstos nos incisos IV e V do artigo 1º, admitem a aplicação subsidiária deste Código?",
+   "gabarito": "O Código de Processo Penal aplica-se aos processos de competência do tribunal especial e aos processos por crimes de imprensa. Essa aplicação ocorre quando as leis especiais que os regulam não dispuserem de modo diverso.",
+   "dicas": [
+    "Observe o parágrafo único do artigo 1º do CPP.",
+    "O dispositivo trata da relação entre o CPP e leis especiais.",
+    "A aplicação do CPP é subsidiária em relação a normas específicas de tribunais especiais e crimes de imprensa."
+   ],
+   "criada_em": "2026-09-10T13:59:48.486425+00:00",
+   "doc_titulo": "Código de Processo Penal",
+   "tipo": "resposta_livre",
+   "gabarito_ce": null,
+   "usuario": null,
+   "contexto": null,
+   "ordem_no_contexto": null,
+   "fontes": [
+    "art:CPP|1o"
+   ],
+   "artigos": [
+    "CPP|1o"
+   ]
+  },
+  {
+   "chave": "56e25b2c6d510319",
+   "disciplina": "Direito Constitucional",
+   "tema": "Competência dos Juízes Federais",
+   "enunciado": "A Constituição Federal estabelece diversas hipóteses de competência dos juízes federais. Qual é a competência dos juízes federais em relação aos crimes cometidos a bordo de navios ou aeronaves?",
+   "gabarito": "Compete aos juízes federais processar e julgar os crimes cometidos a bordo de navios ou aeronaves. Ressalva-se, contudo, a competência da Justiça Militar.",
+   "dicas": [
+    "Consulte o rol de competências do artigo 109 da CF.",
+    "Busque o inciso que trata de crimes em meios de transporte específicos.",
+    "O inciso IX do artigo 109 define essa competência específica."
+   ],
+   "criada_em": "2026-09-10T13:59:48.492186+00:00",
+   "doc_titulo": "cf",
+   "tipo": "resposta_livre",
+   "gabarito_ce": null,
+   "usuario": null,
+   "contexto": null,
+   "ordem_no_contexto": null,
+   "fontes": [
+    "art:CF|109"
+   ],
+   "artigos": [
+    "CF|109"
+   ]
+  },
+  {
+   "chave": "d24f2a73a720f689",
+   "disciplina": "Direito Penal",
+   "tema": "Peculato Culposo",
+   "enunciado": "No crime de peculato culposo, qual é a consequência jurídica se o funcionário público realiza a reparação do dano antes da sentença irrecorrível?",
+   "gabarito": "A reparação do dano, se precede à sentença irrecorrível, extingue a punibilidade do agente.",
+   "dicas": [
+    "Analise as disposições específicas sobre o peculato culposo previstas no artigo 312 do Código Penal.",
+    "Verifique o parágrafo 3º do referido artigo, que aborda os efeitos da reparação do dano.",
+    "A reparação realizada antes da sentença irrecorrível gera o benefício máximo ao réu, impedindo que o Estado o puna."
+   ],
+   "criada_em": "2026-09-10T14:00:25.919458+00:00",
+   "doc_titulo": "cp",
+   "tipo": "resposta_livre",
+   "gabarito_ce": null,
+   "usuario": null,
+   "contexto": null,
+   "ordem_no_contexto": null,
+   "fontes": [
+    "art:CP|312"
+   ],
+   "artigos": [
+    "CP|312"
+   ]
+  },
+  {
+   "chave": "0e03be990fa4174c",
+   "disciplina": "Direito Constitucional",
+   "tema": "Competência Legislativa da União",
+   "enunciado": "Qual é a natureza da competência da União para legislar sobre direito civil, penal e processual?",
+   "gabarito": "A competência é privativa da União.",
+   "dicas": [
+    "Observe o caput do artigo 22 da Constituição Federal.",
+    "O dispositivo elenca matérias que são de competência exclusiva ou privativa do ente central.",
+    "O texto constitucional utiliza o termo 'privativamente' para definir a competência legislativa sobre esses ramos do direito."
+   ],
+   "criada_em": "2026-09-10T14:01:37.108641+00:00",
+   "doc_titulo": "cf",
+   "tipo": "resposta_livre",
+   "gabarito_ce": null,
+   "usuario": null,
+   "contexto": null,
+   "ordem_no_contexto": null,
+   "fontes": [
+    "art:CF|22"
+   ],
+   "artigos": [
+    "CF|22"
+   ]
+  },
+  {
+   "chave": "73023aa01585e5c7",
+   "disciplina": "Direito Processual Penal",
+   "tema": "Processamento de exceções no Tribunal do Júri",
+   "enunciado": "Como devem ser processadas as exceções no procedimento relativo aos processos de competência do Tribunal do Júri?",
+   "gabarito": "As exceções devem ser processadas em apartado.",
+   "dicas": [
+    "Consulte o procedimento específico previsto no Código de Processo Penal para o Tribunal do Júri.",
+    "O dispositivo trata da forma como incidentes processuais devem tramitar.",
+    "O texto determina que o processamento não ocorre nos autos principais, mas sim em separado."
+   ],
+   "criada_em": "2026-09-10T14:01:37.113711+00:00",
+   "doc_titulo": "Código de Processo Penal",
+   "tipo": "resposta_livre",
+   "gabarito_ce": null,
+   "usuario": null,
+   "contexto": null,
+   "ordem_no_contexto": null,
+   "fontes": [
+    "art:CPP|407"
+   ],
+   "artigos": [
+    "CPP|407"
+   ]
+  },
+  {
+   "chave": "08fcba2ab8d28883",
+   "disciplina": "Direito Penal",
+   "tema": "Peculato culposo",
+   "enunciado": "Qual é o efeito jurídico da reparação do dano no crime de peculato culposo quando realizada após a sentença irrecorrível?",
+   "gabarito": "A reparação do dano posterior à sentença irrecorrível reduz de metade a pena imposta ao funcionário público. Trata-se de causa de diminuição de pena prevista no parágrafo terceiro do artigo 312.",
+   "dicas": [
+    "Observe as consequências previstas para o peculato culposo no parágrafo terceiro.",
+    "O dispositivo diferencia o momento da reparação em relação à sentença.",
+    "A reparação após a sentença não extingue a punibilidade, mas gera um benefício na pena."
+   ],
+   "criada_em": "2026-09-10T14:02:04.584551+00:00",
+   "doc_titulo": "cp",
+   "tipo": "resposta_livre",
+   "gabarito_ce": null,
+   "usuario": null,
+   "contexto": null,
+   "ordem_no_contexto": null,
+   "fontes": [
+    "art:CP|312"
+   ],
+   "artigos": [
+    "CP|312"
    ]
   }
  ],
@@ -47493,6 +48422,3488 @@
      "texto": "Você propôs 1 questão(ões) sobre Peculato culposo. O aluno vai respondê-las agora, dentro desta conversa.",
      "fontes": [],
      "criada_em": "2026-09-08T14:05:01.313841+00:00"
+    }
+   ]
+  },
+  {
+   "usuario": "teste-avaliar-chat@local",
+   "titulo": "boa noite",
+   "mesa": "PC-PR Investigador",
+   "criada_em": "2026-09-10T13:22:27.335651+00:00",
+   "atualizada_em": "2026-09-10T13:22:57.652732+00:00",
+   "mensagens": [
+    {
+     "autor": "aluno",
+     "texto": "boa noite",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:22:27.352974+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Boa noite! Vamos iniciar a sua preparação para a PC-PR? Por qual matéria você quer começar hoje: Direito Penal, Direito Processual Penal, Legislação Penal Extravagante ou Direito Administrativo?",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:22:33.422072+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "podemos testar eu nao sei se ja estou bom",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:22:33.449481+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Vamos começar pelo Direito Processual Penal, focando nas disposições preliminares que regem a aplicação da lei no tempo e sua interpretação, temas recorrentes na sua prova.\n\nAs questões estão logo abaixo; repare bem se a lei permite retroatividade ou se ela incide imediatamente sobre os atos processuais.",
+     "fontes": [
+      {
+       "id": 6122,
+       "norma": "CPP",
+       "artigo": "1o",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6188,
+       "norma": "CPP",
+       "artigo": "56",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6123,
+       "norma": "CPP",
+       "artigo": "2o",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6124,
+       "norma": "CPP",
+       "artigo": "3o",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 3965,
+       "norma": "CF",
+       "artigo": "51",
+       "titulo": "cf"
+      },
+      {
+       "id": 6157,
+       "norma": "CPP",
+       "artigo": "26",
+       "titulo": "Código de Processo Penal"
+      }
+     ],
+     "criada_em": "2026-09-10T13:22:49.222348+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "quero eficácia das normas constitucionais",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:22:49.254121+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Para o seu concurso da PC-PR, o tema de eficácia das normas constitucionais é fundamental, pois a banca costuma cobrar a classificação doutrinária de José Afonso da Silva. Como esse assunto é doutrinário e não está nos trechos de lei que recebi, explico aqui: as normas podem ter eficácia plena (produzem todos os efeitos desde a promulgação), contida (têm aplicação imediata, mas podem ser restringidas por lei posterior) ou limitada (precisam de lei regulamentadora para produzir todos os seus efeitos).\n\nVocê já sabe identificar qual desses tipos de eficácia possui uma norma que depende de lei infraconstitucional para ser aplicada?",
+     "fontes": [
+      {
+       "id": 5696,
+       "norma": "CP",
+       "artigo": "9º",
+       "titulo": "cp"
+      },
+      {
+       "id": 4207,
+       "norma": "ADCT",
+       "artigo": "18",
+       "titulo": "ADCT"
+      },
+      {
+       "id": 4264,
+       "norma": "ADCT",
+       "artigo": "70",
+       "titulo": "ADCT"
+      },
+      {
+       "id": 6971,
+       "norma": "L8112",
+       "artigo": "2o",
+       "titulo": "Lei 8.112/1990"
+      },
+      {
+       "id": 4226,
+       "norma": "ADCT",
+       "artigo": "36",
+       "titulo": "ADCT"
+      },
+      {
+       "id": 6970,
+       "norma": "L8112",
+       "artigo": "1o",
+       "titulo": "Lei 8.112/1990"
+      }
+     ],
+     "criada_em": "2026-09-10T13:22:50.853931+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "acho que sim",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:22:50.881966+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Excelente. Se você já sabe que a norma que depende de lei para produzir todos os seus efeitos é a de **eficácia limitada**, então você já domina o conceito central que a banca usa para te confundir com as outras classificações.\n\nPara fechar esse ponto antes de avançarmos: você entende a diferença prática entre uma norma de eficácia contida e uma de eficácia limitada, ou quer que eu detalhe como cada uma se comporta frente a uma lei nova?",
+     "fontes": [
+      {
+       "id": 4209,
+       "norma": "ADCT",
+       "artigo": "19",
+       "titulo": "ADCT"
+      },
+      {
+       "id": 3970,
+       "norma": "CF",
+       "artigo": "56",
+       "titulo": "cf"
+      },
+      {
+       "id": 3952,
+       "norma": "CF",
+       "artigo": "38",
+       "titulo": "cf"
+      },
+      {
+       "id": 3935,
+       "norma": "CF",
+       "artigo": "22",
+       "titulo": "cf"
+      },
+      {
+       "id": 7156,
+       "norma": "L8112",
+       "artigo": "186",
+       "titulo": "Lei 8.112/1990"
+      },
+      {
+       "id": 7086,
+       "norma": "L8112",
+       "artigo": "117",
+       "titulo": "Lei 8.112/1990"
+      }
+     ],
+     "criada_em": "2026-09-10T13:22:52.648443+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "e o art. 312?",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:22:52.676571+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "O artigo 312 que você mencionou trata da **prisão preventiva** no Direito Processual Penal, um tema central para o seu concurso de Investigador. Diferente da eficácia das normas, aqui estamos falando de uma medida cautelar que exige requisitos concretos para ser decretada.\n\nA lei exige que, para a prisão preventiva, existam provas da existência do crime e indícios suficientes de autoria, além do perigo gerado pelo estado de liberdade do imputado. O ponto que a banca mais explora é que a prisão não pode ser decretada com base apenas na gravidade abstrata do delito; ela exige que o juiz demonstre, de forma concreta, o risco à ordem pública, à ordem econômica, à instrução criminal ou à aplicação da lei penal.\n\nVocê já notou que o artigo traz uma lista específica de situações que devem ser consideradas para aferir a periculosidade do agente, como o *modus operandi* ou a participação em organização criminosa?",
+     "fontes": [
+      {
+       "id": 6028,
+       "norma": "CP",
+       "artigo": "312",
+       "titulo": "cp"
+      },
+      {
+       "id": 6456,
+       "norma": "CPP",
+       "artigo": "312",
+       "titulo": "Código de Processo Penal"
+      }
+     ],
+     "criada_em": "2026-09-10T13:22:54.281222+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "me dá uma questão disso",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:22:54.316122+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Vamos treinar isso; as questões estão logo abaixo, repare bem nos requisitos concretos que a lei exige para que o juiz possa decretar a prisão preventiva.",
+     "fontes": [
+      {
+       "id": 6028,
+       "norma": "CP",
+       "artigo": "312",
+       "titulo": "cp"
+      },
+      {
+       "id": 6456,
+       "norma": "CPP",
+       "artigo": "312",
+       "titulo": "Código de Processo Penal"
+      }
+     ],
+     "criada_em": "2026-09-10T13:22:56.313396+00:00"
+    },
+    {
+     "autor": "evento",
+     "texto": "Você propôs 1 questão(ões) sobre Peculato culposo. O aluno vai respondê-las agora, dentro desta conversa.",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:22:57.650197+00:00"
+    }
+   ]
+  },
+  {
+   "usuario": "teste-avaliar-chat@local",
+   "titulo": "oi",
+   "mesa": "PC-PR Investigador",
+   "criada_em": "2026-09-10T13:23:07.644138+00:00",
+   "atualizada_em": "2026-09-10T13:23:26.986825+00:00",
+   "mensagens": [
+    {
+     "autor": "aluno",
+     "texto": "oi",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:23:07.660751+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Olá! Tudo bem? Para começarmos, por qual destas disciplinas do seu edital você prefere seguir hoje: Direito Administrativo, Direito Constitucional, Direito Penal, Direito Processual Penal ou alguma das outras matérias da PC-PR?",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:23:08.733551+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "tudo bem e você?",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:23:08.757906+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Tudo ótimo por aqui, obrigado por perguntar! Para iniciarmos a sua preparação para Investigador da PC-PR, você prefere começar por Direito Constitucional, Direito Processual Penal ou Direito Administrativo?",
+     "fontes": [
+      {
+       "id": 3935,
+       "norma": "CF",
+       "artigo": "22",
+       "titulo": "cf"
+      },
+      {
+       "id": 6122,
+       "norma": "CPP",
+       "artigo": "1o",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 4025,
+       "norma": "CF",
+       "artigo": "109",
+       "titulo": "cf"
+      },
+      {
+       "id": 3937,
+       "norma": "CF",
+       "artigo": "24",
+       "titulo": "cf"
+      },
+      {
+       "id": 4219,
+       "norma": "ADCT",
+       "artigo": "29",
+       "titulo": "ADCT"
+      },
+      {
+       "id": 4046,
+       "norma": "CF",
+       "artigo": "129",
+       "titulo": "cf"
+      }
+     ],
+     "criada_em": "2026-09-10T13:23:22.540429+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "nada, só passei pra ver",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:23:22.562638+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Entendido! Quando quiser organizar o estudo de alguma dessas matérias ou precisar de um direcionamento sobre o que a banca costuma cobrar, é só chamar. Até a próxima!",
+     "fontes": [
+      {
+       "id": 6971,
+       "norma": "L8112",
+       "artigo": "2o",
+       "titulo": "Lei 8.112/1990"
+      },
+      {
+       "id": 4135,
+       "norma": "CF",
+       "artigo": "200",
+       "titulo": "cf"
+      },
+      {
+       "id": 5799,
+       "norma": "CP",
+       "artigo": "111",
+       "titulo": "cp"
+      },
+      {
+       "id": 3944,
+       "norma": "CF",
+       "artigo": "30",
+       "titulo": "cf"
+      },
+      {
+       "id": 6976,
+       "norma": "L8112",
+       "artigo": "7o",
+       "titulo": "Lei 8.112/1990"
+      },
+      {
+       "id": 4243,
+       "norma": "ADCT",
+       "artigo": "51",
+       "titulo": "ADCT"
+      }
+     ],
+     "criada_em": "2026-09-10T13:23:23.824798+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "vamos lá então",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:23:23.848987+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Excelente! Vamos começar então. Como você está se preparando para Investigador da PC-PR, um tema que costuma aparecer em provas de carreiras policiais é a **organização da administração pública e o provimento de cargos**.\n\nPara a gente alinhar o nível, você já sabe diferenciar o momento em que alguém é considerado servidor público do momento em que ocorre a investidura no cargo?",
+     "fontes": [
+      {
+       "id": 6971,
+       "norma": "L8112",
+       "artigo": "2o",
+       "titulo": "Lei 8.112/1990"
+      },
+      {
+       "id": 4135,
+       "norma": "CF",
+       "artigo": "200",
+       "titulo": "cf"
+      },
+      {
+       "id": 5799,
+       "norma": "CP",
+       "artigo": "111",
+       "titulo": "cp"
+      },
+      {
+       "id": 3944,
+       "norma": "CF",
+       "artigo": "30",
+       "titulo": "cf"
+      },
+      {
+       "id": 6976,
+       "norma": "L8112",
+       "artigo": "7o",
+       "titulo": "Lei 8.112/1990"
+      },
+      {
+       "id": 4243,
+       "norma": "ADCT",
+       "artigo": "51",
+       "titulo": "ADCT"
+      }
+     ],
+     "criada_em": "2026-09-10T13:23:26.981761+00:00"
+    }
+   ]
+  },
+  {
+   "usuario": "teste-avaliar-chat@local",
+   "titulo": "me explica peculato",
+   "mesa": "PC-PR Investigador",
+   "criada_em": "2026-09-10T13:23:29.249995+00:00",
+   "atualizada_em": "2026-09-10T13:23:39.265302+00:00",
+   "mensagens": [
+    {
+     "autor": "aluno",
+     "texto": "me explica peculato",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:23:29.264031+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "O peculato é um crime praticado por funcionário público contra a administração em geral. A forma básica ocorre quando o funcionário se apropria de dinheiro, valor ou qualquer bem móvel (público ou particular) de que tem a posse em razão do cargo, ou quando ele desvia esse bem em proveito próprio ou de outra pessoa.\n\nExiste também uma modalidade chamada peculato-furto, que acontece quando o funcionário não tem a posse do bem, mas o subtrai ou facilita a subtração por terceiros, aproveitando-se da facilidade que o seu cargo lhe proporciona. Além disso, o Código Penal prevê o peculato culposo, quando o funcionário, por negligência, imprudência ou imperícia, concorre para que outra pessoa cometa o crime. Nesse caso específico, se o funcionário reparar o dano antes da sentença irrecorrível, a punibilidade é extinta; se reparar depois, a pena é reduzida pela metade.\n\nVocê já tinha notado que o peculato culposo possui um tratamento diferenciado quanto à reparação do dano em comparação aos outros crimes contra a administração?",
+     "fontes": [
+      {
+       "id": 6029,
+       "norma": "CP",
+       "artigo": "313",
+       "titulo": "cp"
+      },
+      {
+       "id": 6028,
+       "norma": "CP",
+       "artigo": "312",
+       "titulo": "cp"
+      },
+      {
+       "id": 5878,
+       "norma": "CP",
+       "artigo": "178",
+       "titulo": "cp"
+      },
+      {
+       "id": 5752,
+       "norma": "CP",
+       "artigo": "65",
+       "titulo": "cp"
+      },
+      {
+       "id": 5874,
+       "norma": "CP",
+       "artigo": "174",
+       "titulo": "cp"
+      },
+      {
+       "id": 5968,
+       "norma": "CP",
+       "artigo": "254",
+       "titulo": "cp"
+      }
+     ],
+     "criada_em": "2026-09-10T13:23:31.543153+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "e a diferença com concussão?",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:23:31.571725+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "A concussão não está nos trechos que recebi agora, então vou te explicar o conceito básico: enquanto no peculato o funcionário se apropria de algo que já está sob sua guarda ou posse, na concussão o funcionário **exige** para si ou para outrem, direta ou indiretamente, ainda que fora da função ou antes de assumi-la, mas em razão dela, vantagem indevida.\n\nA diferença central é a conduta: no peculato há a apropriação ou desvio de um bem que o funcionário já detém, já na concussão há uma exigência (um \"pedágio\" ilegal) feita pelo funcionário para praticar ou deixar de praticar um ato.\n\nVocê já tinha visto que, na corrupção passiva, o funcionário apenas solicita ou recebe a vantagem, enquanto na concussão ele exerce uma exigência, uma imposição?",
+     "fontes": [
+      {
+       "id": 6028,
+       "norma": "CP",
+       "artigo": "312",
+       "titulo": "cp"
+      },
+      {
+       "id": 6029,
+       "norma": "CP",
+       "artigo": "313",
+       "titulo": "cp"
+      },
+      {
+       "id": 6035,
+       "norma": "CP",
+       "artigo": "317",
+       "titulo": "cp"
+      },
+      {
+       "id": 6057,
+       "norma": "CP",
+       "artigo": "337",
+       "titulo": "cp"
+      },
+      {
+       "id": 6046,
+       "norma": "CP",
+       "artigo": "327",
+       "titulo": "cp"
+      },
+      {
+       "id": 6005,
+       "norma": "CP",
+       "artigo": "290",
+       "titulo": "cp"
+      }
+     ],
+     "criada_em": "2026-09-10T13:23:34.220961+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "então se ele já tem a posse é peculato próprio?",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:23:34.243082+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Exatamente. Quando o funcionário público tem a posse do dinheiro, valor ou bem móvel em razão do cargo e se apropria dele ou o desvia, estamos diante do que a doutrina chama de peculato próprio.\n\nJá o peculato impróprio, ou peculato-furto, ocorre quando o funcionário não tem a posse legítima do bem, mas se aproveita da facilidade proporcionada pelo cargo para subtraí-lo ou concorrer para que seja subtraído. Lembre-se que, em ambos os casos, o bem pode ser público ou particular.\n\nEssa distinção entre ter ou não a posse prévia é fundamental para a sua prova na PC-PR. Quer que eu apresente as questões sobre esses crimes para testarmos se esse ponto ficou claro?",
+     "fontes": [
+      {
+       "id": 6028,
+       "norma": "CP",
+       "artigo": "312",
+       "titulo": "cp"
+      },
+      {
+       "id": 6034,
+       "norma": "CP",
+       "artigo": "316",
+       "titulo": "cp"
+      },
+      {
+       "id": 6035,
+       "norma": "CP",
+       "artigo": "317",
+       "titulo": "cp"
+      },
+      {
+       "id": 6051,
+       "norma": "CP",
+       "artigo": "332",
+       "titulo": "cp"
+      },
+      {
+       "id": 5905,
+       "norma": "CP",
+       "artigo": "203",
+       "titulo": "cp"
+      },
+      {
+       "id": 4199,
+       "norma": "ADCT",
+       "artigo": "10",
+       "titulo": "ADCT"
+      }
+     ],
+     "criada_em": "2026-09-10T13:23:36.670579+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "e se o bem for de particular?",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:23:36.695743+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "O peculato continua configurado mesmo que o bem seja de um particular, desde que esse bem esteja sob a posse do funcionário público em razão do cargo.\n\nO Código Penal é claro ao definir que o objeto do crime pode ser dinheiro, valor ou qualquer outro bem móvel, **público ou particular**. O que importa para a lei não é a propriedade do bem, mas a relação de posse que o funcionário exerce sobre ele por causa da sua função pública.\n\nPor exemplo, se um investigador de polícia apreende um objeto de um particular durante uma diligência e, em vez de entregá-lo na delegacia, apropria-se dele para si, ele comete peculato, pois tinha a posse daquele bem particular em razão do seu cargo.\n\nFicou claro por que a origem do bem (público ou privado) não altera a natureza do crime de peculato? Quer que eu siga para as questões sobre esse tema?",
+     "fontes": [
+      {
+       "id": 6028,
+       "norma": "CP",
+       "artigo": "312",
+       "titulo": "cp"
+      },
+      {
+       "id": 6029,
+       "norma": "CP",
+       "artigo": "313",
+       "titulo": "cp"
+      },
+      {
+       "id": 5868,
+       "norma": "CP",
+       "artigo": "169",
+       "titulo": "cp"
+      },
+      {
+       "id": 5870,
+       "norma": "CP",
+       "artigo": "171",
+       "titulo": "cp"
+      },
+      {
+       "id": 6008,
+       "norma": "CP",
+       "artigo": "293",
+       "titulo": "cp"
+      },
+      {
+       "id": 6034,
+       "norma": "CP",
+       "artigo": "316",
+       "titulo": "cp"
+      }
+     ],
+     "criada_em": "2026-09-10T13:23:39.260730+00:00"
+    }
+   ]
+  },
+  {
+   "usuario": "teste-avaliar-chat@local",
+   "titulo": "o que o STJ diz sobre peculato de uso?",
+   "mesa": "PC-PR Investigador",
+   "criada_em": "2026-09-10T13:23:42.141533+00:00",
+   "atualizada_em": "2026-09-10T13:23:49.780519+00:00",
+   "mensagens": [
+    {
+     "autor": "aluno",
+     "texto": "o que o STJ diz sobre peculato de uso?",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:23:42.145640+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Como conversamos, não utilizo jurisprudência ou entendimentos de tribunais, pois o foco aqui é o que a lei determina para a sua prova.\n\nSobre o crime de peculato, o Código Penal, no artigo 313, trata especificamente da modalidade de peculato mediante erro de outrem, que ocorre quando o funcionário público se apropria de dinheiro ou utilidade que recebeu por erro de outra pessoa em razão do seu cargo.\n\nComo o seu edital para a PC-PR cobra Direito Penal e Legislação Penal Extravagante, você já estudou a diferença entre o peculato-apropriação e o peculato-desvio, ou quer que eu explique como a lei diferencia essas condutas?",
+     "fontes": [
+      {
+       "id": 6029,
+       "norma": "CP",
+       "artigo": "313",
+       "titulo": "cp"
+      },
+      {
+       "id": 5938,
+       "norma": "CP",
+       "artigo": "229",
+       "titulo": "cp"
+      },
+      {
+       "id": 5873,
+       "norma": "CP",
+       "artigo": "173",
+       "titulo": "cp"
+      },
+      {
+       "id": 5874,
+       "norma": "CP",
+       "artigo": "174",
+       "titulo": "cp"
+      },
+      {
+       "id": 6056,
+       "norma": "CP",
+       "artigo": "336",
+       "titulo": "cp"
+      },
+      {
+       "id": 6630,
+       "norma": "CPP",
+       "artigo": "478",
+       "titulo": "Código de Processo Penal"
+      }
+     ],
+     "criada_em": "2026-09-10T13:23:43.943836+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "tem súmula? cita o número",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:23:43.964959+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Como conversamos, não utilizo súmulas ou entendimentos de tribunais, pois o foco aqui é o que a lei determina para a sua prova.\n\nSobre o peculato, o que a lei traz é a distinção clara entre as condutas no artigo 312: o peculato-apropriação ocorre quando o funcionário se apropria de bem de que tem a posse em razão do cargo, enquanto o peculato-desvio ocorre quando ele dá ao bem uma destinação diversa daquela prevista, sempre em proveito próprio ou alheio.\n\nVocê já viu a diferença entre essas duas condutas ou quer que eu detalhe como a lei trata a posse do bem nesse caso?",
+     "fontes": [
+      {
+       "id": 6028,
+       "norma": "CP",
+       "artigo": "312",
+       "titulo": "cp"
+      },
+      {
+       "id": 6029,
+       "norma": "CP",
+       "artigo": "313",
+       "titulo": "cp"
+      },
+      {
+       "id": 5707,
+       "norma": "CP",
+       "artigo": "20",
+       "titulo": "cp"
+      },
+      {
+       "id": 6206,
+       "norma": "CPP",
+       "artigo": "74",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6008,
+       "norma": "CP",
+       "artigo": "293",
+       "titulo": "cp"
+      },
+      {
+       "id": 5870,
+       "norma": "CP",
+       "artigo": "171",
+       "titulo": "cp"
+      }
+     ],
+     "criada_em": "2026-09-10T13:23:45.616298+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "e a posição do STF mudou em 2023?",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:23:45.641488+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Como conversamos, não utilizo jurisprudência ou entendimentos de tribunais, pois o foco aqui é o que a lei determina para a sua prova.\n\nPara a sua prova de Direito Penal na PC-PR, o que importa é o que está escrito no Código Penal. No caso do peculato, o artigo 312 define a conduta como apropriar-se de dinheiro, valor ou qualquer outro bem móvel, público ou particular, de que o funcionário tem a posse em razão do cargo, ou desviá-lo, em proveito próprio ou alheio.\n\nVocê prefere que eu explique como a lei trata a situação do peculato culposo, quando o funcionário concorre para o crime de outrem sem intenção, ou quer seguir para outro ponto do edital?",
+     "fontes": [
+      {
+       "id": 6028,
+       "norma": "CP",
+       "artigo": "312",
+       "titulo": "cp"
+      },
+      {
+       "id": 6008,
+       "norma": "CP",
+       "artigo": "293",
+       "titulo": "cp"
+      },
+      {
+       "id": 6029,
+       "norma": "CP",
+       "artigo": "313",
+       "titulo": "cp"
+      },
+      {
+       "id": 5859,
+       "norma": "CP",
+       "artigo": "161",
+       "titulo": "cp"
+      },
+      {
+       "id": 5868,
+       "norma": "CP",
+       "artigo": "169",
+       "titulo": "cp"
+      },
+      {
+       "id": 5707,
+       "norma": "CP",
+       "artigo": "20",
+       "titulo": "cp"
+      }
+     ],
+     "criada_em": "2026-09-10T13:23:47.734358+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "então me diz o que a lei seca diz, ao menos",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:23:47.759661+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "A lei seca, no artigo 312, parágrafo segundo, do Código Penal, define o peculato culposo como a conduta em que o funcionário público concorre, por imprudência, negligência ou imperícia, para que o crime de outrem ocorra.\n\nDiferente do peculato doloso, onde há a intenção de se apropriar ou desviar o bem, aqui a punição é mais branda, com pena de detenção de três meses a um ano. Um ponto fundamental que a lei traz é que, se o funcionário reparar o dano antes da sentença irrecorrível, a punibilidade é extinta; se a reparação ocorrer depois, a pena imposta é reduzida pela metade.\n\nQuer que eu siga para as causas de aumento de pena ou prefere testar esse ponto do peculato culposo?",
+     "fontes": [
+      {
+       "id": 6028,
+       "norma": "CP",
+       "artigo": "312",
+       "titulo": "cp"
+      },
+      {
+       "id": 5870,
+       "norma": "CP",
+       "artigo": "171",
+       "titulo": "cp"
+      },
+      {
+       "id": 6315,
+       "norma": "CPP",
+       "artigo": "174",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 5707,
+       "norma": "CP",
+       "artigo": "20",
+       "titulo": "cp"
+      },
+      {
+       "id": 6164,
+       "norma": "CPP",
+       "artigo": "32",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6008,
+       "norma": "CP",
+       "artigo": "293",
+       "titulo": "cp"
+      }
+     ],
+     "criada_em": "2026-09-10T13:23:49.776555+00:00"
+    }
+   ]
+  },
+  {
+   "usuario": "teste-avaliar-chat@local",
+   "titulo": "quero improbidade administrativa",
+   "mesa": "PC-PR Investigador",
+   "criada_em": "2026-09-10T13:23:53.352107+00:00",
+   "atualizada_em": "2026-09-10T13:23:55.169149+00:00",
+   "mensagens": [
+    {
+     "autor": "aluno",
+     "texto": "quero improbidade administrativa",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:23:53.355435+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Olá! Para a prova de Investigador da PC-PR, o tema de improbidade administrativa é fundamental, especialmente quando estudamos os crimes contra a administração pública que podem gerar essas ações.\n\nVocê já sabe diferenciar o que é um ato de improbidade administrativa de um crime contra a administração pública, ou prefere que comecemos definindo o que a lei considera como causa para a instauração de uma ação de improbidade?",
+     "fontes": [
+      {
+       "id": 5907,
+       "norma": "CP",
+       "artigo": "205",
+       "titulo": "cp"
+      },
+      {
+       "id": 6035,
+       "norma": "CP",
+       "artigo": "317",
+       "titulo": "cp"
+      },
+      {
+       "id": 6039,
+       "norma": "CP",
+       "artigo": "320",
+       "titulo": "cp"
+      },
+      {
+       "id": 6065,
+       "norma": "CP",
+       "artigo": "337-H",
+       "titulo": "cp"
+      },
+      {
+       "id": 6076,
+       "norma": "CP",
+       "artigo": "339",
+       "titulo": "cp"
+      },
+      {
+       "id": 6043,
+       "norma": "CP",
+       "artigo": "324",
+       "titulo": "cp"
+      }
+     ],
+     "criada_em": "2026-09-10T13:23:55.138729+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "entendi",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:23:55.166237+00:00"
+    }
+   ]
+  },
+  {
+   "usuario": "teste-avaliar-chat@local",
+   "titulo": "como você funciona?",
+   "mesa": "PC-PR Investigador",
+   "criada_em": "2026-09-10T13:24:35.208600+00:00",
+   "atualizada_em": "2026-09-10T13:26:03.598221+00:00",
+   "mensagens": [
+    {
+     "autor": "aluno",
+     "texto": "como você funciona?",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:24:35.213053+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Olá! Sou seu professor de concursos e estou aqui para te ajudar a estudar de forma direta e focada no que cai na prova da PC-PR.\n\nEu organizo o conteúdo com base no seu edital, explico os pontos que você precisa dominar e, quando você estiver pronto, aplico exercícios para testar seu conhecimento. Não perco tempo com burocracias ou explicações desnecessárias; nosso foco é o que vai estar na sua prova.\n\nPara começarmos, por qual destas disciplinas do seu edital você prefere seguir hoje: **Direito Administrativo**, **Direito Constitucional**, **Direito Penal** ou **Direito Processual Penal**?",
+     "fontes": [
+      {
+       "id": 3930,
+       "norma": "CF",
+       "artigo": "17",
+       "titulo": "cf"
+      },
+      {
+       "id": 6393,
+       "norma": "CPP",
+       "artigo": "252",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 5979,
+       "norma": "CP",
+       "artigo": "265",
+       "titulo": "cp"
+      },
+      {
+       "id": 4095,
+       "norma": "CF",
+       "artigo": "167",
+       "titulo": "cf"
+      },
+      {
+       "id": 6128,
+       "norma": "CPP",
+       "artigo": "3º-D",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 7198,
+       "norma": "L8112",
+       "artigo": "230",
+       "titulo": "Lei 8.112/1990"
+      }
+     ],
+     "criada_em": "2026-09-10T13:24:36.804177+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "de onde você tira as respostas?",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:24:36.833687+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Eu utilizo exclusivamente a legislação e os textos normativos que compõem o seu edital, como a Lei 8.112, o Código de Processo Penal e a Constituição Federal, para garantir que você estude exatamente o que a banca vai cobrar.\n\nQuando um tema não está na lei, como ocorre com alguns princípios doutrinários, eu te aviso explicitamente que se trata de doutrina e não de um dispositivo legal.\n\nPara começarmos a prática, por qual das disciplinas do seu edital você quer seguir: **Direito Administrativo**, **Direito Constitucional**, **Direito Penal** ou **Direito Processual Penal**?",
+     "fontes": [
+      {
+       "id": 6980,
+       "norma": "L8112",
+       "artigo": "11",
+       "titulo": "Lei 8.112/1990"
+      },
+      {
+       "id": 7047,
+       "norma": "L8112",
+       "artigo": "76-A",
+       "titulo": "Lei 8.112/1990"
+      },
+      {
+       "id": 6315,
+       "norma": "CPP",
+       "artigo": "174",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6623,
+       "norma": "CPP",
+       "artigo": "472",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6974,
+       "norma": "L8112",
+       "artigo": "5o",
+       "titulo": "Lei 8.112/1990"
+      },
+      {
+       "id": 4149,
+       "norma": "CF",
+       "artigo": "213",
+       "titulo": "cf"
+      }
+     ],
+     "criada_em": "2026-09-10T13:24:38.743754+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "você é uma IA ou tem professor de verdade?",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:24:38.772293+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Sou um sistema de inteligência artificial treinado especificamente para atuar como seu professor de concursos, focado em otimizar seu estudo para a PC-PR com base no seu edital.\n\nComo já esclarecemos como trabalho, vamos focar no que importa para sua aprovação: por qual das disciplinas — **Direito Administrativo**, **Direito Constitucional**, **Direito Penal** ou **Direito Processual Penal** — você quer começar hoje?",
+     "fontes": [
+      {
+       "id": 4012,
+       "norma": "CF",
+       "artigo": "98",
+       "titulo": "cf"
+      },
+      {
+       "id": 6265,
+       "norma": "CPP",
+       "artigo": "132",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 3988,
+       "norma": "CF",
+       "artigo": "74",
+       "titulo": "cf"
+      },
+      {
+       "id": 6511,
+       "norma": "CPP",
+       "artigo": "363",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 3935,
+       "norma": "CF",
+       "artigo": "22",
+       "titulo": "cf"
+      },
+      {
+       "id": 4165,
+       "norma": "CF",
+       "artigo": "226",
+       "titulo": "cf"
+      }
+     ],
+     "criada_em": "2026-09-10T13:25:59.320350+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "beleza, então me ensina algo de penal",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:25:59.354336+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Perfeito. Vamos começar pelo **Direito Penal**, que é um dos pilares da sua prova para Investigador.\n\nUm tema muito cobrado é o **Erro sobre elementos do tipo**, que ocorre quando o agente se engana sobre algum fato que compõe o crime. O Código Penal estabelece que esse erro exclui o dolo, mas, se houver previsão legal, o agente ainda pode ser punido por crime culposo.\n\nPara avançarmos, você já sabe a diferença entre o erro sobre o elemento do tipo e as chamadas descriminantes putativas, ou quer que eu explique esse ponto primeiro?",
+     "fontes": [
+      {
+       "id": 6079,
+       "norma": "CP",
+       "artigo": "342",
+       "titulo": "cp"
+      },
+      {
+       "id": 6328,
+       "norma": "CPP",
+       "artigo": "187",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 5707,
+       "norma": "CP",
+       "artigo": "20",
+       "titulo": "cp"
+      },
+      {
+       "id": 6014,
+       "norma": "CP",
+       "artigo": "299",
+       "titulo": "cp"
+      },
+      {
+       "id": 5752,
+       "norma": "CP",
+       "artigo": "65",
+       "titulo": "cp"
+      },
+      {
+       "id": 6331,
+       "norma": "CPP",
+       "artigo": "190",
+       "titulo": "Código de Processo Penal"
+      }
+     ],
+     "criada_em": "2026-09-10T13:26:03.594079+00:00"
+    }
+   ]
+  },
+  {
+   "usuario": "teste-avaliar-chat@local",
+   "titulo": "me explica peculato",
+   "mesa": "PC-PR Investigador",
+   "criada_em": "2026-09-10T13:26:06.585753+00:00",
+   "atualizada_em": "2026-09-10T13:26:24.290573+00:00",
+   "mensagens": [
+    {
+     "autor": "aluno",
+     "texto": "me explica peculato",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:26:06.588995+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "O peculato é um crime praticado por funcionário público contra a administração em geral. A modalidade principal ocorre quando o funcionário se apropria de dinheiro, valor ou qualquer bem móvel (público ou particular) de que tem a posse em razão do cargo, ou quando ele desvia esse bem em proveito próprio ou alheio.\n\nAlém dessa forma, existe o peculato-furto, que acontece quando o funcionário, mesmo sem ter a posse do bem, subtrai o objeto ou facilita que outra pessoa o faça, aproveitando-se da facilidade que seu cargo lhe proporciona.\n\nVocê já notou que existe uma diferença importante entre o peculato doloso (quando há intenção) e o peculato culposo (quando o funcionário concorre para o crime de outrem por negligência, imprudência ou imperícia)? Quer que eu explique como funciona a reparação do dano no caso do peculato culposo?",
+     "fontes": [
+      {
+       "id": 6029,
+       "norma": "CP",
+       "artigo": "313",
+       "titulo": "cp"
+      },
+      {
+       "id": 6028,
+       "norma": "CP",
+       "artigo": "312",
+       "titulo": "cp"
+      },
+      {
+       "id": 5878,
+       "norma": "CP",
+       "artigo": "178",
+       "titulo": "cp"
+      },
+      {
+       "id": 5752,
+       "norma": "CP",
+       "artigo": "65",
+       "titulo": "cp"
+      },
+      {
+       "id": 5874,
+       "norma": "CP",
+       "artigo": "174",
+       "titulo": "cp"
+      },
+      {
+       "id": 5968,
+       "norma": "CP",
+       "artigo": "254",
+       "titulo": "cp"
+      }
+     ],
+     "criada_em": "2026-09-10T13:26:11.997696+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "peculato é quando o servidor chega atrasado, né?",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:26:12.024677+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Não, isso está incorreto. O peculato é um crime contra o patrimônio da administração pública, e não tem relação com atrasos ou comportamento funcional desse tipo.\n\nO peculato exige que o funcionário público se aproprie de dinheiro, valor ou bem móvel que ele tem sob sua guarda em razão do cargo, ou que ele desvie esse bem. No caso do peculato culposo, que mencionei antes, o servidor não tem a intenção de roubar, mas acaba contribuindo para que outra pessoa cometa o crime por ter sido negligente, imprudente ou imperito com o bem que estava sob sua responsabilidade.\n\nFicou claro que o peculato trata de bens e valores, e não de disciplina ou horário? Quer que eu explique como a reparação do dano pode extinguir a punibilidade no peculato culposo?",
+     "fontes": [
+      {
+       "id": 6028,
+       "norma": "CP",
+       "artigo": "312",
+       "titulo": "cp"
+      },
+      {
+       "id": 6029,
+       "norma": "CP",
+       "artigo": "313",
+       "titulo": "cp"
+      },
+      {
+       "id": 6005,
+       "norma": "CP",
+       "artigo": "290",
+       "titulo": "cp"
+      },
+      {
+       "id": 6035,
+       "norma": "CP",
+       "artigo": "317",
+       "titulo": "cp"
+      },
+      {
+       "id": 6046,
+       "norma": "CP",
+       "artigo": "327",
+       "titulo": "cp"
+      },
+      {
+       "id": 6057,
+       "norma": "CP",
+       "artigo": "337",
+       "titulo": "cp"
+      }
+     ],
+     "criada_em": "2026-09-10T13:26:14.774573+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "ah então é qualquer crime de servidor",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:26:14.801435+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Não, nem todo crime cometido por funcionário público é peculato. O Código Penal separa os crimes praticados por funcionários contra a administração em grupos diferentes, dependendo da conduta.\n\nO peculato, especificamente, é um crime contra o **patrimônio** público. Existem outros crimes, como a corrupção passiva, que ocorre quando o funcionário solicita ou recebe vantagem indevida, ou a concussão, que é quando ele exige essa vantagem. São condutas distintas do ato de se apropriar ou desviar um bem móvel.\n\nPara a sua prova na PC-PR, é fundamental não confundir o peculato (que envolve bens e valores) com esses outros crimes funcionais. \n\nVocê já viu a diferença entre a conduta de **exigir** vantagem (concussão) e a de **solicitar ou receber** vantagem (corrupção passiva)?",
+     "fontes": [
+      {
+       "id": 6028,
+       "norma": "CP",
+       "artigo": "312",
+       "titulo": "cp"
+      },
+      {
+       "id": 6029,
+       "norma": "CP",
+       "artigo": "313",
+       "titulo": "cp"
+      },
+      {
+       "id": 6035,
+       "norma": "CP",
+       "artigo": "317",
+       "titulo": "cp"
+      },
+      {
+       "id": 6034,
+       "norma": "CP",
+       "artigo": "316",
+       "titulo": "cp"
+      },
+      {
+       "id": 6008,
+       "norma": "CP",
+       "artigo": "293",
+       "titulo": "cp"
+      },
+      {
+       "id": 6005,
+       "norma": "CP",
+       "artigo": "290",
+       "titulo": "cp"
+      }
+     ],
+     "criada_em": "2026-09-10T13:26:16.569567+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "não entendi ainda, tenta de outro jeito",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:26:16.595100+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Vamos usar um exemplo prático do seu dia a dia como Investigador da PC-PR para ficar bem claro.\n\nImagine que você, no exercício da sua função, apreende um celular caro durante uma investigação. Esse aparelho fica guardado com você na delegacia por causa do seu cargo.\n\nSe você decidir levar esse celular para casa e ficar com ele, ou se decidir dar o aparelho de presente para um parente, você está cometendo **peculato**. \n\nPerceba os elementos:\n1. Você é funcionário público.\n2. O bem (o celular) foi parar na sua mão por causa do seu cargo.\n3. Você pegou o bem para si ou o desviou para outra pessoa.\n\nSe você apenas chegar atrasado ao trabalho, isso é uma infração administrativa (que gera punição interna), mas não é crime. O peculato exige que você mexa com **dinheiro, bens ou valores** (públicos ou particulares), aproveitando-se do seu cargo para ficar com eles ou desviá-los.\n\nFicou mais claro com esse exemplo do celular? Se um policial pega para si o dinheiro de uma fiança que foi pago na delegacia e deveria ir para o Estado, que crime ele cometeu?",
+     "fontes": [
+      {
+       "id": 6035,
+       "norma": "CP",
+       "artigo": "317",
+       "titulo": "cp"
+      },
+      {
+       "id": 6028,
+       "norma": "CP",
+       "artigo": "312",
+       "titulo": "cp"
+      },
+      {
+       "id": 6040,
+       "norma": "CP",
+       "artigo": "321",
+       "titulo": "cp"
+      },
+      {
+       "id": 6029,
+       "norma": "CP",
+       "artigo": "313",
+       "titulo": "cp"
+      },
+      {
+       "id": 6046,
+       "norma": "CP",
+       "artigo": "327",
+       "titulo": "cp"
+      },
+      {
+       "id": 6052,
+       "norma": "CP",
+       "artigo": "333",
+       "titulo": "cp"
+      }
+     ],
+     "criada_em": "2026-09-10T13:26:24.286306+00:00"
+    }
+   ]
+  },
+  {
+   "usuario": "teste-avaliar-chat@local",
+   "titulo": "quero aprender princípios fundamentais do direito…",
+   "mesa": "PC-PR Investigador",
+   "criada_em": "2026-09-10T13:26:27.574963+00:00",
+   "atualizada_em": "2026-09-10T13:26:42.230004+00:00",
+   "mensagens": [
+    {
+     "autor": "aluno",
+     "texto": "quero aprender princípios fundamentais do direito administrativo",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:26:27.579802+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Olá! Vamos começar pelo item 9.1 do seu edital: Conceito, fontes e princípios do Direito Administrativo.\n\nPara entender como isso cai na sua prova, precisamos primeiro alinhar a base. O Direito Administrativo é regido por princípios expressos na Constituição e por outros que a doutrina chama de implícitos, como a autotutela, que permite à Administração rever seus próprios atos quando eivados de ilegalidade. Isso está previsto no art. 114 da Lei 8.112/1990, que reforça esse dever de revisão.\n\nVocê já estudou a diferença entre os princípios da legalidade, impessoalidade, moralidade, publicidade e eficiência (o famoso LIMPE) ou prefere que comecemos detalhando cada um deles?",
+     "fontes": [
+      {
+       "id": 7123,
+       "norma": "L8112",
+       "artigo": "153",
+       "titulo": "Lei 8.112/1990"
+      },
+      {
+       "id": 6040,
+       "norma": "CP",
+       "artigo": "321",
+       "titulo": "cp"
+      },
+      {
+       "id": 6072,
+       "norma": "CP",
+       "artigo": "337-O",
+       "titulo": "cp"
+      },
+      {
+       "id": 6037,
+       "norma": "CP",
+       "artigo": "319",
+       "titulo": "cp"
+      },
+      {
+       "id": 7083,
+       "norma": "L8112",
+       "artigo": "114",
+       "titulo": "Lei 8.112/1990"
+      },
+      {
+       "id": 6970,
+       "norma": "L8112",
+       "artigo": "1o",
+       "titulo": "Lei 8.112/1990"
+      }
+     ],
+     "criada_em": "2026-09-10T13:26:29.090808+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "não quero responder pergunta agora, só me explica o assunto",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:26:29.119820+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Os princípios da Administração Pública, previstos no artigo 37 da Constituição, são o alicerce de toda a atuação estatal e o ponto de partida para o seu edital.\n\nO princípio da **legalidade** determina que o administrador público só pode fazer o que a lei autoriza ou determina; diferentemente do particular, que pode fazer tudo o que a lei não proíbe. A **impessoalidade** exige que a atuação administrativa seja neutra, visando sempre o interesse público, sem favorecer ou prejudicar pessoas específicas, o que é reforçado pela proibição de promoção pessoal em atos e campanhas públicas. A **moralidade** impõe que o agente público não apenas siga a lei, mas atue com ética e boa-fé. A **publicidade** garante a transparência, exigindo que os atos sejam divulgados para que a sociedade possa fiscalizar, ressalvadas as exceções de sigilo previstas em lei. Por fim, a **eficiência** exige que o serviço seja prestado com presteza, perfeição e rendimento funcional, buscando o melhor resultado com o menor custo.\n\nAlém desses, a doutrina aponta princípios implícitos, como a **autotutela**, que é o poder-dever da Administração de anular seus próprios atos quando ilegais ou revogá-los por conveniência e oportunidade, sem precisar recorrer ao Judiciário. Isso não está escrito no texto constitucional, mas é um conceito fundamental para a sua prova.\n\nQuer que eu siga para o próximo ponto do edital, que trata da organização da administração direta e indireta?",
+     "fontes": [
+      {
+       "id": 3951,
+       "norma": "CF",
+       "artigo": "37",
+       "titulo": "cf"
+      },
+      {
+       "id": 3948,
+       "norma": "CF",
+       "artigo": "34",
+       "titulo": "cf"
+      },
+      {
+       "id": 4188,
+       "norma": "CF",
+       "artigo": "249",
+       "titulo": "cf"
+      },
+      {
+       "id": 4052,
+       "norma": "CF",
+       "artigo": "134",
+       "titulo": "cf"
+      },
+      {
+       "id": 3935,
+       "norma": "CF",
+       "artigo": "22",
+       "titulo": "cf"
+      },
+      {
+       "id": 4073,
+       "norma": "CF",
+       "artigo": "151",
+       "titulo": "cf"
+      }
+     ],
+     "criada_em": "2026-09-10T13:26:32.263970+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "quais são os pontos desse assunto que mais caem em prova?",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:26:32.298800+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Para o item 9.1 do seu edital, os pontos que mais caem na prova da PC-PR são:\n\n*   Diferença entre a legalidade administrativa (estrita) e a legalidade privada (ampla).\n*   Aplicação prática do princípio da impessoalidade (vedação à promoção pessoal).\n*   Diferença entre anulação (por ilegalidade) e revogação (por mérito) dentro do princípio da autotutela.\n*   Exceções ao princípio da publicidade (sigilo em casos de segurança da sociedade e do Estado ou intimidade).\n*   Conceito de eficiência e sua relação com a busca por resultados.\n\nQuer que eu aprofunde em algum desses pontos ou prefere seguir para o item 9.2, sobre administração direta e indireta?",
+     "fontes": [
+      {
+       "id": 7113,
+       "norma": "L8112",
+       "artigo": "143",
+       "titulo": "Lei 8.112/1990"
+      },
+      {
+       "id": 6340,
+       "norma": "CPP",
+       "artigo": "200",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6014,
+       "norma": "CP",
+       "artigo": "299",
+       "titulo": "cp"
+      },
+      {
+       "id": 6317,
+       "norma": "CPP",
+       "artigo": "176",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6324,
+       "norma": "CPP",
+       "artigo": "183",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6323,
+       "norma": "CPP",
+       "artigo": "182",
+       "titulo": "Código de Processo Penal"
+      }
+     ],
+     "criada_em": "2026-09-10T13:26:38.056244+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "ainda tenho dúvida na legalidade, explica melhor",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:26:38.085615+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "A diferença central que você precisa levar para a prova é a \"fonte\" da atuação:\n\nNo Direito Privado, vigora o princípio da autonomia da vontade: o particular pode fazer tudo o que a lei não proíbe. É o campo da liberdade individual.\n\nJá no Direito Administrativo, o princípio da legalidade é estrito. O agente público é um mero executor da vontade da lei; ele só pode agir se houver uma norma autorizando ou determinando a sua conduta. Se não houver previsão legal, o administrador não pode criar obrigações ou direitos, sob pena de o ato ser considerado ilegal e passível de anulação.\n\nPara a sua prova, lembre-se: enquanto o particular é livre para agir dentro do que a lei não veda, o administrador público está \"preso\" ao que a lei permite.\n\nFicou mais clara essa distinção entre a liberdade do particular e a subordinação do agente público, ou quer que eu aplique esse conceito em algum exemplo prático?",
+     "fontes": [
+      {
+       "id": 7113,
+       "norma": "L8112",
+       "artigo": "143",
+       "titulo": "Lei 8.112/1990"
+      },
+      {
+       "id": 6014,
+       "norma": "CP",
+       "artigo": "299",
+       "titulo": "cp"
+      },
+      {
+       "id": 7095,
+       "norma": "L8112",
+       "artigo": "126",
+       "titulo": "Lei 8.112/1990"
+      },
+      {
+       "id": 6080,
+       "norma": "CP",
+       "artigo": "343",
+       "titulo": "cp"
+      },
+      {
+       "id": 6040,
+       "norma": "CP",
+       "artigo": "321",
+       "titulo": "cp"
+      },
+      {
+       "id": 6340,
+       "norma": "CPP",
+       "artigo": "200",
+       "titulo": "Código de Processo Penal"
+      }
+     ],
+     "criada_em": "2026-09-10T13:26:40.094178+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "agora sim pode me perguntar",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:26:40.118577+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Excelente. Vamos testar se essa distinção ficou bem fixada para a sua prova:\n\nSe um agente público decide criar um benefício ou gratificação para os servidores de sua repartição, mas não existe nenhuma lei autorizando ou prevendo esse gasto, ele está agindo conforme o princípio da legalidade administrativa? Por quê?",
+     "fontes": [
+      {
+       "id": 6014,
+       "norma": "CP",
+       "artigo": "299",
+       "titulo": "cp"
+      },
+      {
+       "id": 5788,
+       "norma": "CP",
+       "artigo": "100",
+       "titulo": "cp"
+      },
+      {
+       "id": 6378,
+       "norma": "CPP",
+       "artigo": "237",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6082,
+       "norma": "CP",
+       "artigo": "345",
+       "titulo": "cp"
+      },
+      {
+       "id": 6315,
+       "norma": "CPP",
+       "artigo": "174",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6164,
+       "norma": "CPP",
+       "artigo": "32",
+       "titulo": "Código de Processo Penal"
+      }
+     ],
+     "criada_em": "2026-09-10T13:26:42.225316+00:00"
+    }
+   ]
+  },
+  {
+   "usuario": "teste-avaliar-chat@local",
+   "titulo": "quero aprender ciências forenses do zero",
+   "mesa": "PC-PR Investigador",
+   "criada_em": "2026-09-10T13:26:49.418262+00:00",
+   "atualizada_em": "2026-09-10T13:26:49.424532+00:00",
+   "mensagens": [
+    {
+     "autor": "aluno",
+     "texto": "quero aprender ciências forenses do zero",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:26:49.421999+00:00"
+    }
+   ]
+  },
+  {
+   "usuario": "teste-avaliar-chat@local",
+   "titulo": "quero estudar peculato",
+   "mesa": "PC-PR Investigador",
+   "criada_em": "2026-09-10T13:27:15.826793+00:00",
+   "atualizada_em": "2026-09-10T13:28:22.043047+00:00",
+   "mensagens": [
+    {
+     "autor": "aluno",
+     "texto": "quero estudar peculato",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:27:15.835680+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Para o seu concurso de Investigador da PC-PR, o peculato é um dos crimes contra a administração pública que mais exige atenção, especialmente pela distinção entre as modalidades.\n\nO peculato ocorre quando o funcionário público se apropria de dinheiro, valor ou bem móvel (público ou particular) de que tem a posse em razão do cargo, ou o desvia em proveito próprio ou alheio. Existe também o peculato-furto, que acontece quando o funcionário não tem a posse do bem, mas o subtrai ou concorre para a subtração valendo-se da facilidade que o cargo lhe proporciona.\n\nVocê já sabe diferenciar a situação em que o funcionário tem a posse do bem (peculato-apropriação ou desvio) daquela em que ele apenas se aproveita da facilidade do cargo para subtrair (peculato-furto)?",
+     "fontes": [
+      {
+       "id": 6028,
+       "norma": "CP",
+       "artigo": "312",
+       "titulo": "cp"
+      },
+      {
+       "id": 5878,
+       "norma": "CP",
+       "artigo": "178",
+       "titulo": "cp"
+      },
+      {
+       "id": 6029,
+       "norma": "CP",
+       "artigo": "313",
+       "titulo": "cp"
+      },
+      {
+       "id": 5874,
+       "norma": "CP",
+       "artigo": "174",
+       "titulo": "cp"
+      },
+      {
+       "id": 7125,
+       "norma": "L8112",
+       "artigo": "155",
+       "titulo": "Lei 8.112/1990"
+      },
+      {
+       "id": 5752,
+       "norma": "CP",
+       "artigo": "65",
+       "titulo": "cp"
+      }
+     ],
+     "criada_em": "2026-09-10T13:27:18.620610+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "me testa nisso",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:27:18.671358+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Vamos testar esse conhecimento agora mesmo. As questões estão logo abaixo; ao responder, preste muita atenção se o funcionário público já tinha a posse prévia do bem ou se apenas usou a facilidade do cargo para subtraí-lo.",
+     "fontes": [
+      {
+       "id": 6028,
+       "norma": "CP",
+       "artigo": "312",
+       "titulo": "cp"
+      },
+      {
+       "id": 5878,
+       "norma": "CP",
+       "artigo": "178",
+       "titulo": "cp"
+      },
+      {
+       "id": 6029,
+       "norma": "CP",
+       "artigo": "313",
+       "titulo": "cp"
+      },
+      {
+       "id": 5874,
+       "norma": "CP",
+       "artigo": "174",
+       "titulo": "cp"
+      },
+      {
+       "id": 7125,
+       "norma": "L8112",
+       "artigo": "155",
+       "titulo": "Lei 8.112/1990"
+      },
+      {
+       "id": 5752,
+       "norma": "CP",
+       "artigo": "65",
+       "titulo": "cp"
+      }
+     ],
+     "criada_em": "2026-09-10T13:27:38.989849+00:00"
+    },
+    {
+     "autor": "evento",
+     "texto": "Você propôs 2 questão(ões) sobre Peculato culposo, Emissão irregular de conhecimento de depósito ou warrant. O aluno vai respondê-las agora, dentro desta conversa.",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:27:45.245276+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "me da 3 questoes disso",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:27:45.273168+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Vamos treinar a diferença entre o peculato próprio (apropriação/desvio) e o peculato-furto; as questões estão logo abaixo, atente-se ao momento em que o funcionário tem contato com o bem.",
+     "fontes": [
+      {
+       "id": 6028,
+       "norma": "CP",
+       "artigo": "312",
+       "titulo": "cp"
+      },
+      {
+       "id": 5878,
+       "norma": "CP",
+       "artigo": "178",
+       "titulo": "cp"
+      },
+      {
+       "id": 6029,
+       "norma": "CP",
+       "artigo": "313",
+       "titulo": "cp"
+      },
+      {
+       "id": 5874,
+       "norma": "CP",
+       "artigo": "174",
+       "titulo": "cp"
+      },
+      {
+       "id": 7125,
+       "norma": "L8112",
+       "artigo": "155",
+       "titulo": "Lei 8.112/1990"
+      },
+      {
+       "id": 5752,
+       "norma": "CP",
+       "artigo": "65",
+       "titulo": "cp"
+      }
+     ],
+     "criada_em": "2026-09-10T13:27:46.890752+00:00"
+    },
+    {
+     "autor": "evento",
+     "texto": "Você propôs 3 questão(ões) sobre Peculato, Emissão irregular de conhecimento de depósito, Peculato mediante erro de outrem. O aluno vai respondê-las agora, dentro desta conversa.",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:27:49.676471+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "agora 2 itens certo ou errado",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:27:49.706919+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Perfeito, vamos treinar com dois itens de certo ou errado. As questões estão logo abaixo; observe bem se a conduta do funcionário configura apropriação, desvio ou subtração facilitada pelo cargo.",
+     "fontes": [
+      {
+       "id": 6028,
+       "norma": "CP",
+       "artigo": "312",
+       "titulo": "cp"
+      },
+      {
+       "id": 5878,
+       "norma": "CP",
+       "artigo": "178",
+       "titulo": "cp"
+      },
+      {
+       "id": 6029,
+       "norma": "CP",
+       "artigo": "313",
+       "titulo": "cp"
+      },
+      {
+       "id": 5874,
+       "norma": "CP",
+       "artigo": "174",
+       "titulo": "cp"
+      },
+      {
+       "id": 7125,
+       "norma": "L8112",
+       "artigo": "155",
+       "titulo": "Lei 8.112/1990"
+      },
+      {
+       "id": 5752,
+       "norma": "CP",
+       "artigo": "65",
+       "titulo": "cp"
+      }
+     ],
+     "criada_em": "2026-09-10T13:27:53.381472+00:00"
+    },
+    {
+     "autor": "evento",
+     "texto": "Você propôs 2 questão(ões) sobre Peculato culposo e extinção da punibilidade, Efeitos da reparação do dano posterior no peculato culposo. O aluno vai respondê-las agora, dentro desta conversa.",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:28:16.576365+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "quero um simulado formal cronometrado",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:28:16.614519+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Você pode realizar o simulado formal cronometrado diretamente na tela de Simulado do aplicativo, mas, se preferir, podemos continuar treinando com questões avulsas por aqui mesmo.",
+     "fontes": [
+      {
+       "id": 6028,
+       "norma": "CP",
+       "artigo": "312",
+       "titulo": "cp"
+      },
+      {
+       "id": 6133,
+       "norma": "CPP",
+       "artigo": "6o",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6034,
+       "norma": "CP",
+       "artigo": "316",
+       "titulo": "cp"
+      },
+      {
+       "id": 5855,
+       "norma": "CP",
+       "artigo": "157",
+       "titulo": "cp"
+      },
+      {
+       "id": 5707,
+       "norma": "CP",
+       "artigo": "20",
+       "titulo": "cp"
+      },
+      {
+       "id": 5868,
+       "norma": "CP",
+       "artigo": "169",
+       "titulo": "cp"
+      }
+     ],
+     "criada_em": "2026-09-10T13:28:22.038494+00:00"
+    }
+   ]
+  },
+  {
+   "usuario": "teste-avaliar-chat@local",
+   "titulo": "quero estudar peculato",
+   "mesa": "PC-PR Investigador",
+   "criada_em": "2026-09-10T13:28:38.390864+00:00",
+   "atualizada_em": "2026-09-10T13:29:14.316254+00:00",
+   "mensagens": [
+    {
+     "autor": "aluno",
+     "texto": "quero estudar peculato",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:28:38.395078+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Para a sua prova de Investigador da PC-PR, o peculato é um crime contra a administração pública praticado por funcionário público. O ponto central é que o agente se apropria de dinheiro, valor ou bem móvel (público ou particular) de que tem a posse em razão do cargo, ou o desvia em proveito próprio ou alheio.\n\nAlém da apropriação e do desvio, a lei pune também o peculato-furto, que ocorre quando o funcionário, mesmo sem ter a posse legítima do bem, subtrai-o ou concorre para a subtração valendo-se da facilidade que o cargo lhe proporciona. Existe também o peculato culposo, quando o funcionário concorre sem intenção para o crime de outrem. Nesse caso específico, a reparação do dano antes da sentença irrecorrível extingue a punibilidade, e se for feita depois, reduz a pena pela metade.\n\nVocê já sabe diferenciar a situação em que o funcionário tem a posse do bem (peculato próprio) daquela em que ele se aproveita da facilidade do cargo para subtrair algo que não está sob sua posse (peculato-furto)?",
+     "fontes": [
+      {
+       "id": 6028,
+       "norma": "CP",
+       "artigo": "312",
+       "titulo": "cp"
+      },
+      {
+       "id": 5878,
+       "norma": "CP",
+       "artigo": "178",
+       "titulo": "cp"
+      },
+      {
+       "id": 6029,
+       "norma": "CP",
+       "artigo": "313",
+       "titulo": "cp"
+      },
+      {
+       "id": 5874,
+       "norma": "CP",
+       "artigo": "174",
+       "titulo": "cp"
+      },
+      {
+       "id": 7125,
+       "norma": "L8112",
+       "artigo": "155",
+       "titulo": "Lei 8.112/1990"
+      },
+      {
+       "id": 5752,
+       "norma": "CP",
+       "artigo": "65",
+       "titulo": "cp"
+      }
+     ],
+     "criada_em": "2026-09-10T13:28:40.112320+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "me da 4 questoes",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:28:40.136478+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Vamos treinar isso; as questões estão logo abaixo, repare na diferença entre a posse do bem e a facilidade proporcionada pelo cargo.",
+     "fontes": [
+      {
+       "id": 6028,
+       "norma": "CP",
+       "artigo": "312",
+       "titulo": "cp"
+      },
+      {
+       "id": 5878,
+       "norma": "CP",
+       "artigo": "178",
+       "titulo": "cp"
+      },
+      {
+       "id": 6029,
+       "norma": "CP",
+       "artigo": "313",
+       "titulo": "cp"
+      },
+      {
+       "id": 5874,
+       "norma": "CP",
+       "artigo": "174",
+       "titulo": "cp"
+      },
+      {
+       "id": 7125,
+       "norma": "L8112",
+       "artigo": "155",
+       "titulo": "Lei 8.112/1990"
+      },
+      {
+       "id": 5752,
+       "norma": "CP",
+       "artigo": "65",
+       "titulo": "cp"
+      }
+     ],
+     "criada_em": "2026-09-10T13:28:41.947112+00:00"
+    },
+    {
+     "autor": "evento",
+     "texto": "Você propôs 4 questão(ões) sobre Peculato culposo, Peculato mediante erro de outrem, Induzimento à especulação, Emissão irregular de conhecimento de depósito ou warrant. O aluno vai respondê-las agora, dentro desta conversa.",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:28:49.968332+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "agora só uma",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:28:49.995227+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Vamos treinar a diferença entre o peculato próprio e o peculato-furto com esta questão focada no que a banca exige sobre a posse do bem.",
+     "fontes": [
+      {
+       "id": 6028,
+       "norma": "CP",
+       "artigo": "312",
+       "titulo": "cp"
+      },
+      {
+       "id": 5878,
+       "norma": "CP",
+       "artigo": "178",
+       "titulo": "cp"
+      },
+      {
+       "id": 6029,
+       "norma": "CP",
+       "artigo": "313",
+       "titulo": "cp"
+      },
+      {
+       "id": 5874,
+       "norma": "CP",
+       "artigo": "174",
+       "titulo": "cp"
+      },
+      {
+       "id": 7125,
+       "norma": "L8112",
+       "artigo": "155",
+       "titulo": "Lei 8.112/1990"
+      },
+      {
+       "id": 5752,
+       "norma": "CP",
+       "artigo": "65",
+       "titulo": "cp"
+      }
+     ],
+     "criada_em": "2026-09-10T13:28:51.354657+00:00"
+    },
+    {
+     "autor": "evento",
+     "texto": "Você propôs 1 questão(ões) sobre Peculato culposo. O aluno vai respondê-las agora, dentro desta conversa.",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:28:52.944486+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "manda cinco",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:28:52.971436+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Vamos treinar; as questões estão logo abaixo, atente-se aos detalhes sobre a posse do bem e a facilidade que o cargo proporciona para a prática do crime.",
+     "fontes": [
+      {
+       "id": 6028,
+       "norma": "CP",
+       "artigo": "312",
+       "titulo": "cp"
+      },
+      {
+       "id": 5878,
+       "norma": "CP",
+       "artigo": "178",
+       "titulo": "cp"
+      },
+      {
+       "id": 6029,
+       "norma": "CP",
+       "artigo": "313",
+       "titulo": "cp"
+      },
+      {
+       "id": 5874,
+       "norma": "CP",
+       "artigo": "174",
+       "titulo": "cp"
+      },
+      {
+       "id": 7125,
+       "norma": "L8112",
+       "artigo": "155",
+       "titulo": "Lei 8.112/1990"
+      },
+      {
+       "id": 5752,
+       "norma": "CP",
+       "artigo": "65",
+       "titulo": "cp"
+      }
+     ],
+     "criada_em": "2026-09-10T13:29:06.951461+00:00"
+    },
+    {
+     "autor": "evento",
+     "texto": "Você propôs 5 questão(ões) sobre Peculato culposo, Peculato mediante erro de outrem, Processo Administrativo Disciplinar, Peculato-furto, Emissão irregular de conhecimento de depósito ou warrant. O aluno vai respondê-las agora, dentro desta conversa.",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:29:14.313236+00:00"
+    }
+   ]
+  },
+  {
+   "usuario": "teste-avaliar-chat@local",
+   "titulo": "tô desanimado, não sei se vou passar",
+   "mesa": "PC-PR Investigador",
+   "criada_em": "2026-09-10T13:29:16.733849+00:00",
+   "atualizada_em": "2026-09-10T13:29:42.382864+00:00",
+   "mensagens": [
+    {
+     "autor": "aluno",
+     "texto": "tô desanimado, não sei se vou passar",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:29:16.738688+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Entendo perfeitamente o peso dessa jornada, mas o desânimo é um sinal de que você está levando a sério a preparação para a PC-PR. O caminho é longo, mas a constância vence o cansaço.\n\nPara começarmos a organizar o seu estudo e ganhar confiança, por qual dessas disciplinas do seu edital você prefere começar hoje: **Direito Administrativo**, **Direito Penal** ou **Direito Processual Penal**?",
+     "fontes": [
+      {
+       "id": 5905,
+       "norma": "CP",
+       "artigo": "203",
+       "titulo": "cp"
+      },
+      {
+       "id": 5715,
+       "norma": "CP",
+       "artigo": "28",
+       "titulo": "cp"
+      },
+      {
+       "id": 4250,
+       "norma": "ADCT",
+       "artigo": "57",
+       "titulo": "ADCT"
+      },
+      {
+       "id": 4199,
+       "norma": "ADCT",
+       "artigo": "10",
+       "titulo": "ADCT"
+      },
+      {
+       "id": 4248,
+       "norma": "ADCT",
+       "artigo": "55",
+       "titulo": "ADCT"
+      },
+      {
+       "id": 3952,
+       "norma": "CF",
+       "artigo": "38",
+       "titulo": "cf"
+      }
+     ],
+     "criada_em": "2026-09-10T13:29:27.289454+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "estudo há 2 anos e nada",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:29:27.318197+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Dois anos é um tempo considerável, mas o que importa agora é a qualidade da sua revisão e o foco na banca. Se você sente que está estagnado, talvez o problema seja a forma como você está revisando o conteúdo ou a falta de foco no que é mais cobrado.\n\nPara a PC-PR, em **Direito Processual Penal**, um ponto fundamental que costuma aparecer é a atuação da autoridade policial no Inquérito. Você já domina as atribuições da autoridade policial logo após tomar conhecimento de uma infração penal, ou costuma confundir o que deve ser feito no local do crime?",
+     "fontes": [
+      {
+       "id": 6174,
+       "norma": "CPP",
+       "artigo": "42",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6192,
+       "norma": "CPP",
+       "artigo": "60",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 5794,
+       "norma": "CP",
+       "artigo": "106",
+       "titulo": "cp"
+      },
+      {
+       "id": 7141,
+       "norma": "L8112",
+       "artigo": "171",
+       "titulo": "Lei 8.112/1990"
+      },
+      {
+       "id": 6133,
+       "norma": "CPP",
+       "artigo": "6o",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6626,
+       "norma": "CPP",
+       "artigo": "474-A",
+       "titulo": "Código de Processo Penal"
+      }
+     ],
+     "criada_em": "2026-09-10T13:29:31.290721+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "só tenho 20 minutos hoje",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:29:31.314818+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Com 20 minutos, vamos direto ao ponto que mais cai sobre a atuação inicial do delegado: as providências imediatas ao tomar conhecimento de um crime.\n\nO Código de Processo Penal estabelece que, ao saber da infração, a autoridade policial deve preservar o local até a chegada dos peritos, apreender objetos relacionados ao fato (após a liberação pericial), ouvir o ofendido e o indiciado, além de determinar exames de corpo de delito e outras perícias. É uma sequência lógica de preservação e coleta de provas.\n\nVocê já tinha clareza de que a apreensão de objetos só ocorre após a liberação pelos peritos, ou costumava achar que a polícia poderia recolher tudo imediatamente?",
+     "fontes": [
+      {
+       "id": 6178,
+       "norma": "CPP",
+       "artigo": "46",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6137,
+       "norma": "CPP",
+       "artigo": "10",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6132,
+       "norma": "CPP",
+       "artigo": "5o",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6142,
+       "norma": "CPP",
+       "artigo": "159",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6171,
+       "norma": "CPP",
+       "artigo": "39",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6133,
+       "norma": "CPP",
+       "artigo": "6o",
+       "titulo": "Código de Processo Penal"
+      }
+     ],
+     "criada_em": "2026-09-10T13:29:33.032920+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "tá, o que eu faço nesses 20 minutos?",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:29:33.054403+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Nesses 20 minutos, foque em memorizar a ordem lógica das diligências iniciais do inquérito policial, pois a banca costuma trocar a sequência ou incluir atos que não são imediatos.\n\nComo você tem pouco tempo, leia com atenção o que a autoridade policial deve fazer logo após o crime: preservar o local, aguardar os peritos, apreender objetos (após a perícia), ouvir o ofendido e o indiciado, e determinar exames. O ponto de atenção aqui é que a preservação do local e a perícia vêm antes da apreensão de objetos.\n\nPara fixar, vamos treinar isso; as questões estão logo abaixo, repare no que a lei exige do funcionário público.",
+     "fontes": [
+      {
+       "id": 6133,
+       "norma": "CPP",
+       "artigo": "6o",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6550,
+       "norma": "CPP",
+       "artigo": "400",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6137,
+       "norma": "CPP",
+       "artigo": "10",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6562,
+       "norma": "CPP",
+       "artigo": "411",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6341,
+       "norma": "CPP",
+       "artigo": "201",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6692,
+       "norma": "CPP",
+       "artigo": "531",
+       "titulo": "Código de Processo Penal"
+      }
+     ],
+     "criada_em": "2026-09-10T13:29:42.355828+00:00"
+    }
+   ]
+  },
+  {
+   "usuario": "teste-avaliar-chat@local",
+   "titulo": "boa noite",
+   "mesa": "PC-PR Investigador",
+   "criada_em": "2026-09-10T13:47:07.374423+00:00",
+   "atualizada_em": "2026-09-10T13:47:47.062489+00:00",
+   "mensagens": [
+    {
+     "autor": "aluno",
+     "texto": "boa noite",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:47:07.379662+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Boa noite! Vamos começar nossa preparação para a PC-PR; por qual destas disciplinas você prefere seguir hoje: Direito Administrativo, Direito Penal, Direito Processual Penal, Direito Constitucional ou alguma das outras matérias do seu edital?",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:47:12.744699+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "podemos testar eu nao sei se ja estou bom",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:47:12.786211+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Vamos começar por Direito Processual Penal, que é fundamental para o seu cargo de Investigador. Como você quer testar, selecionei questões sobre a aplicação da lei processual no tempo e o alcance do Código de Processo Penal.\n\nRepare bem se a lei impõe a retroatividade ou se ela preserva os atos já praticados sob a vigência da norma anterior.\n\nAs questões estão logo abaixo.",
+     "fontes": [
+      {
+       "id": 3935,
+       "norma": "CF",
+       "artigo": "22",
+       "titulo": "cf"
+      },
+      {
+       "id": 6122,
+       "norma": "CPP",
+       "artigo": "1o",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 4025,
+       "norma": "CF",
+       "artigo": "109",
+       "titulo": "cf"
+      },
+      {
+       "id": 3937,
+       "norma": "CF",
+       "artigo": "24",
+       "titulo": "cf"
+      },
+      {
+       "id": 4219,
+       "norma": "ADCT",
+       "artigo": "29",
+       "titulo": "ADCT"
+      },
+      {
+       "id": 6123,
+       "norma": "CPP",
+       "artigo": "2o",
+       "titulo": "Código de Processo Penal"
+      }
+     ],
+     "criada_em": "2026-09-10T13:47:31.034779+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "quero eficácia das normas constitucionais",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:47:32.170378+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Para falarmos de eficácia das normas constitucionais, preciso saber: você já domina a classificação de José Afonso da Silva (normas de eficácia plena, contida e limitada) ou ainda confunde os efeitos de cada uma?",
+     "fontes": [
+      {
+       "id": 5696,
+       "norma": "CP",
+       "artigo": "9º",
+       "titulo": "cp"
+      },
+      {
+       "id": 4207,
+       "norma": "ADCT",
+       "artigo": "18",
+       "titulo": "ADCT"
+      },
+      {
+       "id": 4264,
+       "norma": "ADCT",
+       "artigo": "70",
+       "titulo": "ADCT"
+      },
+      {
+       "id": 6971,
+       "norma": "L8112",
+       "artigo": "2o",
+       "titulo": "Lei 8.112/1990"
+      },
+      {
+       "id": 4226,
+       "norma": "ADCT",
+       "artigo": "36",
+       "titulo": "ADCT"
+      },
+      {
+       "id": 6970,
+       "norma": "L8112",
+       "artigo": "1o",
+       "titulo": "Lei 8.112/1990"
+      }
+     ],
+     "criada_em": "2026-09-10T13:47:34.180207+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "acho que sim",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:47:34.208326+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Ótimo. Então vamos direto ao ponto que costuma derrubar candidato na prova: a diferença entre a norma de eficácia contida e a limitada.\n\nA norma de **eficácia contida** já nasce com aptidão para produzir todos os seus efeitos, mas pode ter seu alcance reduzido por uma lei infraconstitucional ou por outra norma constitucional. Já a **eficácia limitada** é aquela que depende de uma regulamentação posterior para que possa produzir todos os seus efeitos; até que essa lei venha, ela tem apenas eficácia reduzida.\n\nIsso é doutrina e não está no seu material; confira na sua apostila para ver os exemplos clássicos que a banca costuma cobrar.\n\nPara ver se ficou claro: se a Constituição diz que \"é livre o exercício de qualquer trabalho, ofício ou profissão, atendidas as qualificações profissionais que a lei estabelecer\", estamos diante de qual tipo de eficácia?",
+     "fontes": [
+      {
+       "id": 4057,
+       "norma": "CF",
+       "artigo": "139",
+       "titulo": "cf"
+      },
+      {
+       "id": 6011,
+       "norma": "CP",
+       "artigo": "296",
+       "titulo": "cp"
+      },
+      {
+       "id": 5752,
+       "norma": "CP",
+       "artigo": "65",
+       "titulo": "cp"
+      },
+      {
+       "id": 6970,
+       "norma": "L8112",
+       "artigo": "1o",
+       "titulo": "Lei 8.112/1990"
+      },
+      {
+       "id": 6652,
+       "norma": "CPP",
+       "artigo": "500",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6214,
+       "norma": "CPP",
+       "artigo": "82",
+       "titulo": "Código de Processo Penal"
+      }
+     ],
+     "criada_em": "2026-09-10T13:47:36.552776+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "e o art. 312?",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:47:36.621572+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "O artigo 312 que você mencionou trata da **prisão preventiva** no Direito Processual Penal, que é um tema central para o seu concurso de Investigador da PC-PR. Note que, embora o número seja o mesmo do crime de peculato no Código Penal, aqui estamos falando de uma medida cautelar processual.\n\nA lei estabelece que a prisão preventiva pode ser decretada para garantir a ordem pública, a ordem econômica, por conveniência da instrução criminal ou para assegurar a aplicação da lei penal. Para isso, é indispensável que existam provas da existência do crime e indícios suficientes de autoria e de perigo gerado pelo estado de liberdade do imputado.\n\nUm ponto muito importante que a lei trouxe é que a decisão deve ser sempre motivada e fundamentada em fatos novos ou contemporâneos, sendo vedada a decretação baseada apenas na gravidade abstrata do delito.\n\nFicou clara a diferença entre o uso desse artigo no processo penal e o crime de peculato que vimos anteriormente, ou quer que eu detalhe os requisitos de periculosidade que o juiz deve considerar para decretar essa prisão?",
+     "fontes": [
+      {
+       "id": 6028,
+       "norma": "CP",
+       "artigo": "312",
+       "titulo": "cp"
+      },
+      {
+       "id": 6456,
+       "norma": "CPP",
+       "artigo": "312",
+       "titulo": "Código de Processo Penal"
+      }
+     ],
+     "criada_em": "2026-09-10T13:47:44.142228+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "me dá uma questão disso",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:47:44.249270+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Vamos treinar isso; as questões estão logo abaixo, repare no que a lei exige do juiz para fundamentar a decisão de prisão preventiva, especialmente quanto à contemporaneidade dos fatos.",
+     "fontes": [
+      {
+       "id": 6028,
+       "norma": "CP",
+       "artigo": "312",
+       "titulo": "cp"
+      },
+      {
+       "id": 6456,
+       "norma": "CPP",
+       "artigo": "312",
+       "titulo": "Código de Processo Penal"
+      }
+     ],
+     "criada_em": "2026-09-10T13:47:45.277771+00:00"
+    },
+    {
+     "autor": "evento",
+     "texto": "Você propôs 1 questão(ões) sobre Peculato culposo. O aluno vai respondê-las agora, dentro desta conversa.",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:47:47.047270+00:00"
+    }
+   ]
+  },
+  {
+   "usuario": "teste-avaliar-chat@local",
+   "titulo": "oi",
+   "mesa": "PC-PR Investigador",
+   "criada_em": "2026-09-10T13:47:50.479813+00:00",
+   "atualizada_em": "2026-09-10T13:47:55.152733+00:00",
+   "mensagens": [
+    {
+     "autor": "aluno",
+     "texto": "oi",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:47:50.483675+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Olá! Tudo bem? Para começarmos, por qual destas disciplinas do seu edital você gostaria de seguir hoje: Direito Penal, Direito Processual Penal, Direito Administrativo, Direito Constitucional ou alguma das outras matérias da PC-PR?",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:47:53.126361+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "tudo bem e você?",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:47:53.154049+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Tudo ótimo por aqui, vamos lá! Como você não escolheu uma disciplina específica, vou começar por **Direito Constitucional**, focando em um tema que cai muito para a PC-PR: a repartição de competências entre os entes federativos.\n\nPara começar, você já sabe a diferença entre competência privativa da União e competência concorrente entre União, Estados e Distrito Federal?",
+     "fontes": [
+      {
+       "id": 3935,
+       "norma": "CF",
+       "artigo": "22",
+       "titulo": "cf"
+      },
+      {
+       "id": 6122,
+       "norma": "CPP",
+       "artigo": "1o",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 4025,
+       "norma": "CF",
+       "artigo": "109",
+       "titulo": "cf"
+      },
+      {
+       "id": 3937,
+       "norma": "CF",
+       "artigo": "24",
+       "titulo": "cf"
+      },
+      {
+       "id": 4046,
+       "norma": "CF",
+       "artigo": "129",
+       "titulo": "cf"
+      },
+      {
+       "id": 6558,
+       "norma": "CPP",
+       "artigo": "407",
+       "titulo": "Código de Processo Penal"
+      }
+     ],
+     "criada_em": "2026-09-10T13:47:55.124158+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "nada, só passei pra ver",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:47:55.150017+00:00"
+    }
+   ]
+  },
+  {
+   "usuario": "teste-avaliar-chat@local",
+   "titulo": "quero estudar peculato",
+   "mesa": "PC-PR Investigador",
+   "criada_em": "2026-09-10T13:48:27.510826+00:00",
+   "atualizada_em": "2026-09-10T13:48:52.998564+00:00",
+   "mensagens": [
+    {
+     "autor": "aluno",
+     "texto": "quero estudar peculato",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:48:27.522074+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Olá! Vamos começar por Direito Penal, focando no crime de peculato, que é um dos temas mais recorrentes para Investigador da PC-PR.\n\nO peculato, previsto no Código Penal, ocorre quando o funcionário público se apropria de dinheiro, valor ou qualquer bem móvel, público ou particular, de que tem a posse em razão do cargo, ou o desvia em proveito próprio ou alheio. Existe também o peculato-furto, que acontece quando o funcionário, mesmo sem ter a posse do bem, subtrai-o ou facilita a subtração valendo-se da facilidade que o cargo lhe proporciona.\n\nPara começarmos, você já sabe diferenciar a situação em que o funcionário tem a posse do bem (peculato próprio) daquela em que ele apenas se aproveita da facilidade do cargo para subtrair (peculato-furto)?",
+     "fontes": [
+      {
+       "id": 6028,
+       "norma": "CP",
+       "artigo": "312",
+       "titulo": "cp"
+      },
+      {
+       "id": 5878,
+       "norma": "CP",
+       "artigo": "178",
+       "titulo": "cp"
+      },
+      {
+       "id": 6029,
+       "norma": "CP",
+       "artigo": "313",
+       "titulo": "cp"
+      },
+      {
+       "id": 5874,
+       "norma": "CP",
+       "artigo": "174",
+       "titulo": "cp"
+      },
+      {
+       "id": 7125,
+       "norma": "L8112",
+       "artigo": "155",
+       "titulo": "Lei 8.112/1990"
+      },
+      {
+       "id": 5752,
+       "norma": "CP",
+       "artigo": "65",
+       "titulo": "cp"
+      }
+     ],
+     "criada_em": "2026-09-10T13:48:31.543405+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "me testa nisso",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:48:31.571863+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Vamos treinar isso; as questões estão logo abaixo, repare na diferença entre a posse legítima do bem em razão do cargo e a simples facilidade que a função proporciona para a subtração.",
+     "fontes": [
+      {
+       "id": 6028,
+       "norma": "CP",
+       "artigo": "312",
+       "titulo": "cp"
+      },
+      {
+       "id": 5878,
+       "norma": "CP",
+       "artigo": "178",
+       "titulo": "cp"
+      },
+      {
+       "id": 6029,
+       "norma": "CP",
+       "artigo": "313",
+       "titulo": "cp"
+      },
+      {
+       "id": 5874,
+       "norma": "CP",
+       "artigo": "174",
+       "titulo": "cp"
+      },
+      {
+       "id": 7125,
+       "norma": "L8112",
+       "artigo": "155",
+       "titulo": "Lei 8.112/1990"
+      },
+      {
+       "id": 5752,
+       "norma": "CP",
+       "artigo": "65",
+       "titulo": "cp"
+      }
+     ],
+     "criada_em": "2026-09-10T13:48:33.001868+00:00"
+    },
+    {
+     "autor": "evento",
+     "texto": "Você propôs 2 questão(ões) sobre Peculato, Emissão irregular de conhecimento de depósito ou warrant. O aluno vai respondê-las agora, dentro desta conversa.",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:48:34.830780+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "me da 3 questoes disso",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:48:34.852937+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Vamos treinar mais esse ponto; as questões estão logo abaixo, atente-se para identificar se o agente detinha a posse do bem ou se apenas se valeu da facilidade do cargo para subtraí-lo.",
+     "fontes": [
+      {
+       "id": 6028,
+       "norma": "CP",
+       "artigo": "312",
+       "titulo": "cp"
+      },
+      {
+       "id": 5878,
+       "norma": "CP",
+       "artigo": "178",
+       "titulo": "cp"
+      },
+      {
+       "id": 6029,
+       "norma": "CP",
+       "artigo": "313",
+       "titulo": "cp"
+      },
+      {
+       "id": 5874,
+       "norma": "CP",
+       "artigo": "174",
+       "titulo": "cp"
+      },
+      {
+       "id": 7125,
+       "norma": "L8112",
+       "artigo": "155",
+       "titulo": "Lei 8.112/1990"
+      },
+      {
+       "id": 5752,
+       "norma": "CP",
+       "artigo": "65",
+       "titulo": "cp"
+      }
+     ],
+     "criada_em": "2026-09-10T13:48:39.000795+00:00"
+    },
+    {
+     "autor": "evento",
+     "texto": "Você propôs 3 questão(ões) sobre Peculato, Emissão irregular de conhecimento de depósito ou warrant, Peculato mediante erro de outrem. O aluno vai respondê-las agora, dentro desta conversa.",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:48:42.705589+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "agora 2 itens certo ou errado",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:48:42.729285+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Vamos lá, preparei dois itens de certo ou errado focados na distinção entre as modalidades de peculato que vimos.\n\nO funcionário público que, embora não tenha a posse do bem, subtrai-o valendo-se da facilidade que a qualidade de funcionário lhe proporciona, comete o crime de peculato-furto.\n\nO peculato mediante erro de outrem ocorre quando o funcionário público, no exercício do cargo, apropria-se de dinheiro ou utilidade que recebeu por erro de terceiro.\n\nQuer que eu siga para o peculato culposo ou prefere revisar algum desses pontos?",
+     "fontes": [
+      {
+       "id": 6028,
+       "norma": "CP",
+       "artigo": "312",
+       "titulo": "cp"
+      },
+      {
+       "id": 5878,
+       "norma": "CP",
+       "artigo": "178",
+       "titulo": "cp"
+      },
+      {
+       "id": 6029,
+       "norma": "CP",
+       "artigo": "313",
+       "titulo": "cp"
+      },
+      {
+       "id": 5874,
+       "norma": "CP",
+       "artigo": "174",
+       "titulo": "cp"
+      },
+      {
+       "id": 7125,
+       "norma": "L8112",
+       "artigo": "155",
+       "titulo": "Lei 8.112/1990"
+      },
+      {
+       "id": 5752,
+       "norma": "CP",
+       "artigo": "65",
+       "titulo": "cp"
+      }
+     ],
+     "criada_em": "2026-09-10T13:48:49.333315+00:00"
+    },
+    {
+     "autor": "evento",
+     "texto": "Você propôs 2 questão(ões) sobre Peculato-furto, Peculato culposo. O aluno vai respondê-las agora, dentro desta conversa.",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:48:51.429406+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "quero um simulado formal cronometrado",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:48:51.451622+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Para fazer um simulado formal com cronômetro e correção ao final, você pode utilizar a tela de Simulado do aplicativo.\n\nSe preferir, podemos treinar por aqui mesmo, item a item, com foco nos pontos que mais caem para Investigador da PC-PR, como o Peculato e o Estelionato. Como quer seguir?",
+     "fontes": [
+      {
+       "id": 6028,
+       "norma": "CP",
+       "artigo": "312",
+       "titulo": "cp"
+      },
+      {
+       "id": 6029,
+       "norma": "CP",
+       "artigo": "313",
+       "titulo": "cp"
+      },
+      {
+       "id": 6008,
+       "norma": "CP",
+       "artigo": "293",
+       "titulo": "cp"
+      },
+      {
+       "id": 5870,
+       "norma": "CP",
+       "artigo": "171",
+       "titulo": "cp"
+      },
+      {
+       "id": 5868,
+       "norma": "CP",
+       "artigo": "169",
+       "titulo": "cp"
+      },
+      {
+       "id": 5707,
+       "norma": "CP",
+       "artigo": "20",
+       "titulo": "cp"
+      }
+     ],
+     "criada_em": "2026-09-10T13:48:52.993512+00:00"
+    }
+   ]
+  },
+  {
+   "usuario": "teste-avaliar-chat@local",
+   "titulo": "tô desanimado, não sei se vou passar",
+   "mesa": "PC-PR Investigador",
+   "criada_em": "2026-09-10T13:48:55.478448+00:00",
+   "atualizada_em": "2026-09-10T13:49:10.341340+00:00",
+   "mensagens": [
+    {
+     "autor": "aluno",
+     "texto": "tô desanimado, não sei se vou passar",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:48:55.481974+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Entendo perfeitamente o peso dessa jornada, mas o desânimo é um sinal de que você está levando a sério o desafio da PC-PR. Vamos focar no que você controla: o estudo estratégico.\n\nPara começarmos, prefere que eu siga por **Direito Penal**, **Direito Administrativo** ou **Direito Constitucional**?",
+     "fontes": [
+      {
+       "id": 5905,
+       "norma": "CP",
+       "artigo": "203",
+       "titulo": "cp"
+      },
+      {
+       "id": 5715,
+       "norma": "CP",
+       "artigo": "28",
+       "titulo": "cp"
+      },
+      {
+       "id": 4250,
+       "norma": "ADCT",
+       "artigo": "57",
+       "titulo": "ADCT"
+      },
+      {
+       "id": 4199,
+       "norma": "ADCT",
+       "artigo": "10",
+       "titulo": "ADCT"
+      },
+      {
+       "id": 4248,
+       "norma": "ADCT",
+       "artigo": "55",
+       "titulo": "ADCT"
+      },
+      {
+       "id": 3952,
+       "norma": "CF",
+       "artigo": "38",
+       "titulo": "cf"
+      }
+     ],
+     "criada_em": "2026-09-10T13:49:05.179515+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "estudo há 2 anos e nada",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:49:05.204473+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Dois anos é um tempo de maturação importante, mas, se o resultado não veio, o problema geralmente não é falta de estudo, mas a falta de foco no que a banca realmente cobra. Vamos mudar a estratégia: vamos direto ao que é essencial para a PC-PR.\n\nVou começar por **Direito Processual Penal**, que é o coração do trabalho do Investigador. Para ajustar o rumo, você já domina as regras sobre a preservação do local de crime e a cadeia de custódia, ou sente que isso ainda te confunde na hora da prova?",
+     "fontes": [
+      {
+       "id": 6174,
+       "norma": "CPP",
+       "artigo": "42",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6296,
+       "norma": "CPP",
+       "artigo": "158-C",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 3935,
+       "norma": "CF",
+       "artigo": "22",
+       "titulo": "cf"
+      },
+      {
+       "id": 6133,
+       "norma": "CPP",
+       "artigo": "6o",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6324,
+       "norma": "CPP",
+       "artigo": "183",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6122,
+       "norma": "CPP",
+       "artigo": "1o",
+       "titulo": "Código de Processo Penal"
+      }
+     ],
+     "criada_em": "2026-09-10T13:49:06.761932+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "só tenho 20 minutos hoje",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:49:06.791635+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Com 20 minutos, vamos direto ao ponto: o que o Investigador deve fazer ao chegar no local de crime.\n\nO Código de Processo Penal determina que, ao tomar conhecimento da infração, a autoridade policial deve, primeiramente, dirigir-se ao local e garantir que o estado e a conservação das coisas não sejam alterados até a chegada dos peritos. Só após a liberação pelos peritos é que os objetos com relação ao fato podem ser apreendidos.\n\nVocê já tinha clareza de que a preservação do local tem prioridade absoluta sobre a apreensão de objetos, ou essa ordem de precedência costuma gerar dúvida nas questões?",
+     "fontes": [
+      {
+       "id": 6133,
+       "norma": "CPP",
+       "artigo": "6o",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6072,
+       "norma": "CP",
+       "artigo": "337-O",
+       "titulo": "cp"
+      },
+      {
+       "id": 6178,
+       "norma": "CPP",
+       "artigo": "46",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 5707,
+       "norma": "CP",
+       "artigo": "20",
+       "titulo": "cp"
+      },
+      {
+       "id": 5752,
+       "norma": "CP",
+       "artigo": "65",
+       "titulo": "cp"
+      },
+      {
+       "id": 5715,
+       "norma": "CP",
+       "artigo": "28",
+       "titulo": "cp"
+      }
+     ],
+     "criada_em": "2026-09-10T13:49:08.489699+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "tá, o que eu faço nesses 20 minutos?",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:49:08.515918+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Nesses 20 minutos, foque no **Inquérito Policial**, especificamente nos prazos de conclusão, que são figurinha carimbada na prova da PC-PR.\n\nO Código de Processo Penal estabelece que o inquérito deve ser concluído em **10 dias** se o indiciado estiver preso (em flagrante ou preventivamente), contados da execução da prisão. Se o indiciado estiver solto, o prazo é de **30 dias**. Lembre-se que, se o fato for de difícil elucidação e o indiciado estiver solto, a autoridade pode pedir ao juiz a devolução dos autos para novas diligências em prazo fixado pelo magistrado.\n\nPara fixar isso agora, você prefere que eu apresente questões sobre esses prazos ou quer que eu explique como funciona o prazo para o Ministério Público oferecer a denúncia após receber esse inquérito?",
+     "fontes": [
+      {
+       "id": 6137,
+       "norma": "CPP",
+       "artigo": "10",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6133,
+       "norma": "CPP",
+       "artigo": "6o",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6550,
+       "norma": "CPP",
+       "artigo": "400",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6178,
+       "norma": "CPP",
+       "artigo": "46",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6532,
+       "norma": "CPP",
+       "artigo": "384",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6432,
+       "norma": "CPP",
+       "artigo": "290",
+       "titulo": "Código de Processo Penal"
+      }
+     ],
+     "criada_em": "2026-09-10T13:49:10.337716+00:00"
+    }
+   ]
+  },
+  {
+   "usuario": "teste-avaliar-chat@local",
+   "titulo": "boa noite",
+   "mesa": "PC-PR Investigador",
+   "criada_em": "2026-09-10T13:59:20.838119+00:00",
+   "atualizada_em": "2026-09-10T14:00:25.955126+00:00",
+   "mensagens": [
+    {
+     "autor": "aluno",
+     "texto": "boa noite",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:59:20.843345+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Boa noite! Para começarmos nossa preparação para Investigador da PC-PR, por qual destas disciplinas você prefere começar: Direito Penal, Direito Processual Penal, Direito Administrativo, Língua Portuguesa ou alguma outra do seu edital?",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:59:22.784648+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "podemos testar eu nao sei se ja estou bom",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:59:22.808675+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Vamos testar agora mesmo! As questões estão logo abaixo: preste atenção em como a lei processual penal lida com as exceções de aplicação no território e em como o erro de tipo afeta o dolo no Direito Penal.",
+     "fontes": [
+      {
+       "id": 6122,
+       "norma": "CPP",
+       "artigo": "1o",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 4025,
+       "norma": "CF",
+       "artigo": "109",
+       "titulo": "cf"
+      },
+      {
+       "id": 5746,
+       "norma": "CP",
+       "artigo": "59",
+       "titulo": "cp"
+      },
+      {
+       "id": 4046,
+       "norma": "CF",
+       "artigo": "129",
+       "titulo": "cf"
+      },
+      {
+       "id": 5707,
+       "norma": "CP",
+       "artigo": "20",
+       "titulo": "cp"
+      },
+      {
+       "id": 6124,
+       "norma": "CPP",
+       "artigo": "3o",
+       "titulo": "Código de Processo Penal"
+      }
+     ],
+     "criada_em": "2026-09-10T13:59:43.916828+00:00"
+    },
+    {
+     "autor": "evento",
+     "texto": "Você propôs 2 questão(ões) sobre Aplicação do Código de Processo Penal, Competência dos Juízes Federais. O aluno vai respondê-las agora, dentro desta conversa.",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:59:48.494656+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "quero eficácia das normas constitucionais",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:59:48.522603+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Para o seu concurso da PC-PR, o tema de eficácia das normas constitucionais é fundamental, pois a banca costuma cobrar a classificação de José Afonso da Silva. Como não temos trechos de lei sobre isso, adianto que esta é uma construção doutrinária e não está na sua lei seca: as normas podem ser de eficácia plena, contida ou limitada.\n\nPara começarmos, você já sabe diferenciar uma norma de eficácia plena de uma norma de eficácia contida?",
+     "fontes": [
+      {
+       "id": 5696,
+       "norma": "CP",
+       "artigo": "9º",
+       "titulo": "cp"
+      },
+      {
+       "id": 4207,
+       "norma": "ADCT",
+       "artigo": "18",
+       "titulo": "ADCT"
+      },
+      {
+       "id": 4264,
+       "norma": "ADCT",
+       "artigo": "70",
+       "titulo": "ADCT"
+      },
+      {
+       "id": 6971,
+       "norma": "L8112",
+       "artigo": "2o",
+       "titulo": "Lei 8.112/1990"
+      },
+      {
+       "id": 4226,
+       "norma": "ADCT",
+       "artigo": "36",
+       "titulo": "ADCT"
+      },
+      {
+       "id": 6970,
+       "norma": "L8112",
+       "artigo": "1o",
+       "titulo": "Lei 8.112/1990"
+      }
+     ],
+     "criada_em": "2026-09-10T13:59:50.911422+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "acho que sim",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:59:50.939714+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Ótimo. Então, para confirmar se o conceito está firme: na norma de eficácia plena, a aplicação é direta, imediata e integral. Já na norma de eficácia contida, a aplicação também é direta e imediata, mas pode sofrer uma restrição por parte de outra norma.\n\nA diferença prática que costuma cair na sua prova é: na norma de eficácia contida, o legislador constitucional já deu a norma completa, mas permitiu que uma lei posterior (ou outra norma) venha e reduza o seu alcance. Já na norma de eficácia limitada, a norma não tem aplicabilidade integral imediata, pois depende de uma lei regulamentadora para produzir todos os seus efeitos.\n\nPara testar se essa distinção ficou clara, imagine o seguinte: se a Constituição diz que \"é livre o exercício de qualquer trabalho, ofício ou profissão, atendidas as qualificações profissionais que a lei estabelecer\", estamos diante de qual dessas classificações?",
+     "fontes": [
+      {
+       "id": 3935,
+       "norma": "CF",
+       "artigo": "22",
+       "titulo": "cf"
+      },
+      {
+       "id": 3937,
+       "norma": "CF",
+       "artigo": "24",
+       "titulo": "cf"
+      },
+      {
+       "id": 6315,
+       "norma": "CPP",
+       "artigo": "174",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 5696,
+       "norma": "CP",
+       "artigo": "9º",
+       "titulo": "cp"
+      },
+      {
+       "id": 4004,
+       "norma": "CF",
+       "artigo": "90",
+       "titulo": "cf"
+      },
+      {
+       "id": 6122,
+       "norma": "CPP",
+       "artigo": "1o",
+       "titulo": "Código de Processo Penal"
+      }
+     ],
+     "criada_em": "2026-09-10T13:59:54.204728+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "e o art. 312?",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:59:54.228933+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "O artigo 312 aparece em dois momentos cruciais para a sua prova de Investigador da PC-PR, mas tratam de assuntos completamente distintos:\n\nNo **Direito Penal**, o artigo 312 trata do crime de **Peculato**, que ocorre quando o funcionário público se apropria de dinheiro, valor ou bem móvel de que tem a posse em razão do cargo, ou o desvia em proveito próprio ou alheio. A lei também prevê a modalidade culposa, quando o funcionário concorre sem intenção para o crime de outrem, permitindo a extinção da punibilidade se o dano for reparado antes da sentença irrecorrível.\n\nJá no **Direito Processual Penal**, o artigo 312 trata da **Prisão Preventiva**. Ela é uma medida cautelar que exige prova da existência do crime, indício suficiente de autoria e perigo gerado pelo estado de liberdade do imputado. A lei é clara ao vedar a decretação baseada apenas na gravidade abstrata do delito, exigindo que o juiz demonstre concretamente o risco à ordem pública, à ordem econômica, à instrução criminal ou à aplicação da lei penal.\n\nPara não confundir na hora da prova: você já sabe identificar quando o peculato deixa de ser doloso e passa a ser culposo, ou quer que eu detalhe a diferença de pena entre eles?",
+     "fontes": [
+      {
+       "id": 6028,
+       "norma": "CP",
+       "artigo": "312",
+       "titulo": "cp"
+      },
+      {
+       "id": 6456,
+       "norma": "CPP",
+       "artigo": "312",
+       "titulo": "Código de Processo Penal"
+      }
+     ],
+     "criada_em": "2026-09-10T13:59:57.889246+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "me dá uma questão disso",
+     "fontes": [],
+     "criada_em": "2026-09-10T13:59:57.911877+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Vamos treinar isso; as questões estão logo abaixo, preste atenção em como a lei define a apropriação e a modalidade culposa no peculato.",
+     "fontes": [
+      {
+       "id": 6028,
+       "norma": "CP",
+       "artigo": "312",
+       "titulo": "cp"
+      },
+      {
+       "id": 6456,
+       "norma": "CPP",
+       "artigo": "312",
+       "titulo": "Código de Processo Penal"
+      }
+     ],
+     "criada_em": "2026-09-10T14:00:13.008279+00:00"
+    },
+    {
+     "autor": "evento",
+     "texto": "Você propôs 1 questão(ões) sobre Peculato Culposo. O aluno vai respondê-las agora, dentro desta conversa.",
+     "fontes": [],
+     "criada_em": "2026-09-10T14:00:25.932118+00:00"
+    }
+   ]
+  },
+  {
+   "usuario": "teste-avaliar-chat@local",
+   "titulo": "boa noite",
+   "mesa": "PC-PR Investigador",
+   "criada_em": "2026-09-10T14:01:01.983056+00:00",
+   "atualizada_em": "2026-09-10T14:02:04.591391+00:00",
+   "mensagens": [
+    {
+     "autor": "aluno",
+     "texto": "boa noite",
+     "fontes": [],
+     "criada_em": "2026-09-10T14:01:01.996736+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Boa noite! Vamos começar nossa preparação para a PC-PR; por qual destas disciplinas você quer seguir hoje: Direito Penal, Direito Processual Penal, Direito Administrativo, Direito Constitucional ou alguma das outras do seu edital?",
+     "fontes": [],
+     "criada_em": "2026-09-10T14:01:03.310214+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "podemos testar eu nao sei se ja estou bom",
+     "fontes": [],
+     "criada_em": "2026-09-10T14:01:03.333530+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Vamos começar por Direito Processual Penal, que é fundamental para o seu cargo de Investigador.\n\nComo você quer testar, preparei questões sobre a aplicação da lei processual no tempo e as regras de competência que vimos nos trechos da Constituição e do Código de Processo Penal.\n\nAs questões estão logo abaixo; observe com atenção como a lei trata a vigência da norma e a divisão entre Justiça Federal e Estadual.",
+     "fontes": [
+      {
+       "id": 3935,
+       "norma": "CF",
+       "artigo": "22",
+       "titulo": "cf"
+      },
+      {
+       "id": 6122,
+       "norma": "CPP",
+       "artigo": "1o",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 3937,
+       "norma": "CF",
+       "artigo": "24",
+       "titulo": "cf"
+      },
+      {
+       "id": 4025,
+       "norma": "CF",
+       "artigo": "109",
+       "titulo": "cf"
+      },
+      {
+       "id": 6558,
+       "norma": "CPP",
+       "artigo": "407",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 6123,
+       "norma": "CPP",
+       "artigo": "2o",
+       "titulo": "Código de Processo Penal"
+      }
+     ],
+     "criada_em": "2026-09-10T14:01:26.584933+00:00"
+    },
+    {
+     "autor": "evento",
+     "texto": "Você propôs 2 questão(ões) sobre Competência Legislativa da União, Processamento de exceções no Tribunal do Júri. O aluno vai respondê-las agora, dentro desta conversa.",
+     "fontes": [],
+     "criada_em": "2026-09-10T14:01:37.117081+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "quero eficácia das normas constitucionais",
+     "fontes": [],
+     "criada_em": "2026-09-10T14:01:37.157218+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Para o seu concurso da PC-PR, o estudo da eficácia das normas constitucionais é essencial, pois a banca costuma cobrar a classificação de José Afonso da Silva. Como esse tema é doutrinário e não está nos trechos de lei que temos aqui, adianto que ele divide as normas em três tipos: de eficácia plena, contida e limitada.\n\nVocê já sabe identificar a diferença prática entre uma norma que já nasce produzindo todos os seus efeitos (plena) e uma que precisa de uma lei posterior para ser plenamente exercida (limitada)?",
+     "fontes": [
+      {
+       "id": 5696,
+       "norma": "CP",
+       "artigo": "9º",
+       "titulo": "cp"
+      },
+      {
+       "id": 4207,
+       "norma": "ADCT",
+       "artigo": "18",
+       "titulo": "ADCT"
+      },
+      {
+       "id": 4264,
+       "norma": "ADCT",
+       "artigo": "70",
+       "titulo": "ADCT"
+      },
+      {
+       "id": 6971,
+       "norma": "L8112",
+       "artigo": "2o",
+       "titulo": "Lei 8.112/1990"
+      },
+      {
+       "id": 4226,
+       "norma": "ADCT",
+       "artigo": "36",
+       "titulo": "ADCT"
+      },
+      {
+       "id": 6970,
+       "norma": "L8112",
+       "artigo": "1o",
+       "titulo": "Lei 8.112/1990"
+      }
+     ],
+     "criada_em": "2026-09-10T14:01:40.210535+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "acho que sim",
+     "fontes": [],
+     "criada_em": "2026-09-10T14:01:40.232138+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Ótimo. Então, para fixar: a norma de **eficácia plena** tem aplicabilidade direta, imediata e integral. Ela já nasce pronta para ser aplicada e não pode ter seu alcance restringido por lei infraconstitucional.\n\nJá a norma de **eficácia limitada** tem aplicabilidade indireta, mediata e reduzida. Ela precisa de uma lei posterior (lei integradora) para que você possa exercer o direito ou a garantia nela prevista. Se essa lei não existir, o direito fica \"travado\".\n\nPara testar se você pegou o ponto principal: se uma norma constitucional diz que \"a lei definirá os critérios para o exercício da profissão X\", ela é plena ou limitada?",
+     "fontes": [
+      {
+       "id": 3937,
+       "norma": "CF",
+       "artigo": "24",
+       "titulo": "cf"
+      },
+      {
+       "id": 6315,
+       "norma": "CPP",
+       "artigo": "174",
+       "titulo": "Código de Processo Penal"
+      },
+      {
+       "id": 3935,
+       "norma": "CF",
+       "artigo": "22",
+       "titulo": "cf"
+      },
+      {
+       "id": 3952,
+       "norma": "CF",
+       "artigo": "38",
+       "titulo": "cf"
+      },
+      {
+       "id": 4009,
+       "norma": "CF",
+       "artigo": "95",
+       "titulo": "cf"
+      },
+      {
+       "id": 6004,
+       "norma": "CP",
+       "artigo": "289",
+       "titulo": "cp"
+      }
+     ],
+     "criada_em": "2026-09-10T14:01:42.432266+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "e o art. 312?",
+     "fontes": [],
+     "criada_em": "2026-09-10T14:01:42.454905+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "O artigo 312 que você mencionou aparece em dois lugares distintos no seu material, e é muito comum confundir os dois na hora da prova:\n\nNo **Direito Penal**, o artigo 312 trata do crime de **peculato**, que é quando o funcionário público se apropria de dinheiro ou bem de que tem a posse em razão do cargo, ou o desvia.\n\nNo **Direito Processual Penal**, o artigo 312 trata da **prisão preventiva**, que pode ser decretada para garantir a ordem pública, a ordem econômica, por conveniência da instrução criminal ou para assegurar a aplicação da lei penal.\n\nPara não confundir na prova da PC-PR: quando a questão falar em \"apropriação de bem pelo funcionário\", estamos no crime de peculato; quando falar em \"garantia da ordem pública ou instrução criminal\", estamos na medida cautelar de prisão preventiva.\n\nFicou clara essa distinção entre o crime contra a administração e a medida processual?",
+     "fontes": [
+      {
+       "id": 6028,
+       "norma": "CP",
+       "artigo": "312",
+       "titulo": "cp"
+      },
+      {
+       "id": 6456,
+       "norma": "CPP",
+       "artigo": "312",
+       "titulo": "Código de Processo Penal"
+      }
+     ],
+     "criada_em": "2026-09-10T14:01:44.698121+00:00"
+    },
+    {
+     "autor": "aluno",
+     "texto": "me dá uma questão disso",
+     "fontes": [],
+     "criada_em": "2026-09-10T14:01:44.722453+00:00"
+    },
+    {
+     "autor": "tutor",
+     "texto": "Vamos treinar essa distinção; as questões estão logo abaixo, repare se o enunciado descreve uma conduta criminosa ou uma medida cautelar de natureza processual.",
+     "fontes": [
+      {
+       "id": 6028,
+       "norma": "CP",
+       "artigo": "312",
+       "titulo": "cp"
+      },
+      {
+       "id": 6456,
+       "norma": "CPP",
+       "artigo": "312",
+       "titulo": "Código de Processo Penal"
+      }
+     ],
+     "criada_em": "2026-09-10T14:01:57.619607+00:00"
+    },
+    {
+     "autor": "evento",
+     "texto": "Você propôs 1 questão(ões) sobre Peculato culposo. O aluno vai respondê-las agora, dentro desta conversa.",
+     "fontes": [],
+     "criada_em": "2026-09-10T14:02:04.589019+00:00"
     }
    ]
   }
