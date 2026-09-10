@@ -230,3 +230,70 @@ def test_quantidade_pedida_em_partes_e_somada(fala, quantidade):
     pena" — daí a soma começar depois do primeiro ancorado e pular o que vem
     logo após "art.", "§", "inciso" ou "caixa"."""
     assert pedido.quantas(fala) == quantidade
+
+
+# ─────────────────────────────── "testar" e a palavra "prova"
+
+@pytest.mark.parametrize("fala", [
+    "podemos testar eu nao sei se ja estou bom",
+    "quero testar",
+    "vamos testar isso",
+    "bora testar",
+    "podemos me testar",
+])
+def test_podemos_testar_e_pedido_de_treino(fala):
+    """MEDIDO numa bateria real: o aluno disse "podemos testar eu nao sei se ja
+    estou bom", `treino()` devolveu None (nenhuma questão gerada) — e o tutor
+    respondeu "as questões estão logo abaixo". Promessa que a tela não cumpre,
+    que é pior do que não oferecer.
+
+    O verbo vem ancorado num marcador de intenção de propósito: "testar" solto
+    aparece em pergunta de CONTEÚDO, e isso está travado logo abaixo."""
+    p = pedido.treino(fala)
+    assert p and not p["formal"], p
+
+
+@pytest.mark.parametrize("fala", [
+    "como testar a validade de uma prova pericial?",
+    "o perito vai testar a amostra",
+])
+def test_testar_dentro_de_pergunta_de_conteudo_nao_e_pedido(fala):
+    """Trocar a dúvida do aluno por um exercício que ninguém pediu."""
+    assert pedido.treino(fala) is None
+
+
+@pytest.mark.parametrize("fala", [
+    "me explica prova testemunhal",
+    "o que é prova emprestada no processo penal",
+    "quais são os meios de prova admitidos",
+    "prova ilícita por derivação",
+    "quem tem o ônus da prova no processo penal?",
+    "me explica cadeia de custódia da prova",
+    "como testar a validade de uma prova pericial?",
+])
+def test_a_palavra_prova_sozinha_nao_e_pedido_de_simulado(fala):
+    """`RE_FORMAL` era `prova\\s`, e no Processo Penal / Ciências Forenses
+    "prova" é o substantivo mais comum da matéria. MEDIDO: seis de oito frases
+    reais dessas disciplinas viravam pedido de simulado formal.
+
+    E `formal=True` não é rótulo inofensivo — `api.py` não gera questão nesse
+    caminho e ainda acende `simulado_pedido` na tela. O aluno pedia explicação
+    sobre prova pericial (disciplina inteira do edital dele, com apostila
+    subida) e recebia um empurrão pra tela de Simulado."""
+    p = pedido.treino(fala)
+    assert not (p and p["formal"]), p
+
+
+@pytest.mark.parametrize("fala", [
+    "quero um simulado formal cronometrado",
+    "bora fazer uma prova cronometrada",
+    "vamos fazer uma prova",
+    "quero prova",
+    "abre meu caderno de erros",
+])
+def test_pedido_de_simulado_de_verdade_continua_reconhecido(fala):
+    """O outro lado da mesma régua: apertar `RE_FORMAL` não pode cegar o
+    pedido explícito, que é o caso que a fez nascer ("quero um simulado formal"
+    devolvia None quando a regex só procurava a palavra "questão")."""
+    p = pedido.treino(fala)
+    assert p and p["formal"], p

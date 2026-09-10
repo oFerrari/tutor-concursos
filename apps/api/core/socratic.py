@@ -17,7 +17,7 @@ import unicodedata
 from . import assunto, llm, mesa as mesa_mod, retrieval
 from .retrieval import referencia
 
-VERSAO = "socratic-v50"
+VERSAO = "socratic-v51"
 
 # ------------------------------------------------------------------ schemas
 # Subconjunto OpenAPI aceito pelo Gemini. propertyOrdering importa: o modelo
@@ -854,6 +854,31 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         "citando no máximo as disciplinas do edital dele pra escolher. NÃO abra matéria densa "
         "antes de ele escolher o rumo: despejar um parágrafo sobre eficácia das normas em cima "
         "de um \"boa noite\" cansa e é reclamação real. "
+        # PERGUNTAR O RUMO É UMA VEZ SÓ, e esta cláusula existe porque a regra
+        # acima, sozinha, faz laço. Medido no cenário `cumprimento`:
+        #
+        #   aluno : oi
+        #   tutor : ...por qual destas disciplinas você prefere seguir hoje:
+        #           Direito Administrativo, Direito Constitucional, Direito
+        #           Penal, Direito Processual Penal...?
+        #   aluno : tudo bem e você?
+        #   tutor : ...você prefere começar por Direito Constitucional, Direito
+        #           Processual Penal ou Direito Administrativo?
+        #
+        # "Tudo bem e você?" TAMBÉM é cumprimento, então a regra dispara de
+        # novo e o menu volta com outras palavras. O juiz pontuou 0/4 em "cada
+        # turno move a conversa adiante", e está certo: dois turnos gastos na
+        # mesma pergunta não respondida.
+        #
+        # Professor humano não insiste no cardápio — ele escolhe e começa,
+        # dizendo o que escolheu, porque começar é o que devolve o controle ao
+        # aluno (ele corrige em uma palavra se não quiser aquilo). Repetir a
+        # pergunta devolve o silêncio.
+        "PERGUNTE O RUMO UMA VEZ SÓ. Se você já perguntou por onde começar e a resposta dele "
+        "não escolheu nada — outro cumprimento, \"tudo bem e você?\", \"vamos lá\" —, NÃO "
+        "repita a pergunta nem reapresente a lista de matérias. ESCOLHA você uma disciplina do "
+        "edital dele, diga em meia linha que está começando por ela, e comece. Ele corrige numa "
+        "palavra se quiser outra; insistir no cardápio gasta o turno sem sair do lugar. "
         # PEDIDO DE EXPOSIÇÃO, E POR QUE ELE PRECISA ESTAR AQUI.
         #
         # Reclamação direta do dono: "nem sempre eu quero ficar respondendo

@@ -92,7 +92,7 @@ from core import (assunto, auth, conversa, db, geracao, llm, mesa, pedido,
 from core.config import CLI_USUARIO_EMAIL, EMBEDDING_MODEL
 from core.llm import ErroLLM
 
-VERSAO = "avaliar-chat-v25"
+VERSAO = "avaliar-chat-v26"
 
 # Conta descartável, como manda o AGENTS.md: nada aqui pode encostar na conta
 # real. O `ON DELETE CASCADE` da 009 limpa tudo de uma vez em `--limpar`.
@@ -425,7 +425,33 @@ RE_AUTORIDADE = re.compile(
 # de quem ele avalia. Escrevi a cópia aqui primeiro e ela já divergia — deixava
 # passar "me dá uma questão disso" e não reconhecia "simulado".
 RE_MANDA_BOTAO = re.compile(r"(?i)quero quest[õo]es sobre isto|clique no bot[ãa]o|"
-                            r"use o bot[ãa]o|bot[ãa]o (?:abaixo|logo abaixo)")
+                            r"use o bot[ãa]o|bot[ãa]o (?:abaixo|logo abaixo)|"
+                            # "na tela de Simulado do aplicativo" — mandar pra
+                            # uma TELA é a mesma instrução que mandar pra um
+                            # botão, e a regex só conhecia a palavra "botão".
+                            # Medido: o turno que responde "quero um simulado
+                            # formal cronometrado" caía como aviso, sendo o
+                            # acerto exato que o prompt pede.
+                            r"tela de \w+|na tela do")
+
+# O tutor dizendo que as questões já estão na tela. Só as formas que apontam
+# pra BAIXO (onde as questões aparecem de verdade) — "vamos treinar isso"
+# sozinho é intenção, não promessa, e apontar intenção como defeito seria o
+# falso positivo de sempre.
+RE_ANUNCIA_QUESTAO = re.compile(
+    r"(?i)(quest(?:[ãa]o|[õo]es)|it(?:em|ens)|exerc[íi]cios?)[^.!?\n]{0,60}"
+    r"(logo\s+abaixo|abaixo|a seguir|na sequ[êe]ncia)|"
+    r"(?i)(selecionei|preparei|separei|montei)\s+(?:\w+\s+){0,3}"
+    r"(quest(?:[ãa]o|[õo]es)|it(?:em|ens)|exerc[íi]cios?)")
+
+# O ALUNO ESTÁ INDO EMBORA. Fecho sem pergunta é o CERTO aqui — insistir em
+# devolver pergunta a quem disse que só passou pra ver é o oposto de ler a sala.
+# Medido: "nada, só passei pra ver" -> "...é só chamar. Até a próxima!" virou
+# aviso de "não termina com pergunta".
+RE_ALUNO_SAINDO = re.compile(
+    r"(?i)\b(s[óo] (?:passei|olhando|dando uma olhada)|por hoje (?:[ée] s[óo]|chega)|"
+    r"vou indo|fica pra (?:depois|amanh[ãa])|depois eu volto|tchau|at[ée] (?:mais|logo)|"
+    r"era s[óo] isso|nada,? s[óo])")
 
 # Alternativa de múltipla escolha, no começo da linha OU no meio da frase.
 # A versão anterior só olhava o começo da linha (`^`), e o tutor escreveu
@@ -628,7 +654,42 @@ def checar(fala: str, resposta: str, chunks: list[dict],
     #    se ele quer". O aviso disparava nos quatro turnos do cenário
     #    `pede_treino`, ou seja, num acerto — e aviso que dispara em acerto
     #    ensina você a ignorar avisos. Mesma ressalva já feita pro botão.
+    #    E O SINAL MAIS FORTE NÃO ERA TEXTO: se o turno GEROU QUESTÃO, elas são
+    #    a pergunta. A isenção por `p_treino` já dizia isso, mas keyada no
+    #    PARSER do pedido — e o parser não reconhece "podemos testar eu nao sei
+    #    se ja estou bom", nem o caso em que o próprio tutor decide treinar sem
+    #    o aluno pedir. `questoes` é o fato: o avaliador o recebe pronto.
+    #    Medido nesta bateria: 2 dos 4 avisos eram exatamente isso.
+    #
+    #    QUATRO DE CINCO AVISOS DESTA RODADA ERAM FALSO POSITIVO, e é por isso
+    #    que a correção é aqui e não no prompt. Já aconteceu antes com a
+    #    checagem 3b (7 de 9), e a lição foi a mesma: aviso que dispara em
+    #    acerto ensina a ignorar avisos, e um log que se ignora não vale o
+    #    custo de existir.
+    # 6b. PROMETEU QUESTÃO E NÃO ENTREGOU. É ERRO, não aviso: o aluno olha
+    #     pra baixo e não tem nada lá, e o app fica mentindo sobre o próprio
+    #     estado — a mesma classe do `trocou_de_assunto`, que existe porque
+    #     "silêncio sobre o que o sistema não tem é o defeito".
+    #
+    #     MEDIDO, e é a razão de esta checagem nascer: o aluno disse "podemos
+    #     testar eu nao sei se ja estou bom", `pedido.treino` não reconheceu
+    #     (devolvia None), nenhuma questão foi gerada, e o tutor respondeu
+    #     "selecionei questões... As questões estão logo abaixo." Nada apontou
+    #     isso — o log só reclamou que a resposta não terminava com pergunta.
+    #
+    #     O parser foi consertado, mas a trava fica: nenhum prompt garante que
+    #     o modelo só anuncie questão quando ela existe, e este projeto decide
+    #     no código o que o prompt não garante.
+    #     `questoes is not None` e não `not questoes`: 198 dos 383 turnos já
+    #     gravados são anteriores a este campo existir, e ali "não sei" não é
+    #     "nenhuma". Sem essa distinção, a checagem nova apontaria erro em
+    #     metade do acervo histórico — ausência de dado virando prova.
+    if questoes is not None and not questoes and RE_ANUNCIA_QUESTAO.search(resposta):
+        achados.append(("erro", "anunciou questões ('logo abaixo') e NENHUMA foi gerada"))
+
     if ("?" not in resposta[-250:] and not RE_MANDA_BOTAO.search(resposta)
+            and not questoes
+            and not RE_ALUNO_SAINDO.search(fala)
             and not (p_treino and not p_treino["formal"])):
         achados.append(("aviso", "não termina com pergunta"))
 

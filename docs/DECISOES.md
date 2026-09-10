@@ -2687,3 +2687,129 @@ script existe pra não fazer. Aqui não houve adivinhação, houve verificação
 **A lição verdadeira é anterior:** eu não devia ter editado migração aplicada.
 Custou uma verificação, um UPDATE manual e este parágrafo. A regra do CLAUDE.md
 ("a PRÓXIMA migração é a N") existe pra isso.
+
+---
+
+## A bateria de 10/09: 5 avisos, 4 falsos positivos, e um defeito de verdade escondido
+
+O `.logs/defeitos.md` dizia **0 erros de regra** nas quatro baterias, só avisos.
+Quatro dos cinco eram o mesmo aviso ("não termina com pergunta") em casos que o
+próprio texto do aviso chama de aceitáveis. O quinto apontava para outra coisa.
+
+E o defeito que importava **não estava no arquivo**: só apareceu lendo a
+transcrição inteira, porque o turno que o continha não gerou apontamento nenhum.
+
+### 1. O tutor repetia a própria pergunta (o defeito de verdade)
+
+```
+aluno : oi
+tutor : ...por qual destas disciplinas você prefere seguir hoje: Direito
+        Administrativo, Direito Constitucional, Direito Penal...?
+aluno : tudo bem e você?
+tutor : ...você prefere começar por Direito Constitucional, Direito
+        Processual Penal ou Direito Administrativo?
+```
+
+A regra do prompt manda cumprimentar de volta e perguntar o rumo. "Tudo bem e
+você?" TAMBÉM é cumprimento, então a regra dispara outra vez e o cardápio volta
+com outras palavras. Dois turnos gastos na mesma pergunta não respondida — o
+juiz pontuou 0/4 em "cada turno move a conversa adiante", e estava certo.
+
+Faltava a cláusula "você já perguntou". Professor humano não insiste no
+cardápio: escolhe, diz o que escolheu e começa — porque começar devolve o
+controle ao aluno (ele corrige em uma palavra), enquanto repetir a pergunta
+devolve o silêncio.
+
+### 2. O tutor prometia questões que não existiam
+
+O aviso dizia "não termina com pergunta". A resposta era:
+
+> "Como você quer testar, selecionei questões... **As questões estão logo
+> abaixo.**"
+
+Nenhuma questão foi gerada. `pedido.treino("podemos testar eu nao sei se ja
+estou bom")` devolvia `None` — o parser não conhecia "testar" como verbo de
+pedido. O aluno olha pra baixo e não tem nada lá, e **nada no sistema apontava
+isso**: o log só reclamou da falta de pergunta no fim.
+
+Duas correções, porque uma não basta:
+
+- `RE_TREINO` passou a reconhecer "podemos/quero/vamos/bora testar". O verbo vem
+  ANCORADO num marcador de intenção de propósito: "testar" solto aparece em
+  pergunta de conteúdo ("como testar a validade de uma prova pericial?"), e ali
+  gerar questão trocaria a dúvida por um exercício que ninguém pediu;
+- checagem NOVA no avaliador, e é ERRO, não aviso: `RE_ANUNCIA_QUESTAO` casando
+  com `questoes` vazio. Nenhum prompt garante que o modelo só anuncie questão
+  quando ela existe, e este projeto decide no código o que o prompt não garante.
+  **12 ocorrências reais** no acervo gravado — defeito que escapava havia meses.
+
+  `questoes is not None` e não `not questoes`: 198 dos 383 turnos gravados são
+  anteriores ao campo existir, e ali "não sei" não é "nenhuma". Sem essa
+  distinção a checagem nova apontaria erro em metade do histórico — ausência de
+  dado virando prova.
+
+### 3. "Prova" sozinha não é pedido de prova (achado de raspão, e o pior dos três)
+
+Testando o item 2 apareceu um falso positivo que **não** era da mudança:
+`RE_FORMAL` era `prova\s`. No Processo Penal e nas Ciências Forenses, "prova" é
+o substantivo mais comum da matéria. Medido, com frases reais dessas
+disciplinas, **seis de oito** viravam pedido de simulado formal:
+
+| fala | antes |
+|---|---|
+| "me explica prova testemunhal" | `formal=True` |
+| "quem tem o ônus da prova no processo penal?" | `formal=True` |
+| "o que é prova emprestada" | `formal=True` |
+| "quais são os meios de prova admitidos" | `formal=True` |
+| "prova ilícita por derivação" | `formal=True` |
+| "como testar a validade de uma prova pericial?" | `formal=True` |
+
+E `formal=True` não é rótulo inofensivo: `api.py` NÃO gera questão nesse caminho
+(`if p and not p["formal"]`) e ainda acende `simulado_pedido` na tela. O aluno
+pedia explicação sobre prova pericial — que é uma disciplina inteira do edital
+dele, com apostila subida — e recebia um empurrão pra tela de Simulado.
+
+Agora "prova" só conta com MOLDURA DE EXAME: verbo de intenção colado ("fazer
+uma prova", "quero prova") ou qualificador de exame depois ("prova
+cronometrada"). "Simulado" e "caderno de erros" seguem valendo sozinhos — não
+têm outro sentido. 13 de 13 nos dois sentidos, travados em teste.
+
+### 4. O aviso que gritava em acerto, de novo
+
+Quatro dos cinco avisos eram "não termina com pergunta" em: turno que gerou
+questão (as questões SÃO a pergunta), despedida ("nada, só passei pra ver" →
+"Até a próxima!") e instrução de tela ("na tela de Simulado do aplicativo", que
+a regex só conhecia como "botão").
+
+Já aconteceu com a checagem 3b (7 de 9 falsos positivos, demovida e depois
+removida) e a lição é a mesma: **aviso que dispara em acerto ensina a ignorar
+avisos, e um log que se ignora não vale o custo de existir.**
+
+O conserto usa o sinal FORTE que o avaliador já recebia e não olhava:
+`questoes`. A isenção por `p_treino` já dizia isso, mas keyada no PARSER do
+pedido — e o parser não reconhece toda forma de pedir, nem o caso em que o
+próprio tutor decide treinar.
+
+**Medido antes de confiar** (é o que `--reprocessar` existe pra fazer): A/B no
+mesmo corpus de 366 turnos, com e sem a mudança — 15 → 20 achados removidos, ou
+seja, **5 turnos**. E a checagem continua disparando em 24. Afrouxou onde devia,
+não virou decoração.
+
+### O resultado
+
+| bateria | antes | depois |
+|---|---|---|
+| `regressoes` | 0 erros / 1 aviso | 0 erros / 1 aviso (outro) |
+| `cumprimento` | 0 erros / 2 avisos | **0 / 0** |
+| `pede_treino` | 0 erros / 1 aviso | **0 / 0** |
+| `desanimo` | 0 erros / 1 aviso | **0 / 0** |
+
+O aviso que sobrou em `regressoes` é outro e é LEGÍTIMO: 413 caracteres para
+"podemos testar eu nao sei se ja estou bom". Lendo a resposta, a frase do meio
+repete o que as próprias questões mostram — cabe em ~200. Ficou apontado de
+propósito: depois de afrouxar três checagens numa sessão, a quarta tem de ser
+consertada no texto, não no medidor.
+
+**E a nota do juiz caiu de 64 para 32.** Não é regressão: é a régua que o
+próprio projeto manda ignorar — "36, 93 e 57 na mesma entrada", medido. A
+contagem de erros é a medida; a nota é opinião de uma rodada.

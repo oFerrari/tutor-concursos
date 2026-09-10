@@ -33,7 +33,7 @@ Aqui só se responde "ele quer treinar, e quantas".
 """
 import re
 
-VERSAO = "pedido-v3"
+VERSAO = "pedido-v4"
 
 # Pedido de TREINO. `quest(?:[ãa]o|[õo]es)` e não `quest[õo]es?`: o singular
 # leva "ã" e o plural "õ", e quem tem pressa digita sem acento — a primeira
@@ -41,13 +41,46 @@ VERSAO = "pedido-v3"
 RE_TREINO = re.compile(
     r"(?i)\b(quest(?:[ãa]o|[õo]es)|exerc[íi]cios?|it(?:em|ens)|me\s+test[ae]|"
     r"testa\s+meu|treina[r]?|treino|me\s+pergunt[ae]|"
+    # "PODEMOS TESTAR" é pedido de treino, e faltava. Medido: o aluno disse
+    # "podemos testar eu nao sei se ja estou bom", isto devolveu None, nenhuma
+    # questão foi gerada — e o tutor respondeu "as questões estão logo abaixo".
+    # Promessa que a tela não cumpre, que é pior que não oferecer.
+    #
+    # O verbo vem ANCORADO num marcador de intenção (podemos/quero/vamos/…) de
+    # propósito: "testar" solto aparece em pergunta de CONTEÚDO ("como testar a
+    # validade de uma prova?"), e aí gerar questão seria trocar a dúvida dele
+    # por um exercício que ninguém pediu.
+    r"(?:podemos|vamos|bora|quero|queria|posso|gostaria\s+de)\s+(?:me\s+)?testar|"
     r"pergunt[ae]\s+(?:algo|alguma))\b")
 
 # SIMULADO FORMAL é outro pedido, e continua sendo do botão: ali a pessoa quer
 # prova cronometrada, correção no fim e caderno de erros — o `core/simulado.py`,
 # não um punhado de questões no meio da conversa.
+# "PROVA" SOZINHA NÃO É PEDIDO DE PROVA — e a versão anterior (`prova\s`)
+# achava que era. No Processo Penal e nas Ciências Forenses, "prova" é o
+# substantivo mais comum da matéria: prova pericial, prova testemunhal, prova
+# emprestada, prova ilícita, meios de prova, ônus da prova. Medido, com frases
+# reais dessas disciplinas, SEIS de oito viravam pedido de simulado formal:
+#
+#   "me explica prova testemunhal"            -> formal=True
+#   "quem tem o ônus da prova?"               -> formal=True
+#   "o que é prova emprestada"                -> formal=True
+#
+# E `formal=True` não é rótulo inofensivo: `api.py` NÃO gera questão nesse
+# caminho (`if p and not p["formal"]`) e ainda acende `simulado_pedido` na
+# tela. Ou seja, o aluno pedia explicação sobre prova pericial — que é uma
+# disciplina inteira do edital dele, com apostila subida — e recebia um empurrão
+# pra tela de Simulado.
+#
+# Agora "prova" só conta com MOLDURA DE EXAME: um verbo de intenção colado
+# ("fazer uma prova", "quero prova") ou um qualificador de exame depois
+# ("prova cronometrada"). "Simulado" e "caderno de erros" seguem valendo
+# sozinhos — não têm outro sentido.
 RE_FORMAL = re.compile(
-    r"(?i)\b(simulado|prova\s|caderno\s+de\s+erros|corre[çc][ãa]o\s+autom[áa]tica)\b")
+    r"(?i)(\bsimulado\b|\bcaderno\s+de\s+erros\b|\bcorre[çc][ãa]o\s+autom[áa]tica\b|"
+    r"\b(?:fazer|faz|quero|queria|bora|vamos|simular|aplicar|marcar)\s+"
+    r"(?:uma\s+|a\s+|um\s+)?prova\b|"
+    r"\bprova\s+(?:cronometrada|simulada|completa|inteira|de\s+verdade)\b)")
 
 # Formato explícito. Item CERTO/ERRADO é o estilo Cebraspe (012) e o aluno pede
 # pelo nome; quando ele não pede, quem decide é a banca da mesa
