@@ -150,17 +150,24 @@ function Seletor({
     return () => document.removeEventListener("mousedown", fora);
   }, [aberto]);
 
-  /** No modo livre a lista FILTRA pelo que já foi digitado — com 14 matérias na
-   *  biblioteca, rolar tudo depois de digitar três letras é pior que o nativo
-   *  era. No modo fechado não filtra: ali a lista é o domínio inteiro. */
+  /** DIGITOU nesta abertura? Só então a lista filtra.
+   *
+   *  O filtro por valor sozinho escondia as sugestões justamente onde elas mais
+   *  servem: o lápis abre com o assunto ATUAL no campo, e filtrar por ele deixa
+   *  na lista o que já está lá e mais nada — "sem tá trazendo todas ainda". Um
+   *  valor que o componente recebeu pronto não é busca; busca é o que a pessoa
+   *  digita. Ao digitar, volta a filtrar como antes (com 14 matérias, rolar
+   *  tudo depois de três letras é pior que o seletor nativo era). */
+  const [digitou, setDigitou] = useState(false);
   const visiveis = useMemo(() => {
-    if (!livre || !valor.trim()) return opcoes;
+    if (!livre || !digitou || !valor.trim()) return opcoes;
     const q = valor.trim().toLowerCase();
     return opcoes.filter((o) => o.toLowerCase().includes(q));
-  }, [livre, valor, opcoes]);
+  }, [livre, digitou, valor, opcoes]);
 
   function escolher(v: string) {
     aoMudar(v);
+    setDigitou(false);
     setAberto(false);
     setAtivo(-1);
   }
@@ -196,6 +203,7 @@ function Seletor({
           value={valor}
           onChange={(e) => {
             aoMudar(e.target.value);
+            setDigitou(true);
             setAberto(true);
             setAtivo(-1);
           }}
@@ -296,7 +304,6 @@ export default function PaginaMateriais() {
   /** Linha em edição de rótulo. Inline porque corrigir o palpite é um ajuste de
    *  duas palavras — abrir modal pra isso é mais clique que conteúdo. */
   const [editando, setEditando] = useState<number | null>(null);
-  const [editDisc, setEditDisc] = useState("");
   const [editAssu, setEditAssu] = useState("");
 
   const carregar = useCallback(async () => {
@@ -471,10 +478,31 @@ export default function PaginaMateriais() {
    *  constante só: dois lugares que dizem "sugestões daqui" não podem sugerir
    *  coisas diferentes. */
   const opcoesDiscEdicao = opcoesDisc;
-  const opcoesAssuntoEdicao = useMemo(() => {
-    if (!sugestoes) return [];
-    return sugestoes.assuntos_por_disciplina[editDisc.trim()] ?? sugestoes.assuntos;
-  }, [sugestoes, editDisc]);
+
+  /** Assunto sugerido PARA UM MATERIAL, obedecendo o mesmo interruptor.
+   *
+   *  A disciplina sai do próprio material e não de um campo: o lápis corrige
+   *  ASSUNTO, e quem troca a matéria é o arrasto entre grupos.
+   *
+   *  "usar do edital" oferece o conteúdo programático daquela disciplina —
+   *  antes disto o interruptor não mandava aqui, e a resposta foi a mesma de
+   *  sempre: "sem tá obedecendo a nossa opção". "usar sugestões daqui" oferece
+   *  os assuntos que a biblioteca já tem na disciplina, e cai pra lista inteira
+   *  quando aquela disciplina ainda não tem nenhum — melhor uma lista ampla que
+   *  uma vazia, já que o campo é livre e filtra ao digitar. */
+  const assuntosPara = useCallback(
+    (m: Material) => {
+      if (!sugestoes) return [];
+      const disc = (m.disciplina ?? "").trim();
+      if (usandoAlvo) {
+        const tops = sugestoes.topicos_por_disciplina ?? {};
+        return disc ? (tops[disc] ?? []) : Object.values(tops).flat();
+      }
+      const daDisc = disc ? sugestoes.assuntos_por_disciplina[disc] : undefined;
+      return daDisc?.length ? daDisc : sugestoes.assuntos;
+    },
+    [sugestoes, usandoAlvo]
+  );
 
   /**
    * Envia N arquivos com os MESMOS rótulos, um após o outro.
@@ -501,10 +529,16 @@ export default function PaginaMateriais() {
     // acabado de RECOLOCAR os dezoito na fila. O que entrou foi reportado
     // como o que não entrou.
     let retomados = 0;
+    // ANEXADOS também não são falhas, e são outra coisa que os retomados: o
+    // material já estava indexado e só faltava o arquivo original (pré-024).
+    // Contá-los junto dos retomados diria "coloquei de volta na fila" pra quem
+    // não vai ter indexação nenhuma acontecendo.
+    let anexados = 0;
     for (let i = 0; i < arquivos.length; i++) {
       try {
         const r = await subirMaterial(arquivos[i], { disciplina, assunto, tipo });
-        if (r.retomado) retomados += 1;
+        if (r.arquivo_anexado) anexados += 1;
+        else if (r.retomado) retomados += 1;
       } catch (e) {
         falhas.push(`${arquivos[i].name}${e instanceof ErroApi ? ` (${e.message})` : ""}`);
       }
@@ -519,13 +553,29 @@ export default function PaginaMateriais() {
       setErro(
         `${falhas.length} de ${arquivos.length} não entraram: ${falhas.join("; ")}. Os outros estão processando.`
       );
-    } else if (retomados) {
-      // Aviso, não erro: nada deu errado — material que estava parado voltou
-      // pra fila. Dizer QUANTOS evita a dúvida de "então não fez nada?".
+    } else if (anexados || retomados) {
+      // Aviso, não erro: nada deu errado. Dois casos diferentes cabem aqui e a
+      // frase tem que dizer QUAL — "não reindexei nada" e "recoloquei na fila"
+      // são promessas opostas sobre o que vai acontecer nos próximos minutos.
+      // Dizer QUANTOS evita a dúvida de "então não fez nada?".
+      const partes: string[] = [];
+      if (anexados)
+        partes.push(
+          anexados === 1
+            ? "1 já estava indexado e ganhou de volta o arquivo original, sem reindexar nada — dá pra abrir e baixar ele agora"
+            : `${anexados} já estavam indexados e ganharam de volta o arquivo original, sem reindexar nada — dá pra abrir e baixar eles agora`
+        );
+      if (retomados)
+        partes.push(
+          retomados === 1
+            ? "1 já estava aqui, parado, e voltou pra fila de indexação"
+            : `${retomados} já estavam aqui, parados, e voltaram pra fila de indexação`
+        );
+      const cuidados = anexados + retomados;
       setAviso(
-        retomados === arquivos.length
-          ? `${retomados} ${retomados === 1 ? "arquivo já estava aqui e estava" : "arquivos já estavam aqui e estavam"} parados — coloquei de volta na fila de indexação.`
-          : `${retomados} de ${arquivos.length} já estavam aqui, parados, e voltaram pra fila. O resto entrou agora.`
+        (cuidados === arquivos.length ? "" : `De ${arquivos.length}: `) +
+          partes.join(". ") +
+          (cuidados === arquivos.length ? "." : ". O resto entrou agora.")
       );
       setAssunto("");
       await carregarSugestoes();
@@ -569,7 +619,11 @@ export default function PaginaMateriais() {
   async function salvarRotulo(id: number) {
     setErro(null);
     try {
-      await classificarMaterial(id, { disciplina: editDisc, assunto: editAssu });
+      // SÓ `assunto`: `material.atualizar` monta o UPDATE com os campos que
+      // chegam (`is not None`), então omitir a disciplina é o que a PRESERVA.
+      // Mandá-la junto foi o defeito relatado — "quando eu salvo ele tá criando
+      // uma nova matéria em vez de só renomear o assunto".
+      await classificarMaterial(id, { assunto: editAssu });
       setEditando(null);
       await carregar();
       await carregarSugestoes();
@@ -766,31 +820,22 @@ export default function PaginaMateriais() {
                     }}
                     className="flex flex-wrap items-center gap-1.5"
                   >
+                    {/* SÓ ASSUNTO. A disciplina saiu daqui porque já tem
+                        controle próprio — arrastar o material para outro grupo
+                        —, e ter os dois campos custou o defeito que motivou
+                        esta mudança: o lápis mandava `disciplina` em TODO
+                        salvamento, então corrigir o assunto reescrevia a
+                        matéria junto e o material pulava de grupo. Um campo,
+                        um efeito. */}
                     <Seletor
-                      valor={editDisc}
-                      aoMudar={setEditDisc}
-                      opcoes={opcoesDiscEdicao}
-                      placeholder="disciplina"
-                      className="field !py-1 text-[12.5px]"
-                      caixa="relative w-[160px]"
-                      aria="corrigir disciplina"
+                      valor={editAssu}
+                      aoMudar={setEditAssu}
+                      opcoes={assuntosPara(m)}
+                      placeholder="assunto"
+                      className="field !py-1 text-[13px]"
+                      caixa="relative w-[240px]"
+                      aria="corrigir assunto"
                     />
-                    {/* Assunto NÃO se edita em material de referência: ele é
-                        descartado na indexação (uma norma inteira não tem um
-                        assunto), então o campo prometeria um efeito que não
-                        existe. A disciplina continua editável — dela sai o
-                        recorte da mesa. */}
-                    {!m.referencia && (
-                      <Seletor
-                        valor={editAssu}
-                        aoMudar={setEditAssu}
-                        opcoes={opcoesAssuntoEdicao}
-                        placeholder="assunto"
-                        className="field !py-1 text-[12.5px]"
-                        caixa="relative w-[160px]"
-                        aria="corrigir assunto"
-                      />
-                    )}
                     <button type="submit" className="chip-ativo">
                       ok
                     </button>
@@ -909,15 +954,21 @@ export default function PaginaMateriais() {
                     <Download className="h-3.5 w-3.5" />
                   </button>
                 )}
+                {/* O LÁPIS APARECE EM TODO MATERIAL, inclusive no de
+                    referência. Escondê-lo ali foi meu erro: o que a 027
+                    descarta é o assunto no VETOR (`chunk.rotulo`), não a
+                    coluna — e é a coluna que vira o nome visível da linha.
+                    Sem o lápis, material assim ficava preso ao nome do
+                    arquivo, que foi exatamente o relato: "o título
+                    curso-392722-aula-10-9415-completo é um assunto". */}
                 <button
                   onClick={() => {
                     setEditando(m.id);
-                    setEditDisc(m.disciplina ?? "");
                     setEditAssu(m.assunto ?? "");
                   }}
-                  title="Corrigir disciplina e assunto"
+                  title="Corrigir o assunto"
                   className="flex h-6 w-6 items-center justify-center rounded-[7px] text-label transition-colors hover:bg-surface-hover hover:text-accent-text"
-                  aria-label={`corrigir rótulo de ${m.titulo}`}
+                  aria-label={`corrigir assunto de ${m.titulo}`}
                 >
                   <Pencil className="h-3.5 w-3.5" />
                 </button>

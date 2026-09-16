@@ -1099,6 +1099,26 @@ como "o original" é pior que não ter original. E a gravação roda também no
 caminho do `pulados` — material sincronizado antes da 024 está no banco sem
 bytes, e o pacote novo é a única chance de completá-lo.
 
+**MATERIAL DE ANTES DA 024 RECUPERA O ARQUIVO SUBINDO O MESMO PDF DE NOVO.**
+A 024 deixou o material já existente com `arquivo NULL` — correto, os bytes não
+existiam mais —, mas fechou a única saída junto: `registrar` recusava o reenvio
+com "você já subiu este arquivo", e completar a biblioteca exigia APAGAR o
+material e reindexar do zero. Oito aulas de agosto ficaram assim, indexadas e
+sem "abrir" nem "baixar". O relato foi "não tô achando a opção de abrir nem de
+baixar" — a opção existe; a tela é que a esconde onde o arquivo não está
+(`tem_arquivo`), e fazer diferente seria mostrar botão que sempre falha.
+
+O reenvio de material `pronto` SEM bytes agora anexa o original e para aí: não
+reindexa, não volta pra fila, não mexe no status. É deliberadamente diferente da
+duplicata parada logo acima — lá falta o TRABALHO, aqui falta o ARQUIVO —, e
+tratar os dois igual pagaria o embedding outra vez por texto que já está no
+banco (500 trechos são minutos de CPU) e faria a biblioteca piscar `processando`
+num material pronto. A resposta traz `arquivo_anexado: true`, e é dele que as
+DUAS rotas de upload (arquivo e link) decidem enfileirar ou não, por um
+predicado só: `material.deve_indexar`. Duplicata COM arquivo segue recusada, e
+`tests/test_material.py` prende as duas metades — o arquivo que volta e os
+trechos que não são refeitos (mesmos ids).
+
 **O RÓTULO QUE O ALUNO CORRIGE PASSA A VALER NA BUSCA — pelos DOIS lados da
 híbrida, porque um só não bastou.** A disciplina e o assunto digitados por ele
 valiam pra gerar questão, pra recortar a fila e pro seletor da tela, e não pra

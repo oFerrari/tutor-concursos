@@ -841,6 +841,12 @@ export type Material = {
    *  duplicata. Não é erro: é serviço inacabado sendo retomado — foi o que
    *  acontecia depois de o servidor cair no meio de um lote grande. */
   retomado?: boolean;
+  /** O upload encontrou este material já PRONTO e indexado, mas SEM o arquivo
+   *  original — subido antes da 024, quando os bytes eram descartados — e
+   *  guardou os bytes agora. Não é duplicata recusada nem serviço retomado:
+   *  nada foi reindexado, porque os trechos já estavam lá. O que muda é que o
+   *  "abrir" e o "baixar" passam a aparecer nele. */
+  arquivo_anexado?: boolean;
   /** Mesa que subiu este material (021). `null` = pool comum: material anterior
    *  à migração, ou que serve a qualquer concurso. */
   mesa_id: number | null;
@@ -859,6 +865,11 @@ export type SugestoesMaterial = {
   disciplinas: string[];
   assuntos: string[];
   assuntos_por_disciplina: Record<string, string[]>;
+  /** Conteúdo programático do edital DESTA mesa, por disciplina — a fonte
+   *  "usar do edital" do campo de assunto. Vazio quando a mesa não tem edital.
+   *  Nunca vem chapado: 1015 tópicos numa lista só não é sugestão, é documento;
+   *  recortado pela disciplina do material, é a lista certa. */
+  topicos_por_disciplina: Record<string, string[]>;
 };
 
 export function getSugestoesMaterial(): Promise<SugestoesMaterial> {

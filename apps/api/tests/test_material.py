@@ -5,7 +5,7 @@ import pytest
 
 from core import db, material, retrieval
 
-VERSAO = "test-material-v3"
+VERSAO = "test-material-v5"
 TXT = ("MEU RESUMO PARTICULAR\n\nO mnemônico QUIXOTEBRAVO organiza os prazos "
        "recursais do processo penal conforme minha anotação de aula. " * 10).encode()
 
@@ -270,6 +270,43 @@ def test_sugestoes_agrupam_assunto_por_disciplina(client, usuario):
     s = client.get("/materiais/sugestoes", headers=h).json()
     assert s["assuntos_por_disciplina"]["Direito Penal"] == ["Concussão", "Peculato"]
     assert s["assuntos_por_disciplina"]["Direito Constitucional"] == ["Remédios"]
+
+
+def test_sugestoes_trazem_os_topicos_do_edital_da_mesa(client, usuario):
+    """O campo de assunto tem DUAS fontes, e a segunda é o edital.
+
+    O interruptor da tela ("usar sugestões daqui" × "usar do edital") mandava só
+    na disciplina: do lado do assunto não havia o que oferecer, porque tópico
+    não era exposto por rota nenhuma — só a CONTAGEM dele. O relato foi "sem tá
+    obedecendo a nossa opção".
+
+    Por disciplina e nunca chapado: a objeção medida contra tópico como sugestão
+    (1015 num edital real) só cai porque a tela pede a lista de UM material, que
+    tem UMA disciplina. E é da MESA do cabeçalho — edital de outra mesa não pode
+    sugerir aqui, senão o recorte que a 010 criou vazaria pelo seletor.
+    """
+    h = usuario["headers"]
+    m = client.post("/mesas", json={"nome": "PC-PR"}, headers=h).json()
+    eid = db.exec1("INSERT INTO edital (mesa_id, titulo) VALUES (%(m)s,'e') RETURNING id",
+                   {"m": m["id"]})["id"]
+    for i, (disc, texto) in enumerate([("Direito Constitucional", "Nacionalidade"),
+                                       ("Direito Constitucional", "Direitos políticos"),
+                                       ("Direito Penal", "Peculato")]):
+        db.query("""INSERT INTO topico (edital_id, disciplina, ordem, texto)
+                    VALUES (%(e)s, %(d)s, %(o)s, %(t)s)""",
+                 {"e": eid, "d": disc, "o": i, "t": texto})
+
+    cab = {**h, "X-Mesa-Id": str(m["id"])}
+    s = client.get("/materiais/sugestoes", headers=cab).json()
+    assert s["topicos_por_disciplina"]["Direito Constitucional"] == [
+        "Nacionalidade", "Direitos políticos"], "perdeu a ordem do edital"
+    assert s["topicos_por_disciplina"]["Direito Penal"] == ["Peculato"]
+
+    # Outra mesa, outro recorte: o edital da PC-PR não sugere nada aqui.
+    outra = client.post("/mesas", json={"nome": "Sem edital"}, headers=h).json()
+    s2 = client.get("/materiais/sugestoes",
+                    headers={**h, "X-Mesa-Id": str(outra["id"])}).json()
+    assert s2["topicos_por_disciplina"] == {}
 
 
 def test_sugestoes_nao_oferecem_vazio_nem_repetem(client, usuario, llm_falso):
@@ -695,6 +732,68 @@ def test_subir_de_novo_material_parado_retoma_em_vez_de_recusar(client, usuario)
     # E nunca houve mais de UMA linha pra este arquivo.
     assert db.exec1("SELECT count(*) AS n FROM documento WHERE usuario_id = %(u)s",
                     {"u": usuario["id"]})["n"] == 1
+
+
+def test_material_pre_024_recebe_o_arquivo_de_volta_sem_reindexar(client, usuario):
+    """Material de ANTES da 024 está indexado, mas sem o PDF — e subir de novo
+    ANEXA o original em vez de recusar como duplicata.
+
+    O relato: oito aulas subidas antes de a 024 existir, quando o upload extraía
+    o texto e descartava o arquivo. A busca achava tudo, mas a biblioteca não
+    mostrava "abrir" nem "baixar" — os bytes não existiam. Reenviar batia em
+    "você já subiu este arquivo", e a única saída era APAGAR o material e
+    reindexar do zero: pagar 268 trechos de embedding de novo pra recuperar um
+    PDF que a pessoa tinha na mão.
+
+    O que este teste prende é a metade que não se vê: NÃO REINDEXAR. Os trechos
+    têm que ser os MESMOS (ids inclusive), não trechos novos com o mesmo texto —
+    é a diferença entre esta porta e a do retomado logo acima.
+    """
+    corpo = ("Nacionalidade originaria e naturalizacao. " * 90).encode()
+    subir = lambda: client.post(
+        "/materiais", headers=usuario["headers"], data={"tipo": "aula"},
+        files={"arquivo": ("aula-sem-pdf.txt", corpo, "text/plain")})
+
+    r1 = subir()
+    assert r1.status_code == 201, r1.text
+    doc_id = r1.json()["id"]
+    _esperar_indexacao()
+    antes = db.exec1("""SELECT count(*) AS n, max(id) AS ultimo FROM chunk
+                         WHERE documento_id = %(d)s""", {"d": doc_id})
+    assert antes["n"] > 0
+
+    # O estado exato em que a migração 024 deixou todo material já existente.
+    db.query("""UPDATE documento SET arquivo = NULL, arquivo_tipo = NULL,
+                       arquivo_bytes = NULL WHERE id = %(d)s""", {"d": doc_id})
+    assert client.get(f"/materiais/{doc_id}/arquivo",
+                      headers=usuario["headers"]).status_code == 404
+    lista = client.get("/materiais", headers=usuario["headers"]).json()["materiais"]
+    assert [m for m in lista if m["id"] == doc_id][0]["tem_arquivo"] is False
+
+    r2 = subir()
+    assert r2.status_code == 201, r2.text
+    assert r2.json()["arquivo_anexado"] is True, "recusou como duplicata em vez de anexar"
+    assert r2.json()["id"] == doc_id, "criou uma linha nova em vez de completar a que existia"
+    assert r2.json().get("retomado") is not True, "anexar arquivo não é retomar indexação"
+    # A resposta já diz que o botão pode aparecer, sem esperar o recarregamento.
+    assert r2.json()["tem_arquivo"] is True
+
+    _esperar_indexacao()
+    baixado = client.get(f"/materiais/{doc_id}/arquivo", headers=usuario["headers"])
+    assert baixado.status_code == 200 and baixado.content == corpo
+
+    depois = db.exec1("""SELECT count(*) AS n, max(id) AS ultimo FROM chunk
+                          WHERE documento_id = %(d)s""", {"d": doc_id})
+    assert (depois["n"], depois["ultimo"]) == (antes["n"], antes["ultimo"]), \
+        "reindexou: os trechos são outros"
+    assert db.exec1("SELECT status FROM documento WHERE id = %(d)s",
+                    {"d": doc_id})["status"] == "pronto"
+    assert db.exec1("SELECT count(*) AS n FROM documento WHERE usuario_id = %(u)s",
+                    {"u": usuario["id"]})["n"] == 1
+
+    # Com o arquivo no lugar, duplicata volta a ser duplicata.
+    r3 = subir()
+    assert r3.status_code == 400 and "já subiu" in r3.json()["detail"]
 
 
 def test_html_por_arquivo_vira_texto_e_nao_tags(client, usuario):

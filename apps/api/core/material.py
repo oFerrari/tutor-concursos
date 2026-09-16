@@ -42,7 +42,7 @@ import re
 
 from . import chunking, db, embeddings
 
-VERSAO = "material-v17"
+VERSAO = "material-v19"
 
 LOTE = 32
 MIN_CHARS = 200
@@ -540,6 +540,7 @@ def registrar(usuario_id: int, nome: str, dados: bytes,
     ja = db.exec1(
         """SELECT id, titulo, disciplina, assunto, tipo, status, chunks_total,
                   classificado_por, mesa_id, criado_em,
+                  (arquivo IS NOT NULL) AS tem_arquivo,
                   (SELECT count(*) FROM chunk WHERE documento_id = documento.id) AS chunks
              FROM documento WHERE hash = %(h)s AND usuario_id = %(u)s""",
         {"h": digest, "u": usuario_id})
@@ -553,11 +554,38 @@ def registrar(usuario_id: int, nome: str, dados: bytes,
         #
         # `pronto` COM trecho continua sendo recusado, e tem de continuar: aí a
         # duplicata é real e reindexar seria pagar CPU de novo pelo mesmo
-        # material. O que muda é `processando` e `falha` (ou zero chunks):
+        # material. Com UMA exceção, logo abaixo: se faltarem os bytes do
+        # arquivo, o reenvio serve pra guardá-los — e aí não se reindexa nada. O que muda é `processando` e `falha` (ou zero chunks):
         # volta pra fila e devolve a linha que já existe, como se fosse um
         # upload novo — do ponto de vista de quem arrastou o arquivo, foi.
         parado = ja["status"] != "pronto" or (ja["chunks"] or 0) == 0
         if not parado:
+            # PRONTO, MAS SEM OS BYTES: subir de novo ANEXA o arquivo original.
+            #
+            # Quem cai aqui é material de antes da 024, quando o upload extraía
+            # o texto e DESCARTAVA o PDF. A indexação dele está inteira e certa
+            # — o que falta é só o original, e sem ele a biblioteca esconde o
+            # "abrir" e o "baixar" (`tem_arquivo` falso). Até aqui não havia
+            # porta nenhuma: reenviar dava "você já subiu este arquivo", e a
+            # única saída era APAGAR o material e reindexar do zero. Trocar os
+            # trechos pelo PDF é um preço que ninguém aceitaria pagar sabendo.
+            #
+            # E NÃO REINDEXA — é essa a diferença pro retomado logo abaixo. Lá
+            # falta o trabalho; aqui falta o arquivo. Grava os bytes, deixa o
+            # `status` como está e devolve a linha; nada vai pra fila (ver
+            # `deve_indexar`, que é onde as rotas de upload perguntam isso).
+            #
+            # `AND arquivo IS NULL` no UPDATE: se dois uploads do mesmo arquivo
+            # chegarem juntos, o segundo vira no-op em vez de reescrever bytes
+            # idênticos — o hash é o mesmo, então o conteúdo também é.
+            if not ja["tem_arquivo"]:
+                db.query("""UPDATE documento SET arquivo = %(b)s, arquivo_tipo = %(t)s,
+                                   arquivo_bytes = %(n)s
+                             WHERE id = %(i)s AND arquivo IS NULL""",
+                         {"i": ja["id"], "b": dados, "t": _tipo_mime(nome), "n": len(dados)})
+                volta = {k: v for k, v in ja.items() if k != "tem_arquivo"}
+                return {**volta, "tem_arquivo": True, "arquivo_bytes": len(dados),
+                        "arquivo_anexado": True}
             raise ErroMaterial(f"você já subiu este arquivo (\"{ja['titulo']}\")")
         db.query("""UPDATE documento SET status = 'processando', erro = NULL,
                            arquivo = COALESCE(arquivo, %(b)s),
@@ -566,7 +594,7 @@ def registrar(usuario_id: int, nome: str, dados: bytes,
                      WHERE id = %(i)s""",
                  {"i": ja["id"], "b": dados, "t": _tipo_mime(nome), "n": len(dados)})
         enfileirar(ja["id"])
-        volta = {k: v for k, v in ja.items() if k != "chunks"}
+        volta = {k: v for k, v in ja.items() if k not in ("chunks", "tem_arquivo")}
         return {**volta, "status": "processando", "chunks": 0, "retomado": True}
 
     texto = _extrair(nome, dados)
@@ -924,8 +952,8 @@ def _classificar_se_faltar(documento_id: int, texto: str,
     """
     with db.conexao_isolada() as c:
         with c.cursor() as cur:
-            cur.execute("SELECT disciplina, assunto, tipo FROM documento WHERE id=%s",
-                        (documento_id,))
+            cur.execute("SELECT disciplina, assunto, tipo, origem, classificado_por "
+                        "FROM documento WHERE id=%s", (documento_id,))
             atual = cur.fetchone()
         if not atual:
             return
@@ -1069,6 +1097,21 @@ def _trabalhar() -> None:
             print(f"[tutor] indexação de {doc_id} falhou na fila: {e}")
         finally:
             _fila.task_done()
+
+
+def deve_indexar(doc: dict) -> bool:
+    """A linha que `registrar` devolveu gerou trabalho de indexação?
+
+    Falso num caso só: o upload apenas ANEXOU o arquivo original a um material
+    que já estava pronto e indexado (material de antes da 024). Ali os trechos
+    já existem, e enfileirar pagaria o embedding outra vez pelo mesmo texto —
+    numa apostila de 500 trechos são minutos de CPU por nada, e a biblioteca
+    piscaria `processando` num material que está pronto.
+
+    Vive aqui e não na rota porque são DUAS que sobem material (arquivo e
+    link), e a regra tem que ser a mesma nas duas: a terceira que aparecer
+    chama isto sem precisar saber por quê."""
+    return not doc.get("arquivo_anexado")
 
 
 def enfileirar(documento_id: int) -> None:
@@ -1242,7 +1285,7 @@ def listar(usuario_id: int) -> list[dict]:
         {"u": usuario_id, "ref": list(TIPOS_DE_REFERENCIA)})
 
 
-def sugestoes(usuario_id: int) -> dict:
+def sugestoes(usuario_id: int, mesa_id: int | None = None) -> dict:
     """O que ESTE aluno já usou de rótulo, pra tela oferecer em vez de exigir
     que ele lembre.
 
@@ -1254,6 +1297,16 @@ def sugestoes(usuario_id: int) -> dict:
     sentido DENTRO de uma matéria — oferecer "Remédios constitucionais" a
     quem está subindo Contabilidade é ruído que atrapalha mais que ajuda.
     A lista chapada fica pro caso de ainda não haver disciplina escolhida.
+
+    `topicos_por_disciplina` é a OUTRA fonte de assunto: o conteúdo programático
+    do edital da mesa. Existe porque o interruptor da tela ("usar sugestões
+    daqui" × "usar do edital") mandava só na disciplina — do lado do assunto ele
+    não tinha o que oferecer, e um interruptor que não muda nada é pior que
+    interruptor nenhum. Vem SEMPRE por disciplina, nunca chapado: a objeção
+    medida contra usar tópico como sugestão continua de pé (o edital da Dataprev
+    tem 1015, e uma lista com isso não é sugestão, é um documento) — o que a
+    derruba é o recorte, porque a lista que a tela pede é a de UM material, que
+    tem UMA disciplina.
     """
     linhas = db.query(
         """SELECT DISTINCT disciplina, assunto
@@ -1270,10 +1323,25 @@ def sugestoes(usuario_id: int) -> dict:
             assuntos.add(a)
             if d:
                 por_disc.setdefault(d, set()).add(a)
+    # SQL direto e não `edital.mais_recente`: `core.edital` importa `core.material`
+    # (ingestão de PDF de edital), e o caminho de volta fecharia o ciclo. A regra
+    # do "mais recente da mesa" está duplicada em uma linha, e é a mesma dele —
+    # se ela mudar, muda nos dois (o docstring de lá diz por que ela existe).
+    topicos: dict[str, list[str]] = {}
+    if mesa_id is not None:
+        ed = db.exec1("""SELECT id FROM edital WHERE mesa_id = %(m)s
+                          ORDER BY criado_em DESC, id DESC LIMIT 1""", {"m": mesa_id})
+        if ed:
+            for l in db.query("""SELECT disciplina, texto FROM topico
+                                  WHERE edital_id = %(e)s AND texto IS NOT NULL
+                                  ORDER BY disciplina, ordem""", {"e": ed["id"]}):
+                if l["disciplina"]:
+                    topicos.setdefault(l["disciplina"], []).append(l["texto"])
     return {
         "disciplinas": sorted(disciplinas),
         "assuntos": sorted(assuntos),
         "assuntos_por_disciplina": {k: sorted(v) for k, v in sorted(por_disc.items())},
+        "topicos_por_disciplina": topicos,
     }
 
 

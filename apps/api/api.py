@@ -44,7 +44,7 @@ from core import (assunto, auth, conversa, desafio, edital, geracao, material, m
 from core.config import CORS_ORIGINS
 from core.llm import ErroLLM
 
-VERSAO = "api-v7"
+VERSAO = "api-v9"
 
 app = FastAPI(title="Tutor de concursos — API", version=VERSAO)
 
@@ -1102,13 +1102,18 @@ def rota_listar_materiais(uid: int = Depends(usuario_atual)):
 
 
 @app.get("/materiais/sugestoes")
-def rota_sugestoes_material(uid: int = Depends(usuario_atual)):
-    """Rótulos que ESTE aluno já usou, pra alimentar o seletor da tela.
+def rota_sugestoes_material(uid: int = Depends(usuario_atual),
+                            m: dict = Depends(mesa_atual)):
+    """Rótulos que ESTE aluno já usou — e o programa do edital — pro seletor da tela.
 
     Declarada ANTES de `/materiais/{documento_id}` não por acaso: o FastAPI
     casa rotas na ordem de registro, e uma rota de path param declarada antes
-    engoliria "sugestoes" tentando convertê-la em int."""
-    return material.sugestoes(uid)
+    engoliria "sugestoes" tentando convertê-la em int.
+
+    A MESA entra porque o seletor tem duas fontes ("daqui" × "do edital") e a
+    segunda é o conteúdo programático daquela mesa — sem ela o interruptor não
+    tinha o que oferecer no campo de assunto."""
+    return material.sugestoes(uid, m["id"])
 
 
 @app.post("/materiais", status_code=201)
@@ -1167,7 +1172,10 @@ async def rota_subir_material(fundo: BackgroundTasks,
     # A fila tem UM trabalhador (o embedding é CPU local: paralelizar nunca ia
     # ser mais rápido, só mais frágil) e carrega o ID, não os bytes — quem
     # trabalha lê o arquivo do banco, o que só é possível por causa da 024.
-    material.enfileirar(doc["id"])
+    # SÓ SE HOUVER O QUE INDEXAR: subir de novo um material pré-024 que já está
+    # pronto apenas anexa o PDF que faltava, e os trechos dele já estão no banco.
+    if material.deve_indexar(doc):
+        material.enfileirar(doc["id"])
     return doc
 
 
@@ -1232,7 +1240,10 @@ def rota_indexar_link(body: LinkBody, fundo: BackgroundTasks,
                                  mesa_id=m["id"], url=body.url)
     except material.ErroMaterial as e:
         raise HTTPException(400, str(e))
-    material.enfileirar(doc["id"])
+    # SÓ SE HOUVER O QUE INDEXAR: subir de novo um material pré-024 que já está
+    # pronto apenas anexa o PDF que faltava, e os trechos dele já estão no banco.
+    if material.deve_indexar(doc):
+        material.enfileirar(doc["id"])
     return doc
 
 
