@@ -33,7 +33,7 @@ Aqui só se responde "ele quer treinar, e quantas".
 """
 import re
 
-VERSAO = "pedido-v4"
+VERSAO = "pedido-v5"
 
 # Pedido de TREINO. `quest(?:[ãa]o|[õo]es)` e não `quest[õo]es?`: o singular
 # leva "ã" e o plural "õ", e quem tem pressa digita sem acento — a primeira
@@ -233,3 +233,59 @@ def treino(fala: str, apos_treino: bool = False) -> dict | None:
     return {"quantidade": quantas(fala),
             "tipo": "certo_errado" if RE_CERTO_ERRADO.search(fala) else None,
             "formal": bool(RE_FORMAL.search(fala))}
+
+
+# ---------------------------------------------------------------------------
+# "O QUE EU JÁ ESTUDEI E O QUE FALTA?" — pergunta sobre ELE, não sobre matéria
+# ---------------------------------------------------------------------------
+#
+# Relatado com print: "ele tá consultando material sendo que eu fiz uma pergunta
+# sobre meu desempenho pessoal". A lista de CONSULTADO trazia "Princípios do
+# Direito Administrativo" e uma apostila de direitos sociais numa pergunta que
+# não é de conteúdo nenhum — a resposta certa mora em `### Números deste aluno`
+# e no programa do edital, que já vão no prompt sem busca alguma.
+#
+# A causa é a de sempre: `hibrida()` é k-vizinhos sem piso de relevância, então
+# uma fala sem assunto não devolve vazio, devolve seis trechos com cara de
+# fonte. E "estudei", "falta" e "zerar" passam por palavra de conteúdo em
+# `assunto.py` — corretamente, aliás: "falta grave" é matéria de 8.112 e de
+# execução penal, e cegar a busca pra "falta" custaria mais do que isto custa.
+#
+# Por isso a decisão é de PEDIDO e não de vocabulário: a pergunta inteira é
+# sobre o estado do aluno, e a busca não tem o que fazer nela.
+#
+# EXIGE CABEÇA INTERROGATIVA para os verbos de ver/estudar. "já vi" solto é
+# resposta ("ja vi sim, se você puder citar só os principais"), não pergunta —
+# e tratá-la como pergunta de progresso desligaria a busca no meio de uma aula.
+_CABECA = r"(?:o\s+que|quais|quanto|quantos|quantas|qual)"
+_PROGRESSO = re.compile(
+    r"(?i)("
+    rf"{_CABECA}[^?.!]{{0,40}}\b(?:j[áa]\s+)?(?:estudei|vi|cobri|aprendi|passei)\b"
+    # "o que falta" PRECISA de escopo de estudo ou de fim de frase: "o que falta
+    # para configurar o crime de peculato?" é pergunta de matéria, e calar a
+    # busca nela seria trocar um defeito por outro pior.
+    r"|\bo\s+que\s+(?:me\s+)?(?:falta|est[áa]\s+faltando|ta\s+faltando)\b"
+    r"(?:[^?.!]{0,30}\b(?:edital|mat[ée]ria|disciplina|t[óo]pico|conte[úu]do|"
+    r"estudar|ver|prova|assunto)\b|\s*[?.!]*$)"
+    r"|\bfalta(?:m|ndo)?\s+(?:pra|para)\s+(?:eu\s+|mim\s+)?(?:zerar|terminar|fechar|"
+    r"acabar|concluir)\b"
+    r"|\bcomo\s+(?:eu\s+)?(?:estou|to|t[ôo])\s+(?:indo|me\s+saindo)\b"
+    r"|\bmeu[s]?\s+(?:desempenho|progresso|rendimento|aproveitamento|n[úu]meros|"
+    r"percentual|avan[çc]o|hist[óo]rico)\b"
+    r"|\bminha\s+(?:cobertura|evolu[çc][ãa]o|m[ée]dia|ofensiva)\b"
+    r")")
+
+
+def sobre_desempenho(fala: str) -> bool:
+    """A pergunta é sobre o PRÓPRIO progresso do aluno?
+
+    Sendo, `socratic.explicar` não busca material: a resposta sai dos números
+    que já viajam no prompt. Não buscar é o conserto inteiro — o que incomodou
+    não foi o texto da resposta, foi a lista de fontes dizendo que a contagem de
+    tentativas dele veio de uma apostila de princípios.
+
+    Falso negativo aqui é barato (volta a buscar, como era até agora); falso
+    POSITIVO cala a busca numa pergunta de conteúdo, então a regra pede
+    interrogativa explícita ou possessivo de primeira pessoa, nunca só o verbo.
+    """
+    return bool(_PROGRESSO.search(fala or ""))

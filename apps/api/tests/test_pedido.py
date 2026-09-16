@@ -297,3 +297,50 @@ def test_pedido_de_simulado_de_verdade_continua_reconhecido(fala):
     devolvia None quando a regex só procurava a palavra "questão")."""
     p = pedido.treino(fala)
     assert p and p["formal"], p
+
+
+# ---------------------------------------------------------------------------
+# Pergunta sobre o PRÓPRIO progresso (não busca material)
+# ---------------------------------------------------------------------------
+
+PROGRESSO = [
+    "o que eu ja estudei de direito administrativo e o que ta faltando pra mim zerar o edital?",
+    "quais conteudos eu ja vi das outras materias?",
+    "ta mais eu quero saber o que eu ja estudei e o que falta",
+    "como estou indo?",
+    "me mostra meu desempenho",
+    "quanto eu ja cobri do edital?",
+    "o que me falta ver ainda",
+]
+
+CONTEUDO = [
+    # "já vi" solto é RESPOSTA ao tutor, não pergunta de progresso — e calar a
+    # busca aqui desligaria o material no meio de uma aula.
+    "ja vi sim, se você puder citar só os principais que mais caem em prova",
+    "quero estudar atos administrativos",
+    # "o que falta" com escopo de MATÉRIA: perguntas reais de tipicidade.
+    "o que falta para configurar o crime de peculato?",
+    "o que falta para caracterizar a improbidade?",
+    "me explica a falta grave na lei 8.112",
+    "o que é papiloscopia?",
+    "qual a diferença entre anulação e revogação?",
+]
+
+
+def test_pergunta_sobre_o_proprio_progresso_e_reconhecida():
+    """Relatado com print: a lista de CONSULTADO trazia "Princípios do Direito
+    Administrativo" embaixo de uma contagem de tentativas do aluno.
+
+    A resposta dessa pergunta mora nos números que já vão no prompt; a busca não
+    tem o que fazer nela, e `hibrida()` não devolve vazio — devolve seis trechos
+    com cara de fonte."""
+    for fala in PROGRESSO:
+        assert pedido.sobre_desempenho(fala), fala
+
+
+def test_pergunta_de_materia_continua_buscando():
+    """O falso POSITIVO é o caro: calar a busca numa pergunta de conteúdo
+    entrega resposta sem material. Por isso a regra exige interrogativa
+    explícita ou possessivo de primeira pessoa, nunca só o verbo."""
+    for fala in CONTEUDO:
+        assert not pedido.sobre_desempenho(fala), fala
