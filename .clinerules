@@ -1,109 +1,68 @@
-# Regras de trabalho neste projeto
+# Processo de trabalho
 
-**Sempre leia este arquivo antes de iniciar qualquer nova tarefa neste projeto e
-siga estritamente estas regras de economia de tokens e limite de escopo.**
+`CLAUDE.md` é o CONTEXTO (o que existe e por quê). Este arquivo é o PROCESSO
+(como conduzir a tarefa). Em conflito sobre escopo de execução, este vence.
 
-> `CLAUDE.md`/`AGENTS.md` (raiz) continua sendo o CONTEXTO do projeto — o que
-> existe e por quê. Este arquivo é o PROCESSO: como conduzir a tarefa. Os dois
-> valem juntos; em caso de conflito sobre *escopo de execução*, este vence.
+## FAST TRACK — padrão para pedido pontual
 
----
+> Copiado em resumo no `CLAUDE.md` (é o arquivo que o Claude Code lê). Mudou
+> aqui, mude lá.
 
-## PASSO 1 — Mapeamento e classificação (apenas leitura)
+Pedido pontual = bug, ajuste localizado, mudança clara em arquivo conhecido.
+Aí é **proibido** plano, pré-análise, lista de alternativas, pergunta de
+permissão e resumo longo. Sequência, sem desvio:
 
-1. Classificar o pedido: **[FRONTEND/VISUAL]**, **[BACKEND/LÓGICA]** ou
-   **[FULLSTACK]**.
-2. Listar os arquivos essenciais a partir do conhecimento que já se tem do
-   projeto.
-3. Só se não souber onde está o arquivo: **no máximo UMA** busca, específica
+1. Abrir o arquivo alvo. Se não souber onde está: **UMA** busca específica
    (`grep -rn "termo" caminho/`). Proibida varredura ampla.
+2. Editar o bloco — nunca reescrever o arquivo inteiro.
+3. Rodar **só** o teste que cobre a mudança.
+4. Responder em **até 3 linhas**: o que mudou, onde (`arquivo:linha`), resultado
+   do teste.
 
-## PASSO 1.5 — Visão Sistêmica, Análise Cética e Proatividade (OBRIGATÓRIO)
+Proibido no Fast Track:
+- explicar o que o código já fazia antes da edição;
+- repetir o diff em prosa, ou listar arquivos que o diff já mostra;
+- seções "Mitigações", "Próximos passos", "Resumo", "O que mudou e por quê";
+- perguntar "posso prosseguir?" — é pedido pontual, execute.
 
-Sempre que eu pedir QUALQUER alteração, você assumirá a postura de um **Engenheiro de Software Sênior e Product Owner**. Você DEVE fazer uma análise mental de "Pior Cenário" e de "Experiência Ideal" antes de escrever qualquer código. Nunca programe apenas o "Caminho Feliz" (Happy Path) e **não jogue decisões triviais de usabilidade ou segurança para mim**.
+## Quando SAIR do Fast Track
 
-Tome a iniciativa de incorporar as melhores práticas modernas nas seguintes frentes:
+O critério é o **custo de errar**, não o tamanho. Pare e pergunte antes se for:
 
-1. **Resiliência de Dados e Segurança (Backend/BD):**
-   - Considere TODO input (usuário, arquivos, APIs externas) como não-confiável e sujo.
-   - Aplique proativamente sanitização, tipagem estrita, limites de tamanho (boundaries) e tratamentos contra injeções ou falhas de encode.
-   - Garanta a integridade transacional (se algo falhar no meio, o banco não pode ficar em estado inconsistente).
+- migração que apaga coluna, tabela ou dado;
+- ação irreversível ou que sai da máquina (push, deploy, serviço externo);
+- arquitetura nova, ou pedido com duas leituras plausíveis;
+- qualquer coisa fora do que foi pedido, mesmo parecendo melhoria óbvia.
 
-2. **Performance e Saúde do Sistema (Arquitetura):**
-   - Nenhuma requisição pesada deve bloquear o Event Loop ou a thread principal.
-   - Identifique proativamente gargalos de processamento (ex: chamadas de LLM, manipulação de arquivos) e isole-os em background tasks, filas (workers) ou limite o consumo de CPU/Memória.
-   - Preveja falhas em serviços externos e implemente timeouts e fallbacks gracefully (sem derrubar a aplicação).
+Parando, responda em até 6 linhas: arquivos/rotas exatos, o que será feito, e a
+pergunta. Nada de código antes da resposta.
 
-3. **Completude de UX/UI e Fluxo de Negócio (Frontend):**
-   - Aplique padrões modernos de interface sem que eu precise pedir.
-   - Evite "becos sem saída" (dead ends), cliques inúteis ou redirecionamentos confusos.
-   - Implemente proativamente todos os "Edge Cases" visuais: estados de *Loading* (esqueletos/spinners), *Empty States* (telas vazias convidativas) e tratamentos de *Erro* claros e amigáveis para o usuário final.
-   - Pense no negócio: essa alteração faz sentido na jornada do usuário? Se houver um caminho mais moderno ou lógico, **implemente as melhorias óbvias e sugira as estruturais**.
+## Qualidade — vale pro CÓDIGO, não pro texto da resposta
 
-No **PASSO 2 (Plano de Ação)**, você deve SEMPRE incluir uma seção final chamada **"Mitigações e Proatividade:"**, onde você listará em bullet points curtos:
-- Quais falhas de borda (edge cases) você blindou.
-- Quais melhorias de UX ou performance você já embutiu no código por conta própria para modernizar a entrega.
+Embuta sem pedir e sem narrar:
+- input não-confiável (upload, URL, API): tipo, tamanho e encode validados;
+- transação: falha no meio não deixa o banco inconsistente;
+- nada pesado no event loop ou na thread principal — LLM, PDF e embedding vão
+  pra background ou pra fila;
+- serviço externo com timeout e fallback, sem derrubar a aplicação;
+- na tela: loading, estado vazio e erro legível; sem beco sem saída.
 
-## PASSO 2 — Plano de ação e escopo (PARADA CONDICIONAL)
+Escolha estrutural necessária mas fora do escopo: **uma linha** no fim, sem
+implementar.
 
-**Para tarefas de arquitetura nova ou escopo ambíguo, pare e apresente um plano de
-ação. Para tarefas claramente delimitadas, correções de bugs ou escopos já
-alinhados, execute o código diretamente sem pedir permissão.**
+## Execução
 
-### Quando PARAR (plano antes do código)
+- [FRONTEND/VISUAL]: só `.tsx`/`.css`/`.html`. Proibido tocar em banco, criar ou
+  alterar rota de API, ou mexer no backend.
+- Não rodar suíte inteira sem pedido — só o arquivo de teste afetado.
+- Erro durante a alteração: no máximo **DUAS** tentativas autônomas de conserto.
+  Falhando na segunda, pare e reporte o erro.
 
-Responder com:
+## Notas de casa
 
-- a **classificação** da tarefa;
-- os **arquivos/rotas exatos** que serão alterados;
-- **o que será feito**, em 1 ou 2 frases;
-- a seção **"Mitigações e Proatividade:"** exigida pelo PASSO 1.5;
-- e a pergunta: **"Posso prosseguir?"**
-
-Nada de código antes da aprovação.
-
-### Quando EXECUTAR direto
-
-Sem plano, sem pergunta. A análise do PASSO 1.5 continua obrigatória — ela só
-deixa de ser publicada antes e passa a ser publicada depois: o **relatório de
-entrega** carrega a seção **"Mitigações e Proatividade:"** no lugar do plano.
-Isso não é dispensa da análise; é a mesma análise, entregue junto do resultado.
-
-Em caso de dúvida sobre em qual lado a tarefa cai, o critério é **o custo de
-errar**, não o tamanho: se executar errado significa refazer trabalho, apagar
-dado ou mexer no que não foi pedido, pare e pergunte. Se significa um ajuste de
-uma linha, execute.
-
-O que **sempre** para, independente de parecer delimitado:
-
-- migração de banco que **apaga** coluna, tabela ou dado;
-- qualquer coisa fora do escopo pedido, mesmo que pareça melhoria óbvia;
-- ação irreversível ou que sai da máquina (push, deploy, envio a serviço
-  externo).
-
-## PASSO 3 — Execução restrita (gatilho rígido)
-
-Só depois da aprovação, e obedecendo a:
-
-- **[FRONTEND/VISUAL]**: PROIBIDO tocar em banco de dados, criar/alterar rota de
-  API, mexer no backend ou rodar teste automatizado. Só `.tsx` / `.css` /
-  `.html`.
-- **Não reescrever arquivo inteiro** sem necessidade. Preferir substituição
-  pontual (edição de bloco específico, `sed`, regex).
-- **Não rodar suíte inteira** (`pytest`, `npm test`) a menos que pedido
-  explicitamente.
-- Erro durante a alteração: **no máximo DUAS** tentativas autônomas de conserto.
-  Falhando na segunda, **parar e reportar o erro**.
-
----
-
-## Notas de casa que não mudam com o workflow
-
-- Migração numerada nova se aplica com `python migrar.py` (023), nunca à mão e
-  nunca por `psql -f`: fora do runner ela não entra no livro-razão, e aí o banco
-  fica com o efeito aplicado e sem registro — o silêncio que a 023 existe pra
-  acabar. Commitar continua não sendo aplicar.
-- Escrita em `tentativa`/`progresso`/`simulado`/`edital`/`mesa` em teste vai
+- Migração numerada se aplica com `python migrar.py`, nunca à mão nem por
+  `psql -f` (fora do runner não entra no livro-razão da 023). Commitar não aplica.
+- Teste que grava em `tentativa`/`progresso`/`simulado`/`edital`/`mesa` vai
   contra usuário DESCARTÁVEL, nunca contra `CLI_USUARIO_EMAIL`.
-- Nunca `DELETE FROM documento` pra reprocessar: usar `reingest.py`.
-- Este repositório é de dados PÚBLICOS. Nada de dado de empresa aqui.
+- Nunca `DELETE FROM documento` pra reprocessar: use `reingest.py`.
+- Repositório de dados PÚBLICOS. Nada de dado de empresa aqui.

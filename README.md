@@ -23,9 +23,10 @@ turbo.json           orquestra tasks entre apps/packages (Turborepo, yarn).
 
 ## Onde está cada coisa
 
-- **Regras de negócio, decisões de arquitetura, corpus, banco de dados**:
-  tudo isso é do backend — `apps/api/README.md` e, mais detalhado,
-  `CLAUDE.md` (nesta raiz; os caminhos ali são relativos a `apps/api/`).
+- **Mapa do projeto** (o que existe, como rodar, invariantes): `CLAUDE.md`
+  nesta raiz — os caminhos ali são relativos a `apps/api/`.
+- **Decisões de arquitetura e armadilhas medidas**: `docs/DECISOES.md`.
+  Comandos, um a um: `docs/COMANDOS.md`. Migrações: `docs/SCHEMA.md`.
 - **Subir o banco**: `docker compose up -d` (desta raiz).
 - **Rodar o backend**: `cd apps/api && ...` — ver `apps/api/README.md`.
 - **Rodar o frontend**: `cd apps/web && yarn dev`.
@@ -33,7 +34,7 @@ turbo.json           orquestra tasks entre apps/packages (Turborepo, yarn).
 ## Continuar em outra máquina (git pull + retomar de onde parou)
 
 O que viaja pelo git e o que não viaja é uma decisão deliberada (documentada
-em `CLAUDE.md`, seção "Sincronização entre máquinas"): código e o **texto**
+em `docs/DECISOES.md`, seção "Sincronização entre máquinas"): código e o **texto**
 da lei vão; **chunks/embeddings** não vão (derivam do texto, CPU local, sem
 custo); **questões geradas por LLM e o progresso pessoal** vão, mas por um
 canal separado (`sincronizar.py`), não automaticamente com o `git pull`.
