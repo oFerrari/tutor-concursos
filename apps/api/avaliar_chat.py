@@ -438,11 +438,16 @@ RE_MANDA_BOTAO = re.compile(r"(?i)quero quest[õo]es sobre isto|clique no bot[ã
 # pra BAIXO (onde as questões aparecem de verdade) — "vamos treinar isso"
 # sozinho é intenção, não promessa, e apontar intenção como defeito seria o
 # falso positivo de sempre.
+# `re.IGNORECASE` como FLAG, não `(?i)` no meio do padrão: este tem uma
+# alternância (`|`) e o segundo ramo trazia outro `(?i)`, que o Python 3.12
+# depreciou e o 3.14 transformou em erro de compilação — "global flags not at
+# the start of the expression". Quebrava o arquivo inteiro no import, então
+# `./testar.sh` não subia nesta máquina por um detalhe de regex.
 RE_ANUNCIA_QUESTAO = re.compile(
-    r"(?i)(quest(?:[ãa]o|[õo]es)|it(?:em|ens)|exerc[íi]cios?)[^.!?\n]{0,60}"
+    r"(quest(?:[ãa]o|[õo]es)|it(?:em|ens)|exerc[íi]cios?)[^.!?\n]{0,60}"
     r"(logo\s+abaixo|abaixo|a seguir|na sequ[êe]ncia)|"
-    r"(?i)(selecionei|preparei|separei|montei)\s+(?:\w+\s+){0,3}"
-    r"(quest(?:[ãa]o|[õo]es)|it(?:em|ens)|exerc[íi]cios?)")
+    r"(selecionei|preparei|separei|montei)\s+(?:\w+\s+){0,3}"
+    r"(quest(?:[ãa]o|[õo]es)|it(?:em|ens)|exerc[íi]cios?)", re.IGNORECASE)
 
 # O ALUNO ESTÁ INDO EMBORA. Fecho sem pergunta é o CERTO aqui — insistir em
 # devolver pergunta a quem disse que só passou pra ver é o oposto de ler a sala.

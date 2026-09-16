@@ -88,7 +88,7 @@ from pathlib import Path
 from core import auth, db
 from core.config import CLI_USUARIO_EMAIL
 
-VERSAO = "sincronizar-v4"
+VERSAO = "sincronizar-v5"
 ARQUIVO = Path("dados/progresso.json")
 
 # OS ARQUIVOS ORIGINAIS VIAJAM COMO BLOBS, FORA DO JSON.
@@ -878,8 +878,18 @@ def _importar_tudo(pacote, indexar_material: bool = True) -> dict:
             cid = ja["id"]
         else:
             r = db.exec1(
+                # `::timestamptz` nos DOIS usos de %(c)s, e no %(a)s: o mesmo
+                # parâmetro aparece na coluna (que dá o tipo) e dentro de um
+                # COALESCE cujo primeiro argumento chega NULL — o Postgres
+                # deduz `text` ali e estoura AmbiguousParameter ("text versus
+                # timestamp with time zone"), abortando a importação inteira na
+                # primeira conversa sem `atualizada_em`. Terceira vez desta
+                # classe no projeto (o `::text` do classificado_por e o
+                # `::bigint[]` do reingest.py): parâmetro que o Postgres não
+                # consegue tipar pelo contexto se anota na mão.
                 """INSERT INTO conversa (usuario_id, mesa_id, titulo, criada_em, atualizada_em)
-                   VALUES (%(u)s, %(m)s, %(t)s, %(c)s, COALESCE(%(a)s, %(c)s))
+                   VALUES (%(u)s, %(m)s, %(t)s, %(c)s::timestamptz,
+                           COALESCE(%(a)s::timestamptz, %(c)s::timestamptz))
                    RETURNING id""",
                 {"u": u, "m": mesa_id.get((c["usuario"], c.get("mesa"))) if c.get("mesa") else None,
                  "t": c["titulo"], "c": c["criada_em"], "a": c.get("atualizada_em")},
