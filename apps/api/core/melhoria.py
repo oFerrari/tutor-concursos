@@ -84,7 +84,8 @@ def pendentes(limite: int = 50) -> list[dict]:
     isso, ler a fila seria abrir o banco de novo a cada item, e quem lê está
     justamente atrás do contexto."""
     return db.query(
-        """SELECT f.id, f.conversa_id, f.feedback_texto, f.criado_em, f.status,
+        """SELECT f.id, f.conversa_id, f.mensagem_tutor_id,
+                  f.feedback_texto, f.criado_em, f.status,
                   c.titulo AS conversa_titulo,
                   m.texto  AS resposta_do_tutor,
                   m.fontes AS fontes_do_turno

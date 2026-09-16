@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowUp, Check, ClipboardList, Pencil, Square } from "lucide-react";
+import { ArrowUp, Check, ClipboardList, Pencil, Square, X } from "lucide-react";
 import { MarcaGlifo } from "@/components/Marca";
 import { BalaoQuestao } from "@/components/BalaoQuestao";
 import { GerarQuestoes } from "@/components/GerarQuestoes";
 import { ResultadoQuestao } from "@/components/DialogoQuestao";
 import { TextoDoTutor } from "@/components/TextoDoTutor";
 import {
+  COMANDOS,
   comandosSugeridos,
   desfazerTurno,
   ehComandoDeFeedback,
@@ -113,6 +114,17 @@ export default function PaginaTutor() {
   // Qual comando está destacado no menu da barra. Vive aqui e não dentro do
   // menu porque o TECLADO é quem o move, e o teclado está no campo.
   const [comandoAtivo, setComandoAtivo] = useState(0);
+  // O COMANDO VIRA FICHA, e sai do texto. Enquanto ele era só as primeiras
+  // letras da mensagem não havia como saber, olhando, se o app já entendeu que
+  // aquilo é comando — "/feedb" e "/feedback " parecem a mesma coisa. Fora do
+  // texto ele é um objeto na tela: dá pra ver, dá pra apagar inteiro, e o campo
+  // guarda só o que interessa, que é o relato.
+  const [comando, setComando] = useState<string | null>(null);
+  // Primeiro Backspace ARMA (a ficha fica em vermelho, como texto selecionado),
+  // o segundo apaga. Um toque só apagando seria perder o comando por um
+  // Backspace de mais na hora de corrigir uma palavra — e o gesto de dois
+  // tempos é o que todo campo de etiqueta faz.
+  const [comandoArmado, setComandoArmado] = useState(false);
   /** Controlador do pedido em voo, pra PARAR. `useRef` e não estado: trocar de
    *  controlador não precisa redesenhar nada, e um `useState` aqui faria o
    *  botão remontar no meio do clique. */
@@ -278,12 +290,32 @@ export default function PaginaTutor() {
   const sugestoes = comandosSugeridos(pergunta);
 
   function completar(nome: string) {
-    // Com o espaço já no fim: o comando sozinho não grava nada (o servidor
-    // devolve "escreva o que saiu errado"), então a próxima tecla tem de ser o
-    // texto do relato, não a barra de espaço.
-    setPergunta(`${nome} `);
+    setComando(nome);
+    setComandoArmado(false);
+    setPergunta("");
     setComandoAtivo(0);
     campo.current?.focus();
+  }
+
+  /** O que o aluno digitou VIRA ficha sozinho ao bater o espaço.
+   *
+   *  Digitar o comando inteiro à mão é tão válido quanto escolher no menu, e
+   *  quem digita "/feedback " esperando que o app entenda não deve precisar
+   *  descobrir que precisava ter clicado. O espaço é o gatilho porque é onde a
+   *  palavra termina — antes dele "/bug" ainda pode virar "/bugado". */
+  function aoDigitar(valor: string) {
+    setComandoArmado(false);
+    // `[\s\S]*` e não `.` com a flag `s`: o alvo de compilação do projeto é
+    // anterior ao dotAll, e o relato pode ter quebra de linha.
+    const m = comando === null ? /^\s*(\/[a-zà-ú]+)\s([\s\S]*)$/i.exec(valor) : null;
+    if (m && COMANDOS.some((c) => c.nome === m[1].toLowerCase())) {
+      setComando(m[1].toLowerCase());
+      setPergunta(m[2]);
+      setComandoAtivo(0);
+      return;
+    }
+    setPergunta(valor);
+    setComandoAtivo(0);
   }
 
   const perguntarAoTutor = useCallback(async (texto: string) => {
@@ -528,9 +560,14 @@ export default function PaginaTutor() {
 
   function enviar(e: React.FormEvent) {
     e.preventDefault();
-    const texto = pergunta.trim();
+    // A ficha volta pro texto na hora de mandar: o servidor continua recebendo
+    // "/feedback isso ficou raso", e a regra de quem intercepta continua num
+    // lugar só (`core/melhoria.py`). A ficha é da TELA.
+    const texto = [comando, pergunta.trim()].filter(Boolean).join(" ").trim();
     if (!texto || pensando) return;
     setPergunta("");
+    setComando(null);
+    setComandoArmado(false);
     perguntarAoTutor(texto);
   }
 
@@ -848,15 +885,64 @@ export default function PaginaTutor() {
              faz — o vermelho continua reservado pro que é ação. */
           className="mx-auto max-w-[720px] rounded-[18px] border border-line-strong bg-surface-input px-3.5 pb-2.5 pt-3.5 shadow-[var(--shadow-float)] transition-colors focus-within:border-line-stronger"
         >
+          {/* A FICHA. Dentro da caixa e antes do texto, que é onde ela estava
+              enquanto era letra — o comando não "sumiu", virou objeto.
+              `armado` a pinta como seleção: é o aviso de que o próximo
+              Backspace apaga ela, e não uma letra. */}
+          {comando && (
+            <div className="mb-1.5 flex items-center gap-1.5">
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1
+                            font-mono text-[12.5px] transition-colors ${
+                              comandoArmado
+                                ? "bg-accent text-accent-foreground"
+                                : "border border-accent-line bg-accent-soft text-accent-text"
+                            }`}
+              >
+                {comando}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setComando(null);
+                    setComandoArmado(false);
+                    campo.current?.focus();
+                  }}
+                  aria-label={`tirar o comando ${comando}`}
+                  className="grid h-3.5 w-3.5 place-items-center rounded-full
+                             transition-colors hover:bg-accent-line"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+              <span className="text-[11.5px] text-subtle">
+                {comandoArmado
+                  ? "Backspace de novo apaga o comando"
+                  : COMANDOS.find((c) => c.nome === comando)?.descricao}
+              </span>
+            </div>
+          )}
+
           <textarea
             ref={campo}
             rows={1}
             value={pergunta}
-            onChange={(e) => {
-              setPergunta(e.target.value);
-              setComandoAtivo(0);
-            }}
+            onChange={(e) => aoDigitar(e.target.value)}
             onKeyDown={(e) => {
+              // BACKSPACE NO COMEÇO DO CAMPO É SOBRE A FICHA, não sobre o
+              // texto: não há texto à esquerda pra apagar. Primeiro toque arma,
+              // segundo apaga — e qualquer outra tecla desarma, no `aoDigitar`.
+              const noComeco = e.currentTarget.selectionStart === 0
+                && e.currentTarget.selectionEnd === 0;
+              if (e.key === "Backspace" && comando && noComeco) {
+                e.preventDefault();
+                if (comandoArmado) {
+                  setComando(null);
+                  setComandoArmado(false);
+                } else {
+                  setComandoArmado(true);
+                }
+                return;
+              }
               // COM O MENU ABERTO, o campo é navegação. Enter completa em vez
               // de enviar: mandar "/er" pro servidor seria enviar meia palavra
               // pro modelo, que é exatamente o que o menu existe pra evitar.
@@ -887,7 +973,12 @@ export default function PaginaTutor() {
                 enviar(e);
               }
             }}
-            placeholder="Pergunte sobre a lei — ex.: art. 312 do CP"
+            placeholder={
+              comando
+                ? COMANDOS.find((c) => c.nome === comando)?.exemplo.replace(`${comando} `, "")
+                  ?? "Descreva o que aconteceu"
+                : "Pergunte sobre a lei — ex.: art. 312 do CP"
+            }
             className="max-h-40 w-full resize-none overflow-y-auto bg-transparent text-[15px] leading-relaxed text-foreground outline-none placeholder:text-subtle"
           />
           <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2.5">

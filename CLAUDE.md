@@ -100,6 +100,7 @@ semear_demo.py        conta descartável com dado plausível, pra olhar a TELA
 ```
 
 Scripts da raiz: `setup.sh` (sobe tudo), `testar.sh` (qualidade da resposta),
+`melhorias.sh` (o que o ALUNO pediu, de `/erro` e `/feedback`),
 `sincronizar.sh` (trocar de máquina), `subir-vercel.sh` (nuvem), `ativar.sh`,
 `tutor`.
 
@@ -158,6 +159,7 @@ Scripts da raiz: `setup.sh` (sobe tudo), `testar.sh` (qualidade da resposta),
 ./setup.sh --subir            # confere o schema e sobe API + front (--parar derruba)
 ./testar.sh                   # qualidade da resposta do tutor · --pytest roda a suíte
 ./testar.sh --reprocessar     # re-checa as conversas gravadas, sem gastar LLM
+./melhorias.sh                # fila de /erro e /feedback -> .logs/melhorias.md
 ./sincronizar.sh --sair       # na máquina que você deixa · sem argumento na que você senta
 source ativar.sh              # venv + apps/api · ./tutor <cmd> roda um só
 python migrar.py --listar     # estado do schema, sem tocar em nada
@@ -168,4 +170,7 @@ python semear_demo.py --email voce@teste --senha 12345678   # dado plausível pr
 
 Havendo defeito, `./testar.sh` escreve `.logs/defeitos.md` (a AUSÊNCIA do arquivo
 é o sinal de limpo). Decida pela CONTAGEM DE ERROS, nunca pela nota de 0-100.
+`./melhorias.sh` segue o mesmo molde com o que o ALUNO reclamou no chat (029):
+nome fixo, ausência = fila vazia, e `--fechar <id>` tira da fila sem apagar a
+linha.
 O resto dos comandos — ingestão, curl das rotas, nuvem — está em `docs/COMANDOS.md`.

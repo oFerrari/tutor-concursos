@@ -125,3 +125,53 @@ def test_fila_traz_o_turno_comentado_junto(client, usuario, llm_falso):
     assert item["feedback_texto"] == "isso não responde o que perguntei"
     assert item["resposta_do_tutor"] == "peculato é do art. 312"
     assert item["conversa_titulo"]
+
+
+# ---------------------------------------------------------------------------
+# A outra ponta: a fila virando arquivo pra entregar (`./melhorias.sh`)
+# ---------------------------------------------------------------------------
+
+def test_arquivo_traz_o_contexto_ate_a_resposta_reclamada(client, usuario, llm_falso):
+    """O relatório mostra o que o tutor tinha na frente QUANDO errou.
+
+    A primeira versão do `melhorias.py` montava o contexto até o fim da conversa
+    e trazia turnos POSTERIORES ao reclamado — que já são consequência do erro,
+    não a causa. Quem vai consertar precisa do antes."""
+    import melhorias
+
+    llm_falso.retorno = "a autotutela permite anular os próprios atos"
+    cid = client.post("/perguntar", json={"pergunta": "me explica os implícitos"},
+                      headers=usuario["headers"]).json()["conversa_id"]
+    corpo = client.post("/perguntar",
+                        json={"pergunta": "/erro não era isso que eu pedi", "conversa_id": cid},
+                        headers=usuario["headers"]).json()
+
+    # Um turno DEPOIS do feedback: ele não pode aparecer no relatório do item.
+    llm_falso.retorno = "quer que eu siga para os poderes administrativos?"
+    client.post("/perguntar", json={"pergunta": "e o restante?", "conversa_id": cid},
+                headers=usuario["headers"])
+
+    texto, n = melhorias.montar(50)
+    assert n >= 1
+    assert "não era isso que eu pedi" in texto
+    assert "a autotutela permite anular os próprios atos" in texto
+    assert "poderes administrativos" not in texto, \
+        "o relatório trouxe turno posterior à resposta reclamada"
+    assert str(corpo["feedback"]["id"]) in texto
+
+
+def test_fechar_tira_da_fila_sem_apagar_a_linha(client, usuario, llm_falso):
+    """`status='resolvido'`, nunca DELETE: a fila é o histórico do que o produto
+    errou, e é a única série de reclamação REAL que o projeto tem."""
+    import melhorias
+
+    cid = _conversa_com_resposta(client, usuario, llm_falso)
+    fid = client.post("/perguntar", json={"pergunta": "/erro qualquer coisa", "conversa_id": cid},
+                      headers=usuario["headers"]).json()["feedback"]["id"]
+
+    assert melhorias.fechar([fid]) == 1
+    assert all(x["id"] != fid for x in melhoria.pendentes())
+    assert db.exec1("SELECT status FROM fila_melhoria WHERE id=%(i)s", {"i": fid})["status"] \
+        == "resolvido"
+    # Fechar duas vezes não conta duas: o UPDATE exige `status='pendente'`.
+    assert melhorias.fechar([fid]) == 0
