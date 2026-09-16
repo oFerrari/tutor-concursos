@@ -220,6 +220,89 @@ CENARIOS: dict[str, tuple[str, list[str]]] = {
          "agora só uma",
          "manda cinco"]),
 
+    # =====================================================================
+    # BATERIA DE HUMANIZAÇÃO — pedida pelo dono, doze formas de a conversa
+    # sair do trilho sem que NENHUMA regra de conteúdo seja violada.
+    #
+    # A diferença destes pros de cima: lá o risco é dizer coisa ERRADA (lei
+    # inventada, questão sem proveniência, assunto arrastado). Aqui o risco é
+    # dizer a coisa certa de um jeito que ninguém fala. Não há gabarito
+    # automático pra isso — o que se lê é a escala de naturalidade e a
+    # transcrição, e por isso cada cenário ataca UMA coisa só: misturar dois
+    # riscos num roteiro deixa a nota sem causa.
+    # =====================================================================
+
+    "saudacao_errada": (
+        "cumprimenta com a saudação errada e insiste — o relógio manda, não o eco",
+        ["ola boa noite", "ainda ta de dia nenem",
+         "kkkk beleza, e aí, bom dia então",
+         "vamos de direito penal"]),
+
+    "impaciente": (
+        "respostas secas e pressa: não pode virar palestra nem pedir licença",
+        ["peculato", "sim", "vai direto ao ponto", "e daí?", "sem enrolação por favor"]),
+
+    "humor": (
+        "brinca, provoca e testa o tutor — acompanhar sem forçar piada",
+        ["fala aí professor, tudo joia?",
+         "kkkk você é meio seco hein",
+         "brincadeira, me ensina algo de administrativo",
+         "isso aí foi copiado do google né? kkk"]),
+
+    "pessoal": (
+        "pergunta sobre o TUTOR: nome, opinião, elogio — sem bajulação e sem manual",
+        ["você tem nome?", "o que você acha de mim como aluno?",
+         "você gosta de direito penal?", "tá, me ensina improbidade"]),
+
+    "corrige_o_tutor": (
+        "o aluno afirma que o tutor errou — não capitular por educação nem brigar",
+        ["me explica a diferença entre peculato e concussão",
+         "isso tá errado, concussão é quando o servidor se apropria",
+         "tenho certeza, li isso hoje",
+         "então me mostra onde está escrito"]),
+
+    "digitacao_ruim": (
+        "gíria, abreviação e sem acento — entender sem corrigir o português dele",
+        ["vc pode mi explicar oq e improbidade adm",
+         "blz mas qual a dif pra peculato",
+         "aa entendi mais ou menos", "manda ver entao"]),
+
+    "muda_de_ideia": (
+        "volta atrás duas vezes: o tutor segue o aluno sem cobrar coerência",
+        ["quero estudar licitação", "na verdade não, prefiro penal",
+         "peraí, volta pra licitação", "esquece, me fala do que eu mais erro"]),
+
+    "fora_de_escopo": (
+        "pergunta que não é do edital — recusa curta, sem sermão e sem buscar material",
+        ["me ensina a fazer um bolo de cenoura",
+         "sério, só uma receita rápida",
+         "kkk tá bom, e sobre o jogo de ontem?",
+         "beleza, volta pro edital"]),
+
+    "vespera_da_prova": (
+        "ansiedade com prazo curto: usar os NÚMEROS dele, não frase motivacional",
+        ["minha prova é amanhã, tô surtando",
+         "o que eu estudo nas próximas 3 horas?",
+         "não vai dar tempo de nada né",
+         "tá, o que é mais importante"]),
+
+    "nao_entendi": (
+        "não entende três vezes seguidas — mudar de ÂNGULO, não repetir mais devagar",
+        ["me explica eficácia limitada",
+         "não entendi", "continuo não entendendo",
+         "explica como se eu tivesse 10 anos"]),
+
+    "memoria": (
+        "pergunta o que já estudaram — não pode dizer que não guarda nada",
+        ["a gente já viu papiloscopia?",
+         "quando foi a última vez que eu errei alguma coisa de penal?",
+         "você lembra do que conversamos ontem?",
+         "então me diz o que eu ando errando mais"]),
+
+    "monossilabico": (
+        "só monossílabos: cada turno precisa avançar sem repetir o cardápio",
+        ["oi", "sei", "aham", "tanto faz", "pode ser"]),
+
     "desanimo": (
         "desabafo, não matéria: pede tom, não conteúdo",
         ["tô desanimado, não sei se vou passar", "estudo há 2 anos e nada",
@@ -1740,7 +1823,8 @@ def main() -> int:
                     help="falas suas, em vez do roteiro padrão")
     ap.add_argument("--persona", choices=sorted(PERSONAS), default="iniciante")
     ap.add_argument("--cenario", metavar="NOME",
-                    help="um dos cenários nomeados, ou 'listar' pra ver todos "
+                    help="um dos cenários nomeados, 'listar' pra ver todos, "
+                         "'todos' pra coleção inteira ou 'humanos' pra bateria de voz "
                          "(cada um tem linha própria no placar)")
     ap.add_argument("--mesa", metavar="NOME",
                     help="avalia com o contexto DESSA mesa (concurso-alvo, banca e "
@@ -1780,23 +1864,34 @@ def main() -> int:
         for nome, (desc, roteiro) in CENARIOS.items():
             t.add_row(nome, str(len(roteiro)), desc)
         console.print(t)
-        console.print("\n  uso: ./testar.sh --cenario direto   ·   "
-                      "todos de uma vez: ./testar.sh --cenario todos")
+        console.print("\n  uso: ./testar.sh --cenario direto"
+                      "   ·   a coleção inteira: ./testar.sh --cenario todos"
+                      "\n  só a bateria de VOZ (tom, humor, impaciência, memória): "
+                      "./testar.sh --cenario humanos")
         return 0
     if a.limpar:
         return limpar(a.email)
 
-    if a.cenario == "todos":
+    # GRUPOS. "todos" já custava caro e a bateria de humanização dobrou a
+    # coleção: rodar 24 cenários pra olhar tom é gastar 126 chamadas pra ler 12.
+    # Um grupo nomeado deixa a bateria ser uma rodada só, e é o que se roda
+    # depois de mexer em VOZ — do mesmo jeito que `regressoes` é o que se roda
+    # depois de mexer em conteúdo.
+    HUMANOS = ["saudacao_errada", "impaciente", "humor", "pessoal", "corrige_o_tutor",
+               "digitacao_ruim", "muda_de_ideia", "fora_de_escopo", "vespera_da_prova",
+               "nao_entendi", "memoria", "monossilabico", "cumprimento", "desanimo"]
+    if a.cenario in ("todos", "humanos"):
+        nomes = list(CENARIOS) if a.cenario == "todos" else HUMANOS
         # Roda a coleção inteira. Custa a soma dos turnos + um juiz por cenário,
         # e é a leitura mais completa que existe aqui: um `--cenario todos` antes
         # e outro depois de mexer no prompt cobre o espaço, não só as regressões.
-        total_chamadas = sum(len(r) for _, r in CENARIOS.values()) + len(CENARIOS)
-        console.print(f"[yellow]{len(CENARIOS)} cenários, ~{total_chamadas} chamadas de "
+        total_chamadas = sum(len(CENARIOS[n][1]) for n in nomes) + len(nomes)
+        console.print(f"[yellow]{len(nomes)} cenários, ~{total_chamadas} chamadas de "
                       f"LLM.[/yellow]")
         alvo = Path(__file__).resolve().parents[2] / ".logs" / "defeitos.md"
         alvo.unlink(missing_ok=True)   # a bateria começa do zero e depois acumula
         pior = 0
-        for nome in CENARIOS:
+        for nome in nomes:
             console.print(Rule(f"[bold]cenário: {nome}", style="blue"))
             pior = max(pior, rodar(CENARIOS[nome][1], a.persona, len(CENARIOS[nome][1]),
                                    a.juiz, a.email, cenario=nome, semente=a.semente,
