@@ -39,7 +39,7 @@ from starlette.concurrency import run_in_threadpool
 
 from pydantic import BaseModel
 
-from core import (assunto, auth, conversa, desafio, edital, geracao, material, mesa, pedido,
+from core import (assunto, auth, conversa, desafio, edital, geracao, material, melhoria, mesa, pedido,
                   questoes, rascunho, ritmo, scheduler, simulado, socratic)
 from core.config import CORS_ORIGINS
 from core.llm import ErroLLM
@@ -736,6 +736,40 @@ def rota_perguntar(body: PerguntaBody, uid: int = Depends(usuario_atual),
         conv = conversa.obter(uid, body.conversa_id)
         if not conv:
             raise HTTPException(404, "conversa não encontrada")
+
+    # ---- FEEDBACK (029): a única fala do aluno que NÃO vira turno.
+    #
+    # Sai daqui antes do modelo, antes de `conversa.gravar` e antes do gerador
+    # de questões: `/erro` é bilhete à margem, não pergunta. Gravar em
+    # `mensagem` faria o próximo turno LER a reclamação como matéria, e mandar
+    # ao LLM gastaria cota pra produzir uma resposta que ninguém pediu.
+    #
+    # DEPOIS de resolver a conversa, e não antes: é a conversa que diz qual
+    # resposta está sendo comentada, e é `conversa.obter` que já confirmou a
+    # posse. A conversa NOVA também vale — nela `mensagem_tutor_id` nasce NULL,
+    # que é o estado previsto na 029.
+    texto_feedback = melhoria.comando(body.pergunta)
+    if texto_feedback is not None:
+        if not texto_feedback:
+            # Comando sem texto não tem o que gravar. Devolve instrução, não
+            # erro: quem digitou "/erro" e deu enter está no meio da intenção
+            # certa, e um 400 vermelho seria punir o acerto pela metade.
+            return {"resposta": "Escreva o que saiu errado depois do comando — "
+                                "por exemplo: /erro o gabarito contradiz o artigo citado.",
+                    "fontes": [], "conversa_id": conv["id"], "titulo": conv["titulo"],
+                    "questoes": [], "questoes_fora_do_assunto": False,
+                    "simulado_pedido": False, "feedback_salvo": False}
+        item = melhoria.registrar(conv["id"], texto_feedback)
+        return {"resposta": "Feedback salvo com sucesso!",
+                "fontes": [], "conversa_id": conv["id"], "titulo": conv["titulo"],
+                "questoes": [], "questoes_fora_do_assunto": False,
+                "simulado_pedido": False,
+                # A tela usa isto pra desenhar um cartão discreto em vez de um
+                # balão do tutor — e o `mensagem_tutor_id` volta porque "preso a
+                # qual resposta" é o que dá valor ao registro.
+                "feedback_salvo": True,
+                "feedback": {"id": item["id"],
+                             "mensagem_tutor_id": item["mensagem_tutor_id"]}}
 
     historico = conversa.historico_para_prompt(conv["id"])
     conversa.gravar(conv["id"], "aluno", body.pergunta)

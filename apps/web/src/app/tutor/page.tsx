@@ -3,21 +3,23 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowUp, ClipboardList, Pencil, Square } from "lucide-react";
+import { ArrowUp, Check, ClipboardList, Pencil, Square } from "lucide-react";
 import { MarcaGlifo } from "@/components/Marca";
 import { BalaoQuestao } from "@/components/BalaoQuestao";
 import { GerarQuestoes } from "@/components/GerarQuestoes";
 import { ResultadoQuestao } from "@/components/DialogoQuestao";
 import { TextoDoTutor } from "@/components/TextoDoTutor";
 import {
+  comandosSugeridos,
+  desfazerTurno,
+  ehComandoDeFeedback,
   ErroApi,
   Fonte,
-  Questao,
   getConversa,
   getFila,
   getToken,
-  desfazerTurno,
   perguntar,
+  Questao,
 } from "@/lib/api";
 import { sair } from "@/lib/cache";
 import { ABERTURA_TUTOR, FLASHCARD_EXEMPLO, ROTA_DO_DIA } from "@/mock/prototipo";
@@ -53,7 +55,12 @@ import { ABERTURA_TUTOR, FLASHCARD_EXEMPLO, ROTA_DO_DIA } from "@/mock/prototipo
  */
 type Mensagem =
   | { autor: "usuario"; texto: string }
-  | { autor: "tutor"; texto: string; citadas: string[]; consultadas: string[] };
+  | { autor: "tutor"; texto: string; citadas: string[]; consultadas: string[] }
+  // O AVISO DO PRÓPRIO APP (029), não fala de ninguém: "feedback salvo". Terceiro
+  // valor em vez de um balão de tutor com texto fabricado — a 016 já resolveu
+  // isso no BANCO quando `autor` ganhou `evento`, e escrever aqui um balão do
+  // tutor que o modelo nunca gerou seria trazer o mesmo defeito pela tela.
+  | { autor: "sistema"; texto: string };
 
 function referencia(f: Fonte): string {
   return f.artigo ? `${f.titulo}, art. ${f.artigo}` : f.titulo;
@@ -103,6 +110,9 @@ export default function PaginaTutor() {
    *  formal" — falso, e o aluno acredita e deixa de usar o que existe. */
   const [pediuSimulado, setPediuSimulado] = useState(false);
   const [pensando, setPensando] = useState(false);
+  // Qual comando está destacado no menu da barra. Vive aqui e não dentro do
+  // menu porque o TECLADO é quem o move, e o teclado está no campo.
+  const [comandoAtivo, setComandoAtivo] = useState(0);
   /** Controlador do pedido em voo, pra PARAR. `useRef` e não estado: trocar de
    *  controlador não precisa redesenhar nada, e um `useState` aqui faria o
    *  botão remontar no meio do clique. */
@@ -263,11 +273,29 @@ export default function PaginaTutor() {
   }
 
 
+  // MENU DA BARRA. Derivado da fala, não guardado: estado que espelha outro
+  // estado é a fonte clássica de tela e campo discordando.
+  const sugestoes = comandosSugeridos(pergunta);
+
+  function completar(nome: string) {
+    // Com o espaço já no fim: o comando sozinho não grava nada (o servidor
+    // devolve "escreva o que saiu errado"), então a próxima tecla tem de ser o
+    // texto do relato, não a barra de espaço.
+    setPergunta(`${nome} `);
+    setComandoAtivo(0);
+    campo.current?.focus();
+  }
+
   const perguntarAoTutor = useCallback(async (texto: string) => {
     if (!texto) return;
     setMensagens((m) => [...m, { autor: "usuario", texto }]);
     ultimaPergunta.current = texto;
-    setPensando(true);
+    // `/erro` e `/feedback` NÃO acendem o "pensando": eles nem chegam ao modelo
+    // (o servidor grava e responde na hora, ver 029). Balão de carregamento num
+    // caminho que não pensa é mentira curta, e é o que faz um comando parecer
+    // uma pergunta que deu errado.
+    const ehFeedback = ehComandoDeFeedback(texto);
+    if (!ehFeedback) setPensando(true);
     // Rola JÁ ao mandar, não só ao receber: o balão do aluno mais o "pensando"
     // já empurram o fim da conversa pra fora da tela, e era aí que começava o
     // "tenho que ficar scrollando pra baixo".
@@ -297,6 +325,15 @@ export default function PaginaTutor() {
       const consultadas = new Set<string>();
       for (const f of r.fontes) {
         (r.resposta.includes(marca(f)) ? citadas : consultadas).add(referencia(f));
+      }
+      // FEEDBACK: cartão do sistema, e o turno acaba aqui. Não há fontes pra
+      // separar em citadas/consultadas, não há questão pra gerar, e a conversa
+      // não guarda o bilhete — por isso o `return` em vez de seguir o fluxo
+      // normal com listas vazias.
+      if (ehFeedback) {
+        setMensagens((m) => [...m, { autor: "sistema", texto: r.resposta }]);
+        irAoFim(true);
+        return;
       }
       setMensagens((m) => [
         ...m,
@@ -615,7 +652,20 @@ export default function PaginaTutor() {
 
           {/* --------------------------------------------- conversa real */}
           {mensagens.map((m, i) =>
-            m.autor === "usuario" ? (
+            m.autor === "sistema" ? (
+              /* CARTÃO DO APP, não balão de ninguém: sem avatar, sem fontes,
+                 centrado e discreto. Ele confirma um registro — se parecesse
+                 fala do tutor, o aluno leria "Feedback salvo com sucesso!" como
+                 se o modelo tivesse dito isso, que é o mesmo engano que a 016
+                 evitou no banco. */
+              <div key={i} className="flex justify-center py-1">
+                <p className="inline-flex items-center gap-2 rounded-full border border-line
+                              bg-surface px-3.5 py-1.5 text-[12.5px] text-muted">
+                  <Check className="h-3.5 w-3.5 text-accent-text" aria-hidden />
+                  {m.texto}
+                </p>
+              </div>
+            ) : m.autor === "usuario" ? (
               <div key={i} className="group/msg flex items-center justify-end gap-1.5">
                 {/* O lápis só na ÚLTIMA pergunta, e só com a conversa parada.
                     Editar uma pergunta do meio significaria descartar tudo o
@@ -752,6 +802,43 @@ export default function PaginaTutor() {
 
       {/* ------------------------------------------------- composer */}
       <div className="shrink-0 px-5 pb-5 pt-3">
+        {/* Menu dos comandos de barra (029). Fica ACIMA do campo e não abaixo:
+            embaixo ele cairia fora da tela em telefone, e o olho já está no fim
+            da conversa. `aria-activedescendant` não entra porque isto não é um
+            combobox de formulário — é um atalho de digitação, e o campo continua
+            sendo um textarea comum pra quem não usa a barra. */}
+        {sugestoes.length > 0 && (
+          <div className="mx-auto mb-2 w-full max-w-3xl overflow-hidden rounded-[14px]
+                          border border-line bg-surface shadow-[var(--shadow-drawer)]">
+            <p className="rotulo px-3.5 pt-2.5">comandos</p>
+            <ul className="p-1.5">
+              {sugestoes.map((c, i) => (
+                <li key={c.nome}>
+                  <button
+                    type="button"
+                    onMouseEnter={() => setComandoAtivo(i)}
+                    onClick={() => completar(c.nome)}
+                    className={`flex w-full items-baseline gap-2.5 rounded-[10px] px-2 py-1.5
+                                text-left transition-colors ${
+                                  i === Math.min(comandoAtivo, sugestoes.length - 1)
+                                    ? "bg-surface-hover"
+                                    : ""
+                                }`}
+                  >
+                    <span className="font-mono text-[13px] text-accent-text">{c.nome}</span>
+                    <span className="min-w-0 flex-1 truncate text-[12.5px] text-muted">
+                      {c.descricao}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <p className="border-t border-line-soft px-3.5 py-1.5 text-[11.5px] text-subtle">
+              ↑↓ para escolher · Enter ou Tab completa · Esc cancela
+            </p>
+          </div>
+        )}
+
         <form
           onSubmit={enviar}
           /* SEM `focus-within:border-accent`: o vermelho da marca em volta do
@@ -765,8 +852,36 @@ export default function PaginaTutor() {
             ref={campo}
             rows={1}
             value={pergunta}
-            onChange={(e) => setPergunta(e.target.value)}
+            onChange={(e) => {
+              setPergunta(e.target.value);
+              setComandoAtivo(0);
+            }}
             onKeyDown={(e) => {
+              // COM O MENU ABERTO, o campo é navegação. Enter completa em vez
+              // de enviar: mandar "/er" pro servidor seria enviar meia palavra
+              // pro modelo, que é exatamente o que o menu existe pra evitar.
+              if (sugestoes.length > 0) {
+                if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setComandoAtivo((i) =>
+                    (i + (e.key === "ArrowDown" ? 1 : sugestoes.length - 1)) % sugestoes.length
+                  );
+                  return;
+                }
+                if (e.key === "Enter" || e.key === "Tab") {
+                  e.preventDefault();
+                  completar(sugestoes[Math.min(comandoAtivo, sugestoes.length - 1)].nome);
+                  return;
+                }
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  // Esc LIMPA a barra em vez de só fechar o menu: sem isso o
+                  // menu reabriria no próximo render, porque ele é derivado da
+                  // fala, e a tecla pareceria não ter feito nada.
+                  setPergunta("");
+                  return;
+                }
+              }
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 enviar(e);

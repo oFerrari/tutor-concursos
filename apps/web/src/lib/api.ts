@@ -557,6 +557,39 @@ export type Fonte = {
 
 /** Um turno do chat. Sem `conversaId`, o servidor abre uma conversa e
  *  devolve o id — o cliente não paga uma chamada a mais só pra existir. */
+/** Os comandos de barra que o SERVIDOR intercepta (029) — nome e o que fazem.
+ *
+ *  Mora aqui junto de `ehComandoDeFeedback` porque são a mesma verdade vista de
+ *  dois ângulos: esta lista é o que a tela OFERECE, aquela função é o que ela
+ *  RECONHECE. Divergirem seria sugerir um comando que o servidor ignora.
+ *  Acrescentar comando é acrescentar linha aqui E no `RE_COMANDO` de lá. */
+export const COMANDOS = [
+  { nome: "/erro", descricao: "Registrar um erro desta resposta", exemplo: "/erro o gabarito contradiz o artigo citado" },
+  { nome: "/feedback", descricao: "Deixar um comentário sobre a resposta", exemplo: "/feedback ficou raso demais" },
+  { nome: "/bug", descricao: "Relatar falha do app nesta conversa", exemplo: "/bug a tela travou ao gerar questão" },
+] as const;
+
+/** O que digitar depois da barra, pra completar. `null` quando a fala não é o
+ *  começo de um comando — a barra só abre o menu no INÍCIO da mensagem e
+ *  enquanto ela for uma palavra só: "e/ou" no meio de uma frase não é comando,
+ *  e "/erro já escrito" também não precisa mais de sugestão. */
+export function comandosSugeridos(fala: string): typeof COMANDOS[number][] {
+  const m = /^\/([a-zà-ú]*)$/i.exec(fala);
+  if (!m) return [];
+  const escrito = m[1].toLowerCase();
+  return COMANDOS.filter((c) => c.nome.slice(1).startsWith(escrito));
+}
+
+/** Espelha `core/melhoria.RE_COMANDO` — e a duplicação é a mesma de
+ *  `minutosDoPerfil`: o SERVIDOR continua sendo o dono da regra (é ele que
+ *  grava), mas a tela precisa saber ANTES de mandar, porque o que muda aqui é
+ *  não acender o "pensando". Balão de carregamento do modelo num comando que
+ *  nunca vai ao modelo é mentira de 200ms, e é a diferença entre parecer um
+ *  comando e parecer uma pergunta. */
+export function ehComandoDeFeedback(fala: string): boolean {
+  return /^\s*\/(erro|feedback|bug)\b/i.test(fala);
+}
+
 export function perguntar(
   pergunta: string,
   conversaId?: number,
@@ -585,6 +618,11 @@ export function perguntar(
    *  caso de gerar aqui: a tela tem a página do simulado, e o servidor não deve
    *  abri-la sozinho no meio de um chat. */
   simulado_pedido: boolean;
+  /** A fala era `/erro` ou `/feedback` (029): o servidor gravou o bilhete na
+   *  fila de melhoria, preso à última resposta do tutor, e NÃO chamou o modelo.
+   *  `false` com `resposta` de instrução = comando sem texto. */
+  feedback_salvo?: boolean;
+  feedback?: { id: number; mensagem_tutor_id: number | null };
 }> {
   return chamar("/perguntar", {
     method: "POST",
