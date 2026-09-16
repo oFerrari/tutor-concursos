@@ -1,5 +1,6 @@
 import { RelatorioDisciplina, ResultadoSimulado, ErroSimulado } from "@/lib/api";
 import { TabelaPorDisciplina } from "@/components/TabelaPorDisciplina";
+import { Voltar } from "@/components/Voltar";
 
 export type RelatorioSimulado = {
   resultado: ResultadoSimulado;
@@ -36,6 +37,12 @@ export function RelatorioProva({ relatorio, segundosTotal, rotuloAcao, onAcao }:
   const { resultado, relatorio: porDisciplina, erros } = relatorio;
   return (
     <div>
+      {/* A saída fica SÓ aqui em cima. Antes era só embaixo, depois da lista
+          de revisão inteira: numa prova de 10 questões a página toda ficava
+          entre você e o botão. Duas saídas idênticas na mesma tela também não
+          se justificam — quem termina de ler o relatório tem a seta de voltar
+          ao topo no canto, que é o caminho pra cá. */}
+      <Voltar rotulo={rotuloAcao} aoClicar={onAcao} />
       <div className="card">
         <p className="text-lg font-medium">
           {resultado.acertos}/{resultado.total} corretas ({resultado.nota_pct}%)
@@ -73,10 +80,6 @@ export function RelatorioProva({ relatorio, segundosTotal, rotuloAcao, onAcao }:
           </ul>
         </div>
       )}
-
-      <button onClick={onAcao} className="btn-primary mt-6">
-        {rotuloAcao}
-      </button>
     </div>
   );
 }

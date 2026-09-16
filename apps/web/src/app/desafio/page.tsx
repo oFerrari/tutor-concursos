@@ -1,5 +1,6 @@
 "use client";
 
+import { Check } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AvisoAcervo } from "@/components/AvisoAcervo";
@@ -20,6 +21,33 @@ import { sair } from "@/lib/cache";
 
 type Bloco = "plano" | "reincidentes" | "novas" | "simulado" | "fim";
 const ORCAMENTOS = [10, 20, 30, null] as const;
+
+/**
+ * O que vai cair, por nome — não só quantos.
+ *
+ * "2 pontos fracos / 5 novas" é verdade e não prepara ninguém: o aluno lê um
+ * número e começa às cegas. Os nomes já estavam na resposta o tempo todo
+ * (`PlanoDesafio.reincidentes` são as QUESTÕES, com disciplina e tema), então
+ * isto é leitura de dado que já viajou — nenhuma chamada nova.
+ *
+ * Três e um "+N": a lista existe pra preparar, e sete nomes numa linha só
+ * viram parágrafo. Repetido não conta duas vezes, e a ORDEM é a do plano —
+ * ordenar por outra coisa esconderia qual é o primeiro que vem.
+ */
+function nomear(
+  qs: { disciplina: string; tema: string }[],
+  campo: "tema" | "disciplina",
+  max = 3
+): string | null {
+  const vistos: string[] = [];
+  for (const q of qs) {
+    const v = (q[campo] ?? "").trim();
+    if (v && !vistos.includes(v)) vistos.push(v);
+  }
+  if (vistos.length === 0) return null;
+  const mostra = vistos.slice(0, max).join(" · ");
+  return vistos.length > max ? `${mostra} +${vistos.length - max}` : mostra;
+}
 
 /**
  * Espelha `core/desafio.minutos_do_perfil` — mesma aproximação declarada
@@ -188,11 +216,48 @@ export default function PaginaDesafio() {
       <div className="mx-auto max-w-2xl p-6 md:p-10">
         <Sugestao />
         <h1 className="mb-4 text-2xl font-semibold tracking-tight">Desafio de hoje</h1>
-        <div className="card space-y-1 text-sm">
-          <p>{plano.reincidentes.length} pontos fracos</p>
-          <p>{plano.novas.length} novas</p>
-          <p>{plano.mini_simulado.length} mini-simulado</p>
-          <p className="mt-2 text-muted">~{plano.estimativa_minutos} min estimados</p>
+        <div className="card">
+          {/* O número de QUESTÕES é o compromisso; o tempo é estimativa
+              derivada da velocidade média, e vai junto em corpo menor — dar
+              corpo de manchete a um palpite é prometer precisão que ele não
+              tem. */}
+          <div className="flex items-baseline gap-2">
+            <p className="text-3xl font-semibold tracking-tight">{plano.total_questoes}</p>
+            <p className="text-sm text-muted">
+              {plano.total_questoes === 1 ? "questão" : "questões"} · ~
+              {plano.estimativa_minutos} min
+            </p>
+          </div>
+          <div className="mt-3 space-y-1.5 border-t border-line pt-3 text-sm">
+            {/* Bloco VAZIO não vira linha: "0 novas" é ruído num cartão que
+                existe pra dizer o que vem. O caso de tudo vazio já saiu
+                antes, no `total_questoes === 0`. */}
+            {[
+              // Ponto fraco se descreve pelo TEMA (é "Peculato" que ele errou,
+              // não "Direito Penal"); os outros dois blocos varrem matéria e
+              // se descrevem pela DISCIPLINA — listar tema ali seria uma lista
+              // de especificidades sem fio que as ligue.
+              { qs: plano.reincidentes, rotulo: "ponto fraco", plural: "pontos fracos",
+                campo: "tema" as const },
+              { qs: plano.novas, rotulo: "nova", plural: "novas",
+                campo: "disciplina" as const },
+              { qs: plano.mini_simulado, rotulo: "no mini-simulado",
+                plural: "no mini-simulado", campo: "disciplina" as const },
+            ]
+              .filter((l) => l.qs.length > 0)
+              .map((l) => (
+                <p key={l.rotulo} className="flex flex-wrap items-baseline gap-x-2">
+                  <span className="whitespace-nowrap">
+                    {l.qs.length} {l.qs.length === 1 ? l.rotulo : l.plural}
+                  </span>
+                  {nomear(l.qs, l.campo) && (
+                    <span className="min-w-0 text-[13px] text-muted">
+                      {nomear(l.qs, l.campo)}
+                    </span>
+                  )}
+                </p>
+              ))}
+          </div>
         </div>
 
         {/* "Só tenho N minutos hoje". A conta usa a SUA velocidade média
@@ -218,13 +283,20 @@ export default function PaginaDesafio() {
                 aceita qualquer inteiro (core/desafio.montar(minutos=...)),
                 só faltava a tela deixar digitar um. */}
             {personalizando ? (
+              /* UMA pílula, do tamanho exato das outras. Antes eram duas
+                 peças de famílias diferentes — `field` é retangular e de
+                 formulário, `chip` é redondo e de filtro — e a costura
+                 aparecia na altura e no canto. O campo passa a ser o chip: só
+                 o miolo é editável, e o confirmar mora dentro dele. */
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
                   const v = Number(minutosPersonalizados);
                   if (v > 0) trocarOrcamento(v);
                 }}
-                className="flex items-center gap-1.5"
+                className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border
+                           border-accent bg-accent-soft py-1.5 pl-3.5 pr-1.5 text-[13px]
+                           text-accent-text"
               >
                 <input
                   type="number"
@@ -232,11 +304,25 @@ export default function PaginaDesafio() {
                   autoFocus
                   value={minutosPersonalizados}
                   onChange={(e) => setMinutosPersonalizados(e.target.value)}
-                  placeholder="min"
-                  className="field w-[72px] !py-1.5 text-center text-[13px]"
+                  placeholder="15"
+                  aria-label="quantos minutos você tem"
+                  /* As setinhas do `number` não cabem numa pílula de 28px de
+                     altura — some com elas e deixa o teclado numérico, que é
+                     o que o tipo traz de útil aqui. */
+                  className="w-8 bg-transparent text-right text-[13px] text-accent-text
+                             [appearance:textfield] placeholder:text-subtle focus:outline-none
+                             [&::-webkit-inner-spin-button]:appearance-none
+                             [&::-webkit-outer-spin-button]:appearance-none"
                 />
-                <button type="submit" className="chip-ativo">
-                  ok
+                <span>min</span>
+                <button
+                  type="submit"
+                  aria-label="usar este tempo"
+                  title="usar este tempo"
+                  className="ml-0.5 grid h-[22px] w-[22px] place-items-center rounded-full
+                             transition-colors hover:bg-accent-line"
+                >
+                  <Check size={14} strokeWidth={2.5} aria-hidden />
                 </button>
               </form>
             ) : (

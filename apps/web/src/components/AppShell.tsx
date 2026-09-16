@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { X } from "lucide-react";
 import { Header } from "@/components/Header";
 import { RaioX } from "@/components/RaioX";
+import { VoltarAoTopo } from "@/components/VoltarAoTopo";
 import { Sidebar } from "@/components/Sidebar";
 import {
   Carga,
@@ -118,6 +119,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     carregar();
   }, [pathname, semCasca, carregar]);
 
+  // O elemento que de fato ROLA (o `<main>`) — a seta de voltar ao topo
+  // precisa dele, e ninguém mais deve ter que adivinhar qual é.
+  const conteudoRef = useRef<HTMLElement>(null);
+
   function alternarSidebar() {
     setRecolhida((r) => {
       window.localStorage.setItem(CHAVE_RECOLHIDA, r ? "0" : "1");
@@ -173,7 +178,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               onAbrirMenu={() => setMenuAberto(true)}
             />
           )}
-          <main className="relative z-[1] min-h-0 flex-1 overflow-y-auto">{children}</main>
+          <main ref={conteudoRef} className="relative z-[1] min-h-0 flex-1 overflow-y-auto">
+            {children}
+          </main>
+
+          {/* FORA do <main>: é ele que rola, e a seta tem de ficar parada.
+              Dentro da <section>, que é `relative`, pra encolher junto com a
+              coluna quando o Raio-X abre como coluna no desktop. */}
+          {!foco && <VoltarAoTopo alvo={conteudoRef} />}
 
           {/* Saída do foco no ALTO E À DIREITA, onde o botão "Foco" estava
               antes de o cabeçalho sumir: entrar e sair no mesmo canto é o que

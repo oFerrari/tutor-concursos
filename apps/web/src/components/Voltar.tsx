@@ -13,12 +13,26 @@ import { ArrowLeft } from "lucide-react";
  * fila, sempre); `router.back()` quando a origem varia — a curadoria pode
  * ter vindo do onboarding ou do painel, e mandar pro lugar errado é pior
  * que devolver de onde veio.
+ *
+ * `aoClicar` é o terceiro caso: a saída não é rota nenhuma, é FECHAR o que
+ * está aberto (a revisão de uma prova, que é estado da própria tela). Mora
+ * aqui e não num componente novo porque é a mesma coisa pro aluno — a seta que
+ * desfaz o passo — e duas peças com a mesma aparência divergem na primeira vez
+ * que alguém mexer numa só.
  */
-export function Voltar({ href, rotulo = "Voltar" }: { href?: string; rotulo?: string }) {
+export function Voltar({
+  href,
+  rotulo = "Voltar",
+  aoClicar,
+}: {
+  href?: string;
+  rotulo?: string;
+  aoClicar?: () => void;
+}) {
   const router = useRouter();
   return (
     <button
-      onClick={() => (href ? router.push(href) : router.back())}
+      onClick={() => (aoClicar ? aoClicar() : href ? router.push(href) : router.back())}
       className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-subtle transition-colors hover:text-foreground"
     >
       <ArrowLeft className="h-4 w-4" />
