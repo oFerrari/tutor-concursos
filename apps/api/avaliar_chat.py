@@ -390,10 +390,29 @@ def vetores_gravados() -> int:
 # NÃO entra: é palavra corrente em Direito ("contexto fático") e daria falso
 # positivo em toda explicação decente.
 VOCABULARIO_SISTEMA = [
-    "escada pedagógica", "degrau", "método socrático", "socrático", "diagnóstico",
-    "trechos recuperados", "trecho recuperado", "acervo", "prompt", "ferramenta",
-    "chunk", "embedding", "rag", "base de dados", "meu treinamento", "modelo de linguagem",
+    "escada pedagógica", "degrau", "método socrático", "socrático",
+    "trechos recuperados", "trecho recuperado", "material recuperado",
+    "acervo", "prompt", "chunk", "embedding", "rag", "base de dados",
+    "meu treinamento", "modelo de linguagem",
+    # "diagnóstico" e "ferramenta" SÓ no sentido do app, com a companhia que os
+    # denuncia. Sozinhos eles são vocabulário da MATÉRIA: "diagnóstico da morte"
+    # e "diagnóstico diferencial" são Medicina Legal, e perícia de local usa
+    # "ferramenta" no sentido literal. Uma checagem que dispara em acerto ensina
+    # a ignorar checagens — é a lição das 7 de 9 da 3b, e este corpus é forense.
+    "pergunta de diagnóstico", "fase de diagnóstico", "fazer um diagnóstico",
+    "diagnóstico do seu nível", "sou uma ferramenta", "esta ferramenta",
+    "essa ferramenta", "não tenho uma ferramenta", "nao tenho uma ferramenta",
 ]
+
+# PALAVRA INTEIRA, não substring — e isto era um defeito de verdade da própria
+# checagem. Com `termo in baixo`, "rag" casava dentro de "t-RAG-o": duas das
+# duas ocorrências apontadas na rodada de 15/09 eram o tutor dizendo "trago o
+# conceito fundamental". Apontar acerto como erro é o pior defeito que um
+# medidor pode ter, porque ele custa a confiança nos apontamentos verdadeiros da
+# mesma lista. "fragmento", "integrado" e "milagre" cairiam igual.
+RE_VOCABULARIO_SISTEMA = re.compile(
+    r"\b(" + "|".join(re.escape(t) for t in VOCABULARIO_SISTEMA) + r")\b",
+    re.IGNORECASE)
 
 # A resposta está INVOCANDO AUTORIDADE — norma, dispositivo ou tribunal? É o que
 # separa "estou te ensinando Direito" de "estou te dizendo quem eu sou". Só o
@@ -487,9 +506,11 @@ def checar(fala: str, resposta: str, chunks: list[dict],
 
     # 1. O andaime narrado. Causa conhecida: nome próprio dentro do prompt vira
     #    vocabulário do modelo ("vamos voltar um degrau na escada pedagógica").
-    for termo in VOCABULARIO_SISTEMA:
-        if termo in baixo:
-            achados.append(("erro", f"vocabulário de sistema na resposta: {termo!r}"))
+    # `dict.fromkeys` em vez de `set`: a mesma palavra duas vezes é UM defeito, e
+    # a ordem em que apareceu na resposta é a que ajuda quem vai ler.
+    for termo in dict.fromkeys(m.group(0).lower()
+                               for m in RE_VOCABULARIO_SISTEMA.finditer(resposta)):
+        achados.append(("erro", f"vocabulário de sistema na resposta: {termo!r}"))
 
     # 2. Questão escrita no chat. O prompt manda oferecer o botão; questão solta
     #    não tem proveniência, não entra na fila e some quando a conversa rola.

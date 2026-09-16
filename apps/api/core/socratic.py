@@ -13,11 +13,12 @@ Sem isso, modelo pequeno erra a sintaxe e a sessão de estudo morre no meio.
 """
 import re
 import unicodedata
+from datetime import datetime
 
-from . import assunto, llm, mesa as mesa_mod, retrieval
+from . import assunto, llm, mesa as mesa_mod, pedido as pedido_mod, retrieval
 from .retrieval import referencia
 
-VERSAO = "socratic-v51"
+VERSAO = "socratic-v55"
 
 # ------------------------------------------------------------------ schemas
 # Subconjunto OpenAPI aceito pelo Gemini. propertyOrdering importa: o modelo
@@ -396,6 +397,36 @@ def _resumo_desempenho(usuario_id: int, disciplinas: list[str] | None = None) ->
     return "\n".join(linhas)
 
 
+DIAS = ("segunda-feira", "terça-feira", "quarta-feira", "quinta-feira",
+        "sexta-feira", "sábado", "domingo")
+MESES = ("janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho",
+         "agosto", "setembro", "outubro", "novembro", "dezembro")
+
+
+def _agora_por_extenso(quando: datetime | None = None) -> str:
+    """Data e hora locais em português, prontas pro prompt.
+
+    POR EXTENSO e não ISO: o que o modelo precisa fazer com isto é escolher
+    entre "bom dia" e "boa noite", e "2026-09-16T21:04" obriga a converter
+    antes de decidir — conversão é onde ele erra. O período do dia vai
+    escrito, pelo mesmo motivo: a decisão sai pronta.
+
+    Sem fuso declarado: é a hora da máquina, que é a do aluno na CLI e a do
+    servidor na nuvem. Assumir um fuso fixo aqui seria inventar precisão."""
+    agora = quando or datetime.now()
+    hora = agora.hour
+    periodo = ("madrugada" if hora < 5 else "manhã" if hora < 12
+               else "tarde" if hora < 18 else "noite")
+    # SÓ O FATO, sem nenhuma ordem junto. A primeira versão terminava com
+    # "cumprimente de acordo com a hora", e o modelo obedeceu literalmente:
+    # quatro turnos seguidos abrindo com "Boa noite!", inclusive respondendo
+    # "começa pelo primeiro tópico então". Instrução colada num bloco de dado
+    # vira comportamento em todo turno — o dado fica aqui, a regra de quando
+    # cumprimentar fica com as outras regras.
+    return (f"{DIAS[agora.weekday()]}, {agora.day} de {MESES[agora.month - 1]} "
+            f"de {agora.year}, {agora:%H:%M} — é {periodo}.")
+
+
 def _resumo_mesa(mesa_: dict | None) -> str | None:
     """
     Quem é o aluno NESTA sessão: o concurso, a banca, e as matérias que o
@@ -698,8 +729,21 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     # lê o número da própria string, então enriquecer com histórico deixaria um
     # "art. 140" de três turnos atrás sequestrar a pergunta nova — e a resposta
     # viria confiante sobre o artigo errado, que é a pior falha possível aqui.
-    consulta = (pergunta if assunto.cita_dispositivo(pergunta)
-                else assunto.em_foco(historico, pergunta, disciplinas))
+    # PERGUNTA SOBRE ELE NÃO BUSCA MATERIAL. "o que eu já estudei e o que falta
+    # pra zerar o edital?" é sobre o estado do ALUNO: a resposta está em
+    # `### Números deste aluno` e no programa do edital, que já vão no prompt.
+    # Buscando, a tela mostrava CONSULTADO com "Princípios do Direito
+    # Administrativo" e uma apostila de direitos sociais embaixo de uma
+    # contagem de tentativas — relatado com print, e o incômodo é justo: a
+    # lista de fontes afirma de onde veio a resposta, e não veio de lá.
+    #
+    # `cita_dispositivo` continua ANTES: "como estou em processo legislativo,
+    # art. 59?" tem número, e número manda.
+    if not assunto.cita_dispositivo(pergunta) and pedido_mod.sobre_desempenho(pergunta):
+        consulta = None
+    else:
+        consulta = (pergunta if assunto.cita_dispositivo(pergunta)
+                    else assunto.em_foco(historico, pergunta, disciplinas))
 
     # `None` = ninguém nomeou assunto nenhum ainda ("olá", "vamos" como primeira
     # fala). NÃO buscar é melhor que buscar por isso: seis artigos sorteados no
@@ -735,6 +779,13 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     # prompt vazando como citação é pior que citação errada — expõe o
     # andaime e destrói a confiança nas citações verdadeiras da mesma frase.
     partes = []
+    # AGORA, NO FUSO DA MÁQUINA. O modelo não tem relógio: perguntado de noite,
+    # respondia "bom dia" de volta — o dono trollou de propósito ("então agora
+    # está de noite rs, trolei você") e o ponto é justo. Custa uma linha e
+    # resolve uma classe inteira: cumprimento, "amanhã tenho prova", "essa hora
+    # da noite". Fica na PRIMEIRA seção porque data errada contamina tudo o que
+    # vier depois, e vem do servidor porque o modelo não tem de onde tirar.
+    partes.append(f"### Agora\n{_agora_por_extenso()}")
     if contexto_mesa or contexto_perfil:
         bloco = "\n".join(x for x in (contexto_mesa, contexto_perfil) if x)
         partes.append(f"### Contexto do aluno\n{bloco}")
@@ -844,11 +895,44 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         "produto, e é reclamação real de aluno deste app. A exceção é única e vale sempre: se "
         "ele PEDIR questão, exercício ou treino, atenda NA HORA — o app monta as questões e "
         "você só apresenta, em uma linha. "
+        # O TOM, depois de "cadê seu senso de humor?" e de três aberturas
+        # seguidas de desculpa ("Haha, justa reclamação!", "Perdão pela
+        # confusão", "Justo demais, você tem toda razão"). Desculpa mecânica não
+        # é educação: é um turno gasto antes de a resposta começar, e concordar
+        # com entusiasmo a cada crítica soa a bajulação de atendimento.
+        "NÃO ABRA COM DESCULPA NEM COM ELOGIO À CRÍTICA. Nada de \"perdão pela confusão\", "
+        "\"você tem toda razão\", \"justa reclamação\", \"ótima pergunta\". Sendo o caso, "
+        "corrija o rumo na própria frase que já entrega o conteúdo. Acompanhe o humor do aluno "
+        "quando ele brincar — uma frase, no tom dele — e volte à matéria; brincadeira forçada "
+        "cansa tanto quanto a secura. "
+        # NARRAR O ESTADO DO MATERIAL É A MESMA FALHA COM OUTRAS PALAVRAS.
+        #
+        # Medido no cenário `forense_do_zero`, dois turnos seguidos: "como o
+        # material recuperado para este início específico ainda está carregando
+        # as páginas teóricas da aula inicial...". Nada estava carregando —
+        # aquela busca simplesmente não trouxe o tópico. A frase inventa um
+        # estado do sistema, promete que o conteúdo vem depois e ainda ensina o
+        # aluno a duvidar do app em vez do próprio estudo. É primo do "escada
+        # pedagógica": o andaime aparecendo, só que disfarçado de desculpa.
+        "NÃO DESCREVA O ESTADO DO MATERIAL. Nada de \"ainda está carregando\", \"o material "
+        "recuperado traz só a apresentação\", \"não veio o conteúdo desta aula\". Ou você "
+        "ensina o ponto com o que tem, ou diz em UMA linha que aquilo não está no material "
+        "dele e ensina assim mesmo, como já está mandado acima. O aluno não tem como agir "
+        "sobre o estado de uma busca, e prometer que o texto vem depois é promessa que "
+        "ninguém vai cumprir. "
         "NUNCA use, na resposta, o vocabulário do seu próprio funcionamento: nada de \"escada "
         "pedagógica\", \"degrau\", \"método socrático\", \"diagnóstico\", \"contexto\", "
         "\"acervo\", \"trechos recuperados\", \"prompt\" ou \"ferramenta\". O aluno veio "
         "estudar Direito, não ler o manual do app. Você é um professor conversando, não um "
         "sistema se descrevendo. "
+        # SAUDAÇÃO É DO PRIMEIRO TURNO, e isto foi regressão medida: com a hora
+        # no prompt, o tutor passou a abrir TODAS as respostas com "Boa noite!",
+        # inclusive a que respondia "começa pelo primeiro tópico então". Ninguém
+        # cumprimenta quatro vezes na mesma conversa.
+        "CUMPRIMENTE UMA VEZ SÓ, e só se ELE cumprimentar. Havendo conversa acima, entre "
+        "direto no conteúdo: nada de \"bom dia\"/\"boa noite\" reabrindo turno no meio do "
+        "diálogo. A hora que está no alto serve pra você ACERTAR a saudação quando ela "
+        "couber, e pra entender \"amanhã\", \"hoje\", \"essa hora\" — não é assunto. "
         "RESPONDA NO TAMANHO DA PERGUNTA. Se o aluno só cumprimentou (\"oi\", \"boa noite\"), "
         "cumprimente de volta em UMA linha e pergunte, curto e aberto, por onde ele quer ir — "
         "citando no máximo as disciplinas do edital dele pra escolher. NÃO abra matéria densa "
@@ -943,10 +1027,57 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         "HAVENDO programa do edital acima, o mapa É ELE: use aqueles itens, com as palavras "
         "deles, e diga que é o que o edital dele cobra. Sem programa e sem trecho, NÃO invente "
         "a lista — diga que não tem como afirmar o que mais cai sem o material. "
+        # "VAMOS DE CIÊNCIAS FORENSES" E O TUTOR ABRIU EM BALÍSTICA.
+        #
+        # Relato literal do dono: "é sua obrigação lembrar se eu já estudei
+        # algum tópico e seguir a sequência de aprendizado da matéria, tipo a
+        # introdução do assunto, o que é perícia, não trazer um assunto
+        # aleatoriamente". Ele tinha razão e a causa é mecânica: pedido de
+        # matéria INTEIRA é consulta ampla, a híbrida devolve k vizinhos por
+        # mais alheios que sejam (não há piso de relevância), e o primeiro
+        # trecho que voltou virou a aula. Balística é o tópico 2.2 do edital
+        # dele; o 2.1 abre em "Medicina Legal: conceito, divisões".
+        #
+        # O conserto mora aqui e não na busca porque a ORDEM não está no vetor:
+        # está no programa do edital, que já vai neste prompt, numerado. A
+        # regra do MAPA ("quais os pontos que mais caem") já usava essa lista;
+        # o que faltava era dizer que ENTRAR numa matéria também a usa.
+        "PEDIR UMA MATÉRIA NÃO É PEDIR UM ASSUNTO. Quando ele nomear a disciplina inteira "
+        "(\"vamos de ciências forenses\", \"quero direito penal\"), NÃO abra pelo assunto que "
+        "apareceu nos trechos recuperados — trecho que voltou da busca não é começo de curso. "
+        "Havendo programa do edital acima, comece pelo PRIMEIRO item daquela disciplina, na "
+        "ordem em que ele está escrito. Diga por onde está começando UMA VEZ, ao entrar na "
+        "matéria, em meia linha, e que ele pode pular se já domina — depois disso NÃO repita "
+        "o número do item nem \"seguindo a ordem do edital\"/\"continuando do item X\" a cada "
+        "resposta. Dito uma vez é orientação; repetido todo turno é bordão, e foi medido: "
+        "quatro respostas seguidas abriram assim. Sem programa, comece pelo conceito e pelas "
+        "divisões da matéria, que é como toda apostila abre. Assunto avançado só quando ELE "
+        "pedir, ou quando o anterior estiver resolvido. "
         "ESGOTE UM ASSUNTO ANTES DE IR PARA OUTRO. Enquanto ele demonstrar dúvida no ponto "
         "atual, fique nele e ataque a dúvida por outro ângulo — não avance de tópico nem "
         "ofereça assunto novo. Só troque quando ele pedir, ou quando o ponto estiver claramente "
         "resolvido; e ao trocar, diga em uma linha que está trocando. "
+        # ABERTURA DE ASSUNTO NÃO É RESPOSTA DE DUAS LINHAS.
+        #
+        # "Você tem vários materiais alimentados com uma enxurrada de conteúdo
+        # inicial e você só me traz isso?" — reclamação real, sobre um turno de
+        # duas linhas depois de a busca ter trazido três apostilas. "Responda no
+        # tamanho da pergunta" está certa pro cumprimento e vira avareza na
+        # abertura de matéria: ali a pergunta é curta e a resposta devida não é.
+        # UM MICRO-TÓPICO continua valendo — o que muda é a profundidade DENTRO
+        # dele, não a quantidade de assuntos.
+        "ABRINDO UM ASSUNTO, ENSINE DE VERDADE — SEM VIRAR PALESTRA. Quando ele pedir "
+        "introdução, conceito ou visão geral — ou reclamar que a resposta veio rasa —, "
+        "sintetize o que os trechos recuperados trazem sobre AQUELE ponto: o conceito, para "
+        "que serve e a distinção que a banca cobra, em um ou dois parágrafos curtos. Vários "
+        "trechos sobre o mesmo ponto se juntam numa explicação só; não escolha um e descarte "
+        "o resto. Duas linhas onde havia três apostilas recuperadas é resposta pobre — e "
+        "meia página também é, pelo lado oposto: NADA de desfile de doutrinadores, com "
+        "definição de três autores e classificação de um quarto, que foi medido e reprovado "
+        "(a dimensão \"um micro-tópico por resposta\" tirou 0 de 4). Um conceito explicado "
+        "com as suas palavras "
+        "vale mais que quatro citações enfileiradas; nome de autor entra quando a banca cobra "
+        "aquele nome, não pra mostrar erudição. "
         "UM MICRO-TÓPICO POR RESPOSTA. Não misture dois assuntos diferentes na mesma mensagem — "
         "explicar direitos sociais e emendar competência concorrente no parágrafo seguinte "
         "confunde em vez de ensinar, e também é reclamação real. Se os trechos recuperados "
