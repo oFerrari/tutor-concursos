@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowUp, Check, ClipboardList, Pencil, Square, X } from "lucide-react";
+import { ArrowUp, Check, ClipboardList, Pencil, Square } from "lucide-react";
 import { MarcaGlifo } from "@/components/Marca";
 import { BalaoQuestao } from "@/components/BalaoQuestao";
 import { GerarQuestoes } from "@/components/GerarQuestoes";
@@ -292,7 +292,11 @@ export default function PaginaTutor() {
   function completar(nome: string) {
     setComando(nome);
     setComandoArmado(false);
-    setPergunta("");
+    // TIRA SÓ O COMANDO, mantém o que já estava escrito depois dele. A versão
+    // anterior limpava o campo inteiro, e desde que o menu passou a aparecer
+    // com texto adiante isso virou perda de trabalho: escolher "/feedback" em
+    // "/feedb ficou raso demais" apagava o "ficou raso demais".
+    setPergunta((atual) => atual.replace(/^\s*\/[a-zà-ú]*\s*/i, ""));
     setComandoAtivo(0);
     campo.current?.focus();
   }
@@ -885,45 +889,30 @@ export default function PaginaTutor() {
              faz — o vermelho continua reservado pro que é ação. */
           className="mx-auto max-w-[720px] rounded-[18px] border border-line-strong bg-surface-input px-3.5 pb-2.5 pt-3.5 shadow-[var(--shadow-float)] transition-colors focus-within:border-line-stronger"
         >
-          {/* A FICHA. Dentro da caixa e antes do texto, que é onde ela estava
-              enquanto era letra — o comando não "sumiu", virou objeto.
-              `armado` a pinta como seleção: é o aviso de que o próximo
-              Backspace apaga ela, e não uma letra. */}
-          {comando && (
-            <div className="mb-1.5 flex items-center gap-1.5">
+          {/* A FICHA, NA LINHA DO TEXTO. Ela ocupa o lugar exato onde o comando
+              estava enquanto era letra — em cima, virava um segundo bloco e
+              empurrava o campo pra baixo. Quadrada e de borda discreta: é um
+              rótulo do que já está entendido, não um botão a ser clicado.
+              Sem "×": quem quer tirar usa Backspace, que é o gesto de quem já
+              está digitando, e a legenda avisa disso quando a ficha está
+              armada. */}
+          <div className="flex items-start gap-2">
+            {comando && (
               <span
-                className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1
-                            font-mono text-[12.5px] transition-colors ${
+                className={`mt-[3px] shrink-0 rounded-[5px] px-1.5 py-0.5 font-mono
+                            text-[12.5px] leading-[1.35] transition-colors ${
                               comandoArmado
                                 ? "bg-accent text-accent-foreground"
-                                : "border border-accent-line bg-accent-soft text-accent-text"
+                                : "border border-line-strong bg-surface-hover text-muted"
                             }`}
+                title={COMANDOS.find((c) => c.nome === comando)?.descricao}
               >
                 {comando}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setComando(null);
-                    setComandoArmado(false);
-                    campo.current?.focus();
-                  }}
-                  aria-label={`tirar o comando ${comando}`}
-                  className="grid h-3.5 w-3.5 place-items-center rounded-full
-                             transition-colors hover:bg-accent-line"
-                >
-                  <X className="h-3 w-3" />
-                </button>
               </span>
-              <span className="text-[11.5px] text-subtle">
-                {comandoArmado
-                  ? "Backspace de novo apaga o comando"
-                  : COMANDOS.find((c) => c.nome === comando)?.descricao}
-              </span>
-            </div>
-          )}
+            )}
 
-          <textarea
-            ref={campo}
+            <textarea
+              ref={campo}
             rows={1}
             value={pergunta}
             onChange={(e) => aoDigitar(e.target.value)}
@@ -973,14 +962,13 @@ export default function PaginaTutor() {
                 enviar(e);
               }
             }}
-            placeholder={
-              comando
-                ? COMANDOS.find((c) => c.nome === comando)?.exemplo.replace(`${comando} `, "")
-                  ?? "Descreva o que aconteceu"
-                : "Pergunte sobre a lei — ex.: art. 312 do CP"
-            }
-            className="max-h-40 w-full resize-none overflow-y-auto bg-transparent text-[15px] leading-relaxed text-foreground outline-none placeholder:text-subtle"
-          />
+            /* COM FICHA, SEM EXEMPLO. O exemplo dizia "ficou raso demais" e
+               ensinava o óbvio: quem digitou /feedback já sabe o que é
+               feedback. O rótulo da ficha basta. */
+            placeholder={comando ? "" : "Pergunte sobre a lei — ex.: art. 312 do CP"}
+              className="max-h-40 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent text-[15px] leading-relaxed text-foreground outline-none placeholder:text-subtle"
+            />
+          </div>
           <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2.5">
             <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
               <Link href="/meta" className="chip text-[12.5px]">

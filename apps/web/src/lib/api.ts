@@ -564,17 +564,24 @@ export type Fonte = {
  *  RECONHECE. Divergirem seria sugerir um comando que o servidor ignora.
  *  Acrescentar comando é acrescentar linha aqui E no `RE_COMANDO` de lá. */
 export const COMANDOS = [
-  { nome: "/erro", descricao: "Registrar um erro desta resposta", exemplo: "/erro o gabarito contradiz o artigo citado" },
-  { nome: "/feedback", descricao: "Deixar um comentário sobre a resposta", exemplo: "/feedback ficou raso demais" },
-  { nome: "/bug", descricao: "Relatar falha do app nesta conversa", exemplo: "/bug a tela travou ao gerar questão" },
+  { nome: "/erro", descricao: "Registrar um erro desta resposta" },
+  { nome: "/feedback", descricao: "Deixar um comentário sobre a resposta" },
+  { nome: "/bug", descricao: "Relatar falha do app nesta conversa" },
 ] as const;
 
-/** O que digitar depois da barra, pra completar. `null` quando a fala não é o
- *  começo de um comando — a barra só abre o menu no INÍCIO da mensagem e
- *  enquanto ela for uma palavra só: "e/ou" no meio de uma frase não é comando,
- *  e "/erro já escrito" também não precisa mais de sugestão. */
+/** O que digitar depois da barra, pra completar.
+ *
+ *  Casa a PRIMEIRA PALAVRA e ignora o resto da frase: a versão anterior exigia
+ *  que a mensagem inteira fosse só o comando (`$` no fim da regex), então quem
+ *  já tinha texto escrito e voltou pra pôr a barra na frente não via menu
+ *  nenhum — relatado com print. A barra continua valendo só no INÍCIO, que é o
+ *  que separa comando de "e/ou" no meio de uma frase.
+ *
+ *  Prefixo que não casa com nada devolve lista vazia, e aí não há menu: "/calma
+ *  eu tô tratando outro assunto" é conversa que começou com barra, não comando
+ *  pela metade. */
 export function comandosSugeridos(fala: string): typeof COMANDOS[number][] {
-  const m = /^\/([a-zà-ú]*)$/i.exec(fala);
+  const m = /^\/([a-zà-ú]*)/i.exec(fala);
   if (!m) return [];
   const escrito = m[1].toLowerCase();
   return COMANDOS.filter((c) => c.nome.slice(1).startsWith(escrito));
