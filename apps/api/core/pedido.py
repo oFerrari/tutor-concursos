@@ -33,7 +33,7 @@ Aqui só se responde "ele quer treinar, e quantas".
 """
 import re
 
-VERSAO = "pedido-v5"
+VERSAO = "pedido-v7"
 
 # Pedido de TREINO. `quest(?:[ãa]o|[õo]es)` e não `quest[õo]es?`: o singular
 # leva "ã" e o plural "õ", e quem tem pressa digita sem acento — a primeira
@@ -178,6 +178,20 @@ RE_CONTINUA = re.compile(
     r"[\s,]*(?:\d{1,2}|" + "|".join(NUMERO) + r"|outra|outras|mais)\b")
 
 
+# O adiamento, e o que ele governa. Curta e fechada como as outras listas deste
+# módulo: quem carrega a decisão é a POSIÇÃO (o marcador antes da palavra de
+# treino), não o vocabulário.
+RE_ADIADO = re.compile(
+    r"(?i)\b(?:depois|mais\s+tarde|mais\s+pra\s+frente|em\s+seguida|no\s+fim|ao\s+final|"
+    r"talvez|quem\s+sabe|se\s+der|futuramente)\b[^.!?]{0,40}?"
+    r"\b(quest(?:[ãa]o|[õo]es)|exerc[íi]cios?|it(?:em|ens)|treino|treinar|simulado)\b")
+
+
+def _adiado(fala: str) -> bool:
+    """A fala fala de treino PRA DEPOIS, não pra agora?"""
+    return bool(RE_ADIADO.search(fala or ""))
+
+
 def veio_de_treino(historico: list[dict] | None) -> bool:
     """A última fala do ALUNO já era pedido de treino?
 
@@ -230,6 +244,17 @@ def treino(fala: str, apos_treino: bool = False) -> dict | None:
         # Só a forma elíptica, e só logo depois de um turno de treino.
         if not (apos_treino and RE_CONTINUA.match(fala.strip())):
             return None
+    # PEDIDO ADIADO NÃO É PEDIDO. Relatado com log: "me introduza ao assunto,
+    # depois trazendo exemplos pra depois TALVEZ questões" gerou duas questões
+    # na hora — e o aluno acabara de dizer, na mesma frase, a ordem que queria
+    # (introdução, exemplos, e só então talvez treino). A palavra "questões"
+    # estava lá; o pedido, não.
+    #
+    # Só vale quando o adiamento GOVERNA a palavra de treino (ela vem depois
+    # dele na frase): "depois me dá questões" adia; "me dá 5 questões, depois a
+    # gente vê a teoria" pede agora e fala de outra coisa em seguida.
+    if _adiado(fala):
+        return None
     return {"quantidade": quantas(fala),
             "tipo": "certo_errado" if RE_CERTO_ERRADO.search(fala) else None,
             "formal": bool(RE_FORMAL.search(fala))}
@@ -289,3 +314,76 @@ def sobre_desempenho(fala: str) -> bool:
     interrogativa explícita ou possessivo de primeira pessoa, nunca só o verbo.
     """
     return bool(_PROGRESSO.search(fala or ""))
+
+
+# ---------------------------------------------------------------------------
+# "VOCÊ LEMBRA O QUE A GENTE ESTUDOU?" — pergunta sobre o APP, não sobre matéria
+# ---------------------------------------------------------------------------
+#
+# Relatado com log: "você consegue me dizer quando foi a última vez que a gente
+# conversou sobre isso?" recuperou CP arts. 214, 216, 220, 223, 224 — crimes
+# sexuais, numa conversa sobre papiloscopia. A busca acertou as palavras
+# ("conversou", "última vez") e errou tudo o mais, pelo mesmo mecanismo de
+# sempre: k-vizinhos sem piso de relevância não devolve vazio.
+#
+# É irmã de `sobre_desempenho` e ficou separada de propósito: uma pergunta sobre
+# o QUE ele estudou se responde com os números; esta se responde dizendo o que o
+# sistema guarda. As duas têm em comum só o fato de a busca não ter o que fazer
+# nelas.
+RE_MEMORIA = re.compile(
+    r"(?i)("
+    r"\bvoc[êe]\s+(?:se\s+)?(?:lembra|recorda|guarda|tem)\b[^?.!]{0,30}"
+    r"\b(?:mem[óo]ria|hist[óo]rico|conversas?|sess[õo]es|estudamos|estudei|falamos)\b"
+    r"|\b(?:quando|qual\s+dia|que\s+dia)\b[^?.!]{0,40}"
+    r"\b(?:a\s+gente|n[óo]s|voc[êe]\s+e\s+eu)\b[^?.!]{0,20}"
+    r"\b(?:conversamos|conversou|falamos|estudamos|vimos)\b"
+    r"|\bvoc[êe]\s+(?:n[ãa]o\s+)?(?:tem|guarda|salva|grava)\b[^?.!]{0,20}"
+    r"\b(?:mem[óo]ria|hist[óo]rico|registro)\b"
+    r"|\b[úu]ltima\s+vez\s+que\s+(?:a\s+gente|n[óo]s|eu)\b"
+    r")")
+
+
+def sobre_memoria(fala: str) -> bool:
+    """A pergunta é sobre o que o SISTEMA guarda, não sobre a matéria?"""
+    return bool(RE_MEMORIA.search(fala or ""))
+
+
+# DESABAFO NÃO É CONSULTA. Relato do dono: "o cara pode vir aqui e querer só
+# desabafar, nem por isso você precisa puxar nada do material". E a busca não
+# fica de fora sozinha: "to cansado, não aguento mais estudar" tem "cansado" e
+# "aguento" como palavras de conteúdo, então virava consulta e devolvia seis
+# trechos de lei debaixo de um desabafo — o retrato do robô que o produto não
+# quer ser.
+#
+# Primeira pessoa é o que separa desabafo de matéria: "cansaço" aparece em
+# jornada de trabalho na 8.112 e em excludentes de culpabilidade; "tô cansado"
+# não aparece em lei nenhuma.
+RE_DESABAFO = re.compile(
+    r"(?i)("
+    r"\b(?:t[ôo]|to|estou|tava|tô\s+muito|ando)\s+(?:muito\s+|meio\s+|bem\s+)?"
+    r"(?:cansad[oa]|exaust[oa]|desanimad[oa]|perdid[oa]|travad[oa]|ansios[oa]|"
+    r"estressad[oa]|sem\s+cabe[çc]a|sem\s+[âa]nimo|de\s+saco\s+cheio)\b"
+    r"|\bn[ãa]o\s+(?:aguento|consigo|t[ôo]\s+conseguindo|dou\s+conta)\b"
+    r"|\b(?:desisti|vou\s+desistir|t[ôo]\s+surtando|surtando|pirando)\b"
+    r"|\b(?:que\s+dia|semana)\s+(?:dif[íi]cil|horr[íi]vel|pesad[oa])\b"
+    r"|\bdesabafar\b"
+    r")")
+
+
+def desabafo(fala: str) -> bool:
+    """A fala é desabafo, não pedido de matéria?
+
+    Não decide o que RESPONDER — isso é do prompt, que já tem a regra de tom.
+    Decide só que não há o que buscar: seis artigos debaixo de "tô cansado" é
+    o sistema respondendo a uma pessoa com um índice remissivo.
+    """
+    return bool(RE_DESABAFO.search(fala or ""))
+
+
+def dispensa_busca(fala: str) -> bool:
+    """Pergunta que não tem o que fazer com material recuperado.
+
+    Porta ÚNICA pra quem chama: a rota pergunta uma coisa só, e acrescentar um
+    terceiro caso amanhã não exige mexer em `socratic.explicar` de novo.
+    """
+    return sobre_desempenho(fala) or sobre_memoria(fala) or desabafo(fala)

@@ -116,3 +116,35 @@ def test_trocar_perfil_nao_exige_senha(client, usuario):
     seria atrito sem ameaça correspondente."""
     r = client.put("/me/perfil", json={"turno": "Manhã"}, headers=usuario["headers"])
     assert r.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Alvo declarado à MÃO não tem programa — e o prompt não pode fingir que tem
+# ---------------------------------------------------------------------------
+
+def test_alvo_manual_nao_vira_programa_de_um_item(usuario):
+    """`edital.criar_manual` grava UM tópico por disciplina, com o nome dela
+    como texto (017). Sem esta guarda, "Ciências Forenses" chegava ao prompt
+    como "Programa NA ORDEM: 1. Ciências Forenses" — e o tutor anunciaria
+    "item 1" e prometeria uma sequência que não existe.
+
+    Prometer estrutura que não há é pior que não ter estrutura: o aluno usa o
+    número pra se localizar no edital dele e não acha."""
+    from core import edital, mesa as mesa_mod, socratic
+
+    m = mesa_mod.criar(usuario["id"], "Alvo na mão")
+    edital.criar_manual(m["id"], titulo="PC-XX", disciplinas=["Ciências Forenses"],
+                        nome_da_mesa=m["nome"])
+    alvo = {**m, "disciplinas": mesa_mod.disciplinas(m["id"])}
+
+    assert alvo["disciplinas"] == ["Ciências Forenses"], alvo["disciplinas"]
+    assert socratic._programa_em_foco(alvo, "quero ciências forenses do zero", []) is None
+
+    # E com programa DE VERDADE (mais de um item, ou item diferente do nome da
+    # matéria) ele volta a entrar — a guarda é estreita de propósito.
+    db.query("INSERT INTO topico (edital_id, disciplina, ordem, texto) "
+             "VALUES ((SELECT id FROM edital WHERE mesa_id=%(m)s ORDER BY id DESC LIMIT 1), "
+             "        'Ciências Forenses', 2, '2.2. Criminalística e Documentoscopia')",
+             {"m": m["id"]})
+    prog = socratic._programa_em_foco(alvo, "quero ciências forenses do zero", [])
+    assert prog and "Criminalística e Documentoscopia" in prog

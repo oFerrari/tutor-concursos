@@ -18,7 +18,7 @@ from datetime import datetime
 from . import assunto, llm, mesa as mesa_mod, pedido as pedido_mod, retrieval
 from .retrieval import referencia
 
-VERSAO = "socratic-v55"
+VERSAO = "socratic-v63"
 
 # ------------------------------------------------------------------ schemas
 # Subconjunto OpenAPI aceito pelo Gemini. propertyOrdering importa: o modelo
@@ -310,6 +310,13 @@ def _resumo_perfil(perfil: dict | None) -> str | None:
             + ", ".join(partes) + ".")
 
 
+def _sem_acento_baixo(texto: str) -> str:
+    """Comparação frouxa de rótulo — "Ciências Forenses" e "ciencias forenses"
+    são o mesmo alvo. Reusa a normalização de `assunto` em vez de escrever a
+    terceira: duas versões de "estas palavras são a mesma" divergem."""
+    return assunto._sem_acento(" ".join((texto or "").split()).lower())
+
+
 def _programa_em_foco(mesa_: dict | None, pergunta: str,
                       historico: list[dict] | None) -> str | None:
     """O programa do edital DA DISCIPLINA que a conversa nomeou, na ordem dele.
@@ -344,12 +351,25 @@ def _programa_em_foco(mesa_: dict | None, pergunta: str,
     topicos = mesa_mod.topicos_da_disciplina(mesa_["id"], alvo)
     if not topicos:
         return None
+    # ALVO DECLARADO À MÃO NÃO TEM PROGRAMA, e o banco não distingue sozinho:
+    # `edital.criar_manual` grava UM tópico por disciplina com o nome dela como
+    # texto (017), então "Ciências Forenses" chega aqui parecendo uma lista de
+    # um item. Mandar isso como "programa NA ORDEM" faria o tutor anunciar
+    # "item 1: Ciências Forenses" e prometer uma sequência que não existe —
+    # pior que não ter programa, porque parece que tem.
+    #
+    # Sem programa o tutor não fica mudo: ele avisa a troca de ASSUNTO em vez de
+    # a troca de item (ver a regra no prompt). Quem estuda por alvo manual perde
+    # a numeração, não a orientação.
+    so_o_nome = len(topicos) == 1 and _sem_acento_baixo(topicos[0]) == _sem_acento_baixo(alvo)
+    if so_o_nome:
+        return None
     linhas = "\n".join(f"{i}. {t}" for i, t in enumerate(topicos, 1))
     return (f"### Programa de {alvo} no edital deste aluno, NA ORDEM\n{linhas}\n"
             "Esta é a ordem oficial. Se ele pedir para começar do zero ou seguir o edital, "
             "siga ESTA lista e diga em que ponto dela vocês estão — não invente outro ponto "
-            "de partida a partir dos trechos de lei recuperados. Tópico para o qual não houver "
-            "trecho recuperado: diga que ainda não tem esse material aqui e siga para o "
+            "de partida a partir dos trechos de lei acima. Tópico para o qual não houver "
+            "trecho acima: diga que ainda não tem esse material aqui e siga para o "
             "próximo, sem explicá-lo de memória.")
 
 
@@ -372,8 +392,14 @@ def _resumo_desempenho(usuario_id: int, disciplinas: list[str] | None = None) ->
     ]
     erros = scheduler.caderno_erros(usuario_id, limite=5, disciplinas=disciplinas)
     if erros:
-        linhas.append("Temas que mais reincidem em erro: " +
-                      ", ".join(f"{e['tema']} ({e['vezes']}x)" for e in erros))
+        # COM A DATA. `ultima` já vinha do caderno e morria aqui, e era
+        # justamente o que faltava pra responder "quando foi a última vez que a
+        # gente viu isso?" — pergunta que o tutor vinha respondendo com "não
+        # guardo sessões passadas", que é falso e joga fora o diferencial do
+        # produto.
+        linhas.append("Temas que mais reincidem em erro (com a data do último): " +
+                      ", ".join(f"{e['tema']} ({e['vezes']}x, último em "
+                                f"{e['ultima']:%d/%m/%Y})" for e in erros))
 
     # O CONCEITO, e não só o tema (022). "Temas que reincidem" nomeia a
     # PERGUNTA errada; isto nomeia a confusão. Sem essa linha o resumo já dizia
@@ -403,7 +429,7 @@ MESES = ("janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho",
          "agosto", "setembro", "outubro", "novembro", "dezembro")
 
 
-def _agora_por_extenso(quando: datetime | None = None) -> str:
+def _agora_por_extenso(quando: datetime | None = None, com_saudacao: bool = True) -> str:
     """Data e hora locais em português, prontas pro prompt.
 
     POR EXTENSO e não ISO: o que o modelo precisa fazer com isto é escolher
@@ -423,8 +449,22 @@ def _agora_por_extenso(quando: datetime | None = None) -> str:
     # "começa pelo primeiro tópico então". Instrução colada num bloco de dado
     # vira comportamento em todo turno — o dado fica aqui, a regra de quando
     # cumprimentar fica com as outras regras.
-    return (f"{DIAS[agora.weekday()]}, {agora.day} de {MESES[agora.month - 1]} "
-            f"de {agora.year}, {agora:%H:%M} — é {periodo}.")
+    # A SAUDAÇÃO CERTA SAI CALCULADA, como dado. Dizer "é tarde" e esperar que
+    # o modelo derive "boa tarde" foi medido e falhou: perguntado com "ola boa
+    # noite" às 12h19, ele respondeu "Boa noite" — espelhou o aluno e ignorou o
+    # relógio que estava no prompt. Derivação que o servidor pode fazer, o
+    # servidor faz; o modelo erra o que ele não precisava ter calculado.
+    saudacao = {"madrugada": "boa noite", "manhã": "bom dia",
+                "tarde": "boa tarde", "noite": "boa noite"}[periodo]
+    # E SÓ NO PRIMEIRO TURNO. Medido na bateria de humanização: com a linha da
+    # saudação no prompt de TODO turno, o tutor abriu com "Boa tarde!" em
+    # quatro cenários seguidos, e o juiz apontou isso como o que mais atrapalha
+    # em três deles. A regra em prosa ("cumprimente uma vez só") não segurou —
+    # de novo —, porque o que ensina o comportamento é o DADO estar lá.
+    # Conversa começada não precisa da saudação: ela já aconteceu.
+    linha = (f"{DIAS[agora.weekday()]}, {agora.day} de {MESES[agora.month - 1]} "
+             f"de {agora.year}, {agora:%H:%M} — é {periodo}.")
+    return linha + (f" A saudação correta agora é \"{saudacao}\"." if com_saudacao else "")
 
 
 def _resumo_mesa(mesa_: dict | None) -> str | None:
@@ -739,7 +779,7 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     #
     # `cita_dispositivo` continua ANTES: "como estou em processo legislativo,
     # art. 59?" tem número, e número manda.
-    if not assunto.cita_dispositivo(pergunta) and pedido_mod.sobre_desempenho(pergunta):
+    if not assunto.cita_dispositivo(pergunta) and pedido_mod.dispensa_busca(pergunta):
         consulta = None
     else:
         consulta = (pergunta if assunto.cita_dispositivo(pergunta)
@@ -785,7 +825,7 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     # resolve uma classe inteira: cumprimento, "amanhã tenho prova", "essa hora
     # da noite". Fica na PRIMEIRA seção porque data errada contamina tudo o que
     # vier depois, e vem do servidor porque o modelo não tem de onde tirar.
-    partes.append(f"### Agora\n{_agora_por_extenso()}")
+    partes.append(f"### Agora\n{_agora_por_extenso(com_saudacao=not historico)}")
     if contexto_mesa or contexto_perfil:
         bloco = "\n".join(x for x in (contexto_mesa, contexto_perfil) if x)
         partes.append(f"### Contexto do aluno\n{bloco}")
@@ -804,7 +844,7 @@ def explicar(pergunta: str, usuario_id: int | None = None,
                   "que buscar.")
         partes.append(
             f"### Trechos de lei recuperados\nNenhum — {motivo} NÃO afirme conteúdo de lei "
-            "sem trecho recuperado: use o contexto do aluno e os números dele, e pergunte de "
+            "sem trecho acima: use o contexto do aluno e os números dele, e pergunte de "
             "que assunto ele quer tratar.")
     if contexto_desempenho:
         partes.append(f"### Números deste aluno no banco\n{contexto_desempenho}")
@@ -866,7 +906,7 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         # modelo continuou citando, e com razão: um exemplo formatado vale mais
         # que a proibição em prosa três linhas antes. Prompt com duas ordens
         # opostas obedece a mais concreta.
-        "Ao falar de conteúdo, use os trechos de lei recuperados e nada além deles. Nunca "
+        "Ao falar de conteúdo, use os trechos de lei acima e nada além deles. Nunca "
         "mencione o nome de uma seção deste prompt como se fosse fonte. "
         "Uma matéria de prova pode morar em mais de uma norma — organização da administração "
         "pública, por exemplo, está na Constituição e no estatuto dos servidores ao mesmo tempo. "
@@ -890,7 +930,7 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         "que o aluno JÁ SABE dele, com UMA pergunta curta e específica — não \"o que você sabe "
         "sobre X?\", que joga o trabalho de volta pra ele, mas algo como \"você já viu a "
         "diferença entre A e B?\". Depois explique o que faltou, apoiado nos trechos "
-        "recuperados. Só depois de ter explicado é que testar faz sentido. NÃO proponha teste "
+        "acima. Só depois de ter explicado é que testar faz sentido. NÃO proponha teste "
         "sobre assunto que você ainda não tratou aqui: oferecer prova antes da aula é empurrar "
         "produto, e é reclamação real de aluno deste app. A exceção é única e vale sempre: se "
         "ele PEDIR questão, exercício ou treino, atenda NA HORA — o app monta as questões e "
@@ -914,6 +954,26 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         # estado do sistema, promete que o conteúdo vem depois e ainda ensina o
         # aluno a duvidar do app em vez do próprio estudo. É primo do "escada
         # pedagógica": o andaime aparecendo, só que disfarçado de desculpa.
+        # "NÃO GUARDO SESSÕES PASSADAS" É FALSO, e é o oposto do produto.
+        #
+        # Relatado com log: perguntado "quando foi a última vez que a gente
+        # conversou sobre isso?", respondeu "não consigo acessar o histórico das
+        # nossas conversas anteriores"; e a "você não tem memória de nada que
+        # estudamos?", "não guardo sessões passadas". O dono: "o nosso
+        # diferencial era justamente ele conseguir trazer o que eu já estudei,
+        # mas ele mesmo assume que não faz isso".
+        #
+        # O modelo respondeu o que um chat genérico responderia, ignorando que
+        # os números DELE estão no prompt — inclusive, agora, com a data do
+        # último erro de cada tema.
+        "VOCÊ NÃO É UMA SESSÃO EM BRANCO, e nunca diga que é. Nada de \"não guardo sessões "
+        "passadas\", \"não tenho memória\", \"não acesso conversas anteriores\". Você tem o "
+        "registro dele: o que ele acertou e errou por disciplina, os temas que reincidem com a "
+        "DATA do último erro, os conceitos que ele confunde e a conversa inteira até aqui. "
+        "Perguntado quando viram um assunto, responda com o que está aí — \"seu último erro em "
+        "papiloscopia foi em 19/08\" — e, se aquele assunto não estiver no registro, diga isso "
+        "e não que você não guarda nada. O que você NÃO tem é o texto de outras conversas: "
+        "diga exatamente isso quando for o caso, em uma linha, sem se descrever como sistema. "
         "NÃO DESCREVA O ESTADO DO MATERIAL. Nada de \"ainda está carregando\", \"o material "
         "recuperado traz só a apresentação\", \"não veio o conteúdo desta aula\". Ou você "
         "ensina o ponto com o que tem, ou diz em UMA linha que aquilo não está no material "
@@ -922,13 +982,38 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         "ninguém vai cumprir. "
         "NUNCA use, na resposta, o vocabulário do seu próprio funcionamento: nada de \"escada "
         "pedagógica\", \"degrau\", \"método socrático\", \"diagnóstico\", \"contexto\", "
-        "\"acervo\", \"trechos recuperados\", \"prompt\" ou \"ferramenta\". O aluno veio "
+        "\"acervo\", \"prompt\" ou \"ferramenta\", e não fale do material como \"trecho "
+        "recuperado\" nem \"material recuperado\" — para o aluno é \"a sua apostila\", \"a "
+        "lei\" ou \"o seu material\". O aluno veio "
         "estudar Direito, não ler o manual do app. Você é um professor conversando, não um "
         "sistema se descrevendo. "
         # SAUDAÇÃO É DO PRIMEIRO TURNO, e isto foi regressão medida: com a hora
         # no prompt, o tutor passou a abrir TODAS as respostas com "Boa noite!",
         # inclusive a que respondia "começa pelo primeiro tópico então". Ninguém
         # cumprimenta quatro vezes na mesma conversa.
+        # NÃO ESPELHE A SAUDAÇÃO ERRADA. "ola boa noite" às 12h19 recebeu "Boa
+        # noite" de volta, com a hora certa no alto do prompt. Repetir a
+        # saudação do aluno é o reflexo do modelo, e aqui ele custa a única
+        # coisa que o relógio veio dar.
+        # "PRIMEIRO ELE DEVERIA LER E INTERPRETAR O QUE EU PEDI, NÃO IR
+        # IMEDIATAMENTE BUSCAR ACERVO." Relato do dono, com print: "ola boa
+        # noite se é que ta de noite kkk" recebeu de volta um cumprimento e, na
+        # mesma frase, uma pergunta sobre prescrição em crimes permanentes.
+        # Ninguém conversa assim.
+        #
+        # A busca já não roda nesses turnos (`pedido.dispensa_busca` e o filtro
+        # de risada em `assunto.py`), mas silenciar a busca não ensina a
+        # RESPONDER — e é a resposta que soa de robô.
+        "RESPONDA À PESSOA ANTES DE RESPONDER À MATÉRIA. Saudação, piada, desabafo e "
+        "\"tudo bem?\" se respondem no MESMO registro em que vieram, e só isso: uma ou duas "
+        "linhas, no tom dele, sem emendar assunto novo na mesma mensagem. Quem entra "
+        "brincando não está pedindo aula; quem desabafa está falando do cansaço dele, não da "
+        "matéria. Espere ele dizer o que quer — e, se ele não disser em dois turnos, aí sim "
+        "ofereça um caminho, curto. "
+        "A SAUDAÇÃO É A DO RELÓGIO, não a dele. Se ele disser \"boa noite\" às duas da "
+        "tarde, responda com a do bloco \"Agora\" — sem lição de moral e sem piada longa: "
+        "uma correção leve numa fração de linha, e siga. Nunca repita de volta a saudação "
+        "errada. "
         "CUMPRIMENTE UMA VEZ SÓ, e só se ELE cumprimentar. Havendo conversa acima, entre "
         "direto no conteúdo: nada de \"bom dia\"/\"boa noite\" reabrindo turno no meio do "
         "diálogo. A hora que está no alto serve pra você ACERTAR a saudação quando ela "
@@ -1013,7 +1098,7 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         "indisponibilidade, autotutela), que não estão em artigo nenhum. Mas diga, numa linha "
         "curta e explícita, que aquilo NÃO veio do material dele — algo como \"isto é doutrina "
         "e não está no seu material; confira na sua apostila\". Nunca use colchete nesse "
-        "trecho: colchete é reservado a fonte recuperada. "
+        "trecho: colchete é reservado ao que veio no material acima. "
         "O QUE CONTINUA PROIBIDO SEM TRECHO, sem exceção: número de artigo, número de súmula, "
         "pena, prazo, valor, e a posição de qualquer tribunal. Nada de \"o STJ entende que\", "
         "nem para dizer que é pacífico. Se o aluno pedir jurisprudência, diga que não está no "
@@ -1044,15 +1129,55 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         # o que faltava era dizer que ENTRAR numa matéria também a usa.
         "PEDIR UMA MATÉRIA NÃO É PEDIR UM ASSUNTO. Quando ele nomear a disciplina inteira "
         "(\"vamos de ciências forenses\", \"quero direito penal\"), NÃO abra pelo assunto que "
-        "apareceu nos trechos recuperados — trecho que voltou da busca não é começo de curso. "
+        "apareceu nos trechos acima — trecho que veio junto não é começo de curso. "
         "Havendo programa do edital acima, comece pelo PRIMEIRO item daquela disciplina, na "
-        "ordem em que ele está escrito. Diga por onde está começando UMA VEZ, ao entrar na "
-        "matéria, em meia linha, e que ele pode pular se já domina — depois disso NÃO repita "
-        "o número do item nem \"seguindo a ordem do edital\"/\"continuando do item X\" a cada "
-        "resposta. Dito uma vez é orientação; repetido todo turno é bordão, e foi medido: "
-        "quatro respostas seguidas abriram assim. Sem programa, comece pelo conceito e pelas "
-        "divisões da matéria, que é como toda apostila abre. Assunto avançado só quando ELE "
-        "pedir, ou quando o anterior estiver resolvido. "
+        "ordem em que ele está escrito. Sem programa, comece pelo conceito e pelas divisões da "
+        "matéria, que é como toda apostila abre. Assunto avançado só quando ELE pedir, ou "
+        "quando o anterior estiver resolvido. "
+        # ONDE ESTAMOS SÓ SE DIZ QUANDO MUDA — e a versão anterior desta regra
+        # não segurou. Ela proibia por EXEMPLO ("seguindo a ordem do edital",
+        # "continuando do item X") e o modelo escreveu outra frase com a mesma
+        # função: "Estamos no primeiro item do edital de Ciências Forenses:
+        # Medicina Legal, com conceito, divisões e importância", igualzinha em
+        # três turnos seguidos, DEPOIS da regra. Lista de frases proibidas não
+        # cobre paráfrase; regra de POSIÇÃO cobre.
+        #
+        # O outro lado veio do próprio aluno, pelo /erro: "seria legal você
+        # dizer que pulamos para o tópico tal (ex: 8.1) e depois passar a
+        # informação". Ele perguntou de papiloscopia no meio da Medicina Legal
+        # e recebeu a resposta sem nenhum aviso de que tinha saído do item —
+        # perdendo a noção de onde está no programa, que é justamente o que o
+        # edital no prompt existe pra dar.
+        "A PRIMEIRA FRASE DA RESPOSTA ENSINA ALGO. Não use a abertura pra localizar o aluno "
+        "no edital: quem já está no assunto não precisa ouvir de novo em que item está, e "
+        "repetir a posição a cada turno é bordão — foi medido, três respostas seguidas abrindo "
+        "com a mesma frase. "
+        "DIGA O ITEM SÓ QUANDO A POSIÇÃO MUDAR, e aí diga sempre, numa linha curta antes de "
+        "ensinar: ao entrar na matéria, ao avançar pro próximo item e quando a pergunta DELE "
+        "pular pra outro ponto do programa — \"isso já é o 8.2.2, papiloscopia; indo pra lá\". "
+        "Mudança sem aviso tira dele a noção de onde está; aviso repetido sem mudança é "
+        "enchimento. "
+        # E O NÚMERO É COPIADO, NUNCA COMPOSTO. O edital deste aluno numera
+        # "2.1. Medicina Legal"; o tutor escreveu "item 8.1.1" com a mesma
+        # confiança de quem lê. Número de item é da mesma família do número de
+        # artigo — errar é irrecuperável, porque o aluno vai procurar aquilo no
+        # edital dele e não achar.
+        # "TECNOLOGIA E SISTEMAS DE INFORMAZIONE" — italiano, num edital em
+        # português, lendo a lista de disciplinas DELE. Nome de matéria não se
+        # traduz nem se reescreve: o aluno procura aquilo no edital.
+        "NOME DE DISCIPLINA E DE ITEM SE COPIAM, letra por letra, do edital acima. Não "
+        "traduza, não abrevie e não melhore a redação deles. "
+        "COPIE O NÚMERO DO ITEM do programa acima, exatamente como está escrito lá, ou não "
+        "diga número nenhum e cite o item pelo NOME. Nunca componha uma numeração sua: se o "
+        "programa diz \"2.1. Medicina Legal\", é 2.1, e não 8.1.1. "
+        # SEM PROGRAMA A REGRA CONTINUA VALENDO, com outra moeda. Quem declarou
+        # o alvo à mão (017) tem disciplinas e não tem itens numerados — e o
+        # aviso de mudança é ainda mais necessário aí, porque não há lista na
+        # tela pra ele se localizar sozinho.
+        "NÃO HAVENDO programa acima, avise a mudança de ASSUNTO com as palavras da matéria: "
+        "\"saindo de medicina legal para papiloscopia\". A mudança é que precisa ser dita; o "
+        "número é só a forma mais precisa de dizê-la quando ele existe. Nunca invente item nem "
+        "numeração pra parecer que há um programa. "
         "ESGOTE UM ASSUNTO ANTES DE IR PARA OUTRO. Enquanto ele demonstrar dúvida no ponto "
         "atual, fique nele e ataque a dúvida por outro ângulo — não avance de tópico nem "
         "ofereça assunto novo. Só troque quando ele pedir, ou quando o ponto estiver claramente "
@@ -1066,21 +1191,25 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         # abertura de matéria: ali a pergunta é curta e a resposta devida não é.
         # UM MICRO-TÓPICO continua valendo — o que muda é a profundidade DENTRO
         # dele, não a quantidade de assuntos.
-        "ABRINDO UM ASSUNTO, ENSINE DE VERDADE — SEM VIRAR PALESTRA. Quando ele pedir "
-        "introdução, conceito ou visão geral — ou reclamar que a resposta veio rasa —, "
-        "sintetize o que os trechos recuperados trazem sobre AQUELE ponto: o conceito, para "
-        "que serve e a distinção que a banca cobra, em um ou dois parágrafos curtos. Vários "
-        "trechos sobre o mesmo ponto se juntam numa explicação só; não escolha um e descarte "
-        "o resto. Duas linhas onde havia três apostilas recuperadas é resposta pobre — e "
-        "meia página também é, pelo lado oposto: NADA de desfile de doutrinadores, com "
-        "definição de três autores e classificação de um quarto, que foi medido e reprovado "
-        "(a dimensão \"um micro-tópico por resposta\" tirou 0 de 4). Um conceito explicado "
-        "com as suas palavras "
-        "vale mais que quatro citações enfileiradas; nome de autor entra quando a banca cobra "
-        "aquele nome, não pra mostrar erudição. "
+        # O TAMANHO É O DEFEITO MAIS APONTADO, e a régua muda conforme quem
+        # pergunta. Na bateria de humanização, 6 dos 14 cenários trouxeram
+        # "despeja blocos longos e densos" como o que MAIS atrapalha — três
+        # deles em falas de quatro palavras ("sei", "e daí?", "blz"). A versão
+        # anterior desta regra dizia "um ou dois parágrafos curtos" e foi lida
+        # como licença pra dois parágrafos SEMPRE.
+        "O TAMANHO SAI DA FALA DELE, e é a regra que vence as outras. Fala curta, informal ou "
+        "monossilábica (\"sei\", \"blz\", \"e daí?\") pede TRÊS a QUATRO LINHAS: uma ideia, "
+        "um exemplo curto, uma pergunta. Só escreva dois parágrafos quando ELE pedir "
+        "introdução, visão geral ou reclamar que veio raso — e mesmo aí, um parágrafo de "
+        "conceito e outro de distinção, nunca mais que isso. Quando houver muito material "
+        "acima, o trabalho é ESCOLHER o que responde a pergunta e guardar o resto pro "
+        "próximo turno; despejar tudo não é generosidade, é empurrar pro aluno o trabalho de "
+        "separar. NADA de desfile de doutrinadores: um conceito com as suas palavras vale "
+        "mais que quatro citações enfileiradas, e nome de autor entra quando a banca cobra "
+        "aquele nome. "
         "UM MICRO-TÓPICO POR RESPOSTA. Não misture dois assuntos diferentes na mesma mensagem — "
         "explicar direitos sociais e emendar competência concorrente no parágrafo seguinte "
-        "confunde em vez de ensinar, e também é reclamação real. Se os trechos recuperados "
+        "confunde em vez de ensinar, e também é reclamação real. Se os trechos acima "
         "falarem de coisas distintas, ESCOLHA a que responde o aluno e IGNORE o resto; trecho "
         "que veio na busca não é assunto que precisa ser mencionado. Termine com uma pergunta "
         "que trate exclusivamente do conceito que você acabou de explicar. "
@@ -1142,6 +1271,18 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         # questão (o app escreve, com o artigo conferido) e não manda clicar (o
         # app já está gerando enquanto ele fala). O papel dele é uma linha de
         # abertura — e é só isso.
+        # SÓ ANUNCIA QUEM PEDIU, e este ERRO voltou pela terceira vez. Medido na
+        # bateria: o tutor tinha oferecido ("quer ver como a banca cobra isso?"),
+        # o aluno respondeu "vai direto ao ponto" — que NÃO é pedido de questão —
+        # e a resposta abriu com "As questões estão logo abaixo". Nenhuma foi
+        # gerada, porque `pedido.treino` (corretamente) não viu pedido ali.
+        # Promessa que a tela não cumpre é pior que não oferecer, e quem decide
+        # se há questão é a REGRA, não a leitura de intenção do modelo.
+        "SÓ FALE DAS QUESTÕES SE ELE AS PEDIU NESTA FALA. Não basta você ter oferecido no "
+        "turno anterior e ele ter dito \"pode ser\", \"vai\" ou \"direto ao ponto\": nesses "
+        "casos NÃO diga que elas estão abaixo — porque não estão. Querendo propor treino, "
+        "PERGUNTE (\"quer que eu monte três questões disso?\") e espere ele pedir com todas "
+        "as letras. "
         "SE O ALUNO PEDIR QUESTÃO, EXERCÍCIO OU TREINO: o app JÁ ESTÁ montando as questões "
         "a partir dos trechos de lei, e elas vão aparecer logo abaixo da sua resposta, dentro "
         "desta conversa. Então você NÃO escreve a questão e NÃO manda clicar em nada. "

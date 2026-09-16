@@ -498,3 +498,20 @@ def test_pedir_o_formato_da_resposta_nao_e_assunto_novo():
 
     # E o contrário continua valendo: pedido COM assunto troca o foco.
     assert assunto.palavras_de_conteudo("me traz um resumo de improbidade") == ["improbidade"]
+
+
+def test_risada_nao_e_assunto():
+    """"ola boa noite se é que ta de noite kkk" virou consulta de busca: todas as
+    outras palavras estão em `VAZIAS`, sobrou "kkk", e voltaram CP 111, CP 150 e
+    a Lei 8.112 art. 70 — debaixo de uma saudação.
+
+    É forma livre (kkk, kkkkkk, rsrs, hahaha), então lista não resolve: resolve
+    regra. E a risada colada num pedido real não pode levar o pedido junto."""
+    assert assunto.palavras_de_conteudo("ola boa noite se é que ta de noite kkk") == []
+    assert assunto.palavras_de_conteudo("rsrs") == []
+    assert assunto.em_foco([], "ola boa noite se é que ta de noite kkk") is None
+
+    assert assunto.palavras_de_conteudo("me explica peculato kkk") == ["peculato"]
+    assert assunto.palavras_de_conteudo("hahaha adorei") == ["adorei"]
+    # "hurto" não é risada, é erro de digitação de uma palavra de matéria.
+    assert assunto.palavras_de_conteudo("hurto ou furto?") == ["hurto", "furto"]

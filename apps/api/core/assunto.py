@@ -109,7 +109,7 @@ import unicodedata
 from . import pedido
 from .retrieval import RE_CITACAO
 
-VERSAO = "assunto-v8"
+VERSAO = "assunto-v9"
 
 # Teto da consulta. Embedding é MÉDIA do que entra: parede de texto dilui o
 # assunto exatamente como o art. 37 (13.059 caracteres) já se dilui no próprio
@@ -244,11 +244,20 @@ def _sem_acento(palavra: str) -> str:
 RE_PALAVRA = re.compile(r"[^\W\d_]+", re.UNICODE)
 
 
+# RISADA E INTERJEIÇÃO NÃO SÃO ASSUNTO, e isto entrou porque "ola boa noite se
+# é que ta de noite kkk" virou consulta de busca: TODAS as outras palavras
+# estavam em `VAZIAS`, sobrou "kkk", e a busca devolveu CP 111, CP 150 e a Lei
+# 8.112 art. 70 pra uma saudação. Como é forma livre (kkk, kkkkkk, rsrs,
+# hahaha), a lista não resolve — a REGRA resolve.
+RE_RISADA = re.compile(r"(?i)^(?:k{2,}|(?:ha|he|hi|hu){2,}|(?:rs){1,}|hehe|huehue)$")
+
+
 def palavras_de_conteudo(texto: str) -> list[str]:
     """As palavras da fala que carregam assunto — o resto é andaime de conversa."""
     achadas = RE_PALAVRA.findall((texto or "").lower())
     return [p for p in achadas
-            if len(p) >= MIN_LETRAS and _sem_acento(p) not in VAZIAS]
+            if len(p) >= MIN_LETRAS and _sem_acento(p) not in VAZIAS
+            and not RE_RISADA.match(p)]
 
 
 def disciplina_citada(texto: str, disciplinas: list[str] | None) -> str | None:

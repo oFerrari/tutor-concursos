@@ -344,3 +344,67 @@ def test_pergunta_de_materia_continua_buscando():
     explícita ou possessivo de primeira pessoa, nunca só o verbo."""
     for fala in CONTEUDO:
         assert not pedido.sobre_desempenho(fala), fala
+
+
+# ---------------------------------------------------------------------------
+# Pedido ADIADO, e pergunta sobre a memória do app
+# ---------------------------------------------------------------------------
+
+def test_treino_adiado_nao_gera_questao_agora():
+    """Relatado com log: "me introduza ao assunto, depois trazendo exemplos pra
+    depois TALVEZ questões" gerou duas questões na hora.
+
+    O aluno acabara de dizer, na mesma frase, a ordem que queria — introdução,
+    exemplos, e só então talvez treino. A palavra "questões" estava lá; o
+    pedido, não."""
+    adiados = [
+        "não o que me interessa é só o que cai em concurso, se isso cai eu quero que você "
+        "me introduza ao assunto depois trazendo exemplos pra depois talvez questões",
+        "depois me traz umas questões",
+        "mais pra frente a gente vê exercícios",
+        "quem sabe depois um simulado",
+    ]
+    for fala in adiados:
+        assert pedido.treino(fala) is None, fala
+
+    # E o adiamento só vale quando GOVERNA a palavra de treino: pedir agora e
+    # falar de outra coisa depois continua sendo pedido.
+    assert pedido.treino("me dá 3 questões, depois a gente vê a teoria")["quantidade"] == 3
+
+
+def test_pergunta_sobre_a_memoria_do_app_nao_busca_material():
+    """Relatado com log: "quando foi a última vez que a gente conversou sobre
+    isso?" recuperou CP arts. 214, 216, 220, 223 e 224 — crimes sexuais, numa
+    conversa sobre papiloscopia. A busca acertou as palavras e errou tudo mais."""
+    for fala in ["você consegue me dizer quando foi a ultima vez que a gente conversou sobre isso?",
+                 "você não tem memoria de nada que estudamos?",
+                 "você lembra do que falamos ontem?"]:
+        assert pedido.sobre_memoria(fala), fala
+        assert pedido.dispensa_busca(fala), fala
+
+    # "memória" também é MATÉRIA (psicologia forense, prova testemunhal): a
+    # regra pede o pronome de segunda pessoa junto, nunca a palavra solta.
+    assert not pedido.dispensa_busca("me explica a memória de curto prazo na psicologia forense")
+    assert not pedido.dispensa_busca("o que é papiloscopia?")
+
+
+def test_desabafo_nao_busca_material():
+    """"O cara pode vir aqui e querer só desabafar, nem por isso você precisa
+    puxar nada do material." "To cansado, não aguento mais estudar" tem
+    "cansado" e "aguento" como palavras de conteúdo — virava consulta, e vinham
+    seis trechos de lei debaixo do desabafo.
+
+    Primeira pessoa é o que separa desabafo de matéria: "cansaço" está na
+    jornada de trabalho da 8.112; "tô cansado" não está em lei nenhuma."""
+    for fala in ["to cansado hoje, não aguento mais estudar",
+                 "nossa que dia difícil, to desanimado",
+                 "tô surtando com essa prova",
+                 "só queria desabafar",
+                 "vou desistir de tudo"]:
+        assert pedido.desabafo(fala), fala
+        assert pedido.dispensa_busca(fala), fala
+
+    for fala in ["me explica o cansaço na jornada de trabalho da 8.112",
+                 "a vítima estava cansada no momento do crime?",
+                 "quero estudar peculato"]:
+        assert not pedido.desabafo(fala), fala
