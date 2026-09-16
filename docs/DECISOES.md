@@ -2967,3 +2967,65 @@ continua sem poder marcar `falha`, então material sem cota de modelo termina
 `status` DE DENTRO da chamada de classificação, porque no fim os dois campos
 ficam certos de qualquer jeito e nenhuma asserção sobre o resultado final
 distinguiria as duas versões.
+
+## Cinco falhas apontadas no chat, uma existia (e é a terceira leva de `assunto`)
+
+Relato com log longo e diagnóstico pronto, de outra ferramenta. Conferido no
+código, item a item, antes de mexer — o mesmo exercício de 10/09, com resultado
+parecido.
+
+**1. "Erro de gatilho JSON: pediu peculato culposo e veio 'inserção de dados
+falsos'".** Não existe gatilho por JSON neste projeto. O caminho automático é
+`core/pedido.treino` (regra sobre a fala) e o manual é o botão, que manda só
+`conversa_id`. A questão exibida é a de `id=7`, do acervo PÚBLICO, criada em
+04/08 — veio da fila, não de geração. Questões de peculato existem e são de
+10/09 (ids 1511-1519).
+
+**2. "Amnésia da saudação: 'boa noite' no meio da sessão reseta o fluxo".** Na
+conversa real (525), `boa noite` é a PRIMEIRA mensagem. Abrir perguntando por
+onde começar é o comportamento correto — não há o que blindar.
+
+**3. "Alucinação: disse que não estava no material e os chunks eram da
+apostila".** A frase é literal do prompt (`socratic.py`), e é decisão registrada
+neste arquivo: doutrina sem trecho é PERMITIDA e MARCADA. O que estava errado
+era o que a busca trouxe — ver o item 5.
+
+**4. "Botão órfão: remova o botão manual".** Ele é o único caminho manual e não
+foi substituído por nada. Removê-lo tiraria função em nome de um mecanismo que
+não existe.
+
+**5. ENVENENAMENTO DA BUSCA — este era real, e reproduzido.** `em_foco` é puro,
+então a conversa inteira foi reexecutada pelo banco. Para
+
+    "queria um resumão mais detalhado com 2 exemplos de cada"
+
+a consulta que ia ao pgvector era
+
+    "queria um resumão mais detalhado com 2 exemplos de cada agora eu queria que
+     trouxesse um resumão com tudo de uma vez ja"
+
+Sem UMA palavra de matéria. "resumao", "detalhado" e "trouxesse" contavam como
+conteúdo, então a fala "dizia assunto", virou consulta E puxou as anteriores
+(também meta) como reforço. Daí CP art. 150 (violação de domicílio), CP art. 28
+(embriaguez) e CF art. 220 (comunicação social) numa aula de Direito
+Administrativo.
+
+Depois de entrarem em `VAZIAS`, a mesma fala cai no turno do TUTOR:
+
+    "Vamos ao resumão completo dos princípios implícitos que caem na sua prova:
+     Supremacia do interesse público..."
+
+**E o item 3 é consequência deste.** Com a consulta envenenada, o tutor dizia a
+verdade ao avisar "isto é doutrina e não está no seu material" — não estava no
+que ele recebeu. Estava na apostila.
+
+**O fixture recortado MENTIU, e isso quase virou o teste.** A primeira versão do
+caso usava oito turnos escolhidos a dedo, e com eles a consulta caía nas falas
+anteriores do ALUNO em vez do turno do tutor — outro resultado, com o mesmo
+código. `em_foco` decide olhando a sequência, então recortar a conversa é mudar
+a pergunta. O fixture passou a ser o log inteiro, literal, como o cabeçalho do
+arquivo já mandava.
+
+**"citar" ficou de fora da lista de propósito:** citação é ato processual no CPP,
+e cegar a busca para ela custa mais que a diluição que ela causa. A assimetria é
+a mesma de sempre — palavra a mais dilui, palavra de domínio a menos cega.

@@ -9,7 +9,7 @@ quanto métrica errada, e "vamos" foi exatamente a fala que quebrou tudo.
 """
 from core import assunto
 
-VERSAO = "test-assunto-v1"
+VERSAO = "test-assunto-v2"
 
 # A conversa que expôs o bug: começou em Direito Penal, migrou pra
 # Constitucional (eficácia das normas), passou por dois turnos de meta-conversa
@@ -344,3 +344,157 @@ def test_aluno_retoma_a_iniciativa_e_troca_de_assunto():
     foco = assunto.em_foco(LOG, troca).lower()
     assert foco.startswith("agora quero controle")
     assert "penha" not in foco and "doméstic" not in foco
+
+
+# ---------------------------------------------------------------------------
+# Terceira leva de meta-conversa: "resumão", "detalhado", "trouxesse"
+# ---------------------------------------------------------------------------
+
+# Conversa 525, literal, do começo do assunto até o pedido que envenenou a
+# busca. Cortada onde importa — o que decide é o PAR (fala do aluno, turno
+# anterior do tutor), e é isso que precisa estar aqui.
+PRINCIPIOS = [
+    ('aluno', 'boa noite'),
+    ('tutor',
+     'Boa noite! Vamos começar nossa preparação para a PC-PR com a FGV. Por onde você quer '
+     'ir hoje? Podemos focar em Direito Constitucional, Direito Penal, Direito '
+     'Administrativo ou alguma das outras matérias do seu edital.'),
+    ('aluno', 'direito administrativo'),
+    ('tutor',
+     'Vamos começar por Direito Administrativo, focando no primeiro tópico do seu edital '
+     'para a PC-PR: conceito, fontes e princípios, além da LINDB. Para direcionar bem o '
+     'estudo, você já tem facilidade com a diferença entre os princípios expressos e os '
+     'implícitos da Administração Pública na cobrança da FGV?'),
+    ('aluno', 'eu acho que sim, mais ou menos'),
+    ('tutor',
+     'Isso é doutrina e não está no seu material; confira na sua apostila: os princípios '
+     'expressos estão previstos de forma explícita na Constituição, enquanto os implícitos '
+     'são reconhecidos pela doutrina e jurisprudência para dar sustentação à atuação '
+     'estatal, como a supremacia do interesse público e a autotutela. Você já pegou alguma '
+     'questão da FGV cobrando a autotutela da Administração Pública?'),
+    ('aluno',
+     'mais você como uma IA não consegue trazer pra mim alguns conceitos e explicações '
+     'sobre os principios expressos e implicitos?'),
+    ('tutor',
+     'Sim, trago direto. O art. 37, *caput*, da Constituição traz os princípios expressos '
+     'da administração pública direta e indireta: legalidade, impessoalidade, moralidade, '
+     'publicidade e eficiência. Já os implícitos, como a supremacia do interesse público '
+     'sobre o privado e a autotutela, são construções doutrinárias que decorrem do sistema '
+     'constitucional e dão base ao poder estatal. Quer que eu siga para o próximo ponto do '
+     'edital, que trata da LINDB aplicada ao Direito Administrativo?'),
+    ('aluno',
+     'calma você mal falou de principios expressos e explicitos e ja quer mudar de '
+     'assunto?'),
+    ('tutor',
+     'Tem razão, vamos aprofundar os princípios expressos para não deixar nenhuma brecha '
+     'para a FGV. Os princípios expressos são aqueles listados expressamente no texto '
+     'constitucional: legalidade, impessoalidade, moralidade, publicidade e eficiência. A '
+     'legalidade significa que a administração só pode atuar quando autorizada por lei; a '
+     'impessoalidade exige que a atuação seja voltada ao interesse público, sem '
+     'favorecimentos ou perseguições pessoais; a moralidade impõe atuação ética e proba; a '
+     'publicidade exige transparência dos atos administrativos; e a eficiência cobra '
+     'qualidade, rapidez e rendimento na prestação dos serviços públicos. Você lembra qual '
+     'desses cinco princípios é o único que foi inserido na Constituição por uma emenda '
+     'posterior e não constava no texto original de 1988?'),
+    ('aluno', 'sei é a eficiencia'),
+    ('tutor',
+     'Exato, a eficiência foi incluída pela Emenda Constitucional nº 19/1998, trazendo '
+     'para a Administração Pública a exigência de resultados, qualidade e rapidez. Podemos '
+     'seguir para os princípios implícitos, como a autotutela e a supremacia do interesse '
+     'público, ou você prefere ver como a FGV costuma cobrar o princípio da impessoalidade '
+     'em provas de carreiras policiais?'),
+    ('aluno', 'podemos sim'),
+    ('tutor',
+     'Vamos seguir para os princípios implícitos, começando pela autotutela. Este é um '
+     'conceito da doutrina, que não está expresso em um artigo único, mas que fundamenta o '
+     'poder que a Administração Pública tem de anular seus próprios atos quando forem '
+     'ilegais, ou revogá-los por motivo de conveniência e oportunidade, sem precisar ir ao '
+     'Judiciário para isso. Você já viu a Súmula 473 do Supremo Tribunal Federal, que '
+     'trata justamente desse poder de anulação e revogação?'),
+    ('aluno',
+     'ja vi sim, se você puder citar só os principais que mais caem em prova, implicitos e '
+     'um resumo com um caso real de cada ja ta bom'),
+    ('tutor',
+     'Os princípios implícitos que mais caem em provas de carreiras policiais cobrados '
+     'pela banca são: - Supremacia do interesse público sobre o privado - '
+     'Indisponibilidade do interesse público - Autotutela - Continuidade dos serviços '
+     'públicos - Razoabilidade e proporcionalidade Sobre a supremacia, pense em uma '
+     'desapropriação: o Estado desapropria um terreno particular para construir uma '
+     'delegacia. O interesse da coletividade em ter segurança pública prevalece sobre o '
+     'direito individual de propriedade. Sobre a indisponibilidade, imagine um delegado '
+     'que descobre provas de um crime cometido por um amigo íntimo; ele não pode '
+     'simplesmente rasgar o inquérito para protegê-lo, porque os bens e interesses '
+     'públicos não pertencem ao agente, que não pode abrir mão deles. Quer que eu siga '
+     'para o próximo tópico de Direito Administrativo?'),
+    ('aluno', 'e o restante não vai explicar?'),
+    ('tutor',
+     'Vamos explicar agora o princípio da continuidade dos serviços públicos, que estava '
+     'na lista. Ele garante que as atividades essenciais da administração não podem parar, '
+     'por isso a lei impõe limites ao direito de greve de servidores em áreas como a '
+     'segurança pública. Você sabe se o direito de greve é permitido para os policiais '
+     'civis na sua prova?'),
+    ('aluno', 'nao é permitido'),
+    ('tutor',
+     'Exato. Como os policiais civis exercem atividade essencial de segurança pública, o '
+     'Supremo Tribunal Federal entende que o direito de greve é vedado para as carreiras '
+     'policiais civis e militares, justamente para garantir a continuidade dos serviços '
+     'públicos. Quer que eu siga para os princípios da razoabilidade e da '
+     'proporcionalidade?'),
+    ('aluno', 'agora eu queria que trouxesse um resumão com tudo de uma vez ja'),
+    ('tutor',
+     'Vamos ao resumão completo dos princípios implícitos que caem na sua prova: - '
+     'Supremacia do interesse público: o interesse da coletividade está acima do '
+     'particular, como ocorre na desapropriação de um imóvel para construir uma delegacia. '
+     '- Indisponibilidade do interesse público: o agente não é dono da coisa pública e não '
+     'pode abrir mão dela, como o delegado que não pode arquivar um inquérito por amizade. '
+     '- Autotutela: a administração pode anular seus próprios atos ilegais ou revogar os '
+     'inconvenientes sem precisar do Judiciário, conforme a Súmula 473 do Supremo Tribunal '
+     'Federal. - Continuidade dos serviços públicos: a atividade essencial não pode parar, '
+     'justificando, por exemplo, a proibição de greve para policiais civis. - '
+     'Razoabilidade e proporcionalidade: exigem adequação entre os meios e os fins, '
+     'impedindo exageros da administração pública. Quer que eu siga para os poderes '
+     'administrativos?'),
+]
+
+LOG_PRINCIPIOS = [{"autor": a, "texto": t} for a, t in PRINCIPIOS]
+PEDIDO_DE_RESUMO = "queria um resumão mais detalhado com 2 exemplos de cada"
+
+
+def test_pedido_de_resumo_nao_vira_consulta():
+    """A fala que envenenou a busca numa aula inteira de Direito Administrativo.
+
+    `em_foco` devolvia a PRÓPRIA fala somada às anteriores do aluno — "agora eu
+    queria que trouxesse um resumão com tudo de uma vez" —, uma consulta sem uma
+    palavra de matéria. Voltaram CP art. 150 (violação de domicílio), CP art. 28
+    (embriaguez) e CF art. 220 (comunicação social), e o tutor avisou ao aluno
+    que o assunto "não está no seu material". Estava na apostila; não no que a
+    busca trouxe.
+
+    "resumão", "detalhado" e "trouxesse" não são assunto. Pedir o formato da
+    resposta é meta-conversa como "me explica" — só com palavras que a lista
+    ainda não tinha."""
+    assert assunto.palavras_de_conteudo(PEDIDO_DE_RESUMO) == []
+    assert not assunto.diz_assunto(PEDIDO_DE_RESUMO)
+
+    foco = assunto.em_foco(LOG_PRINCIPIOS, PEDIDO_DE_RESUMO) or ""
+    assert not foco.lower().startswith("queria um resum"), foco
+    # A consulta passa a ser o turno do TUTOR, que é onde o assunto está escrito
+    # por extenso — mesma regra do caso Maria da Penha.
+    assert "princípios implícitos" in foco.lower(), foco
+
+
+def test_pedir_o_formato_da_resposta_nao_e_assunto_novo():
+    """Vale pras duas falas do mesmo tipo, não só pra que gerou o relato — uma
+    lista que conserta um caso literal e deixa o vizinho passar não conserta
+    nada."""
+    for fala in ["agora eu queria que trouxesse um resumão com tudo de uma vez ja",
+                 "me traz um resumo detalhado",
+                 "traga os principais"]:
+        assert assunto.palavras_de_conteudo(fala) == [], fala
+
+    # "citar" NÃO entrou na lista, e é decisão: citação é ato processual no CPP
+    # ("citação do réu"), e cegar a busca pra ela custa mais que a diluição.
+    assert assunto.palavras_de_conteudo("cite os principais") == ["cite"]
+
+    # E o contrário continua valendo: pedido COM assunto troca o foco.
+    assert assunto.palavras_de_conteudo("me traz um resumo de improbidade") == ["improbidade"]

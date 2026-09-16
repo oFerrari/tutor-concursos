@@ -109,7 +109,7 @@ import unicodedata
 from . import pedido
 from .retrieval import RE_CITACAO
 
-VERSAO = "assunto-v7"
+VERSAO = "assunto-v8"
 
 # Teto da consulta. Embedding é MÉDIA do que entra: parede de texto dilui o
 # assunto exatamente como o art. 37 (13.059 caracteres) já se dilui no próprio
@@ -194,8 +194,32 @@ beleza entao ai ta tao pouca quase bastante primeiro segundo terceiro
 noite dia tarde manha ola oi opa bora saudacoes testar testa teste testando
 testes treinar treino treinando praticar pratica praticando revisar revisao
 revisando
+resumo resumao resumos resumido resumida resumidamente resumir resuma resume
+detalhado detalhada detalhados detalhadas detalhe detalhes detalhar detalha
+aprofundar aprofunda aprofunde traga trazer traz trouxe trouxesse tragam
+principais
 """.split())
 
+# A TERCEIRA LEVA veio de uma conversa inteira sobre princípios administrativos
+# (conversa 525), e é o mesmo defeito com palavras novas. Reproduzido com o log
+# real, `em_foco` para
+#
+#     "queria um resumão mais detalhado com 2 exemplos de cada"
+#
+# devolvia A PRÓPRIA FALA somada às anteriores do aluno — "agora eu queria que
+# trouxesse um resumão com tudo de uma vez" —, uma consulta sem UMA palavra de
+# matéria. "resumao", "detalhado" e "trouxesse" contavam como conteúdo, então a
+# fala "dizia assunto" e o reforço foi buscar mais meta-conversa. A busca
+# devolveu CP art. 150 (violação de domicílio), CP art. 28 (embriaguez) e CF
+# art. 220 (comunicação social) numa aula de Direito Administrativo — e o tutor
+# só respondeu bem porque a regra de doutrina o deixa ensinar conceito sem
+# trecho, avisando. Ele avisou: "isto é doutrina e não está no seu material".
+# Estava, na apostila — só não no que a busca trouxe.
+#
+# "principais" entrou junto ("cite só os principais"); "citar" NÃO, e a razão é
+# a assimetria de sempre: citação é ato processual no CPP, e cegar a busca pra
+# ele custa mais do que a diluição que ele causa.
+#
 # ESTA LISTA NUNCA VAI ESTAR COMPLETA, e é importante não se enganar sobre isso:
 # ela cresceu duas vezes atrás de casos reais ("vamos", depois "boa noite /
 # podemos testar / bora"), e vai crescer de novo — não existe enumeração de todas
