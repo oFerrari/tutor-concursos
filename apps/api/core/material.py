@@ -42,7 +42,7 @@ import re
 
 from . import chunking, db, embeddings
 
-VERSAO = "material-v19"
+VERSAO = "material-v24"
 
 LOTE = 32
 MIN_CHARS = 200
@@ -121,7 +121,7 @@ def e_referencia(tipo: str | None, chunks: list[dict] | None = None) -> bool:
 
 
 def classificar(texto: str, disciplinas_conhecidas: list[str] | None = None,
-                com_assunto: bool = True) -> dict:
+                com_assunto: bool = True, nome_arquivo: str | None = None) -> dict:
     """
     Descobre disciplina e assunto lendo o começo do material.
 
@@ -137,6 +137,21 @@ def classificar(texto: str, disciplinas_conhecidas: list[str] | None = None,
     indexado que nenhuma mesa alcança — o mesmo defeito do alvo manual com
     nome livre, documentado na 017.
 
+    `nome_arquivo` é a ORIGEM (o nome com que o material subiu) e entra como
+    evidência, não como verdade. Quem escreve "Direito Administrativo -
+    Princípios do Direito Administrativo.pdf" leu o material e já disse do que
+    ele trata; o classificador lia só `texto[:MAX_CHARS_CLASSE]` e, num PDF que
+    abre pela capa do primeiro vídeo, chamava de "Regime jurídico
+    administrativo" uma aula que é de princípios — o mesmo erro de escopo da CF
+    virando "Princípios fundamentais" (027), o começo mentindo sobre o todo.
+    Nome inútil existe e é comum (`curso-392722-aula-10-9415-completo`), e nome
+    ERRADO também — o dono renomeou uma aula de direitos sociais para "Direitos
+    Humanos - princípios internacionais" e subiu. Por isso a ordem no prompt é
+    de PRECEDÊNCIA e não de peso: o nome vale quando concorda com o texto ou
+    quando o texto não decide; contradizendo o texto, ele é descartado. Pista
+    que sobrepuja a prova é pior que pista nenhuma, porque o rótulo errado vira
+    `chunk.rotulo` e entra no tsvector (025).
+
     Falha do modelo devolve `{}`, não estoura: material sem rótulo continua
     indexado e buscável, só aparece como "não identificado" na tela. Perder o
     material inteiro porque a cota acabou seria trocar um defeito pequeno por
@@ -144,6 +159,11 @@ def classificar(texto: str, disciplinas_conhecidas: list[str] | None = None,
     """
     from . import llm
     conhecidas = ", ".join(disciplinas_conhecidas or []) or "(nenhuma ainda)"
+    # Uma linha, sem extensão e curto: o nome é texto do aluno indo pro prompt,
+    # e nome de 200 caracteres com quebra de linha viraria instrução parecendo
+    # dado. O que sobra é rótulo, que é tudo que se quer dele.
+    nome = re.sub(r"\s+", " ",
+                  re.sub(r"\.[A-Za-z0-9]{1,5}$", "", str(nome_arquivo or ""))).strip()[:160]
     sistema = (
         "Você recebe o começo de um material de estudo para concurso público "
         "brasileiro (apostila, aula, resumo ou jurisprudência) e devolve a "
@@ -165,10 +185,36 @@ def classificar(texto: str, disciplinas_conhecidas: list[str] | None = None,
            # que não deve existir não se pede e se descarta: não se pede.
            "NÃO devolva assunto: este material é um poço de consulta (norma "
            "inteira, jurisprudência) e não trata de um assunto só.\n\n")
+        + (("Você recebe TAMBÉM o NOME ORIGINAL DO ARQUIVO. Ele é PISTA; o "
+            "TEXTO é a PROVA, e o texto SEMPRE ganha.\n"
+            "· Nome descritivo que CONCORDA com o texto (\"Direito "
+            "Administrativo - Princípios.pdf\" sobre uma aula de princípios): "
+            "use como indicador d" + ("a disciplina e do assunto"
+                                      if com_assunto else "a disciplina") +
+            ", porque quem nomeou assim leu o material inteiro.\n"
+            # O EXEMPLO É INVENTADO DE PROPÓSITO, e não o caso que motivou a
+            # regra ("Direitos Humanos" num PDF de direitos sociais): exemplo
+            # formatado vale mais que regra em prosa — está medido na 3b — e
+            # colocar o caso real aqui seria entregar a resposta dele ao modelo
+            # e perder a única prova de que a regra funciona sozinha.
+            "· Nome que CONTRADIZ o texto: está ERRADO e se IGNORA. Arquivo "
+            "chamado \"Direito Penal - crimes contra a fé pública\" cujo "
+            "conteúdo trata de licitações e contratos é aula de LICITAÇÕES, e é "
+            "LICITAÇÕES que você devolve — nunca repita um nome que o texto "
+            "desmente.\n"
+            "· Nome genérico ou inútil (\"scan_001.pdf\", \"aula_04.pdf\", "
+            "\"curso-392722-aula-10-9415-completo\"): IGNORADO por completo.\n"
+            "Em qualquer caso, devolva o rótulo no seu formato canônico — não "
+            "copie o nome do arquivo literalmente.\n\n") if nome else "")
         + "Se não der pra saber, devolva string vazia no campo. Não invente."
     )
+    # O nome vai ROTULADO e antes do trecho: sem o rótulo o modelo lê o nome
+    # como primeira linha do conteúdo, que é exatamente o que ele não é.
+    corpo = texto[:MAX_CHARS_CLASSE]
+    if nome:
+        corpo = f"NOME DO ARQUIVO: {nome}\n\nTRECHO DO CONTEÚDO:\n{corpo}"
     try:
-        r = llm.obter().gerar_json(texto[:MAX_CHARS_CLASSE], sistema,
+        r = llm.obter().gerar_json(corpo, sistema,
                                    max_tokens=200, schema=ESQUEMA_CLASSE)
     except Exception:
         return {}
@@ -399,6 +445,59 @@ def _html_para_texto(html: str) -> str:
 MIN_ARTIGOS_LEI = 40
 RE_ARTIGO_LEI = re.compile(r"(?im)^\s*Art(?:igo)?\.?\s*\d")
 
+# MARCAS DE APOSTILA: o que existe em material de curso e NÃO existe em lei
+# publicada. Contar artigo não bastou — uma aula de Direitos Sociais que
+# transcreve os arts. 6º a 11 da CF passa dos 40 com folga (medido: 57), e a
+# aula de Processo Legislativo também (55). As duas foram fatiadas por artigo,
+# perderam a explicação do professor entre um dispositivo e outro e viraram
+# "material de consulta" — sem assunto, pela 027.
+#
+# Duas famílias independentes, qualquer uma bastando, porque erro de OCR ou
+# apostila sem nome de banca não pode desarmar as duas ao mesmo tempo:
+RE_BANCA_APOSTILA = re.compile(
+    r"(?i)\b(cebraspe|cespe|fgv|fcc|vunesp|quadrix|ibfc|instituto aocp)\b")
+RE_MARCA_APOSTILA = re.compile(
+    r"(?im)^\s*(?:aula\s*\d|questões\s+comentadas|lista\s+de\s+questões|"
+    r"gabarito|prof(?:\.|essor)|índice|sumário)")
+
+# Os cortes saem da MEDIÇÃO abaixo, com a margem que ela mostrou — não de
+# palpite. Lei de verdade (cf, cp, cpp, 8.112, ADCT, e os três .html compilados
+# do Planalto) vs. o que o aluno subiu de fato:
+#
+#   arquivo                       artigos  banca  marcas
+#   cf.txt                            292      0       4
+#   cp.txt                            437      0       0
+#   cpp.txt                           899      0       1
+#   lei8112.txt                       253      0       1
+#   adct.txt                          174      0       0
+#   Constituicao-Compilado.html       466      0       0
+#   Del3689Compilado.html             898      0       0
+#   L8112consol.html                  362      0       1
+#   ---------------------------------------------------
+#   aula 10 (doc 738)                  55     82     155
+#   Direitos Sociais (doc 789)         57     38      87
+#   Edital PC-PR 2026                  72     99       9
+#   aula 00 (doc 344)                  26     56     100
+#
+# Nenhuma lei cita banca (0 em oito arquivos) e nenhuma passa de 7 marcas;
+# nenhuma apostila fica abaixo de 37 bancas. O EDITAL entrou junto e é caso
+# novo: 72 "Art." em começo de linha faziam dele lei seca também.
+MIN_BANCA_APOSTILA = 3
+MIN_MARCA_APOSTILA = 20
+
+
+def _e_apostila(texto: str) -> bool:
+    """Tem cara de material de CURSO — aula, resumo, edital, caderno de questões?
+
+    Serve de VETO ao `_e_lei_seca`, não de classificador: quem responde "não"
+    aqui não está dizendo que o texto é lei, só que não há prova de que seja
+    apostila. Por isso os dois cortes são altos — o custo de vetar por engano
+    (a lei do aluno fica em janela genérica, como era antes da 019) é menor que
+    o de fatiar uma apostila por artigo, que joga fora a aula inteira.
+    """
+    return (len(RE_BANCA_APOSTILA.findall(texto)) >= MIN_BANCA_APOSTILA
+            or len(RE_MARCA_APOSTILA.findall(texto)) >= MIN_MARCA_APOSTILA)
+
 
 def _e_lei_seca(texto: str) -> bool:
     """O material é o TEXTO DE UMA LEI, e não uma aula sobre ela?
@@ -414,8 +513,17 @@ def _e_lei_seca(texto: str) -> bool:
 
     Conta artigo em INÍCIO DE LINHA, que é como lei publicada se apresenta.
     Citação no meio do texto ("previsto no art. 37") não conta, e é justamente
-    o que apostila faz."""
-    return len(RE_ARTIGO_LEI.findall(texto)) >= MIN_ARTIGOS_LEI
+    o que apostila faz.
+
+    SÓ CONTAR NÃO BASTOU. Apostila boa transcreve o dispositivo antes de
+    explicá-lo, em início de linha e em bloco — a aula de Direitos Sociais traz
+    os arts. 6º a 11 da CF inteiros e bateu 57. O que separa não é quantidade de
+    artigo, é a companhia: `_e_apostila` veta pelo que só existe em material de
+    curso. A ordem importa e é barata — a contagem roda primeiro e derruba a
+    maioria dos textos sem olhar as marcas."""
+    if len(RE_ARTIGO_LEI.findall(texto)) < MIN_ARTIGOS_LEI:
+        return False
+    return not _e_apostila(texto)
 
 
 # Quantos artigos amostrados precisam bater pra dizer "isto já está no acervo".
@@ -906,8 +1014,10 @@ def indexar(documento_id: int, nome: str, dados: bytes) -> None:
                 # `_dividir`) e reindexou pra 543 artigos — a tela mostrava
                 # "543 de 1074" pra material completo, que parece indexação
                 # travada. O denominador tem de vir de quem acabou de contar.
+                # SEM `status='pronto'` AQUI: ele é a última coisa que
+                # acontece, depois do rótulo. Ver o bloco no fim da função.
                 cur.execute("""UPDATE documento
-                                  SET status='pronto', erro=NULL, chunks_total=%s
+                                  SET erro=NULL, chunks_total=%s
                                 WHERE id=%s""",
                             (len(chunks), documento_id))
 
@@ -934,6 +1044,23 @@ def indexar(documento_id: int, nome: str, dados: bytes) -> None:
         _classificar_se_faltar(documento_id, texto, chunks)
     except Exception:
         pass
+
+    # E O 'pronto' É A ÚLTIMA LINHA, depois do rótulo — não antes.
+    #
+    # A tela só faz polling ENQUANTO existe material `processando` (senão seria
+    # consulta a cada 3s numa biblioteca parada). Anunciar `pronto` antes de
+    # classificar abre uma janela de segundos em que a lista é buscada com o
+    # material já pronto e ainda SEM disciplina: a tela desenha "Outros", para
+    # de perguntar, e fica mentindo até alguém dar F5. Relatado exatamente
+    # assim — "ele não identificou a matéria" — com a matéria gravada no banco.
+    #
+    # Só o ANÚNCIO mudou de lugar: o rótulo continua fora do try da indexação e
+    # continua sem poder marcar `falha` (o `except ... pass` acima), então
+    # material sem cota de modelo termina `pronto` do mesmo jeito. Índice
+    # continua sendo o produto; o que ele não pode é dizer que acabou enquanto
+    # a linha ainda vai mudar na tela.
+    with db.conexao_isolada() as c, c.cursor() as cur:
+        cur.execute("UPDATE documento SET status='pronto' WHERE id=%s", (documento_id,))
 
 
 def _classificar_se_faltar(documento_id: int, texto: str,
@@ -965,7 +1092,8 @@ def _classificar_se_faltar(documento_id: int, texto: str,
         conhecidas = [r["disciplina"] for r in
                       db.query("SELECT DISTINCT disciplina FROM documento "
                                "WHERE disciplina IS NOT NULL ORDER BY 1")]
-        palpite = classificar(texto, conhecidas, com_assunto=not referencia)
+        palpite = classificar(texto, conhecidas, com_assunto=not referencia,
+                              nome_arquivo=atual.get("origem"))
         if not palpite:
             return
         disc = atual["disciplina"] or palpite.get("disciplina")
@@ -974,22 +1102,24 @@ def _classificar_se_faltar(documento_id: int, texto: str,
         # reindexar tem de limpar. Preservar seria carregar o defeito pra
         # frente justamente na hora que existe pra consertá-lo.
         assu = None if referencia else (atual["assunto"] or palpite.get("assunto"))
+        # 'aluno' se ELE informou a disciplina e o modelo só completou o assunto:
+        # a parte que decide o recorte da mesa continua sendo a dele.
+        #
+        # Sai do `classificado_por` GRAVADO, não de "a disciplina já está
+        # preenchida" — que era a regra e estava errada na REINDEXAÇÃO: na
+        # segunda passada a disciplina já está lá, posta pelo próprio modelo na
+        # primeira, e o material se promovia sozinho a "você informou". Visto
+        # acontecer: o doc 789 perdeu o aviso "eu deduzi, confira" reindexando,
+        # sem ninguém confirmar nada. `registrar` já grava 'aluno' só quando o
+        # aluno digita, então o campo antigo é a resposta, e a pergunta velha
+        # ("tem disciplina?") só coincidia com ela na primeira vez.
+        de_quem = "aluno" if atual["classificado_por"] == "aluno" else "modelo"
         with c.cursor() as cur:
             cur.execute(
                 """UPDATE documento
-                      SET disciplina = %s, assunto = %s,
-                          -- 'aluno' se ele informou a disciplina e o modelo só
-                          -- completou o assunto: a parte que decide o recorte
-                          -- da mesa continua sendo a dele.
-                          -- `::text` explícito: sem ele o Postgres não
-                          -- consegue inferir o tipo do parâmetro num
-                          -- `IS NOT NULL` isolado e estoura
-                          -- IndeterminateDatatype. Mesma classe do
-                          -- `::bigint[]` que o reingest.py já precisou.
-                          classificado_por = CASE WHEN %s::text IS NOT NULL
-                                                  THEN 'aluno' ELSE 'modelo' END
+                      SET disciplina = %s, assunto = %s, classificado_por = %s
                     WHERE id = %s""",
-                (disc, assu, atual["disciplina"], documento_id))
+                (disc, assu, de_quem, documento_id))
 
 
 def atualizar(usuario_id: int, documento_id: int, disciplina: str | None = None,

@@ -5,7 +5,7 @@ import pytest
 
 from core import db, material, retrieval
 
-VERSAO = "test-material-v5"
+VERSAO = "test-material-v10"
 TXT = ("MEU RESUMO PARTICULAR\n\nO mnemônico QUIXOTEBRAVO organiza os prazos "
        "recursais do processo penal conforme minha anotação de aula. " * 10).encode()
 
@@ -99,6 +99,115 @@ def test_falha_do_classificador_nao_perde_o_material(client, usuario, llm_falso)
     m = client.get("/materiais", headers=usuario["headers"]).json()["materiais"][0]
     assert m["status"] == "pronto" and m["chunks"] >= 1
     assert m["disciplina"] is None
+
+
+def test_nome_do_arquivo_e_evidencia_pro_classificador(client, usuario, llm_falso):
+    """O nome com que o material subiu VAI pro prompt, rotulado.
+
+    O classificador lia só o começo do texto, e o começo de uma apostila é a
+    capa do primeiro vídeo — uma aula de princípios do direito administrativo
+    foi classificada como "Regime jurídico administrativo", que é o tópico 2 de
+    7 dela. Quem nomeia o arquivo de "Direito Administrativo - Princípios" leu o
+    material e já disse do que ele trata; ignorar isso é jogar fora a única
+    evidência que cobre o documento inteiro."""
+    llm_falso.retorno = '{"disciplina": "Direito Administrativo", "assunto": "Princípios"}'
+    nome = "direito administrativo - Princípios do Direito Administrativo.txt"
+    r = client.post("/materiais", files={"arquivo": (nome, TXT, "text/plain")},
+                    data={"tipo": "aula"}, headers=usuario["headers"])
+    assert r.status_code == 201, r.text
+    doc = r.json()
+    _esperar_indexacao()
+
+    chamada = llm_falso.chamadas[-1]
+    assert "NOME DO ARQUIVO: direito administrativo - Princípios do Direito Administrativo" \
+        in chamada["prompt"], chamada["prompt"][:400]
+    # SEM a extensão, e o trecho continua indo junto: o nome é evidência a mais,
+    # não substituto do texto.
+    assert ".txt" not in chamada["prompt"].splitlines()[0]
+    assert "MEU RESUMO PARTICULAR" in chamada["prompt"]
+    # E as duas ordens viajam com ele: descartar nome inútil (sem isso
+    # "scan_001" vira assunto) e, quando nome e texto discordam, obedecer ao
+    # TEXTO — um PDF renomeado à mão de "Direitos Humanos" sobre os arts. 6º a
+    # 11 da CF é aula de direitos sociais, e é o texto que sabe disso.
+    assert "IGNORADO" in chamada["sistema"]
+    assert "CONTRADIZ" in chamada["sistema"] and "o texto SEMPRE ganha" in chamada["sistema"]
+
+    m = client.get("/materiais", headers=usuario["headers"]).json()["materiais"][0]
+    assert m["id"] == doc["id"] and m["assunto"] == "Princípios"
+
+
+def test_sem_nome_o_prompt_nao_fala_de_arquivo(llm_falso):
+    """Regra órfã é instrução pra ninguém: o modelo recebendo "use o nome do
+    arquivo" sem nome nenhum tem uma ordem a menos pra cumprir e uma chance a
+    mais de inventar. `classificar` é chamável sem a origem — a assinatura é
+    opcional de propósito, pra CLI e reprocessamento antigo continuarem valendo."""
+    llm_falso.retorno = '{"disciplina": "Direito Penal", "assunto": "Dosimetria"}'
+    assert material.classificar("texto qualquer de apostila") == {
+        "disciplina": "Direito Penal", "assunto": "Dosimetria"}
+    chamada = llm_falso.chamadas[-1]
+    assert "NOME DO ARQUIVO" not in chamada["prompt"]
+    assert "NOME ORIGINAL DO ARQUIVO" not in chamada["sistema"]
+
+
+def test_material_so_fica_pronto_depois_de_rotulado(client, usuario, llm_falso):
+    """`pronto` é promessa pra TELA, e a tela para de perguntar quando a ouve.
+
+    O polling da biblioteca roda só enquanto existe material `processando`.
+    Anunciar `pronto` antes de classificar deixava uma janela de segundos em que
+    a lista era buscada já pronta e ainda sem disciplina — a tela desenhava
+    "Outros" e congelava assim até um F5. Relatado como "ele não identificou a
+    matéria", com a matéria gravada no banco.
+
+    O duplê do LLM CHECA o banco no meio da classificação: é o único jeito de
+    afirmar a ordem, porque no fim os dois campos estão certos de qualquer
+    maneira."""
+    visto = {}
+    # Busca pela ORIGEM e não pelo id: a indexação é síncrona no teste, então o
+    # classificador roda DENTRO do `client.post` — o id ainda não voltou pra cá
+    # quando este código executa.
+    nome = "espia-da-ordem.txt"
+
+    class _Espia(type(llm_falso)):
+        def gerar(self, *a, **k):
+            visto["status"] = db.exec1(
+                "SELECT status FROM documento WHERE origem = %(o)s ORDER BY id DESC LIMIT 1",
+                {"o": nome})["status"]
+            return '{"disciplina": "Direito Penal", "assunto": "Dosimetria"}'
+
+    espia = _Espia()
+    from core import llm as _llm
+    _llm.obter = lambda: espia  # o monkeypatch do fixture já restaura no fim
+
+    r = client.post("/materiais", files={"arquivo": (nome, TXT, "text/plain")},
+                    data={"tipo": "resumo"}, headers=usuario["headers"])
+    assert r.status_code == 201, r.text
+    _esperar_indexacao()
+
+    m = client.get("/materiais", headers=usuario["headers"]).json()["materiais"][0]
+    assert m["status"] == "pronto" and m["disciplina"] == "Direito Penal"
+    assert visto.get("status") == "processando", \
+        "o material foi anunciado pronto antes de ter rótulo — a tela para de atualizar aí"
+
+
+def test_reindexar_nao_promove_palpite_a_resposta_do_aluno(client, usuario, llm_falso):
+    """Material deduzido continua deduzido depois de reindexar.
+
+    A regra antiga decidia a procedência por "a disciplina já está preenchida?",
+    o que é verdade na primeira passada e MENTIRA na segunda: quem preencheu foi
+    o próprio modelo. Visto acontecer ao reindexar o doc 789 — ele perdeu o
+    aviso "eu deduzi, confira" sem ninguém confirmar nada, e um palpite sem
+    aviso é pior que um palpite."""
+    llm_falso.retorno = '{"disciplina": "Direito Penal", "assunto": "Dosimetria"}'
+    doc = client.post("/materiais", files={"arquivo": ("x.txt", TXT, "text/plain")},
+                      data={"tipo": "resumo"}, headers=usuario["headers"]).json()
+    _esperar_indexacao()
+    m = client.get("/materiais", headers=usuario["headers"]).json()["materiais"][0]
+    assert m["classificado_por"] == "modelo" and m["disciplina"] == "Direito Penal"
+
+    material.indexar(doc["id"], "x.txt", TXT)
+    m = client.get("/materiais", headers=usuario["headers"]).json()["materiais"][0]
+    assert m["classificado_por"] == "modelo", \
+        "reindexar promoveu o palpite do modelo a resposta do aluno"
 
 
 def test_aluno_corrige_o_palpite(client, usuario):
@@ -837,6 +946,70 @@ def test_cabecalhos_de_navegador_no_download_por_link():
     frágil hoje."""
     ua = material.CABECALHOS_URL.get("User-Agent", "")
     assert "Mozilla" in ua, "sem UA de navegador o Planalto derruba a conexão"
+
+
+def _aula_que_transcreve_a_lei(n_artigos: int = 55) -> bytes:
+    """Apostila DE VERDADE: transcreve o dispositivo e comenta embaixo.
+
+    É a forma do material que quebrou — não é apostila que cita "art. 312" no
+    meio da frase (essa a regra antiga já protegia), é a que abre linha com o
+    artigo inteiro, como a lei faz, dezenas de vezes."""
+    corpo = []
+    for n in range(6, 6 + n_artigos):
+        corpo.append(f"Art. {n}º São direitos sociais a educação, a saúde, o trabalho, "
+                     f"a moradia, o transporte, o lazer e a segurança, na forma desta "
+                     f"Constituição.")
+        corpo.append(f"Pessoal, observe que o dispositivo acima é o coração da aula: a "
+                     f"banca FGV já cobrou o inciso {n} duas vezes, e o professor "
+                     f"costuma pedir a literalidade. Vamos analisar cada termo.")
+    cabeca = ["Aula 04", "Prof. Herbert Almeida", "Índice",
+              "Questões Comentadas - Direitos Sociais - FGV",
+              "Lista de Questões - Direitos Sociais - FGV", "Gabarito"]
+    return ("\n".join(cabeca + corpo)).encode()
+
+
+def test_apostila_que_transcreve_a_lei_nao_e_lei_seca(client, usuario):
+    """O contador de artigos sozinho classificou aula como lei — e o estrago não
+    parou no chunk.
+
+    Relatado com dois materiais reais (Direitos Sociais e Processo Legislativo):
+    uma aula que transcreve os arts. 6º a 11 da CF bate 57 "Art." em começo de
+    linha, passa dos 40 e é fatiada por artigo. Aí `e_referencia` vê chunk com
+    artigo, chama de poço de consulta e a 027 SUPRIME o assunto — a tela cai no
+    nome do arquivo, que era justamente o nome errado que o dono tinha digitado.
+    Um limiar de contagem decidindo três comportamentos.
+
+    O que separa não é quantidade de artigo, é a companhia: nenhuma das oito
+    leis medidas cita banca, e nenhuma apostila medida fica sem citar."""
+    r = client.post("/materiais", headers=usuario["headers"], data={"tipo": "aula"},
+                    files={"arquivo": ("aula-04.txt", _aula_que_transcreve_a_lei(),
+                                       "text/plain")})
+    assert r.status_code == 201, r.text
+    doc = r.json()["id"]
+
+    chunks = db.exec1("SELECT count(*) AS t, count(artigo) AS a FROM chunk "
+                      "WHERE documento_id = %(d)s", {"d": doc})
+    assert chunks["t"] > 0 and chunks["a"] == 0, \
+        "aula que transcreve a lei foi fatiada por artigo — perde a explicação do professor"
+    # E o efeito que o aluno VÊ: não vira material de consulta, então o assunto
+    # continua sendo pedido em vez de suprimido pela 027.
+    assert not material.e_referencia("aula", [dict(r) for r in db.query(
+        "SELECT artigo FROM chunk WHERE documento_id = %(d)s", {"d": doc})])
+
+
+def test_edital_com_muitos_artigos_tambem_nao_e_lei_seca():
+    """Caso vizinho, achado na mesma medição: o edital da PC-PR tem 72 "Art." em
+    começo de linha (as regras do certame) e caía na mesma armadilha. Sem banco:
+    a regra é pura."""
+    edital = "\n".join(
+        [f"Art. {n}. O candidato deverá observar o disposto neste edital." for n in range(1, 80)]
+        + ["A banca examinadora FGV divulgará o gabarito preliminar.",
+           "A FGV não se responsabiliza por inscrição não recebida.",
+           "Recursos serão julgados pela FGV em até 10 dias."])
+    assert not material._e_lei_seca(edital)
+    # E a lei continua sendo lei: mesma contagem, sem a companhia de curso.
+    assert material._e_lei_seca("\n".join(
+        f"Art. {n}. Fica estabelecido o disposto neste artigo." for n in range(1, 80)))
 
 
 def test_lei_seca_do_aluno_vira_chunk_por_artigo(client, usuario):

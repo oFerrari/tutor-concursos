@@ -2833,3 +2833,137 @@ consertada no texto, não no medidor.
 **E a nota do juiz caiu de 64 para 32.** Não é regressão: é a régua que o
 próprio projeto manda ignorar — "36, 93 e 57 na mesma entrada", medido. A
 contagem de erros é a medida; a nota é opinião de uma rodada.
+
+## O nome do arquivo entra no classificador — e um contador de artigos decidia três coisas
+
+Dois relatos do dono, no mesmo dia, sobre a mesma tela da biblioteca.
+
+### 1. "Me dei o trabalho de nomear o arquivo e ele ignorou"
+
+A aula de Princípios do Direito Administrativo subiu como
+`direito administrativo - Princípios do Direito Administrativo - princípios da
+Administração Pública.pdf` e o assunto saiu **"Regime Jurídico Administrativo"**
+— o tópico 2 de 7 do índice (p. 5–14 de 151), com princípios ocupando da p. 14 à
+58. Plausível e estreito, pelo mesmo mecanismo da CF virando "Princípios
+fundamentais" na 027: `classificar()` lê `texto[:6_000]`, e o começo de uma
+apostila é a capa do primeiro vídeo.
+
+O nome do arquivo não estava perdido — ele é o `titulo` desde sempre, e a tela o
+mostra em cinza. Quem nunca o via era o classificador. Agora ele entra
+**rotulado** no payload (`NOME DO ARQUIVO: …`, sem extensão, uma linha, 160
+caracteres), e é a única evidência disponível que cobre o documento INTEIRO em
+vez dos primeiros 6 mil caracteres.
+
+O exemplo de contradição dentro do prompt é INVENTADO ("Direito Penal - crimes
+contra a fé pública" num PDF de licitações), e não o caso que motivou a regra: a
+3b já ensinou que exemplo formatado vale mais que regra em prosa, então o caso
+real ali dentro entregaria a resposta ao modelo e mataria a única prova de que a
+regra funciona sozinha.
+
+**Pista não sobrepuja prova, e isso precisou de uma segunda rodada.** A primeira
+versão dizia "INDICADOR FORTE" e parou aí. O dono então renomeou À MÃO uma aula
+de Direitos Sociais para "Direitos Humanos - princípios internacionais" e subiu
+— nome descritivo, estruturado e ERRADO, que é exatamente o caso que "indicador
+forte" não cobre. A regra virou de PRECEDÊNCIA, com o exemplo dele dentro do
+prompt: nome que **contradiz** o texto é descartado, nome que concorda orienta,
+nome inútil (`scan_001.pdf`, `curso-392722-aula-10-9415-completo`) se ignora. E
+o rótulo sai no formato canônico — copiar o nome literal seria o classificador
+virando eco.
+
+### 2. E o que estava quebrado nesse segundo material era outra coisa
+
+Antes de mexer no prompt, o registro: doc 789 tinha `assunto = NULL` e **52 de
+52 trechos com `artigo`**. O modelo não preferiu o nome do arquivo — ele nunca
+foi perguntado. A aula transcreve os arts. 6º a 11 da CF, bateu **57** "Art." em
+começo de linha, passou do `MIN_ARTIGOS_LEI = 40` e foi tratada como LEI SECA.
+Daí em cascata: `chunk_lei` fatiou por artigo e jogou fora a explicação do
+professor entre um dispositivo e outro; `e_referencia` viu chunk com artigo e
+chamou de poço de consulta; a 027 suprimiu o assunto; e a tela, sem assunto,
+caiu no `titulo` — que era o nome errado que ele mesmo tinha digitado. **Um
+limiar de contagem decidindo três comportamentos.**
+
+Subir o limiar não resolve: lei de 60 artigos existe. O que separa não é
+quantidade de artigo, é a COMPANHIA. Medido sobre oito leis de verdade (as cinco
+do `corpus/` e os três `.html` compilados do Planalto, que são o caso original da
+019) e o que o dono subiu de fato:
+
+| arquivo | artigos | banca | marcas de aula |
+|---|---|---|---|
+| cf.txt | 292 | 0 | 4 |
+| cp.txt | 437 | 0 | 0 |
+| cpp.txt | 899 | 0 | 1 |
+| lei8112.txt | 253 | 0 | 1 |
+| adct.txt | 174 | 0 | 0 |
+| Constituicao-Compilado.html | 466 | 0 | 0 |
+| Del3689Compilado.html | 898 | 0 | 0 |
+| L8112consol.html | 362 | 0 | 1 |
+| aula 10, Processo Legislativo (738) | 55 | 82 | 155 |
+| aula 04, Direitos Sociais (789) | 57 | 38 | 87 |
+| **Edital PC-PR 2026** | 72 | 99 | 9 |
+| aula 00 (344) | 26 | 56 | 100 |
+
+Nenhuma lei cita banca; nenhuma passa de 7 marcas; nenhuma apostila fica abaixo
+de 37 bancas. Os cortes (3 bancas ou 20 marcas) ficam no meio dessa distância.
+`_e_apostila` é VETO, não classificador: responder "não" não afirma que o texto
+é lei, só que não há prova de apostila — e por isso os cortes são altos, já que
+vetar por engano devolve a lei do aluno à janela genérica (o mundo pré-019),
+enquanto errar pro outro lado destrói a aula.
+
+**O EDITAL apareceu na medição sem ninguém procurar por ele**: 72 "Art." em
+começo de linha, as regras do certame. Estava caindo na mesma armadilha, e o
+mesmo veto o tira.
+
+**O que fica ambíguo, dito pra não virar susto:** o livro de emendas
+(`CF88_Livro_EC91_2016.pdf`, 1197 artigos, zero marcas de curso) continua
+passando por lei seca se alguém o subir pela biblioteca. É o comportamento
+anterior, não mudou, e não há medição que diga qual dos dois lados é o certo —
+no `corpus/` ele entra como `historico`, por outro caminho.
+
+### 3. E a reindexação promoveu o palpite a resposta do aluno
+
+Material já indexado ficou como estava: a regra nova só age em quem passa por
+`indexar()`. Os dois documentos afetados foram reindexados pelo caminho normal
+(`material.indexar`, idempotente desde a 019) — sem `DELETE FROM documento`:
+
+| doc | antes | depois |
+|---|---|---|
+| 738, Processo Legislativo | 54/54 trechos com artigo | **0/202**, assunto intacto (`aluno`) |
+| 789, Direitos Sociais | 52/52 com artigo, `assunto = NULL` | **0/164**, assunto **"Direitos Sociais"** |
+
+O 789 é a prova das duas mudanças juntas, e por isso o exemplo do prompt não
+podia ser ele: o modelo recebeu o nome "Direitos Humanos - princípios
+internacionais" e devolveu "Direitos Sociais", que está no texto.
+
+**Mas ele voltou marcado como "você informou", e ninguém informou nada.**
+`_classificar_se_faltar` decidia a procedência por "a disciplina já está
+preenchida?" — verdade na primeira passada, MENTIRA na segunda, porque quem
+preencheu foi o modelo. Reindexar apagava o aviso "eu deduzi, confira" de todo
+material deduzido, e palpite sem aviso é pior que palpite: a tela pede
+conferência exatamente onde ela é necessária. A procedência agora sai do
+`classificado_por` GRAVADO (`registrar` já o escreve 'aluno' só quando o aluno
+digita), e a linha do 789 foi corrigida de volta para `modelo`.
+
+Achado só porque o antes/depois da reindexação foi impresso campo a campo — a
+mudança "funcionou" em tudo que se tinha ido conferir.
+
+### 4. "Ele não identificou a matéria" — com a matéria gravada no banco
+
+O dono apagou o material e subiu de novo. A tela mostrou o PDF em **Outros**,
+sem disciplina e sem assunto; o banco, no mesmo instante, tinha `Direito
+Constitucional` / `Direitos sociais`. Os dois estavam certos, e é isso que
+tornava o relato difícil de acreditar.
+
+`indexar()` gravava `status='pronto'` e SÓ ENTÃO classificava. A biblioteca faz
+polling apenas enquanto existe material `processando` — senão seria consulta a
+cada 3s numa tela parada —, então bastava a lista ser buscada dentro dessa
+janela de segundos: a tela desenhava "Outros", ouvia "pronto", parava de
+perguntar, e ficava mentindo até alguém dar F5. Um material que está para mudar
+de linha não pode ser anunciado como terminado.
+
+O `pronto` passou a ser a ÚLTIMA escrita da função, depois da classificação. Só
+o anúncio mudou de lugar: o rótulo continua fora do `try` da indexação e
+continua sem poder marcar `falha`, então material sem cota de modelo termina
+`pronto` igual. A prova de ordem está no teste — o duplê do LLM consulta o
+`status` DE DENTRO da chamada de classificação, porque no fim os dois campos
+ficam certos de qualquer jeito e nenhuma asserção sobre o resultado final
+distinguiria as duas versões.
