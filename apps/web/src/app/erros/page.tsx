@@ -5,12 +5,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ErroApi, ErroCaderno, getErros, getToken } from "@/lib/api";
 import { Carregando } from "@/components/Carregando";
-import { gravarCache, lerCache, sair } from "@/lib/cache";
+import { gravarCache, sair, useCache } from "@/lib/cache";
 
 export default function PaginaErros() {
   const router = useRouter();
   // Do cache primeiro: o caderno visto nesta sessão aparece na hora.
-  const [erros, setErros] = useState<ErroCaderno[] | null>(() => lerCache("erros"));
+  const [erros, setErros] = useCache<ErroCaderno[]>("erros");
   const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
@@ -31,7 +31,9 @@ export default function PaginaErros() {
         }
         setErro(e instanceof ErroApi ? e.message : "Não deu pra conectar com a API");
       });
-  }, [router]);
+    // `setErros` vem do `useCache`: é o setter do `useState` de lá, estável,
+    // mas o lint não enxerga a origem e pede que ele seja declarado.
+  }, [router, setErros]);
 
   return (
     <div className="mx-auto max-w-3xl p-6 md:p-10">

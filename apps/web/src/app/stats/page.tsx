@@ -14,7 +14,7 @@ import {
   getToken,
 } from "@/lib/api";
 import { Carregando } from "@/components/Carregando";
-import { gravarCache, lerCache, sair } from "@/lib/cache";
+import { gravarCache, sair, useCache } from "@/lib/cache";
 
 /**
  * Desempenho — a mesma faixa de KPIs do panorama, e abaixo dela o detalhe
@@ -71,11 +71,9 @@ function Linha({
 
 export default function PaginaStats() {
   const router = useRouter();
-  const [dados, setDados] = useState<Desempenho[] | null>(() => lerCache("stats"));
-  const [carga, setCarga] = useState<Carga | null>(() => lerCache("carga"));
-  const [conceitos, setConceitos] = useState<ConceitoFraco[] | null>(
-    () => lerCache("conceitos")
-  );
+  const [dados, setDados] = useCache<Desempenho[]>("stats");
+  const [carga, setCarga] = useCache<Carga>("carga");
+  const [conceitos, setConceitos] = useCache<ConceitoFraco[]>("conceitos");
   const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
@@ -113,7 +111,8 @@ export default function PaginaStats() {
         gravarCache("conceitos", c);
       })
       .catch(() => {});
-  }, [router]);
+    // Setters do `useCache` — estáveis; o lint só não vê através do hook.
+  }, [router, setCarga, setConceitos, setDados]);
 
   const geral = agregar(dados);
   // ORDENADO POR PIOR ACERTO, como no protótipo: quem abre esta tela quer

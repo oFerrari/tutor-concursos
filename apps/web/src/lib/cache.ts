@@ -1,3 +1,8 @@
+"use client";
+
+import { useEffect, useLayoutEffect, useState } from "react";
+import type { Dispatch, SetStateAction } from "react";
+
 import { getMesaAtiva, limparToken } from "./api";
 
 /**
@@ -68,4 +73,35 @@ export function limparCache(): void {
 export function sair(): void {
   limparCache();
   limparToken();
+}
+
+
+/**
+ * O MESMO cache, sem quebrar a hidratação.
+ *
+ * `useState(() => lerCache("fila"))` parece o jeito óbvio e tem um defeito que
+ * só aparece com o servidor de pé: no SERVIDOR não existe `sessionStorage`,
+ * então o HTML sai com o esqueleto de carregamento; no CLIENTE o inicializador
+ * lê o cache e a PRIMEIRA renderização já vem com a tela cheia. Os dois não
+ * batem, e o React descarta a árvore hidratada e refaz tudo — com um erro
+ * vermelho na tela em desenvolvimento ("Hydration failed", relatado em
+ * `/fila`). O cache existe pra economizar trabalho e estava causando o dobro.
+ *
+ * Aqui a primeira renderização é IGUAL nos dois lados (`null`, esqueleto) e o
+ * cache entra num efeito de LAYOUT, que roda depois do commit e ANTES da
+ * pintura — então continua sem piscar "Carregando…", que era o ponto.
+ * `useEffect` no servidor é o de sempre: lá o efeito nunca roda, e usar
+ * `useLayoutEffect` direto só renderia um aviso do React.
+ */
+const useEfeitoDeLayout = typeof window === "undefined" ? useEffect : useLayoutEffect;
+
+export function useCache<T>(chave: string): [T | null, Dispatch<SetStateAction<T | null>>] {
+  const [valor, setValor] = useState<T | null>(null);
+  useEfeitoDeLayout(() => {
+    const doCache = lerCache<T>(chave);
+    // Só SEMEIA: se a resposta do servidor já chegou (revalidação rápida ou
+    // mesa trocada), sobrescrever com o cache seria andar pra trás.
+    if (doCache !== null) setValor((atual) => (atual === null ? doCache : atual));
+  }, [chave]);
+  return [valor, setValor];
 }

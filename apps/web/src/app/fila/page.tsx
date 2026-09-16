@@ -8,14 +8,17 @@ import { useRouter } from "next/navigation";
 import { Sugestao } from "@/components/Sugestao";
 import { Carga, ErroApi, Questao, getCarga, getFila, getToken } from "@/lib/api";
 import { Carregando } from "@/components/Carregando";
-import { gravarCache, lerCache, sair } from "@/lib/cache";
+import { gravarCache, sair, useCache } from "@/lib/cache";
 
 export default function PaginaFila() {
   const router = useRouter();
   // Semeado do cache: a fila que você já viu nesta sessão volta na hora e
   // revalida por baixo, em vez de piscar "Carregando…" a cada navegação.
-  const [questoes, setQuestoes] = useState<Questao[] | null>(() => lerCache("fila"));
-  const [carga, setCarga] = useState<Carga | null>(() => lerCache("carga"));
+  // Pelo `useCache` e não por `useState(() => lerCache(...))`: o
+  // inicializador roda com resultados DIFERENTES no servidor e no cliente, e
+  // era isso que derrubava a hidratação desta página.
+  const [questoes, setQuestoes] = useCache<Questao[]>("fila");
+  const [carga, setCarga] = useCache<Carga>("carga");
   const [erro, setErro] = useState<string | null>(null);
 
   // Em `useCallback` porque quem gera questão precisa recarregar a fila
@@ -38,7 +41,9 @@ export default function PaginaFila() {
         }
         setErro(e instanceof ErroApi ? e.message : "Não deu pra conectar com a API");
       });
-  }, [router]);
+    // Setters do `useCache` (o `useState` de lá): estáveis, só não dá pra o
+    // lint provar isso atravessando o hook.
+  }, [router, setCarga, setQuestoes]);
 
   useEffect(() => {
     if (!getToken()) {
