@@ -33,7 +33,7 @@ Aqui só se responde "ele quer treinar, e quantas".
 """
 import re
 
-VERSAO = "pedido-v7"
+VERSAO = "pedido-v8"
 
 # Pedido de TREINO. `quest(?:[ãa]o|[õo]es)` e não `quest[õo]es?`: o singular
 # leva "ã" e o plural "õ", e quem tem pressa digita sem acento — a primeira
@@ -380,10 +380,47 @@ def desabafo(fala: str) -> bool:
     return bool(RE_DESABAFO.search(fala or ""))
 
 
+# PERGUNTA SOBRE O SISTEMA NÃO BUSCA MATERIAL. Medido no cenário `meta`: "como
+# você funciona?" passava por `em_foco` inteira, virava consulta vetorial e
+# devolvia seis trechos de lei sorteados — e seis artigos no prompt são um
+# convite pro modelo discorrer sobre eles debaixo de uma pergunta que não é de
+# matéria. É o mesmo mecanismo de `sobre_memoria` e `desabafo`: k-vizinhos sem
+# piso de relevância nunca devolve vazio.
+#
+# Irmã de `sobre_memoria` e separada dela de propósito: "você lembra do que eu
+# estudei?" se responde com o registro do aluno; esta se responde dizendo o que
+# você é, em uma linha, sem abrir o manual do app.
+#
+# O ALVO É "VOCÊ", NÃO "COMO FUNCIONA". "como funciona a prescrição?" e "de
+# onde vem a competência do STF?" são pedido de MATÉRIA e não podem cair aqui —
+# por isso cada alternativa exige o pronome de segunda pessoa ou a palavra que
+# só cabe na máquina (IA, robô, modelo, chatbot).
+RE_SISTEMA = re.compile(
+    r"(?i)("
+    r"\bcomo\s+(?:voc[êe]|tu)\s+(?:funciona|trabalha|faz|pensa|responde|foi\s+feit[oa])\b"
+    r"|\bde\s+onde\s+(?:voc[êe]|tu)\s+(?:tira|tirou|pega|puxa|busca|saca)\b"
+    r"|\bvoc[êe]\s+[ée]\s+(?:uma\s+)?(?:ia|i\.a|intelig[êe]ncia\s+artificial|rob[ôo]|"
+    r"m[áa]quina|chatgpt|gpt|gemini|modelo|chatbot|bot)\b"
+    r"|\b(?:quem|o\s+que)\s+(?:te|lhe)\s+(?:criou|fez|treinou|programou)\b"
+    r"|\bvoc[êe]\s+(?:[ée]\s+)?(?:humano|pessoa|professor\s+de\s+verdade|gente)\b"
+    r"|\bque\s+(?:ia|modelo|intelig[êe]ncia)\s+(?:voc[êe]\s+)?(?:usa|[ée])\b"
+    r")")
+
+
+def sobre_o_sistema(fala: str) -> bool:
+    """A pergunta é sobre o que VOCÊ é, não sobre a matéria?
+
+    Não decide o que responder — isso é do prompt, que tem a regra de não abrir
+    o manual do app. Decide só que a busca não tem o que fazer aqui.
+    """
+    return bool(RE_SISTEMA.search(fala or ""))
+
+
 def dispensa_busca(fala: str) -> bool:
     """Pergunta que não tem o que fazer com material recuperado.
 
     Porta ÚNICA pra quem chama: a rota pergunta uma coisa só, e acrescentar um
     terceiro caso amanhã não exige mexer em `socratic.explicar` de novo.
     """
-    return sobre_desempenho(fala) or sobre_memoria(fala) or desabafo(fala)
+    return (sobre_desempenho(fala) or sobre_memoria(fala) or desabafo(fala)
+            or sobre_o_sistema(fala))

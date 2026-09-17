@@ -3,6 +3,9 @@
 `CLAUDE.md` é o CONTEXTO (o que existe e por quê). Este arquivo é o PROCESSO
 (como conduzir a tarefa). Em conflito sobre escopo de execução, este vence.
 
+Tutor socrático para concursos. Para regras de negócio, contexto de domínio e
+funcionamento do produto, consulte `docs/PRODUTO.md` ou a memória vetorial.
+
 ## FAST TRACK — padrão para pedido pontual
 
 > Copiado em resumo no `CLAUDE.md` (é o arquivo que o Claude Code lê). Mudou

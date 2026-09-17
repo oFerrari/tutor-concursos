@@ -41,22 +41,11 @@ CÓDIGO, nunca pro texto da resposta: embuta sem narrar. Ver `.clinerules`.
 
 ## O que é
 
-Tutor socrático para concursos públicos brasileiros: RAG sobre lei seca + banco
-de questões + repetição espaçada. Multiusuário. A MESMA lógica (`core/*.py`)
-servida por CLI (`chat.py`) e API HTTP (`api.py`), com frontend Next.js
-(`apps/web`) consumindo a API.
+Tutor socrático para concursos. Para regras de negócio, contexto de domínio e
+funcionamento do produto, consulte `docs/PRODUTO.md` ou a memória vetorial.
 
-- Corpus público: CP, CF + ADCT, CPP, Lei 8.112 (normas separadas) + um livro de
-  emendas como material `historico` (busca híbrida, sem citação por artigo).
-- Biblioteca privada do aluno: PDF ou link indexado no mesmo acervo, invisível
-  para as outras contas.
-- Dois formatos de questão: discursiva curta (avaliada por LLM) e item
-  CERTO/ERRADO estilo Cebraspe (corrigido em código), com "Texto associado"
-  opcional compartilhado entre itens.
-- Sem questão da matéria no banco, o sistema GERA do acervo e grava com
-  proveniência. O chat tem memória e sabe para que concurso a pessoa estuda.
-- **Nunca contém dado de empresa.** O autor trabalha numa cooperativa; este
-  projeto é separado disso por decisão explícita, e só usa material público.
+**Nunca contém dado de empresa.** O autor trabalha numa cooperativa; este
+projeto é separado disso por decisão explícita, e só usa material público.
 
 ## Pilha
 

@@ -42,3 +42,6 @@ dist/
 
 # Metadado do Windows/WSL que vem colado em arquivo baixado. Não é dado.
 *:Zone.Identifier
+
+# ferramenta de memória dos agentes de código (local, por máquina)
+.ai-memory.toml

@@ -92,7 +92,7 @@ from core import (assunto, auth, conversa, db, geracao, llm, mesa, pedido,
 from core.config import CLI_USUARIO_EMAIL, EMBEDDING_MODEL
 from core.llm import ErroLLM
 
-VERSAO = "avaliar-chat-v26"
+VERSAO = "avaliar-chat-v27"
 
 # Conta descartável, como manda o AGENTS.md: nada aqui pode encostar na conta
 # real. O `ON DELETE CASCADE` da 009 limpa tudo de uma vez em `--limpar`.
@@ -648,10 +648,37 @@ def checar(fala: str, resposta: str, chunks: list[dict],
                 achados.append(("aviso", f"pediu {p_treino['quantidade']} questão(ões) e "
                                          f"veio(ram) {len(questoes)}"))
 
+    # ARTIGO JÁ INTRODUZIDO NA CONVERSA NÃO É INVENÇÃO, e esta exceção é decisão
+    # do dono (16/09/2026). Medido no cenário `fora_do_acervo`: o tutor mostrou o
+    # art. 312 no turno 2 com o trecho na mão e, no turno 4, o aluno pediu "me diz
+    # o que a lei seca diz, ao menos" — a busca não rodou e ele retomou o MESMO
+    # artigo que ele próprio já tinha explicado. As checagens 3 e 3c apontaram
+    # invenção; não era. Proibir isso obriga o tutor a esquecer entre um turno e o
+    # seguinte o que ele acabou de ensinar, que é amnésia artificial e o oposto do
+    # produto ("você não é uma sessão em branco").
+    #
+    # O critério é o NÚMERO já dito NESTA conversa, por qualquer um dos dois: o
+    # tutor só o disse antes tendo trecho (senão a checagem teria apontado ali), e
+    # número que o ALUNO trouxe é assunto que ele quer tratar. O que continua
+    # proibido é o que sempre foi: número NOVO, que ninguém mostrou.
+    numeros_da_conversa = {
+        "".join(ch for ch in m.group(1) if ch.isdigit())
+        for t in (historico or [])
+        for m in retrieval.RE_CITACAO.finditer(t.get("texto") or "")}
+    numeros_da_conversa.discard("")
+
+    def _inedito(texto: str) -> str | None:
+        """O primeiro artigo citado que NINGUÉM mostrou nesta conversa."""
+        for m in retrieval.RE_CITACAO.finditer(texto):
+            if "".join(ch for ch in m.group(1) if ch.isdigit()) not in numeros_da_conversa:
+                return m.group(1)
+        return None
+
     # 3. Lei afirmada sem trecho por trás. É a única coisa que este tutor não
     #    pode fazer, e a instrução de "nenhum trecho recuperado" existe pra isso.
-    if not chunks and retrieval.RE_CITACAO.search(resposta):
-        achados.append(("erro", "citou artigo de lei sem nenhum trecho recuperado"))
+    if not chunks and (novo := _inedito(resposta)):
+        achados.append(("erro", f"citou art. {novo} sem nenhum trecho recuperado, e ele não "
+                                f"tinha aparecido antes nesta conversa"))
 
     # 3b MORREU COM O socratic-v49, e vale registrar por que em vez de só
     #    apagar. Ela apontava "explicou em bloco sem citar NENHUMA fonte", e a
@@ -700,7 +727,8 @@ def checar(fala: str, resposta: str, chunks: list[dict],
     for m in (retrieval.RE_CITACAO.finditer(RE_COLCHETE.sub("", resposta))
               if len(resposta) > 200 else []):
         so_digitos = "".join(ch for ch in m.group(1) if ch.isdigit())
-        if so_digitos and so_digitos not in numeros_recuperados:
+        # A conversa é a segunda fonte legítima, pelo motivo escrito na 3.
+        if so_digitos and so_digitos not in numeros_recuperados | numeros_da_conversa:
             achados.append(("erro", f"invocou art. {m.group(1)} em prosa, e nenhum trecho "
                                     f"recuperado é desse artigo"))
             break
@@ -840,13 +868,26 @@ def checar(fala: str, resposta: str, chunks: list[dict],
 # Separada de `VERSAO` de propósito: mexer no spinner ou na cor da tabela não
 # invalida histórico nenhum, e obrigar a isso faria a série reiniciar por
 # cosmético. Suba SÓ quando mudar dimensão, âncora ou o texto do juiz.
-ESCALA_VERSAO = "escala-v6"
+ESCALA_VERSAO = "escala-v7"
 
 ESCALA = [
-    ("proporcao", "Tamanho proporcional à fala do aluno",
-     "0 = despeja parágrafo de matéria densa em cima de um 'boa noite'"
-     " · 2 = responde certo, mas sobra texto"
-     " · 4 = cumprimento recebe uma linha; pergunta grande recebe resposta grande"),
+    # A RÉGUA É O TIPO DO TURNO, NÃO O TAMANHO DA FALA (Seção 1 de
+    # `docs/REGRAS_TUTOR_CONSOLIDADAS.md`, socratic-v64). A âncora anterior media
+    # a resposta contra o COMPRIMENTO da fala do aluno, e passou a punir o tutor
+    # por obedecer: "me explica peculato" são três palavras e é pedido de
+    # EXPOSIÇÃO — a resposta devida são dois parágrafos, não duas linhas. Deu 0
+    # numa rodada em que o tutor estava certo.
+    ("proporcao", "Tamanho proporcional ao TIPO do turno",
+     "tipos: 1 social (saudação/piada/desabafo) e 2 pedido de treino = até 2 linhas"
+     " · 3 pedido de mapa = lista curta · 4 pedido de exposição ('me explica X',"
+     " 'quero ler') e 5 abertura de disciplina = até 2 parágrafos"
+     " · 6 continuidade ('sei', 'e daí?') = 3 a 4 linhas · 7 sobre o desempenho dele"
+     " = 3 a 6 linhas."
+     " 0 = despeja parágrafo denso em cima de um 'boa noite', ou responde em duas"
+     " linhas um pedido de exposição"
+     " · 2 = tipo certo, mas sobra ou falta texto"
+     " · 4 = o tamanho bate com o tipo do turno. NÃO desconte por resposta longa"
+     " quando o aluno pediu explicação"),
 
     ("um_topico", "Um micro-tópico por resposta",
      "0 = explica dois institutos na mesma mensagem (direitos sociais e, no parágrafo"
@@ -854,12 +895,17 @@ ESCALA = [
      " · 2 = um assunto principal, com menção lateral a outro"
      " · 4 = um conceito só, do começo ao fim"),
 
+    # SÓ VALE QUANDO É O TUTOR QUE CONDUZ (Seção 7). Pedido de exposição é pedido
+    # de AULA: sondar ali contraria a regra "explique corrido, sem devolver
+    # pergunta de diagnóstico", e o juiz descontava por isso em rodada limpa.
     ("descobrir_antes", "Descobre o que o aluno sabe antes de explicar",
-     "0 = despeja a explicação sem saber de onde o aluno parte, ou pergunta 'o que você"
-     " sabe sobre X?', que devolve o trabalho pra ele"
+     "n/a quando o aluno PEDIU explicação ('me explica X', 'quero ler', 'sem enrolação'),"
+     " quando pediu treino, ou quando nenhum assunto novo foi aberto — nesses turnos"
+     " sondar é desobedecer."
+     " Nos demais: 0 = despeja a explicação sem saber de onde o aluno parte, ou pergunta"
+     " 'o que você sabe sobre X?', que devolve o trabalho pra ele"
      " · 2 = pergunta, mas genérica"
-     " · 4 = uma pergunta curta e específica ('você já viu a diferença entre A e B?')"
-     " · n/a se nenhum assunto novo foi aberto"),
+     " · 4 = uma pergunta curta e específica ('você já viu a diferença entre A e B?')"),
 
     # PONTUE O PIOR TURNO, não a média — e isto está escrito na âncora porque a
     # régua já errou por não dizer: no cenário `forense_do_zero` o juiz deu 4

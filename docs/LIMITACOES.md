@@ -169,6 +169,38 @@ medição.
 
 ## Aberto
 
+### Débito de retrieval: a busca afoga a lei, e a consulta faz eco (16/09/2026)
+
+Dois defeitos MEDIDOS no mesmo dia, nos dois casos com transcrição gravada em
+`.logs/`. Nenhum dos dois se conserta no prompt — ficam registrados aqui para
+ciclo dedicado de backend, e não como "melhoria óbvia" a ser tentada de raspão.
+
+**1. A biblioteca do aluno afoga a lei seca.** No cenário `direto`, `me explica
+peculato` devolveu *Traumatologia forense* cinco vezes e *Asfixiologia* — zero
+linha do Código Penal, numa mesa (PC-PR Investigador) com apostilas de Ciências
+Forenses no acervo do aluno. O tutor respondeu peculato de cabeça porque não
+recebeu artigo nenhum. É o "lei afogada" de `62fab87` voltando por outro lado: a
+híbrida não tem piso de relevância, e material do aluno com muitos chunks domina
+o RRF quando o termo da pergunta não casa forte com nenhuma rubrica.
+
+Onde olhar: `core/retrieval.py`, o peso dos braços léxico e vetorial, e se
+documento com `usuario_id` deve concorrer em pé de igualdade com norma quando a
+pergunta nomeia um instituto jurídico. Cuidado: piso de relevância vetorial já
+foi medido e enterrado (ver "CEMITÉRIO DE IDEIAS" em `docs/DECISOES.md`) — a
+saída não é aquela.
+
+**2. A consulta de busca é a resposta anterior do tutor.** Visível em todo turno
+2+ dos cenários `direto` e `fora_do_acervo`: `query: Boa noite. Peculato é o
+crime praticado por funcionário público que...`. É o caminho `e_eco` de
+`core/assunto.py` — quando a fala do aluno é eco ("e a diferença com
+concussão?"), a consulta herda a última fala do TUTOR inteira. Funciona quando o
+vocabulário casa, e é sorte: a prosa do tutor tem centenas de palavras e decide
+a busca no lugar da pergunta.
+
+Onde olhar: `assunto.em_foco`, ramo `e_eco`. A herança deveria ser do ASSUNTO da
+fala anterior, não do texto dela — hoje é `_truncar` de prosa.
+
+
 - **Múltipla escolha** (FGV, Vunesp): exige tabela de alternativas. O
   dispatcher do front (`<QuestaoInterativa>`) já tem onde encaixar o
   terceiro ramo; falta o schema.

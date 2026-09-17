@@ -109,7 +109,7 @@ import unicodedata
 from . import pedido
 from .retrieval import RE_CITACAO
 
-VERSAO = "assunto-v9"
+VERSAO = "assunto-v10"
 
 # Teto da consulta. Embedding é MÉDIA do que entra: parede de texto dilui o
 # assunto exatamente como o art. 37 (13.059 caracteres) já se dilui no próprio
@@ -585,7 +585,18 @@ def em_foco(turnos: list[dict] | None = None, pergunta: str | None = None,
     # Com os pedidos fora, `em_foco` alcança "quero estudar peculato", que é o
     # que a conversa é. Mesmo espírito de `e_eco`: a fala que não propõe assunto
     # não deve decidir de qual artigo se cobra.
-    do_aluno = [f for f in falas_de("aluno") if not pedido.treino(f, apos_treino=True)]
+    # PERGUNTA SOBRE O SISTEMA TAMBÉM NÃO NOMEIA ASSUNTO, e pelo mesmo motivo.
+    # Medido no cenário `meta`, turno 4: as três falas anteriores eram "como você
+    # funciona?", "de onde você tira as respostas?" e "você é uma IA?" — nenhuma
+    # busca, porque `dispensa_busca` as pega. Mas elas ficam no HISTÓRICO, e
+    # "respostas", "professor" e "verdade" passam por `diz_assunto`: a consulta de
+    # "me ensina algo de penal" saiu como "...você é uma IA ou tem professor de
+    # verdade? de onde você tira as respostas?" e a busca devolveu falso
+    # testemunho e prova pericial. O aluno pediu Direito Penal e recebeu o artigo
+    # que casou com a palavra "perícia" da pergunta sobre a MÁQUINA.
+    do_aluno = [f for f in falas_de("aluno")
+                if not pedido.treino(f, apos_treino=True)
+                and not pedido.sobre_o_sistema(f)]
     if pergunta and not pedido.treino(pergunta, apos_treino=True):
         do_aluno.append(pergunta)
 
