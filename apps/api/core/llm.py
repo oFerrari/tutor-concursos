@@ -17,13 +17,14 @@ from pathlib import Path
 
 import httpx
 
+from . import telemetria
 from .config import (GEMINI_API_KEY, GEMINI_MODEL, GEMINI_RESERVAS, LLM_PROVIDER,
                      OLLAMA_MODEL, OLLAMA_URL)
 
 # 120s nao bastava no plano gratuito. Configuravel via LLM_TIMEOUT no .env.
 TIMEOUT = httpx.Timeout(float(os.getenv("LLM_TIMEOUT", "240")))
 DEBUG_FILE = Path(".llm_debug.txt")
-VERSAO = "llm-v17"
+VERSAO = "llm-v18"
 
 # Temperatura padrão de TODA chamada do produto. Era um literal repetido nos dois
 # adaptadores; virou constante quando o `temperatura=` apareceu, porque dois
@@ -122,26 +123,43 @@ class Gemini(LLM):
         #
         # Uma tentativa por modelo, e o backoff fica só entre as rodadas: se
         # nenhum dos quatro respondeu, aí sim vale esperar antes de repassar.
+        # TELEMETRIA POR TENTATIVA (030). Cada rodada deste laço é uma
+        # requisição que a cota contou, inclusive a que voltou 429 — e é
+        # justamente a linha do 429 que responde "gastei quanto, em quê". O
+        # `de_onde` é lido UMA vez aqui: dentro do `except` a pilha já é outra.
+        de_onde = telemetria.origem()
         r = None
         ultimo_erro = ""
+        modelo_usado = None
         for modelo in [GEMINI_MODEL, *GEMINI_RESERVAS]:
             try:
                 r = _post(f"{self.BASE}/{modelo}:generateContent",
                           {"key": GEMINI_API_KEY}, corpo, tentativas=1)
             except ErroLLM as e:
                 ultimo_erro = str(e)
+                # Status 0: não houve resposta HTTP (timeout, rede). Zerar o
+                # código seria confundir com sucesso; 0 não é código nenhum.
+                telemetria.registrar("gemini", modelo, 0, origem_chamada=de_onde)
                 continue
             if r.status_code < 500 and r.status_code != 429:
                 if modelo != GEMINI_MODEL:
                     print(f"    {GEMINI_MODEL} indisponível; respondeu com {modelo}")
+                modelo_usado = modelo
                 break
             ultimo_erro = f"HTTP {r.status_code}"
+            telemetria.registrar("gemini", modelo, r.status_code, origem_chamada=de_onde)
             r = None
         if r is None:
             raise ErroLLM(
                 f"o Gemini não respondeu em nenhum dos {1 + len(GEMINI_RESERVAS)} modelos "
                 f"({ultimo_erro}). Isso é instabilidade do provedor, não do app — "
                 f"costuma passar em alguns minutos. Tente de novo.")
+        if r.status_code >= 400:
+            # O 4xx do modelo que RESPONDEU também gastou requisição, e sai do
+            # laço pela porta do `break` — sem esta linha ele não apareceria no
+            # painel. As tentativas que falharam já foram gravadas lá dentro.
+            telemetria.registrar("gemini", modelo_usado or GEMINI_MODEL, r.status_code,
+                                 origem_chamada=de_onde)
         if r.status_code == 429:
             raise ErroLLM("cota do plano gratuito estourada (429). Aguarde ou troque de modelo.")
         if r.status_code == 404:
@@ -151,6 +169,13 @@ class Gemini(LLM):
             raise ErroLLM(f"Gemini HTTP {r.status_code}: {r.text[:400]}")
 
         d = r.json()
+        # O `usageMetadata` sempre veio na resposta e era descartado sem ser
+        # lido — é a única contagem de token que não precisa ser estimada.
+        uso = d.get("usageMetadata") or {}
+        telemetria.registrar("gemini", modelo_usado or GEMINI_MODEL, r.status_code,
+                             tokens_input=uso.get("promptTokenCount"),
+                             tokens_output=uso.get("candidatesTokenCount"),
+                             origem_chamada=de_onde)
         cands = d.get("candidates") or []
         if not cands:
             raise ErroLLM(f"nenhum candidato na resposta: {json.dumps(d)[:400]}")

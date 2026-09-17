@@ -20,7 +20,11 @@ source .venv/bin/activate
 # `.py` vira `python arquivo.py`; qualquer outra coisa (pytest, uvicorn) roda
 # direto do venv. Sem isso, `./tutor migrar.py` cairia no shebang e no python
 # do sistema, que é justamente o erro que este script existe pra evitar.
+# ATALHO SEM `.py` pros painéis que se lê direto (`./tutor gasto`). O `.py`
+# continua valendo; isto só poupa a extensão em comando de leitura, que é o que
+# se digita com pressa.
 case "$1" in
-  *.py) exec python "$@" ;;
-  *)    exec "$@" ;;
+  gasto)   shift; exec python gasto.py "$@" ;;
+  *.py)    exec python "$@" ;;
+  *)       exec "$@" ;;
 esac

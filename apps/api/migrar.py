@@ -191,6 +191,8 @@ SONDAS: dict[str, tuple[str, tuple]] = {
     "021_biblioteca_por_mesa.sql":   (COLUNA, ("documento", "mesa_id")),
     "022_conceito_faltante.sql":     (COLUNA, ("tentativa", "conceito_faltante")),
     "023_migracao.sql":              (TABELA, ("migracao",)),
+    "030_telemetria_llm.sql":        (TABELA, ("telemetria_llm",)),
+    "031_estudo_teoria.sql":         (TABELA, ("estudo_teoria",)),
 }
 
 

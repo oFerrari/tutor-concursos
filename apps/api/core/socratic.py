@@ -15,10 +15,10 @@ import re
 import unicodedata
 from datetime import datetime
 
-from . import assunto, llm, mesa as mesa_mod, pedido as pedido_mod, retrieval
+from . import assunto, diario, llm, mesa as mesa_mod, pedido as pedido_mod, retrieval
 from .retrieval import referencia
 
-VERSAO = "socratic-v67"
+VERSAO = "socratic-v69"
 
 # ------------------------------------------------------------------ schemas
 # Subconjunto OpenAPI aceito pelo Gemini. propertyOrdering importa: o modelo
@@ -874,6 +874,8 @@ Você tem o registro dele: o que acertou e errou por disciplina, os temas que re
 
 Nunca diga "não guardo sessões passadas", "não tenho memória" ou "não acesso conversas anteriores". Perguntado quando viram um assunto, responda com o que está aí: "seu último erro em papiloscopia foi em 19/08". Não estando aquele assunto no registro, diga isso — e não que você não guarda nada. O que você não tem é o texto de OUTRAS conversas: diga exatamente isso, em uma linha, sem se descrever como sistema.
 
+O BLOCO DE TEORIA É A AULA DE ONTEM. Ele lista o que vocês conversaram nos dias anteriores, com quantos turnos e quantas questões ele respondeu naquela matéria naquele dia. Perguntado o que estudaram, responda com ele — "ontem ficamos três turnos em peculato" — e use o desequilíbrio quando ele existir: assunto com muitos turnos e NENHUMA questão respondida é convite a testar hoje, dito UMA vez e em meia linha, como professor que lembra da aula, nunca como cobrança nem como relatório. Bloco ausente é conversa nova: não invente aula que não está aí, e não diga que não guarda nada.
+
 Linhas marcadas como fato da sessão são o que o aluno FEZ — respondeu, acertou, errou. Não são fala sua nem dele. Use-as: errar a questão que você acabou de propor vale mais que qualquer coisa que ele diga sobre ter entendido, e a próxima resposta parte DAÍ, sem repetir a explicação que já não funcionou.
 
 Havendo conversa anterior, CONTINUE dela: resposta curta ("qualquer um", "esse mesmo", "sim") responde à SUA última pergunta. Siga daí, em vez de pedir que ele reformule, e não repita explicação já dada.
@@ -979,6 +981,12 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     contexto_mesa = _resumo_mesa(mesa_)
     contexto_programa = _programa_em_foco(mesa_, pergunta, historico)
     contexto_perfil = _resumo_perfil(perfil)
+    # A OUTRA METADE DA MEMÓRIA (031). Os números acima dizem o que ele
+    # RESPONDEU; isto diz o que vocês CONVERSARAM nos dias anteriores, que é
+    # exatamente o que faltava pra Seção 10 do prompt ("você não é uma sessão em
+    # branco") ter matéria-prima em vez de só ordem.
+    contexto_teoria = (diario.resumo_para_prompt(usuario_id, disciplinas=disciplinas)
+                       if usuario_id else None)
 
     # A guarda considera as QUATRO fontes, não duas. Ela olhava só material e
     # desempenho, e isso bastava enquanto TODA pergunta buscava — havia sempre
@@ -988,7 +996,7 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     # concurso-alvo e o perfil declarado respondem sem precisar de artigo nenhum.
     # Regressão pega por `test_perfil.py`, não em uso.
     if not (contexto_material or contexto_desempenho or contexto_mesa or contexto_perfil
-            or contexto_programa):
+            or contexto_programa or contexto_teoria):
         return {"resposta": ("Não encontrei isso no material, e ainda não tenho nenhum "
                              "desempenho seu registrado.") if consulta else
                             ("Me diga de que matéria ou assunto você quer tratar — ainda não "
@@ -1030,6 +1038,9 @@ def explicar(pergunta: str, usuario_id: int | None = None,
             f"### Trechos de lei recuperados\nNenhum — {motivo} NÃO afirme conteúdo de lei "
             "sem trecho acima: use o contexto do aluno e os números dele, e pergunte de "
             "que assunto ele quer tratar.")
+    if contexto_teoria:
+        partes.append(f"### Teoria que vocês já conversaram (sessões anteriores)\n"
+                      f"{contexto_teoria}")
     if contexto_desempenho:
         partes.append(f"### Números deste aluno no banco\n{contexto_desempenho}")
     if historico:
@@ -1055,6 +1066,12 @@ def explicar(pergunta: str, usuario_id: int | None = None,
 
     sistema = SISTEMA_TUTOR
     resposta = llm.obter().gerar("\n\n".join(partes), sistema, max_tokens=1500)
+
+    # O DIÁRIO SÓ REGISTRA AULA QUE ACONTECEU: depois da geração, porque LLM
+    # indisponível não é estudo, e o `raise` de `gerar` já saiu daqui. Turno sem
+    # material (saudação, desabafo, meta-pergunta) não tem rótulo e não entra —
+    # `diario.rotulo` devolve None e a função não faz nada.
+    diario.anotar(usuario_id, chunks)
 
     # A ORDEM IMPORTA: tira as questões ANTES de limpar citações. Questão escrita
     # pelo modelo vem cheia de "art. 37" inventado, e limpar citação primeiro

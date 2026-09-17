@@ -40,7 +40,7 @@ from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from core import (assunto, auth, conversa, desafio, edital, geracao, material, melhoria, mesa, pedido,
-                  questoes, rascunho, ritmo, scheduler, simulado, socratic)
+                  questoes, rascunho, ritmo, scheduler, simulado, socratic, telemetria)
 from core.config import CORS_ORIGINS
 from core.llm import ErroLLM
 
@@ -699,6 +699,17 @@ def rota_conceitos(uid: int = Depends(usuario_atual), m: dict = Depends(mesa_atu
     agregação sem pedir.
     """
     return scheduler.conceitos_fracos(uid, m["disciplinas"], limite=12)
+
+
+@app.get("/gasto")
+def rota_gasto(dias: int = 1, uid: int = Depends(usuario_atual)):
+    """Consumo do LLM deste projeto na janela pedida (030).
+
+    Autenticada como todo o resto, e NÃO recortada por usuário de propósito: a
+    cota é da CHAVE, não da conta, e quem estoura o free tier é o projeto
+    inteiro somado. Recortar por aluno responderia outra pergunta.
+    """
+    return telemetria.resumo(dias=max(1, dias))
 
 
 @app.get("/meta")
