@@ -23,7 +23,7 @@ import re
 from . import db
 from .embeddings import embed_consulta
 
-VERSAO = "retrieval-v6"
+VERSAO = "retrieval-v7"
 RRF_K = 60  # constante de amortecimento padrão do RRF
 
 # Material `historico` (livro de emendas: "Redação Anterior", múltiplas
@@ -160,6 +160,16 @@ APELIDOS_NORMA = {
     "CP": ("código penal", "codigo penal"),
 }
 
+#  Citar norma que NÃO está no corpus é diferente de não citar norma nenhuma:
+#  "art. 1º da Lei 8.429" devolvia o art. 1º do ADCT, da CF, do CP, do CPP e
+#  da L8112, todos com score 1.0, porque _norma_mencionada devolve None nos
+#  dois casos e o filtro se desliga. Exige DÍGITO de propósito — "lei seca" e
+#  "Lei Maria da Penha" não podem disparar. Sub-acionar é seguro; super-acionar
+#  cala busca legítima.
+RE_NORMA_NUMERADA = re.compile(
+    r"(?i)\b(lei|lc|lei\s+complementar|decreto|medida\s+provis[óo]ria|mp|"
+    r"emenda\s+constitucional|ec)\b[\s.ºno°]*\d")
+
 
 def _norma_mencionada(pergunta: str) -> str | None:
     """
@@ -194,6 +204,8 @@ def por_dispositivo(pergunta: str, n: int = 4, usuario_id: int | None = None,
     if not m:
         return []
     norma = _norma_mencionada(pergunta)
+    if norma is None and RE_NORMA_NUMERADA.search(pergunta):
+        return []
     return db.query(
         f"""SELECT {CAMPOS}, 1.0 AS score
             FROM chunk c JOIN documento d ON d.id = c.documento_id
