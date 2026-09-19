@@ -45,3 +45,9 @@ dist/
 
 # ferramenta de memória dos agentes de código (local, por máquina)
 .ai-memory.toml
+
+# config do Claude Code desta máquina (caminho do espelho /mnt/c)
+.claude/settings.local.json
+
+# espelho para a árvore do Windows: caminho desta máquina, não versionar
+/espelho.sh
