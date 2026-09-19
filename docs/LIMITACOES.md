@@ -167,6 +167,24 @@ medição.
   (`--cenario todos`) — este último é o mais barato e o único que amplia a
   cobertura junto.
 
+## Troca curta de disciplina não muda o foco da busca
+
+"e no processo penal?", dito depois de uma pergunta do tutor, é classificado
+como resposta (`assunto.e_eco` devolve True) porque não tem verbo de `PEDIDO`,
+não cita dispositivo e não pede treino. A consulta vira a fala do tutor, que é
+sobre a disciplina anterior. O turno seguinte recupera a disciplina certa — a
+busca fica um turno atrás da conversa.
+
+Medido em `tests/test_assunto_troca_de_disciplina.py` (xfail estrito).
+
+Tentado e revertido em 2026-09-19: reconhecer nome de disciplina em
+`pede_assunto` exige `disciplinas` em `pede_assunto` e `e_eco`, trocar o filtro
+do caminho normal de `em_foco` para `_com_assunto` — o que derruba citação pura
+("art. 312" não tem palavra de conteúdo) — e casamento por radical em
+`disciplina_citada` ("processo" vs "processual"). Quatro mudanças acopladas; o
+dano observado é um turno de contexto degradado, com o modelo respondendo certo
+assim mesmo.
+
 ## Aberto
 
 ### Débito de retrieval: a busca afoga a lei, e a consulta faz eco (16/09/2026)
