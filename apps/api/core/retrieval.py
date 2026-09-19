@@ -23,7 +23,7 @@ import re
 from . import db
 from .embeddings import embed_consulta
 
-VERSAO = "retrieval-v8"
+VERSAO = "retrieval-v9"
 RRF_K = 60  # constante de amortecimento padrão do RRF
 
 # Material `historico` (livro de emendas: "Redação Anterior", múltiplas
@@ -139,10 +139,26 @@ LIMIT %(n)s
 
 
 def _termos_lexicais(pergunta: str) -> str:
-    """Remove palavras presentes em todo dispositivo, que só geram ruído."""
+    """Remove o que é andaime de conversa, não matéria.
+
+    GENERICOS sozinho é fraco demais: media-se "obrigado, era só isso" casando
+    299 chunks e tomando as 6 vagas lexicais, enquanto "peculato culposo"
+    casava 1. `assunto.VAZIAS` existe exatamente pra separar "falar da matéria"
+    de "falar sobre o estudo" — manter duas listas de palavra vazia e usar a
+    fraca aqui era o defeito.
+
+    O `or pergunta` que fechava esta função caiu junto: era ele que devolvia a
+    frase CRUA quando tudo era vazio, reintroduzindo "obrigado". String vazia
+    dá tsquery vazio, `@@` falso e CTE lex vazia — que é o certo pra pergunta
+    sem matéria nenhuma.
+    """
+    # Import TARDIO: core/assunto.py importa RE_CITACAO deste módulo.
+    # No topo isto seria ciclo.
+    from .assunto import VAZIAS, _sem_acento
     palavras = [p for p in re.findall(r"[\wÀ-ÿ\-]+", pergunta)
-                if p.lower() not in GENERICOS]
-    return " ".join(palavras) or pergunta
+                if p.lower() not in GENERICOS
+                and _sem_acento(p.lower()) not in VAZIAS]
+    return " ".join(palavras)
 
 
 def _normas_existentes() -> list[str]:
