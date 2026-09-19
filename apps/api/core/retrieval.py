@@ -23,7 +23,7 @@ import re
 from . import db
 from .embeddings import embed_consulta
 
-VERSAO = "retrieval-v7"
+VERSAO = "retrieval-v8"
 RRF_K = 60  # constante de amortecimento padrão do RRF
 
 # Material `historico` (livro de emendas: "Redação Anterior", múltiplas
@@ -160,6 +160,21 @@ APELIDOS_NORMA = {
     "CP": ("código penal", "codigo penal"),
 }
 
+
+def _formas_por_extenso(norma: str) -> tuple[str, ...]:
+    """L8112 -> casa "lei 8.112", "lei nº 8112", "lei n. 8112".
+
+    Derivado da sigla em vez de alias manual: lei numerada nova entra
+    no corpus a cada ingestão, e tabela fixa ficaria pra trás — mesmo
+    motivo de _normas_existentes() consultar o banco.
+    """
+    m = re.fullmatch(r"(?i)L[C]?(\d+)", norma)
+    if not m:
+        return ()
+    d = m.group(1)
+    num = rf"{d[:-3]}\.?{d[-3:]}" if len(d) > 3 else d
+    return (rf"\bLEI\s*(?:N?[º°.]?\s*)*{num}\b",)
+
 #  Citar norma que NÃO está no corpus é diferente de não citar norma nenhuma:
 #  "art. 1º da Lei 8.429" devolvia o art. 1º do ADCT, da CF, do CP, do CPP e
 #  da L8112, todos com score 1.0, porque _norma_mencionada devolve None nos
@@ -186,6 +201,11 @@ def _norma_mencionada(pergunta: str) -> str | None:
             return norma
         for apelido in APELIDOS_NORMA.get(norma, ()):
             if re.search(rf"\b{re.escape(apelido.upper())}\b", p):
+                return norma
+        #  Já vem como REGEX pronto: `re.escape` aqui mataria o `\.?` e o
+        #  casamento voltaria a falhar em silêncio.
+        for forma in _formas_por_extenso(norma):
+            if re.search(forma, p):
                 return norma
     return None
 

@@ -85,6 +85,11 @@ CASOS = [
     ("dispositivo", "o que diz o art. 1 da constituição", "CF", "1º"),
     ("dispositivo", "art. 5 da CF", "CF", "5º"),
     ("dispositivo", "art. 1 do ADCT", "ADCT", "1º"),
+    # Norma numerada citada POR EXTENSO: a sigla do banco ("L8112") não
+    # aparece na pergunta. Classe descoberta tarde — a regressão que fez
+    # "Lei 8.112" devolver nada passou por este gabarito sem acusar.
+    ("dispositivo", "art. 20 da Lei 8.112", "L8112", "20"),
+    ("dispositivo", "o que diz o art. 40 da lei nº 8112", "L8112", "40"),
 
     ("rubrica", "concussão", "CP", "316"),
     ("rubrica", "peculato", "CP", "312"),
