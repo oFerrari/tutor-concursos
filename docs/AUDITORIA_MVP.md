@@ -1,5 +1,97 @@
 # Auditoria do tutor — placar do MVP
 
+## ▶ ONDE PARAMOS — 22/09/2026, fim do dia (retomar daqui)
+
+**Leia isto primeiro.** O resto do arquivo é o placar item a item.
+
+### Estado do ambiente ao encerrar
+
+- **Serviços:** API (8000), front (3000) e banco (5433) de pé, subidos pelo
+  `./setup.sh --subir` — então `./setup.sh --parar` derruba API e front.
+- **Banco:** zerado a pedido do dono e repovoado só com o uso real dele.
+  1 usuário (`andrei.ferrari11@gmail.com`, senha `12345678`), 1 "Mesa principal"
+  criada por ele, **nenhum edital**, perfil do onboarding (2 h, Intermediário,
+  Noite), lei seca pública intacta.
+- **Material:** 18 PDFs subidos pelo app — **11 prontos, 7 ainda indexando** ao
+  encerrar (aulas 00–07 de Constitucional). A fila de indexação tem um
+  trabalhador só; confira com a consulta de status antes de simular.
+- **Simulação feita:** 1 conversa de aluno novo (11 falas), 2 questões geradas,
+  1 tentativa. Resultado registrado na seção 8.
+
+### Git e o estado no GitHub — atenção
+
+- `develop` local está **4 commits à frente** do GitHub (6246645, ed2b7e3,
+  bb45341, 8df7bd3) — o dono ainda não empurrou.
+- O ref `estado` no GitHub **ainda guarda o banco de 10/09** (publicado às 22:17,
+  quando o banco local estava restaurado). O próximo `git push` comum publica o
+  banco ATUAL por cima — é o que se quer.
+- **Não rodar `git pull` antes desse push**: o hook `post-merge` importaria o
+  estado de 10/09 por cima do uso real. `./setup.sh` já não importa (1.7).
+
+### Perguntas em aberto para o dono
+
+1. **Edital:** subir o da PC-PR na mesa, ou seguir simulando sem edital (aluno
+   cujo edital não saiu)? Sem edital, o mapa de disciplinas (2.2) não tem o que
+   mapear e a classificação escolhe nome errado (8.7).
+2. **Hooks de estado (1.8):** manter push/pull levando o banco, ou desligar.
+3. **Maestria (2.8):** manter a regra atual ou dar gradiente.
+
+### Próximos passos, em ordem
+
+1. **8.1 — CPF e cabeçalho repetido nos trechos.** Privacidade: o dado vai ao
+   Gemini. Regra universal por frequência na ingestão + aproveitar a página.
+2. **8.2 — diário que inventa estudo.** Registrar só o que o turno explicou.
+3. **4.4 e 6.6 — conversa:** o tutor adia a pergunta do aluno; tique "Sigo
+   para…?". É prompt: validar com `./testar.sh` e conversa real.
+4. **8.7 — classificação sem edital** escolhe a disciplina errada.
+5. **3.3 — rodízio de disciplinas na fila.**
+6. **5.1/5.2 — curadoria:** capa/apresentação que vira questão; tema inventado.
+7. **6.1/6.2 — selo e CITADO legíveis** (nome do edital; título do material).
+8. **Telas (seção 7) e 8.3–8.5.**
+
+### O que falta simular (continuação da bateria de aluno novo)
+
+- Subir o edital pela tela (se o dono aprovar) e conferir: Meu edital, mapa das
+  disciplinas (Criminalística/Processual Penal → disciplina do edital), meta e
+  data da prova.
+- Material de edital subido como aula (`edital_n_4_completo`): ficou **pronto
+  sem disciplina e sem assunto** — ver se aparece em algum lugar e como.
+- Fila e Sessão de estudo com várias disciplinas (rodízio, 3.3).
+- Simulado completo (montar, responder, relatório) e Caderno de erros.
+- Meus materiais no celular (7.5) e Mesas (7.1, 7.4).
+
+### Como rodar a simulação de novo
+
+Os roteiros de navegador ficaram em `.logs/auditoria-drivers/` (fora do git):
+
+```bash
+cd .logs/auditoria-drivers
+npm i && npx playwright install chromium   # uma vez
+node primeiro_acesso.mjs   # login → /mesas; sem mesa, tudo volta ao lobby
+node aluno_novo.mjs        # a bateria de 11 falas + fila, desempenho, panorama
+```
+
+`aluno_novo` e `primeiro_acesso` entram pela tela de login. `abandono`,
+`simulado` e `tour` esperam `TOKEN` (`auth.emitir_token(id)`) e `MESA` no ambiente.
+A transcrição completa de cada rodada sai do banco (`mensagem` da última
+`conversa`), não da tela.
+
+### Onde estão os backups (fora do git, em `.logs/`)
+
+- `backup-completo-antes-do-reset-20260922.sql.gz` — banco inteiro antes do reset
+- `backup-estado-restaurado-2210-20260922.sql.gz` — o que o `./setup.sh` trouxe de volta
+- `backup-arquivos-20260922/` — os PDFs antigos que estavam em `dados/arquivos`
+- `progresso-estado-antigo-20260922.json` — o pacote de estado antigo
+- `backup-lixo-teste-20260922.json` e `backup-duplicatas-20260922.json`
+
+### Risco operacional
+
+Um agente do Antigravity (Codex) rodou nesta máquina, no mesmo repositório e no
+mesmo banco, e os dois `./setup.sh` que desfizeram o reset saíram do terminal do
+Antigravity. Antes de medir qualquer coisa, confira quem mais está usando o banco.
+
+---
+
 Consolida as três rodadas de auditoria de 22/09/2026 (bateria 1 do chat, varredura
 de telas, rodada 2 de fluxos e dados) e o que foi corrigido depois. Cada item diz
 o estado, a evidência que o sustenta e onde está o conserto.
@@ -73,7 +165,7 @@ do que vira questão** (fonte que não é matéria). O motor — busca, dados, e
 | 3.2 | Primeiro acesso ia ao painel com mesa criada sozinha | `mesa.padrao()` cria na 1ª chamada sem mesa | ✅ `ed2b7e3` — login leva a /mesas; portão na casca; verificado: 0 mesas criadas |
 | 3.3 | Fila não alterna disciplinas | Inéditas por `ORDER BY q.id`: Administrativo nunca entrava | ⏳ LIMITACOES — rodízio |
 | 3.4 | Sessão de estudo sem a matéria com mais material | Recorte (2.2) + ordem da fila (3.3) | 🟡 recorte resolvido; ordem pendente |
-| 3.5 | Material que é edital subido como aula | `edital_n_4_completo` indexado como apostila (22/09) | ⏳ a validar na simulação |
+| 3.5 | Material que é edital subido como aula | `edital_n_4_completo` indexado como apostila (22/09) | ⏳ ficou pronto SEM disciplina e SEM assunto — o classificador não o tomou por aula, mas nada avisa o aluno, e sem disciplina ele fica fora de todo recorte |
 
 ## 4. Chat — pedido e intenção
 
@@ -134,7 +226,8 @@ mesa → painel → 11 falas no tutor → fila → desempenho → panorama. Lat�
 | 8.3 | Plural sem concordância | "0 de 1 tentativas", "em 1 tentativas", "(1 reincidências)" | ⏳ |
 | 8.4 | Título da conversa é a primeira fala | Recentes: "boa noite" numa conversa sobre proposições | ⏳ |
 | 8.5 | `GET /edital` responde 404 quando não há edital | 33 vezes numa sessão; a tela trata, o console acusa erro | ⏳ responder 200 com vazio |
-| 8.6 | Edital subido como material de aula | `edital_n_4_completo` na fila de indexação como apostila | ⏳ conferir a classificação quando indexar |
+| 8.6 | Edital subido como material de aula | `edital_n_4_completo` ficou pronto sem disciplina nem assunto | ⏳ ver 3.5: detectar e avisar que é edital |
+| 8.7 | Classificação sem edital escolhe a disciplina errada | A Aula 00 de Ciências Forenses (perícias) foi classificada como "Direito Processual Penal": sem edital, o classificador prefere nome que já existe no acervo, e "Ciências Forenses" ainda não existia. Com edital, o mapa (2.2) a poria em Penal pelo cabeçalho "7.1 Direito Processual Penal" — errado para conteúdo pericial | ⏳ reclassificar quando o edital chega; não travar a escolha no que já existe |
 
 Validado ao vivo e funcionando: negação (4.1), encerramento (4.5), troca curta
 (4.3), tentativa do chat nas estatísticas (2.1 — Panorama "0 de 1", 1 revisão,
