@@ -17,6 +17,11 @@ não é perda, é decisão.
   (pg_dump, fora do git).
 - `avaliar_retrieval.py` depois do reset: 23/34 top-1, 32/34 top-6 (baseline).
 
+**`./setup.sh` não importa mais o estado remoto** (desde 22/09/2026): ele só sobe
+o serviço. Importar o de outra máquina é opção explícita:
+`TUTOR_TRAZER_ESTADO=1 ./setup.sh --subir`. Antes disso, dois `./setup.sh`
+seguidos restauraram o banco antigo por cima do reset.
+
 **Risco para quem trabalha em paralelo neste banco:** `git pull` dispara o hook
 `post-merge`, que IMPORTA o estado do ref remoto `estado` — ou seja, traria de
 volta o banco de antes do reset. `sincronizar.sh` sem argumento faz o mesmo.

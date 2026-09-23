@@ -42,6 +42,19 @@ PID_WEB="$LOGS/web.pid"
 
 vivo() { [ -f "$1" ] && kill -0 "$(cat "$1")" 2>/dev/null; }
 
+# Importar o estado de outra máquina (contas, mesas, editais, questões,
+# conversas) SOBRESCREVE o banco local com o que estiver no ref `estado`. Por
+# isso é opção explícita, nunca efeito colateral de subir o serviço.
+trazer_estado_se_pedido() {
+  if [ "${TUTOR_TRAZER_ESTADO:-}" = "1" ]; then
+    . "$RAIZ/.githooks/_comum.sh"
+    estado_receber origin
+  else
+    echo "  estado remoto NÃO importado (o banco local fica como está)."
+    echo "  pra trazer o de outra máquina: TUTOR_TRAZER_ESTADO=1 ./setup.sh --subir"
+  fi
+}
+
 parar() {
   for par in "API:$PID_API" "frontend:$PID_WEB"; do
     nome=${par%%:*}; arq=${par#*:}
@@ -94,11 +107,12 @@ if [ "$MODO" = "--subir" ]; then
     exit 1
   fi
   cd "$RAIZ"
-  # Rede de segurança: se o pull veio de uma máquina sem os hooks instalados,
-  # o estado ainda não entrou. Importar duas vezes é inofensivo (união
-  # idempotente), então vale sempre conferir.
-  . "$RAIZ/.githooks/_comum.sh"
-  estado_receber origin
+  # O --subir SÓ SOBE O SERVIÇO. Importar o estado remoto aqui foi removido em
+  # 22/09/2026, a pedido do dono: o banco tinha sido zerado de propósito, e cada
+  # `./setup.sh --subir` trazia de volta o estado antigo do ref `estado` por
+  # cima do reset — duas vezes em cinco minutos. Trazer o estado de outra
+  # máquina continua possível, mas pedindo: TUTOR_TRAZER_ESTADO=1.
+  trazer_estado_se_pedido
 else
 
 # ------------------------------------------------------- 2/7 venv + requisitos
@@ -154,8 +168,7 @@ echo "== 6/7 estado (contas, mesas, editais, questões, progresso, conversas) ==
 # O estado NÃO está no branch de código — vem do ref `estado`, que o hook de
 # pre-push mantém. Aqui é o caso da máquina nova, que ainda não tem o ref.
 cd "$RAIZ"
-. "$RAIZ/.githooks/_comum.sh"
-estado_receber origin
+trazer_estado_se_pedido
 cd apps/api
 
 # ---------------------------------------------------------------- 7/7 frontend
