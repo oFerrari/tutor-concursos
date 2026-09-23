@@ -553,6 +553,9 @@ export type Fonte = {
   norma?: string;
   artigo?: string;
   rubrica?: string;
+  /** Calculado pelo servidor ANTES de limpar a citação da prosa. Não tentar
+   *  reconstruir pelo número do artigo: CP 312 e CPP 312 colidem. */
+  citada?: boolean;
 };
 
 /** Um turno do chat. Sem `conversaId`, o servidor abre uma conversa e

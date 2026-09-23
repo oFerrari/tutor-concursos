@@ -20,7 +20,7 @@ diário de linhas que enganam a leitura do dia seguinte.
 """
 from . import db
 
-VERSAO = "diario-v1"
+VERSAO = "diario-v2"
 
 MAX_ASSUNTO = 120       # casa com o CHECK da 031
 DIAS_PADRAO = 7         # janela do bloco que vai ao prompt
@@ -126,15 +126,27 @@ def resumo_para_prompt(usuario_id: int, dias: int = DIAS_PADRAO,
     ontem?", e obrigar o modelo a subtrair datas é criar uma chance de errar
     onde não precisa haver nenhuma.
     """
-    linhas = []
-    for r in recentes(usuario_id, dias, disciplinas):
-        parte = f"- {_quando(r['dias_atras'])}: {r['assunto']}"
+    registros = recentes(usuario_id, dias, disciplinas)
+    if not registros:
+        return None
+
+    # MATÉRIA E ASSUNTO NÃO SÃO SINÔNIMOS. O formato antigo era
+    # "Peculato (Direito Penal)"; perguntado "quais matérias eu já estudei?",
+    # o modelo listou Peculato, Detração e Processo Legislativo como matérias.
+    # Entregar a hierarquia já nomeada evita pedir ao modelo que deduza uma
+    # estrutura que o banco conhece em cada linha.
+    materias = list(dict.fromkeys(
+        r["disciplina"] for r in registros if r.get("disciplina")))
+    linhas = (["Matérias com teoria conversada nesta janela: " +
+               (", ".join(materias) if materias else "nenhuma identificada")])
+    for r in registros:
+        parte = f"- ASSUNTO: {r['assunto']}"
         if r["disciplina"]:
-            parte += f" ({r['disciplina']})"
-        parte += f", {r['turnos']} turno(s) de conversa"
+            parte += f"; MATÉRIA: {r['disciplina']}"
+        parte += f"; QUANDO: {_quando(r['dias_atras'])}; {r['turnos']} turno(s) de conversa"
         if r["questoes_no_dia"] == 0:
             parte += " — NENHUMA questão respondida nesse dia"
         elif r["questoes_no_dia"]:
             parte += f" e {r['questoes_no_dia']} questão(ões) respondida(s)"
         linhas.append(parte)
-    return "\n".join(linhas) or None
+    return "\n".join(linhas)

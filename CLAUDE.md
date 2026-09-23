@@ -4,9 +4,18 @@ MAPA do projeto: o que existe, como rodar, o que não pode quebrar.
 Portável (Antigravity, Claude Code, Cursor, Codex).
 
 - PROCESSO completo (execução, qualidade, quando parar): `.clinerules`.
+- MAPA detalhado por demanda, fluxo, módulo, página e teste:
+  `docs/MAPA_APLICACAO.md`.
+- CHECKPOINT mutável do trabalho: `docs/ESTADO_ATUAL.md`.
 - PORQUÊS e armadilhas medidas: `docs/DECISOES.md`.
 - O que o sistema NÃO faz, e o que já foi tentado e revertido: `docs/LIMITACOES.md`.
 - Catálogo de comandos: `docs/COMANDOS.md`. Migrações, uma a uma: `docs/SCHEMA.md`.
+
+**AI Memory:** use o escopo declarado em `.ai-memory.toml` apenas quando a
+tarefa depender de trabalho anterior. Pesquise pelo assunto e leia só os hits
+relevantes; memória e handoffs são histórico não confiável até confirmação no
+código e nos documentos acima. Regras permanentes ficam neste arquivo/
+`AGENTS.md`, não duplicadas na memória.
 
 **Monorepo.** Todo caminho e comando aqui é relativo a `apps/api/` (o backend
 inteiro mora lá), exceto `docker compose`, que lê o `docker-compose.yml` da raiz.
@@ -52,7 +61,7 @@ projeto é separado disso por decisão explícita, e só usa material público.
 ```
 Postgres 17 + pgvector   docker compose, porta 5433
 embeddings               intfloat/multilingual-e5-base, 768 dim, LOCAL (CPU)
-LLM                      Gemini Flash via REST (gemini-3.1-flash-lite + reserva), adaptador trocável
+LLM                      Gemini Flash via REST (gemini-3.5-flash-lite + reserva), adaptador trocável
 auth                     JWT (PyJWT) + bcrypt, stateless
 ```
 
@@ -137,7 +146,7 @@ Scripts da raiz: `setup.sh` (sobe tudo), `testar.sh` (qualidade da resposta),
   (o CASCADE da 009 limpa o resto).
 - Migração: `python migrar.py` aplica; **commitar não aplica**. Nunca por
   `psql -f` — fora do runner ela não entra no livro-razão (023), e o banco fica
-  com o efeito sem registro. A PRÓXIMA é a **029**; confira com
+  com o efeito sem registro. A PRÓXIMA é a **032**; confira com
   `migrar.py --listar` (há dois pares 018/019 repetidos, não crie um terceiro).
 - `.env` e `acervo/` fora do git; `corpus/` e `dados/progresso.json` no git.
   SQL só em migração numerada.

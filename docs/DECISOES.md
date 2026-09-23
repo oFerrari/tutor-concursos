@@ -1151,11 +1151,17 @@ INDEXADO, nunca no que é EXIBIDO — há teste travando isso.
 **E corrigir o rótulo REINDEXA, em background.** Sem isso a correção ficaria pela
 metade: a lista dizendo "Ciências Forenses" e a busca respondendo pelo rótulo
 velho, que é pior que não ter corrigido porque parece ter funcionado. Isto só é
-possível por causa da 024 — antes dela os bytes não existiam e reindexar exigia
-o upload de novo, que era exatamente o atrito que fazia a correção não valer
-nada. Material anterior à 024 não reindexa (`reindexar: false` na resposta) e
-fica com o vetor antigo: a lista continua certa, a busca é que não melhora, e
-isso é melhor que apagar os trechos que existem.
+possível por causa da 024 para reindexação completa. Desde 21/09/2026, material
+anterior à 024 também aceita correção integral de rótulo sem fingir que o PDF
+existe: o texto de cada chunk já está preservado, então `reindexar_rotulo`
+recalcula embedding e `chunk.rotulo` em transação, mantendo os mesmos ids e
+`fonte_chunks`. O original continua indisponível para download e para um novo
+chunking, mas disciplina e assunto passam a valer na busca.
+
+Aplicado ao corpus real em 21/09/2026: o doc 342 fechou 268/268 e os docs 343,
+345, 346, 347 e 348 fecharam mais 1.177/1.177. Depois disso, aula/resumo do
+usuário 1914 ficou com zero chunk sem rótulo e `questao.fonte_chunks` com zero
+referência órfã. A avaliação continuou em 23/34 top-1 e 32/34 top-6.
 
 Chunk de LEI não mudou: `rotulo` é NULL, o `coalesce` devolve vazio e o tsvector
 sai idêntico. Verificado com `avaliar_retrieval.py` antes e depois — top1 21/32,
@@ -3029,3 +3035,77 @@ arquivo já mandava.
 **"citar" ficou de fora da lista de propósito:** citação é ato processual no CPP,
 e cegar a busca para ela custa mais que a diluição que ela causa. A assimetria é
 a mesma de sempre — palavra a mais dilui, palavra de domínio a menos cega.
+
+## Quatro melhorias reais do tutor — fila 20, 58, 65 e 108
+
+Tratadas juntas em 21/09/2026 porque as quatro expunham o mesmo limite: regras
+genéricas do prompt perdiam para sinais mais próximos da fala ou para dados sem
+hierarquia explícita.
+
+- **#108 — matéria não é assunto.** O diário deixou de entregar
+  `Peculato (Direito Penal)` como texto ambíguo e agora agrega as matérias e
+  rotula cada linha como `ASSUNTO` e `MATÉRIA`. O tutor respondeu com Direito
+  Constitucional, Direito Penal e Direito Administrativo como matérias e
+  manteve Processo Legislativo, Peculato etc. como conteúdos vistos.
+- **#65 — planejamento não empurra aula.** “Como vamos estudar por dia?” virou
+  pedido explícito de planejamento. A resposta medida ficou no plano e terminou
+  oferecendo a distribuição dos dias, sem retomar a pergunta de conteúdo nem
+  escolher uma matéria para o aluno.
+- **#58 — humor precisa de sinal local.** Duas versões só no prompt falharam e
+  voltaram a saudar por causa da palavra “tarde”. O `kkk`/`rs` da fala atual
+  agora gera uma instrução condicional junto da própria pergunta. Na medição
+  final, o tutor entrou na brincadeira com “o prejuízo é só no relógio”, sem
+  nova saudação, e retomou uma única ideia.
+- **#20 — salto dentro do mesmo item também é posição.** Papiloscopia pertence
+  ao próprio item 2.1 de Medicina Legal no edital atual; o tutor medido disse
+  “Continuamos no 2.1, em Medicina Legal” antes de explicar, sem inventar uma
+  subdivisão.
+
+Validação direcionada após a última alteração: **72 testes passaram**. As quatro
+saídas também foram verificadas com o provedor real; não bastou inspecionar o
+texto do prompt.
+
+## Auditoria no Chrome: assunto atual, intenção de mapa e vitrine falsa
+
+Em 22/09/2026, o defeito relatado foi reproduzido na conversa 1337. A fala
+“certo eu quero questões de ciencias forense quais são os assuntos?” vinha após
+Direito Constitucional. `pedido.treino()` reconhecia o pedido, mas
+`assunto.em_foco()` excluía a fala atual pela hipótese antiga de que pedido de
+treino nunca nomeava assunto. O gerador herdava Constitucional e entregava
+Mutação Constitucional e Controle Interno.
+
+A correção separou três intenções que antes estavam misturadas:
+
+- treino explícito com disciplina/tema atual usa a fala atual como foco;
+- treino elíptico (“manda cinco”) continua herdando o foco da conversa;
+- pergunta de escolha (“quais são os assuntos/temas/tópicos?”) é mapa e não
+  gera questões até o aluno escolher.
+
+O fallback de geração também foi recortado pela disciplina explicitamente
+nomeada. A primeira repetição real passou a gerar somente Ciências Forenses,
+mas revelou o segundo defeito: o aluno ainda estava pedindo o mapa, não a
+geração. Depois da separação de intenção, a mesma fala não criou questão e o
+tutor apresentou o item de Medicina Legal para escolha.
+
+O uso visível mostrou ainda dois defeitos independentes:
+
+1. questões geradas ficavam no estado React ao trocar de conversa; o estado é
+   zerado imediatamente em “abrir” e “nova conversa”;
+2. `/tutor` sempre desenhava uma conversa completa de demonstração — números,
+   pergunta de peculato, questão e flashcard — antes das mensagens reais. Esse
+   conteúdo de Penal podia parecer exatamente uma geração indevida anterior à
+   escolha do assunto. A vitrine foi removida da rota real e os exports sem
+   consumidor também saíram de `mock/prototipo.ts`.
+
+Na mesma rodada, a tela deixou de decidir “citado” procurando apenas o número do
+artigo na prosa. O caso real do art. 312 marcava simultaneamente CP e CPP. Agora
+o backend persiste `citada` e a tela respeita esse dado inclusive ao reabrir a
+conversa. Um teste com CP 312 citado e CPP 312 apenas consultado trava o
+contrato. A atribuição positiva completa continua limitada pelo contrato do
+modelo e está descrita em `LIMITACOES.md`.
+
+Evidência final: **132 testes direcionados**, ESLint direcionado e
+`git diff --check` aprovados; testes reais no Chrome para Ciências Forenses,
+papiloscopia, meta-pergunta, retomada de Penal, troca curta de disciplina e
+colisão CP/CPP. Não foi rodada a suíte completa nem declarada bateria 1 inteira
+como concluída.

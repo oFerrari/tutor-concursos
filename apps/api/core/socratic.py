@@ -18,7 +18,33 @@ from datetime import datetime
 from . import assunto, diario, llm, mesa as mesa_mod, pedido as pedido_mod, retrieval
 from .retrieval import referencia
 
-VERSAO = "socratic-v69"
+VERSAO = "socratic-v72"
+
+ESQUEMA_RESPOSTA_TUTOR = {
+    "type": "OBJECT",
+    "properties": {
+        "resposta": {"type": "STRING"},
+        "fontes_usadas": {"type": "ARRAY", "items": {"type": "INTEGER"}},
+    },
+    "required": ["resposta", "fontes_usadas"],
+}
+
+
+def _resposta_com_fontes(dados: object, chunks: list[dict]) -> tuple[str, set[int]]:
+    """IDs declarados pelo modelo só valem dentro do contexto desta chamada.
+
+    Isso identifica atribuição, não prova que a afirmação é sustentada pelo
+    trecho. IDs alheios e tipos inválidos nunca ganham selo de fonte usada.
+    """
+    if (not isinstance(dados, dict)
+            or not isinstance(dados.get("resposta"), str)
+            or not dados["resposta"].strip()
+            or not isinstance(dados.get("fontes_usadas"), list)):
+        raise llm.ErroLLM("resposta do tutor fora do formato esperado")
+    permitidos = {c["id"] for c in chunks}
+    usados = {i for i in dados["fontes_usadas"]
+              if type(i) is int and i in permitidos}
+    return dados["resposta"], usados
 
 # ------------------------------------------------------------------ schemas
 # Subconjunto OpenAPI aceito pelo Gemini. propertyOrdering importa: o modelo
@@ -467,6 +493,27 @@ def _agora_por_extenso(quando: datetime | None = None, com_saudacao: bool = True
     return linha + (f" A saudação correta agora é \"{saudacao}\"." if com_saudacao else "")
 
 
+RE_HUMOR_NA_FALA = re.compile(
+    r"(?i)(?:\b(?:kkk+|rsrs+|haha+|hehe+)\b|senso\s+de\s+humor|mais\s+humor)"
+)
+
+
+def _tom_da_fala(fala: str | None) -> str | None:
+    """Sinaliza humor só no turno em que ele existe.
+
+    A ordem geral no system prompt perdeu duas medições seguidas para a palavra
+    "tarde" da própria fala: o modelo saudou de novo e ignorou o `kkk`. Um dado
+    local, imediatamente antes da pergunta, é mais forte e não contamina os
+    demais turnos com obrigação de fazer piada.
+    """
+    if not fala or not RE_HUMOR_NA_FALA.search(fala):
+        return None
+    return ("O aluno está brincando NESTA fala. A primeira frase precisa entrar "
+            "na brincadeira de forma leve e ligada ao que ele disse. Não dê "
+            "saudação por ele ter mencionado manhã, tarde ou noite; depois siga "
+            "com no máximo uma ideia da matéria.")
+
+
 def _resumo_mesa(mesa_: dict | None) -> str | None:
     """
     Quem é o aluno NESTA sessão: o concurso, a banca, e as matérias que o
@@ -770,13 +817,13 @@ SISTEMA_TUTOR = """Você é professor de concursos conversando com um aluno espe
 
 Na dúvida entre dois tipos, vale o de número menor.
 
-1. SOCIAL — saudação, piada, desabafo, "tudo bem?". No máximo 2 linhas, no mesmo registro em que veio, sem emendar matéria nova.
+1. SOCIAL/HUMOR — saudação, piada, desabafo, "tudo bem?", fala com "kkk" ou "rs". Mesmo quando também responde à pergunta anterior, abra com UMA frase leve e concreta sobre a brincadeira; a segunda linha pode retomar uma única ideia da matéria. Mencionar manhã/tarde/noite não é cumprimentar: não dê nova saudação se ele não cumprimentou nesta fala.
 2. PEDIDO DE TREINO — "me dá questões", "quero treinar". Uma ou duas linhas. Não fecha com pergunta.
-3. PEDIDO DE MAPA — "o que mais cai", "o que estudar primeiro". Lista curta, um item por linha, e ofereça aprofundar UM deles.
+3. PEDIDO DE MAPA OU PLANEJAMENTO — "o que mais cai", "o que estudar primeiro", "como vamos estudar por dia", "quero questões; quais são os assuntos?". Dê lista ou plano curto. Quando ele pedir os assuntos antes de escolher as questões, liste os assuntos e espere a escolha: não diga que há questões abaixo nem comece o treino. Fique no planejamento até o fim: não retome nem teste o conteúdo que estava sendo tratado antes. Se ele perguntou COMO será o plano, termine depois de responder; não pergunte qual matéria quer começar nem o empurre para estudar uma agora.
 4. PEDIDO DE EXPOSIÇÃO — "quero ler", "me explica", "não quero pergunta agora". Até 2 parágrafos, sem pergunta de diagnóstico, fechando com oferta de continuar ("sigo para X?").
 5. ABERTURA DE DISCIPLINA — ele nomeia a matéria inteira. Um parágrafo de conceito e um de distinção. Fecha com pergunta.
 6. CONTINUIDADE — resposta curta ("sei", "blz", "e daí?"), dúvida no ponto atual. TRÊS a QUATRO LINHAS: uma ideia, um exemplo curto, uma pergunta.
-7. SOBRE ELE MESMO — "como estou indo", "o que já estudei". De 3 a 6 linhas, só com os números que você recebeu.
+7. SOBRE ELE MESMO — "como estou indo", "o que já estudei". De 3 a 6 linhas, só com os números que você recebeu. Se ele pedir MATÉRIAS, responda com DISCIPLINAS; assunto e tópico não são matéria.
 
 O gatilho é a FUNÇÃO da fala, nunca o número de palavras dela: "vamos de ciências forenses" tem quatro palavras e é do tipo 5, não do 6.
 
@@ -830,6 +877,8 @@ Não mudou a posição: não diga em que item está. Repetir a posição a cada 
 
 Mudou a posição — entrou na matéria, avançou de item, ou a pergunta dele pulou para outro ponto: diga em meia linha antes de ensinar. "isso já é o 8.2.2, papiloscopia; indo pra lá".
 
+Se a pergunta pular para outro ASSUNTO dentro do mesmo item longo, localize mesmo assim, sem fingir troca de item: "continuamos no 2.1; agora, papiloscopia". O aluno quer saber onde a pergunta caiu no edital antes de receber a explicação.
+
 COPIE o número do item exatamente como está escrito no programa, ou não diga número nenhum e cite o item pelo NOME. Nunca componha uma numeração sua: se o programa diz "2.1. Medicina Legal", é 2.1, e não 8.1.1.
 
 COPIE nome de disciplina e de item letra por letra. Não traduza, não abrevie, não melhore a redação deles.
@@ -876,6 +925,8 @@ Nunca diga "não guardo sessões passadas", "não tenho memória" ou "não acess
 
 O BLOCO DE TEORIA É A AULA DE ONTEM. Ele lista o que vocês conversaram nos dias anteriores, com quantos turnos e quantas questões ele respondeu naquela matéria naquele dia. Perguntado o que estudaram, responda com ele — "ontem ficamos três turnos em peculato" — e use o desequilíbrio quando ele existir: assunto com muitos turnos e NENHUMA questão respondida é convite a testar hoje, dito UMA vez e em meia linha, como professor que lembra da aula, nunca como cobrança nem como relatório. Bloco ausente é conversa nova: não invente aula que não está aí, e não diga que não guarda nada.
 
+MATÉRIA/DISCIPLINA é a categoria do edital; ASSUNTO/TÓPICO é o conteúdo dentro dela. Perguntado "quais matérias eu já estudei?", use somente a linha "Matérias com teoria conversada" e os nomes depois de "MATÉRIA". Nunca liste Peculato, Detração, Processo Legislativo ou outro ASSUNTO como matéria. Perguntado pelos assuntos, aí sim use as linhas "ASSUNTO". Para dizer quais matérias faltam, compare as matérias estudadas com as disciplinas do edital.
+
 Linhas marcadas como fato da sessão são o que o aluno FEZ — respondeu, acertou, errou. Não são fala sua nem dele. Use-as: errar a questão que você acabou de propor vale mais que qualquer coisa que ele diga sobre ter entendido, e a próxima resposta parte DAÍ, sem repetir a explicação que já não funcionou.
 
 Havendo conversa anterior, CONTINUE dela: resposta curta ("qualquer um", "esse mesmo", "sim") responde à SUA última pergunta. Siga daí, em vez de pedir que ele reformule, e não repita explicação já dada.
@@ -890,7 +941,7 @@ Você também nunca fala das suas próprias limitações como se fossem norma: "
 
 Nunca descreva o estado do sistema: nada de "ainda está carregando", "a busca não trouxe", "o material recuperado traz só a apresentação", "no momento não disponho". O aluno não tem como agir sobre isso, e prometer que o texto vem depois é promessa que ninguém cumpre. Dizer em UMA linha que aquele ponto não está no material dele, e ensinar assim mesmo dentro do que a seção 4 permite, é outra coisa — isso é esperado.
 
-Acompanhe o humor dele quando brincar: uma frase, no tom dele, e volte à matéria. Brincadeira forçada cansa tanto quanto a secura.
+Acompanhe o humor dele quando brincar: uma frase realmente bem-humorada, no tom dele, e volte à matéria. "kkk", "rs" ou uma piada dele pedem uma resposta leve de verdade, ligada ao que ele disse — não apenas "é verdade" ou outra confirmação neutra. Se ele pedir mais senso de humor, atenda nesta fala. Brincadeira forçada cansa tanto quanto a secura.
 
 ## 12. Os números dele e o perfil
 
@@ -976,11 +1027,14 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     # contexto são um convite pro modelo discorrer sobre eles.
     chunks = (retrieval.buscar(consulta, n=6, usuario_id=usuario_id, mesa_id=mesa_id)
               if consulta else [])
-    contexto_material = retrieval.formatar_contexto(chunks) if chunks else None
+    contexto_material = ("\n\n".join(
+        f"ID da fonte: {c['id']}\n{retrieval.formatar_contexto([c])}"
+        for c in chunks) if chunks else None)
     contexto_desempenho = _resumo_desempenho(usuario_id, disciplinas) if usuario_id else None
     contexto_mesa = _resumo_mesa(mesa_)
     contexto_programa = _programa_em_foco(mesa_, pergunta, historico)
     contexto_perfil = _resumo_perfil(perfil)
+    contexto_tom = _tom_da_fala(pergunta)
     # A OUTRA METADE DA MEMÓRIA (031). Os números acima dizem o que ele
     # RESPONDEU; isto diz o que vocês CONVERSARAM nos dias anteriores, que é
     # exatamente o que faltava pra Seção 10 do prompt ("você não é uma sessão em
@@ -1043,6 +1097,11 @@ def explicar(pergunta: str, usuario_id: int | None = None,
                       f"{contexto_teoria}")
     if contexto_desempenho:
         partes.append(f"### Números deste aluno no banco\n{contexto_desempenho}")
+    if contexto_tom:
+        # CONDICIONAL e junto da fala atual. Colar a mesma ordem no bloco do
+        # relógio fez o tutor cumprimentar em todos os turnos; aqui ela só
+        # existe quando a mensagem atual realmente traz humor.
+        partes.append(f"### Tom desta fala\n{contexto_tom}")
     if historico:
         # A CONVERSA ATÉ AQUI, e não só a pergunta solta. Sem isso o aluno
         # que responde "qualquer um" a uma pergunta do tutor recebe de volta
@@ -1065,7 +1124,22 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     partes.append(f"### Pergunta do aluno\n{pergunta}")
 
     sistema = SISTEMA_TUTOR
-    resposta = llm.obter().gerar("\n\n".join(partes), sistema, max_tokens=1500)
+    usadas: set[int] = set()
+    if chunks:
+        sistema += (
+            "\n\nFormato de saída: JSON com resposta (o texto para o aluno) e "
+            "fontes_usadas (IDs inteiros dos trechos efetivamente usados para "
+            "sustentar essa resposta). Copie somente IDs da fonte apresentados "
+            "nos trechos desta chamada. Não inclua trecho apenas por ter sido "
+            "recuperado, nem fonte citada só no histórico. Se nenhum sustenta "
+            "a resposta, use lista vazia. IDs e metadados ficam fora da prosa."
+        )
+        dados = llm.obter().gerar_json(
+            "\n\n".join(partes), sistema, max_tokens=1500,
+            schema=ESQUEMA_RESPOSTA_TUTOR, tentativas=1)
+        resposta, usadas = _resposta_com_fontes(dados, chunks)
+    else:
+        resposta = llm.obter().gerar("\n\n".join(partes), sistema, max_tokens=1500)
 
     # O DIÁRIO SÓ REGISTRA AULA QUE ACONTECEU: depois da geração, porque LLM
     # indisponível não é estudo, e o `raise` de `gerar` já saiu daqui. Turno sem
@@ -1087,33 +1161,16 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         # e reescrever prosa de modelo é o que `_costurar` aprendeu a não fazer.
         resposta = ("Vamos treinar isso — as questões estão logo abaixo, "
                     "com o artigo conferido.")
-    # UMA PASSADA SÓ. A primeira versão chamava `limpar_citacoes` (que APAGA as
-    # inválidas) e depois procurava as que sobraram pra marcar — duas remoções
-    # em cima do mesmo texto, e o resultado foi frase pendurada ("Já a lesão
-    # corporal está no.") porque cada uma cortava um pedaço.
-    #
-    # Agora `_refs_citadas` decide sobre o texto CRU usando `com_fonte`, que é a
-    # mesma pergunta que `limpar_citacoes` faria; e a remoção acontece uma vez,
-    # de TODAS as citações — as válidas porque o dono não as quer na prosa, as
-    # inválidas porque nunca deviam estar lá.
-    citadas = _refs_citadas(resposta, chunks)
+    # A atribuição vem dos IDs estruturados, não do número do artigo na prosa.
+    # Se a limpeza retirou questões, não atribua fontes a conteúdo removido.
+    if questoes_tiradas:
+        usadas.clear()
 
-    # A CITAÇÃO SAI DA PROSA E VIRA DADO. Pedido do dono: "você já cita as
-    # referências lá embaixo, não tem necessidade de citá-las novamente no meio
-    # da explicação". Estava certo — a lista de fontes embaixo da resposta já
-    # diz de onde veio, e no meio do texto a citação interrompe a leitura.
-    #
-    # Mas a tela distinguia CITADO de CONSULTADO justamente procurando a
-    # citação DENTRO do texto (`resposta.includes(marca(f))`), e essa distinção
-    # é útil: dizer "consultei seis trechos e usei dois" é diferente de listar
-    # seis como se todos tivessem sido usados. Então quem sabia disso passa a
-    # INFORMAR em vez de deixar a marca no texto — o servidor já parseia as
-    # citações aqui, é o lugar natural.
-    # `limpar_citacoes` NORMAL: só o que não tem trecho por trás. A remoção
-    # total foi tentada e revertida — ver o comentário do prompt acima.
+    # Mantém a proteção contra referências inline inválidas que o modelo
+    # eventualmente escrever, sem usá-las para atribuir fontes.
     resposta = limpar_citacoes(resposta, chunks)
 
-    fontes = [{**c, "citada": referencia(c) in citadas} for c in chunks]
+    fontes = [{**c, "citada": c["id"] in usadas} for c in chunks]
     return {"resposta": resposta, "fontes": fontes,
             "questoes_do_modelo_tiradas": questoes_tiradas}
 

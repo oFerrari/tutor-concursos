@@ -1,5 +1,3 @@
-import pytest
-
 from core import assunto
 
 HISTORICO = [
@@ -25,37 +23,18 @@ def test_causa_turno_anterior_do_tutor_termina_em_pergunta():
     assert "?" in HISTORICO[-1]["texto"]
 
 
-# --- alvo: comportamento desejado. Deve FALHAR hoje. ---
-
-
-@pytest.mark.xfail(strict=True, reason=
-    "DEFEITO CONHECIDO, medido e não corrigido. Troca curta de "
-    "disciplina sem verbo de pedido ('e no processo penal?') cai no "
-    "caminho do ECO e a consulta vira a fala do tutor sobre a "
-    "disciplina ANTERIOR. Corrigir exige mexer em pede_assunto, e_eco, "
-    "_com_assunto e disciplina_citada ao mesmo tempo — tentado em "
-    "2026-09-19 e revertido: o novo filtro de em_foco derruba "
-    "test_citacao_sozinha_conta_como_assunto, e disciplina_citada não "
-    "casa 'processo penal' contra 'Direito Processual Penal'. "
-    "Ver docs/LIMITACOES.md.")
 def test_troca_curta_de_disciplina_retoma_a_iniciativa():
-    assert assunto.e_eco(TROCA, HISTORICO) is False
+    assert assunto.e_eco(TROCA, HISTORICO, DISCIPLINAS) is False
 
 
-@pytest.mark.xfail(strict=True, reason=
-    "DEFEITO CONHECIDO, medido e não corrigido. Troca curta de "
-    "disciplina sem verbo de pedido ('e no processo penal?') cai no "
-    "caminho do ECO e a consulta vira a fala do tutor sobre a "
-    "disciplina ANTERIOR. Corrigir exige mexer em pede_assunto, e_eco, "
-    "_com_assunto e disciplina_citada ao mesmo tempo — tentado em "
-    "2026-09-19 e revertido: o novo filtro de em_foco derruba "
-    "test_citacao_sozinha_conta_como_assunto, e disciplina_citada não "
-    "casa 'processo penal' contra 'Direito Processual Penal'. "
-    "Ver docs/LIMITACOES.md.")
 def test_consulta_segue_a_disciplina_que_o_aluno_pediu():
     tema = (assunto.em_foco(HISTORICO, pergunta=TROCA,
                             disciplinas=DISCIPLINAS) or "").lower()
-    assert "processo penal" in tema, f"consulta saiu: {tema!r}"
+    assert tema == TROCA, f"consulta saiu: {tema!r}"
+
+
+def test_processo_penal_casa_direito_processual_penal():
+    assert assunto.disciplina_citada(TROCA, DISCIPLINAS) == "Direito Processual Penal"
 
 
 def test_disciplina_como_resposta_nao_vira_consulta():

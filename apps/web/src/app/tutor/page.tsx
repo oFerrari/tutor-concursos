@@ -7,7 +7,6 @@ import { ArrowUp, Check, ClipboardList, Pencil, Square } from "lucide-react";
 import { MarcaGlifo } from "@/components/Marca";
 import { BalaoQuestao } from "@/components/BalaoQuestao";
 import { GerarQuestoes } from "@/components/GerarQuestoes";
-import { ResultadoQuestao } from "@/components/DialogoQuestao";
 import { TextoDoTutor } from "@/components/TextoDoTutor";
 import {
   COMANDOS,
@@ -17,42 +16,24 @@ import {
   ErroApi,
   Fonte,
   getConversa,
-  getFila,
   getToken,
   perguntar,
   Questao,
 } from "@/lib/api";
 import { sair } from "@/lib/cache";
-import { ABERTURA_TUTOR, FLASHCARD_EXEMPLO, ROTA_DO_DIA } from "@/mock/prototipo";
 
 /**
- * O Tutor — tela principal do protótipo: conversa, e dentro da conversa a
- * questão socrática e o flashcard.
+ * O Tutor — conversa real com o professor e questões pedidas durante ela.
  *
- * O que é REAL aqui: o campo de baixo (chat livre, `POST /perguntar` — ver
+ * O campo de baixo usa o chat livre (`POST /perguntar` — ver
  * distinção citado × consultado, absorvida de `/perguntar`, que era rota
  * paralela órfã do menu e foi removida depois de portar o que tinha de
- * único pra cá) E a questão embutida na conversa, que puxa a PRÓXIMA da
- * fila de verdade (`GET /fila`) e roda por `<BalaoQuestao>` — dispatcher
- * dinâmico por tipo (`components/BalaoQuestao.tsx`) que hoje só sabe
- * renderizar "resposta_livre" com dado de verdade, porque é o único tipo
- * que `questao.gabarito` (texto aberto) suporta; os outros dois tipos
- * (múltipla escolha, certo/errado) existem na arquitetura mas avisam que
- * ainda não têm base real, em vez de fingir. TODA a lógica de avaliação,
- * dica e gravação de tentativa é a mesma de `/questao/[id]` e `/desafio`
- * (`<DialogoQuestao>`) — nada foi reescrito, só reembalado pro formato de
- * balão de chat.
- *
- * O que continua vitrine: a abertura, a rota do dia e o flashcard, de
- * `mock/prototipo.ts` — nenhum dos dois foi tocado nesta revisão.
- *
- * Os botões "Errei · 1d / Difícil · 3d / Bom · 9d / Fácil · 21d" do
- * flashcard também são vitrine, e de um jeito que MERECE nota: o
- * agendamento real não é SM-2 com nota do usuário, é caixa de Leitner
- * decidida por `core/scheduler_regras.py` a partir do veredito e da
- * penalidade — quem escolhe o intervalo é a regra, não a pessoa. Ligar
- * esses botões seria trocar a regra de agendamento do produto, não
- * conectar um clique.
+ * único pra cá). Questões aparecem apenas quando o aluno as pede nesta
+ * conversa e usam `<BalaoQuestao>`, com a mesma avaliação, dicas e gravação
+ * de tentativa das demais telas. A antiga abertura de demonstração foi
+ * removida: misturar conversa, números, questão e flashcard fictícios com a
+ * sessão real fazia conteúdo de Penal parecer resposta do tutor antes de o
+ * aluno escolher qualquer assunto.
  */
 type Mensagem =
   | { autor: "usuario"; texto: string }
@@ -67,22 +48,8 @@ function referencia(f: Fonte): string {
   return f.artigo ? `${f.titulo}, art. ${f.artigo}` : f.titulo;
 }
 
-function marca(f: Fonte): string {
-  return f.artigo ? `art. ${f.artigo}` : f.titulo;
-}
-
 export default function PaginaTutor() {
   const router = useRouter();
-  const [virado, setVirado] = useState(false);
-
-  // Questão embutida no chat: puxa a próxima da fila de verdade (mesma
-  // fonte de /fila) uma vez, no mount. `resultado` fica null enquanto o
-  // <BalaoQuestao> está interativo; vira objeto quando o aluno fecha a
-  // questão, e o balão congela numa mensagem de resultado (não some, viraria
-  // "onde foi minha resposta?" no meio da conversa).
-  const [questao, setQuestao] = useState<Questao | null | undefined>(undefined); // undefined = carregando
-  const [resultado, setResultado] = useState<ResultadoQuestao | null>(null);
-  const [erroQuestao, setErroQuestao] = useState<string | null>(null);
 
   const [pergunta, setPergunta] = useState("");
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
@@ -189,19 +156,7 @@ export default function PaginaTutor() {
   useEffect(() => {
     if (!getToken()) {
       router.push("/login");
-      return;
     }
-    getFila()
-      .then((fila) => setQuestao(fila[0] ?? null))
-      .catch((e) => {
-        if (e instanceof ErroApi && e.status === 401) {
-          sair();
-          router.push("/login");
-          return;
-        }
-        setErroQuestao(e instanceof ErroApi ? e.message : "Não deu pra buscar a fila");
-        setQuestao(null);
-      });
   }, [router]);
 
   /** PARA a resposta em voo e desfaz o turno no servidor.
@@ -360,7 +315,10 @@ export default function PaginaTutor() {
       const citadas = new Set<string>();
       const consultadas = new Set<string>();
       for (const f of r.fontes) {
-        (r.resposta.includes(marca(f)) ? citadas : consultadas).add(referencia(f));
+        // O servidor leu as citações ANTES de limpar os colchetes da prosa e
+        // devolve a decisão por fonte. Recalcular por `art. N` na tela marcava
+        // CP 312 E CPP 312 como citados quando a resposta usava só um deles.
+        (f.citada === true ? citadas : consultadas).add(referencia(f));
       }
       // FEEDBACK: cartão do sistema, e o turno acaba aqui. Não há fontes pra
       // separar em citadas/consultadas, não há questão pra gerar, e a conversa
@@ -419,6 +377,13 @@ export default function PaginaTutor() {
   // gatilhos: o `?c=` de quem chega de outra tela, e o evento de quem clica no
   // recente já estando aqui.
   const abrirConversa = useCallback((id: number) => {
+    // Cartões gerados pertencem à conversa em que nasceram. Sem limpar aqui,
+    // abrir um recente carregava as mensagens certas com as questões da
+    // conversa anterior ainda embaixo — visualmente parecia que o servidor
+    // acabara de gerar questões fora do assunto.
+    setGeradas([]);
+    setForaDoAssunto(false);
+    setPediuSimulado(false);
     getConversa(id)
       .then((conv) => {
         setConversaId(conv.id);
@@ -451,7 +416,7 @@ export default function PaginaTutor() {
               const citadas = new Set<string>();
               const consultadas = new Set<string>();
               for (const f of m.fontes) {
-                (m.texto.includes(marca(f)) ? citadas : consultadas).add(referencia(f));
+                (f.citada === true ? citadas : consultadas).add(referencia(f));
               }
               return {
                 autor: "tutor" as const,
@@ -521,6 +486,9 @@ export default function PaginaTutor() {
       setConversaId(null);
       setMensagens([]);
       setPergunta("");
+      setGeradas([]);
+      setForaDoAssunto(false);
+      setPediuSimulado(false);
     }
     window.addEventListener("tutor:nova", nova);
     return () => window.removeEventListener("tutor:nova", nova);
@@ -579,117 +547,18 @@ export default function PaginaTutor() {
     <div className="flex h-full flex-col">
       <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-5 pb-2 pt-6">
         <div className="mx-auto flex max-w-[720px] flex-col gap-[18px]">
-          <p className="text-center font-mono text-[11px] uppercase tracking-[1.5px] text-[#45454d]">
-            {ABERTURA_TUTOR.horario}
-          </p>
-
-          {/* ------------------------------------------ abertura + rota */}
-          <div className="balao-subida flex items-start gap-3" style={{ animationDelay: "40ms" }}>
-            <span className="mt-0 flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] bg-accent text-accent-foreground">
-              <MarcaGlifo className="h-4 w-4" />
-            </span>
-            <div className="min-w-0">
-              <p className="rotulo mb-2">FerrarIA · iniciou a conversa</p>
+          {mensagens.length === 0 && !pensando && (
+            <div className="flex items-start gap-3">
+              <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] bg-accent text-accent-foreground">
+                <MarcaGlifo className="h-4 w-4" />
+              </span>
               <div className="balao-tutor">
-                <p className="text-[15px] leading-[1.65]">{ABERTURA_TUTOR.paragrafo1}</p>
-                <p className="mt-3 text-[15px] leading-[1.65] text-[#b6b6bd]">
-                  {ABERTURA_TUTOR.paragrafo2Prefixo}
-                  <span className="font-semibold text-accent-text">{ABERTURA_TUTOR.paragrafo2Destaque}</span>
-                  {ABERTURA_TUTOR.paragrafo2Sufixo}
+                <p className="text-[15px] leading-[1.65]">
+                  Pergunte sobre uma matéria do seu edital ou diga o que quer treinar.
                 </p>
-
-                <div className="mt-3.5 flex flex-col gap-2">
-                  {ROTA_DO_DIA.map((r) => (
-                    <div key={r.n} className="passo-rota">
-                      <span className="passo-numero">{r.n}</span>
-                      <span className="min-w-0 flex-1 text-[13.5px]">{r.texto}</span>
-                      <span className="shrink-0 font-mono text-[11.5px] text-subtle">{r.tempo}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <Link href="/desafio" className="btn-primary">
-                    Aceitar a rota
-                  </Link>
-                  <Link href="/fila" className="btn-ghost">
-                    Só tenho 20 min
-                  </Link>
-                  <Link href="/simulado" className="btn-ghost">
-                    Quero simulado
-                  </Link>
-                </div>
               </div>
             </div>
-          </div>
-
-          {/* ------------------------------------------- fala do aluno */}
-          <div className="balao-subida flex justify-end" style={{ animationDelay: "170ms" }}>
-            <div className="balao-usuario">{ABERTURA_TUTOR.perguntaUsuario}</div>
-          </div>
-
-          {/* ------------------------------- resposta socrática + questão */}
-          <div className="balao-subida flex items-start gap-3" style={{ animationDelay: "300ms" }}>
-            <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] bg-accent text-accent-foreground">
-              <MarcaGlifo className="h-4 w-4" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="balao-tutor mb-3">
-                <p className="text-[15px] leading-[1.65]">{ABERTURA_TUTOR.respostaSocratica}</p>
-              </div>
-
-              {/* ------------------------------------- questão da fila */}
-              {questao === undefined && (
-                <p className="rotulo animate-[pxPulse_1.4s_ease-in-out_infinite]">buscando sua próxima questão</p>
-              )}
-
-              {questao === null && (
-                <div className="callout-info !p-4 text-sm">
-                  {erroQuestao ?? "Nenhuma questão pendente agora — sua fila está em dia."}{" "}
-                  <Link href="/fila" className="link">Ver fila →</Link>
-                </div>
-              )}
-
-              {questao && !resultado && (
-                <BalaoQuestao tipo={questao.tipo} questao={questao} onFechado={setResultado} />
-              )}
-
-              {questao && resultado && (
-                <div className={resultado.veredito === "correta" ? "callout-success" : "callout-warning !p-4"}>
-                  <p className="font-medium capitalize">{resultado.veredito}</p>
-                  <p className="mt-1 text-sm opacity-90">{resultado.comentario}</p>
-                  <p className="mt-2 text-sm opacity-90">
-                    caixa {resultado.caixa} · volta em {resultado.prox_revisao}
-                  </p>
-                </div>
-              )}
-
-              {/* -------------------------------------------- flashcard */}
-              <div className="mt-3 overflow-hidden rounded-[14px] border border-line bg-surface">
-                <div className="faixa-card justify-between">
-                  <span className="text-accent-text">Flashcard · fixação</span>
-                  <span>{FLASHCARD_EXEMPLO.posicao}</span>
-                </div>
-                <div className="px-[18px] py-5 text-center">
-                  <p className="mb-3.5 text-[15.5px] font-medium">{FLASHCARD_EXEMPLO.frente}</p>
-                  {virado ? (
-                    <div>
-                      <p className="mb-3.5 text-[17px] font-semibold text-accent-text">
-                        {FLASHCARD_EXEMPLO.verso}
-                      </p>
-                      <button onClick={() => setVirado(false)} className="btn-ghost text-[12.5px]">
-                        Esconder
-                      </button>
-                    </div>
-                  ) : (
-                    <button onClick={() => setVirado(true)} className="btn-ghost">
-                      Mostrar resposta
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
+          )}
 
           {/* --------------------------------------------- conversa real */}
           {mensagens.map((m, i) =>

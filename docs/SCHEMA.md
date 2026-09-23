@@ -35,4 +35,10 @@ db/025_rotulo_no_lexical.sql chunk.rotulo entra no tsvector: a disciplina/assunt
 db/026_questao_do_aluno.sql questao.usuario_id: questão gerada da APOSTILA dele, privada — NULL segue sendo o acervo de todos
 db/027_referencia_sem_assunto.sql material de REFERÊNCIA (jurisprudência, corpus de norma) não tem assunto — um rótulo único num corpus mentia E afogava a busca
 db/028_url_do_material.sql documento.url: de onde o material veio, quando veio de link — `origem` guarda só o nome derivado
+db/029_fila_melhoria.sql feedback `/erro`/`/feedback` preso à conversa e à resposta do tutor comentada
+db/030_telemetria_llm.sql provedor/modelo, tokens, status e origem de cada chamada de LLM
+db/031_estudo_teoria.sql diário por usuário/dia/assunto para teoria conversada atravessar sessões
 ```
+
+Próximo número livre: **032**. Confirme no diretório e com
+`python migrar.py --listar` antes de criar.

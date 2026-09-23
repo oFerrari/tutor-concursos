@@ -33,7 +33,7 @@ Aqui só se responde "ele quer treinar, e quantas".
 """
 import re
 
-VERSAO = "pedido-v8"
+VERSAO = "pedido-v9"
 
 # Pedido de TREINO. `quest(?:[ãa]o|[õo]es)` e não `quest[õo]es?`: o singular
 # leva "ã" e o plural "õ", e quem tem pressa digita sem acento — a primeira
@@ -186,6 +186,14 @@ RE_ADIADO = re.compile(
     r"talvez|quem\s+sabe|se\s+der|futuramente)\b[^.!?]{0,40}?"
     r"\b(quest(?:[ãa]o|[õo]es)|exerc[íi]cios?|it(?:em|ens)|treino|treinar|simulado)\b")
 
+# QUER ESCOLHER O ASSUNTO ANTES DE TREINAR. A palavra "questões" aparece, mas
+# ainda não há ordem de geração: "quero questões de Ciências Forenses; quais
+# são os assuntos?" pede o mapa para então escolher. Gerar na hora faz o app
+# decidir por ele — foi exatamente o relato que trouxe esta regra.
+RE_ESCOLHA_ASSUNTO = re.compile(
+    r"(?i)\b(?:quais?|que)\s+(?:s[ãa]o\s+)?(?:os\s+|as\s+)?"
+    r"(?:assuntos?|temas?|t[óo]picos?|conte[úu]dos?)\b")
+
 
 def _adiado(fala: str) -> bool:
     """A fala fala de treino PRA DEPOIS, não pra agora?"""
@@ -254,6 +262,8 @@ def treino(fala: str, apos_treino: bool = False) -> dict | None:
     # dele na frase): "depois me dá questões" adia; "me dá 5 questões, depois a
     # gente vê a teoria" pede agora e fala de outra coisa em seguida.
     if _adiado(fala):
+        return None
+    if RE_ESCOLHA_ASSUNTO.search(fala):
         return None
     return {"quantidade": quantas(fala),
             "tipo": "certo_errado" if RE_CERTO_ERRADO.search(fala) else None,

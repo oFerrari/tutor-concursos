@@ -167,23 +167,13 @@ medição.
   (`--cenario todos`) — este último é o mais barato e o único que amplia a
   cobertura junto.
 
-## Troca curta de disciplina não muda o foco da busca
+## Resolvido em 21/09/2026: troca curta de disciplina muda o foco da busca
 
-"e no processo penal?", dito depois de uma pergunta do tutor, é classificado
-como resposta (`assunto.e_eco` devolve True) porque não tem verbo de `PEDIDO`,
-não cita dispositivo e não pede treino. A consulta vira a fala do tutor, que é
-sobre a disciplina anterior. O turno seguinte recupera a disciplina certa — a
-busca fica um turno atrás da conversa.
-
-Medido em `tests/test_assunto_troca_de_disciplina.py` (xfail estrito).
-
-Tentado e revertido em 2026-09-19: reconhecer nome de disciplina em
-`pede_assunto` exige `disciplinas` em `pede_assunto` e `e_eco`, trocar o filtro
-do caminho normal de `em_foco` para `_com_assunto` — o que derruba citação pura
-("art. 312" não tem palavra de conteúdo) — e casamento por radical em
-`disciplina_citada` ("processo" vs "processual"). Quatro mudanças acopladas; o
-dano observado é um turno de contexto degradado, com o modelo respondendo certo
-assim mesmo.
+"e no processo penal?", dito depois de uma pergunta do tutor, agora é troca
+explícita: `disciplina_citada` casa "processo" com "processual" por prefixo
+longo, `e_eco` devolve `False` e `em_foco` usa apenas a fala nova, sem arrastar
+a disciplina abandonada. A resposta simples ao menu ("direito penal") continua
+sem virar consulta. Coberto por `tests/test_assunto_troca_de_disciplina.py`.
 
 ## Aberto
 
@@ -269,6 +259,17 @@ fala anterior, não do texto dela — hoje é `_truncar` de prosa.
   (019/020): sobe arquivo em lote, indexa link, classifica, agrupa e edita
   rótulo contra a API de verdade, e o `MATERIAIS_EXEMPLO` do mock foi apagado —
   mock que sobrevive à tela real é o que faz alguém depurar dado inventado.
+  **Em 22/09/2026, o `/tutor` também saiu da vitrine:** abertura, rota, pergunta
+  de peculato e flashcard fictícios foram retirados da conversa real. Eles
+  apareciam antes de qualquer fala e podiam ser confundidos com uma resposta do
+  sistema sobre matéria que o aluno não escolheu.
+- **Atribuição de fontes é declaração do modelo, não prova semântica.** Em
+  `socratic-v72`, resposta estruturada substituiu a dependência de colchetes:
+  prosa e IDs vêm na mesma chamada, e somente IDs dos chunks enviados podem
+  receber `citada=true`. CP/CPP com artigo igual e páginas de apostila são
+  distintos. Isso impede IDs alheios, mas não garante que o modelo escolheu
+  semanticamente o trecho correto. Mensagens antigas sem atribuição estruturada
+  continuam com o dado histórico; não foram reprocessadas com LLM.
 - Se a rotina exportar/importar do `sincronizar.py` cansar: Postgres hospedado
   (Neon, Supabase) com `DATABASE_URL` único resolve, ao custo de exigir rede.
 - **Precisão de `retrieval.py` MEDIDA** (`avaliar_retrieval.py`, agora 22

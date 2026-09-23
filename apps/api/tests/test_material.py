@@ -3,9 +3,9 @@ import time
 
 import pytest
 
-from core import db, material, retrieval
+from core import db, embeddings, material, retrieval
 
-VERSAO = "test-material-v10"
+VERSAO = "test-material-v11"
 TXT = ("MEU RESUMO PARTICULAR\n\nO mnemônico QUIXOTEBRAVO organiza os prazos "
        "recursais do processo penal conforme minha anotação de aula. " * 10).encode()
 
@@ -747,6 +747,35 @@ def test_rotulo_corrigido_entra_no_indice_e_a_busca_acha(client, usuario):
     assert linha["rotulo"] == "Papiloscopia. Ciências Forenses"
     assert not linha["texto"].startswith("Ciências Forenses"), \
         "o rótulo vazou pro texto exibido — o prompt leria isso como conteúdo"
+
+
+def test_material_sem_original_reindexa_rotulo_pelos_chunks(usuario, monkeypatch):
+    """Material anterior à 024 conserva texto e ids, então não depende do PDF."""
+    vetor = db.exec1("SELECT embedding FROM chunk ORDER BY id LIMIT 1")["embedding"]
+    doc = db.exec1(
+        """INSERT INTO documento
+                  (titulo,disciplina,assunto,tipo,origem,hash,usuario_id,status,chunks_total)
+           VALUES ('pré-024','Direito Civil','Contratos','aula','pre-024.txt',
+                   'teste-pre-024',%(u)s,'pronto',1) RETURNING id""",
+        {"u": usuario["id"]})
+    chunk = db.exec1(
+        """INSERT INTO chunk (documento_id,ordem,texto,embedding,rotulo)
+           VALUES (%(d)s,0,'papilas e cristas formam desenhos únicos',%(e)s,'Contratos. Direito Civil')
+           RETURNING id""",
+        {"d": doc["id"], "e": vetor})
+    monkeypatch.setattr(embeddings, "embed_passagens",
+                        lambda textos: [vetor for _ in textos])
+
+    r = material.atualizar(usuario["id"], doc["id"],
+                           "Ciências Forenses", "Papiloscopia")
+    assert r["reindexar"] is True
+    assert material.reindexar_rotulo(doc["id"]) is True
+
+    depois = db.query(
+        "SELECT id,rotulo FROM chunk WHERE documento_id=%(d)s ORDER BY ordem",
+        {"d": doc["id"]})
+    assert [r["id"] for r in depois] == [chunk["id"]]
+    assert {r["rotulo"] for r in depois} == {"Papiloscopia. Ciências Forenses"}
 
 
 def test_indexacao_pendente_e_retomada_sem_reenviar_o_arquivo(client, usuario):

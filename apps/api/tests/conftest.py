@@ -19,6 +19,7 @@ já mordeu o projeto (ver "gerar.py girava pra sempre" no CLAUDE.md) — só que
 aqui rodaria em CADA execução da suíte, não uma vez só.
 """
 import uuid
+import json
 
 import pytest
 from fastapi.testclient import TestClient
@@ -96,7 +97,7 @@ class _LLMFalso(llm.LLM):
     válido cobre esse caminho também, sem precisar reimplementar nada."""
 
     def __init__(self):
-        self.retorno = ""
+        self.retorno = "Resposta do tutor."
         self.excecao: Exception | None = None
         self.chamadas: list[dict] = []
 
@@ -105,6 +106,11 @@ class _LLMFalso(llm.LLM):
         self.chamadas.append({"prompt": prompt, "sistema": sistema, "json_mode": json_mode})
         if self.excecao:
             raise self.excecao
+        # Testes de conversa configuram prosa; adapte apenas o novo envelope
+        # do tutor. JSON explícito continua cru para testar falhas de contrato.
+        if (schema and "fontes_usadas" in schema.get("properties", {})
+                and not self.retorno.lstrip().startswith(("{", "["))):
+            return json.dumps({"resposta": self.retorno, "fontes_usadas": []})
         return self.retorno
 
 
@@ -139,10 +145,12 @@ def _indexar_sincrono(monkeypatch):
 
     def agora(documento_id: int) -> None:
         linha = db.exec1(
-            "SELECT origem, arquivo FROM documento WHERE id = %(i)s AND arquivo IS NOT NULL",
+            "SELECT origem, arquivo FROM documento WHERE id = %(i)s",
             {"i": documento_id})
-        if linha:
+        if linha and linha["arquivo"] is not None:
             material.indexar(documento_id, linha["origem"] or "material",
                              bytes(linha["arquivo"]))
+        elif linha:
+            material.reindexar_rotulo(documento_id)
 
     monkeypatch.setattr(material, "enfileirar", agora)

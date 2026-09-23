@@ -12,9 +12,9 @@ O que estes testes travam:
   · apagar a MESA não apaga a conversa (SET NULL, mesma política do
     simulado na 010): o que foi discutido continua valendo noutro concurso.
 """
-from core import conversa, db
+from core import conversa, db, socratic
 
-VERSAO = "test-conversa-v1"
+VERSAO = "test-conversa-v3"
 
 
 def _resposta_falsa(fake, texto="resposta do tutor"):
@@ -52,6 +52,34 @@ def test_primeira_pergunta_abre_conversa_sem_chamada_extra(client, usuario, llm_
     lista = client.get("/conversas", headers=usuario["headers"]).json()
     assert [c["id"] for c in lista] == [r["conversa_id"]]
     assert lista[0]["mensagens"] == 2         # a do aluno e a do tutor
+
+
+def test_fonte_persiste_se_foi_citada_ou_so_consultada(client, usuario, monkeypatch):
+    """Ao reabrir a conversa, a tela precisa distinguir o trecho usado dos
+    demais recuperados. Recalcular pelo número do artigo no navegador confundia
+    CP 312 com CPP 312 e marcava ambos como citados."""
+    monkeypatch.setattr(socratic, "explicar", lambda *args, **kwargs: {
+        "resposta": "A resposta usa somente a primeira fonte.",
+        "fontes": [
+            {"id": 901, "titulo": "Código Penal", "norma": "CP",
+             "artigo": "312", "citada": True},
+            {"id": 902, "titulo": "Código de Processo Penal", "norma": "CPP",
+             "artigo": "312", "citada": False},
+        ],
+    })
+
+    resposta = client.post("/perguntar", json={"pergunta": "explique o dispositivo"},
+                            headers=usuario["headers"]).json()
+    mensagens = client.get(f"/conversas/{resposta['conversa_id']}",
+                           headers=usuario["headers"]).json()["mensagens"]
+    fontes = next(m["fontes"] for m in mensagens if m["autor"] == "tutor")
+
+    assert fontes == [
+        {"id": 901, "titulo": "Código Penal", "norma": "CP",
+         "artigo": "312", "citada": True},
+        {"id": 902, "titulo": "Código de Processo Penal", "norma": "CPP",
+         "artigo": "312", "citada": False},
+    ]
 
 
 def test_pergunta_fica_gravada_mesmo_se_o_llm_cair(client, usuario, llm_falso):
@@ -309,7 +337,7 @@ def test_explicar_nao_devolve_questao_escrita_pelo_modelo(client, usuario, llm_f
     Este teste vai pelo CAMINHO: manda o duplê responder com questão inline e
     afirma que ela não sai pela rota.
     """
-    llm_falso.gerar = lambda *a, **k: (
+    llm_falso.retorno = (
         "Vamos treinar isso; as questões estão logo abaixo.\n\n"
         "[Questão 1: O peculato-apropriação ocorre quando o funcionário, tendo a posse "
         "do bem em razão do cargo, inverte o título da posse.]\n"

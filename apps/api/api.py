@@ -44,7 +44,7 @@ from core import (assunto, auth, conversa, desafio, edital, geracao, material, m
 from core.config import CORS_ORIGINS
 from core.llm import ErroLLM
 
-VERSAO = "api-v9"
+VERSAO = "api-v11"
 
 app = FastAPI(title="Tutor de concursos — API", version=VERSAO)
 
@@ -791,7 +791,8 @@ def rota_perguntar(body: PerguntaBody, uid: int = Depends(usuario_atual),
         raise HTTPException(503, f"LLM indisponível: {e}")
 
     fontes = [{"id": f["id"], "titulo": f["titulo"], "norma": f.get("norma"),
-               "artigo": f.get("artigo")} for f in r["fontes"]]
+               "artigo": f.get("artigo"), "citada": bool(f.get("citada"))}
+              for f in r["fontes"]]
     conversa.gravar(conv["id"], "tutor", r["resposta"], fontes)
 
     # ---- TREINO PEDIDO NA CONVERSA: o app monta as questões, sem botão.
@@ -818,21 +819,24 @@ def rota_perguntar(body: PerguntaBody, uid: int = Depends(usuario_atual),
     # `pedido.veio_de_treino`, sobre o histórico de ANTES desta fala.
     p = pedido.treino(body.pergunta, apos_treino=pedido.veio_de_treino(historico))
     if p and not p["formal"]:
-        # O TEMA VEM DO HISTÓRICO DE ANTES DO PEDIDO, e essa escolha é o conserto
-        # de um bug que eu mesmo introduzi aqui. Usar o histórico ATUALIZADO
-        # (que já inclui esta fala) faz a própria frase do pedido virar a
-        # consulta: `em_foco` viu "me da 3 questoes disso", achou "disso" como
-        # palavra de conteúdo, e as três questões saíram sobre apropriação
-        # indébita, inquérito policial e usurpação — numa conversa sobre
-        # peculato. É a mesma classe do "vamos" que fez nascer o `core/assunto.py`.
-        #
-        # Pedido de treino NUNCA nomeia o assunto: ele diz "disso", "isso",
-        # "nisso". Quem nomeia é a conversa até aqui, e `historico` é justamente
-        # ela — capturado antes de `gravar`, algumas linhas acima.
-        tema = assunto.em_foco(historico, disciplinas=m["disciplinas"])
+        # O histórico continua sendo capturado ANTES de gravar esta fala, mas a
+        # fala atual também entra separada. Isso preserva "me dê questões disso"
+        # (herda o foco anterior) e corrige "quero questões de Ciências
+        # Forenses" (o tema explícito atual vence Direito Constitucional antigo).
+        # Quem decide a diferença é `assunto.pedido_de_treino_nomeia_assunto`.
+        tema = assunto.em_foco(historico, pergunta=body.pergunta,
+                               disciplinas=m["disciplinas"])
+        # Se a busca do tema não achar trecho útil, o fallback aleatório também
+        # fica dentro da disciplina que o aluno acabou de nomear. Antes ele
+        # sorteava em toda a mesa e podia repetir exatamente a troca indevida.
+        disciplina_pedida = assunto.disciplina_citada(body.pergunta,
+                                                       m["disciplinas"])
+        disciplinas_geracao = ([disciplina_pedida] if disciplina_pedida
+                               else m["disciplinas"])
         try:
             tipo = p["tipo"] or geracao.tipo_da_banca(m.get("banca"))
-            g = geracao.sob_demanda(m["disciplinas"], tema, p["quantidade"], tipo,
+            g = geracao.sob_demanda(disciplinas_geracao, tema,
+                                    p["quantidade"], tipo,
                                     usuario_id=uid)
             questoes = g["questoes"]
             # A TROCA DE ASSUNTO VIAJA ATÉ A TELA. O acervo não tinha trecho do
@@ -1339,17 +1343,13 @@ def rota_classificar_material(documento_id: int, body: ClassificarBody,
     que é pior que não ter corrigido, porque parece ter funcionado.
 
     Em background e não aqui: o embedding leva minutos e o PATCH tem que
-    responder na hora. O material volta a `processando` e a biblioteca já sabe
-    desenhar esse estado. Só acontece se houver arquivo (024) — material
-    anterior à migração não tem bytes pra reextrair, e a resposta diz isso em
-    `reindexar` pra tela poder avisar."""
+    responder na hora. Com arquivo, reextrai; sem ele, material anterior à 024
+    reaproveita os chunks preservados e mantém seus ids."""
     r = material.atualizar(uid, documento_id, body.disciplina, body.assunto)
     if not r:
         raise HTTPException(404, "material não encontrado")
     if r.get("reindexar"):
-        arq = material.bytes_do_arquivo(uid, documento_id)
-        if arq:
-            material.enfileirar(documento_id)
+        material.enfileirar(documento_id)
     return r
 
 

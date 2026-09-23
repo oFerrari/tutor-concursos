@@ -8,8 +8,8 @@ funcionamento do produto, consulte `docs/PRODUTO.md` ou a memória vetorial.
 
 ## FAST TRACK — padrão para pedido pontual
 
-> Copiado em resumo no `CLAUDE.md` (é o arquivo que o Claude Code lê). Mudou
-> aqui, mude lá.
+> Copiado em resumo no `CLAUDE.md` e no `AGENTS.md`. Mudou aqui, mantenha os
+> dois equivalentes sincronizados sem duplicar os mapas de consulta.
 
 Pedido pontual = bug, ajuste localizado, mudança clara em arquivo conhecido.
 Aí é **proibido** plano, pré-análise, lista de alternativas, pergunta de

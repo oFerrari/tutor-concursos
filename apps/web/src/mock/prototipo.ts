@@ -21,8 +21,7 @@
  * vazio, apague o arquivo — é esse o plano.
  *
  * Rotas que faltam: nenhuma das telas listadas aqui. O que sobrou neste
- * arquivo é número DECORATIVO (bloco abaixo) e a conversa de exemplo do
- * tutor, que depende de uma decisão de schema, não de uma rota.
+ * arquivo é somente número DECORATIVO (bloco abaixo).
  *
  * JÁ SAÍRAM DAQUI (o plano funcionando):
  *   - biblioteca → migração 019 + GET/POST/DELETE /materiais.
@@ -63,52 +62,3 @@ export const LIGA = { nome: "Ouro", posicao: "7º de 42" };
 export const TEMPO_MEDIO = { valor: "1m 48s", nota: "por questão" };
 export const ACERTO_NOTA = "+4 pts vs. mês anterior";
 export const FLASHCARDS_NA_FILA = 28;
-
-
-/**
- * Conversa de exemplo do tutor.
- *
- * TODO(backend): o `/perguntar` já responde pergunta livre e o
- * `/questoes/{id}/avaliar` já faz o diálogo socrático — mas o protótipo
- * mostra a questão com alternativas A/B/C, e `questao.gabarito` é texto
- * aberto no schema. Ligar esta tela na API de verdade é decidir antes se
- * a questão ganha alternativas (coluna nova) ou se a tela abandona o
- * múltipla-escolha e usa o campo de resposta livre que a `/fila` já usa.
- */
-export const ROTA_DO_DIA = [
-  { n: 1, texto: "3 revisões SM-2 de Penal · peculato e improbidade", tempo: "12 min" },
-  { n: 2, texto: "Bloco novo de RLM · equivalências lógicas", tempo: "24 min" },
-  { n: 3, texto: "6 erros do caderno para fechar o dia", tempo: "12 min" },
-];
-
-export const QUESTAO_EXEMPLO = {
-  fonte: ["Questão · SM-2", "CESPE 2023", "Art. 312, CP"],
-  enunciado: "Quanto ao peculato culposo, a reparação do dano antes da sentença irrecorrível produz qual efeito?",
-  alternativas: [
-    { letra: "A", texto: "Extingue a punibilidade." },
-    { letra: "B", texto: "Reduz a pena pela metade." },
-    { letra: "C", texto: "Nenhum efeito; a reparação é irrelevante." },
-  ],
-  correta: "A",
-  dica:
-    "Antes da sentença irrecorrível, extingue a punibilidade (§3º). Depois, apenas reduz a pena pela metade. " +
-    "Seu erro recorrente é inverter esses dois momentos — e isso só vale para a modalidade culposa.",
-};
-
-export const FLASHCARD_EXEMPLO = {
-  posicao: "2 de 5",
-  frente: "Peculato culposo: reparação DEPOIS da sentença irrecorrível →",
-  verso: "reduz a pena pela metade",
-};
-
-export const ABERTURA_TUTOR = {
-  horario: "Hoje · 06:40",
-  paragrafo1:
-    "Bom dia, Andrei. Senti sua falta ontem — sua ofensiva de 12 dias quase caiu. Olhei sua memória: o SM-2 está pedindo socorro em 3 questões de Penal e você não toca em RLM há 9 dias.",
-  paragrafo2Prefixo: "Faltam ",
-  paragrafo2Destaque: "63 dias",
-  paragrafo2Sufixo: " para a prova e 39% do edital ainda está aberto. Minha sugestão de rota para hoje, em 48 minutos:",
-  perguntaUsuario: "Aceito, mas me explica peculato culposo primeiro. Erro sempre.",
-  respostaSocratica:
-    "Não vou te dar a regra pronta. Você errou 3× a mesma pegadinha, então vamos pelo caminho inverso: responda e eu te mostro onde seu raciocínio desvia.",
-};

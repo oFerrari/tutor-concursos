@@ -42,7 +42,7 @@ import re
 
 from . import chunking, db, embeddings
 
-VERSAO = "material-v24"
+VERSAO = "material-v25"
 
 LOTE = 32
 MIN_CHARS = 200
@@ -1063,6 +1063,57 @@ def indexar(documento_id: int, nome: str, dados: bytes) -> None:
         cur.execute("UPDATE documento SET status='pronto' WHERE id=%s", (documento_id,))
 
 
+def reindexar_rotulo(documento_id: int) -> bool:
+    """Atualiza vetor e índice lexical usando os chunks que já existem.
+
+    Material anterior à migração 024 não guarda o arquivo original, mas ainda
+    guarda o texto integral de cada chunk. Corrigir apenas disciplina/assunto
+    não exige extrair nem dividir o PDF outra vez: recalcular o embedding do
+    texto preservado mantém ids, ordem e `fonte_chunks` intactos.
+    """
+    with db.conexao_isolada() as c, c.cursor() as cur:
+        cur.execute("SELECT disciplina, assunto, tipo FROM documento WHERE id=%s",
+                    (documento_id,))
+        doc = cur.fetchone()
+        cur.execute(
+            "SELECT id, texto, artigo FROM chunk WHERE documento_id=%s ORDER BY ordem",
+            (documento_id,))
+        chunks = cur.fetchall()
+    if not doc or not chunks:
+        return False
+
+    referencia = e_referencia(doc["tipo"], chunks)
+    disciplina = None if referencia else doc["disciplina"]
+    assunto = None if referencia else doc["assunto"]
+    rotulo = ". ".join(x for x in (assunto, disciplina) if x) or None
+
+    # Tudo que pode consumir CPU ou falhar roda antes da primeira escrita.
+    prontos = []
+    for i in range(0, len(chunks), LOTE):
+        lote = chunks[i:i + LOTE]
+        vetores = embeddings.embed_passagens(
+            [texto_para_vetor(x["texto"], disciplina, assunto) for x in lote])
+        prontos.extend(zip((x["id"] for x in lote), vetores))
+
+    with db.conexao_isolada() as c:
+        with c.cursor() as cur:
+            cur.execute("SELECT pg_try_advisory_lock(%s, %s) AS meu",
+                        (TRAVA_INDEXACAO, documento_id))
+            if not cur.fetchone()["meu"]:
+                return False
+        # Uma falha no meio não pode deixar metade dos chunks com rótulo novo.
+        with c.transaction():
+            with c.cursor() as cur:
+                cur.execute("UPDATE documento SET status='processando', erro=NULL WHERE id=%s",
+                            (documento_id,))
+                cur.executemany(
+                    "UPDATE chunk SET embedding=%s, rotulo=%s WHERE id=%s",
+                    [(vetor, rotulo, chunk_id) for chunk_id, vetor in prontos])
+                cur.execute("UPDATE documento SET status='pronto', erro=NULL WHERE id=%s",
+                            (documento_id,))
+    return True
+
+
 def _classificar_se_faltar(documento_id: int, texto: str,
                            chunks: list[dict] | None = None) -> None:
     """Preenche disciplina/assunto quando o aluno não disse.
@@ -1134,10 +1185,9 @@ def atualizar(usuario_id: int, documento_id: int, disciplina: str | None = None,
     velho. Quem reindexa é a rota, em background — aqui não, porque `atualizar`
     responde dentro do request e o embedding leva minutos.
 
-    Só pede reindexação se houver ARQUIVO (024): sem os bytes não há como
-    reextrair o texto, e material anterior à migração fica com o vetor antigo.
-    A lista continua certa; a busca é que não melhora — e é melhor isso que
-    apagar os trechos que existem."""
+    Com arquivo, a fila reextrai e redivide normalmente. Sem arquivo (material
+    anterior à 024), ela recalcula vetor e rótulo a partir dos chunks existentes:
+    o texto necessário está preservado e os ids não precisam mudar."""
     campos, params = [], {"d": documento_id, "u": usuario_id}
     if disciplina is not None:
         campos.append("disciplina = %(disc)s")
@@ -1152,11 +1202,13 @@ def atualizar(usuario_id: int, documento_id: int, disciplina: str | None = None,
         f"""UPDATE documento SET {', '.join(campos)}
              WHERE id = %(d)s AND usuario_id = %(u)s
          RETURNING id, titulo, disciplina, assunto, tipo, status, classificado_por,
-                   origem, (arquivo IS NOT NULL) AS tem_arquivo""",
+                   origem, (arquivo IS NOT NULL OR EXISTS (
+                       SELECT 1 FROM chunk c WHERE c.documento_id = documento.id
+                   )) AS pode_reindexar""",
         params)
     if not r:
         return None
-    return {**r, "reindexar": bool(r.pop("tem_arquivo"))}
+    return {**r, "reindexar": bool(r.pop("pode_reindexar"))}
 
 
 def bytes_do_arquivo(usuario_id: int, documento_id: int) -> tuple[str, bytes] | None:
@@ -1221,8 +1273,10 @@ def _trabalhar() -> None:
                     "SELECT origem, arquivo FROM documento "
                     " WHERE id = %s AND arquivo IS NOT NULL", (doc_id,))
                 linha = cur.fetchone()
-            if linha:
+            if linha and linha["arquivo"] is not None:
                 indexar(doc_id, linha["origem"] or "material", bytes(linha["arquivo"]))
+            elif linha:
+                reindexar_rotulo(doc_id)
         except Exception as e:  # noqa: BLE001 — ver o docstring
             print(f"[tutor] indexação de {doc_id} falhou na fila: {e}")
         finally:
@@ -1302,12 +1356,14 @@ def pendentes_retomaveis() -> list[dict]:
     retomável, e é o que destrava carga grande — subir vinte apostilas deixava
     de ser uma aposta de que nada reinicia por horas.
 
-    `arquivo IS NOT NULL` é o filtro inteiro: material anterior à 024 continua
-    dependendo do reenvio, e é honesto que continue — sem bytes não há o que
-    reprocessar. `ORDER BY id` retoma na ordem em que foram subidos."""
+    Arquivo permite refazer tudo; chunks existentes permitem ao menos concluir
+    uma atualização de rótulo sem perder texto nem proveniência. `ORDER BY id`
+    retoma na ordem em que foram subidos."""
     return db.query(
         """SELECT id, origem FROM documento
-            WHERE status = 'processando' AND arquivo IS NOT NULL
+            WHERE status = 'processando'
+              AND (arquivo IS NOT NULL OR EXISTS (
+                  SELECT 1 FROM chunk c WHERE c.documento_id = documento.id))
             ORDER BY id""")
 
 

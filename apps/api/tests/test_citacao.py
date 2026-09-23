@@ -11,9 +11,49 @@ turnos. Fixture inventado testaria o formato que eu imagino que ele usa, e o
 ponto todo é que ele não usa o que eu imagino: acrescenta ", XVI", ", § 1º",
 ", inciso II", troca "5o" por "5º" e às vezes larga a rubrica.
 """
-from core import retrieval, socratic
+import json
 
-VERSAO = "test-citacao-v1"
+import pytest
+
+from core import llm, retrieval, socratic
+
+VERSAO = "test-citacao-v2"
+
+
+def test_atribuicao_estruturada_distingue_normas_e_paginas(monkeypatch, llm_falso):
+    chunks = [
+        {"id": 11, "titulo": "CP", "artigo": "312", "texto": "Peculato"},
+        {"id": 12, "titulo": "CPP", "artigo": "312", "texto": "Prisão"},
+        {"id": 13, "titulo": "Apostila", "pagina": 1, "texto": "Introdução"},
+        {"id": 14, "titulo": "Apostila", "pagina": 2, "texto": "Perícia"},
+    ]
+    monkeypatch.setattr(retrieval, "buscar", lambda *a, **kw: chunks)
+    llm_falso.retorno = json.dumps({
+        "resposta": "Texto sem citação inline.",
+        "fontes_usadas": [11, 14, 14, 999, "12", True],
+    })
+    r = socratic.explicar("explique o art. 312")
+    assert r["resposta"] == "Texto sem citação inline."
+    assert [f["id"] for f in r["fontes"] if f["citada"]] == [11, 14]
+    assert len(llm_falso.chamadas) == 1
+    assert llm_falso.chamadas[0]["json_mode"] is True
+    assert all(f"ID da fonte: {c['id']}" in llm_falso.chamadas[0]["prompt"]
+               for c in chunks)
+
+
+@pytest.mark.parametrize("dados", [None, [], {},
+    {"resposta": "", "fontes_usadas": []},
+    {"resposta": 12, "fontes_usadas": []},
+    {"resposta": "texto", "fontes_usadas": "11"}])
+def test_envelope_invalido_vira_erro_do_provedor(dados):
+    with pytest.raises(llm.ErroLLM):
+        socratic._resposta_com_fontes(dados, [])
+
+
+def test_sem_atribuicao_nao_inventa_fonte():
+    assert socratic._resposta_com_fontes(
+        {"resposta": "Vamos escolher o assunto.", "fontes_usadas": []},
+        [{"id": 11}]) == ("Vamos escolher o assunto.", set())
 
 # Os trechos como o acervo os apresenta — `titulo` é o do documento ingerido, e
 # varia de forma de propósito: "cp" (sem --titulo), "Código de Processo Penal" e

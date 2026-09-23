@@ -17,9 +17,9 @@ import re
 
 import pytest
 
-from core import db, pedido
+from core import db, pedido, socratic
 
-VERSAO = "test-pedido-v1"
+VERSAO = "test-pedido-v3"
 
 
 @pytest.mark.parametrize("fala, quantidade", [
@@ -106,6 +106,12 @@ def test_pedir_treino_no_chat_gera_questao_com_proveniencia_e_sem_botao(
               temperatura=None):
         if not json_mode and not schema:
             return "Vamos treinar isso; as questões estão logo abaixo."
+        # A resposta do TUTOR também é JSON tipado desde socratic-v72
+        # ({resposta, fontes_usadas}). Sem este ramo o duplê devolvia a lista
+        # de questões para ela, e o código recusava — com razão — o formato.
+        if schema is socratic.ESQUEMA_RESPOSTA_TUTOR:
+            return json.dumps({"resposta": "Vamos treinar isso; as questões estão logo abaixo.",
+                               "fontes_usadas": []})
         arts = list(dict.fromkeys(
             a.strip() for a in re.findall(r"\[[^\]]*?art\. ([^\]—]+)", prompt)))
         return json.dumps([
@@ -207,6 +213,46 @@ def test_continuacao_nao_vira_assunto_de_busca():
     h = _hist("quero estudar peculato", "me da 4 questoes")
     assert assunto.em_foco(h, disciplinas=["Direito Penal"]) == "quero estudar peculato"
     assert assunto.em_foco(h, "manda cinco", ["Direito Penal"]) == "quero estudar peculato"
+
+
+def test_disciplina_explicita_no_turno_de_questoes_vence_historico():
+    """Regressão real: Ciências Forenses gerou Mutação Constitucional.
+
+    O pedido atual nomeia a disciplina e não pode ser descartado só porque
+    também contém a palavra "questões". Já as formas vagas continuam herdando
+    o foco anterior — são as duas metades da mesma regra.
+    """
+    from core import assunto
+    disciplinas = ["Ciências Forenses", "Direito Constitucional"]
+    h = _hist("Processo Legislativo e Organização do Estado")
+    mapa = "certo eu quero questões de ciencias forense quais são os assuntos?"
+    direto = "me da 2 questões de ciencias forenses"
+
+    # Pedir o MAPA antes de escolher não gera nada ainda, mas a consulta que
+    # explica o mapa continua sendo a disciplina atual, nunca o histórico.
+    assert pedido.treino(mapa) is None
+    assert assunto.em_foco(h, mapa, disciplinas) == mapa
+
+    # Quando a ordem é direta, a fala atual gera e vence o histórico.
+    assert assunto.pedido_de_treino_nomeia_assunto(direto, disciplinas) is True
+    assert assunto.em_foco(h, direto, disciplinas) == direto
+    assert assunto.pedido_de_treino_nomeia_assunto(
+        "me da 2 questoes disso", disciplinas) is False
+    assert assunto.em_foco(h, "me da 2 questoes disso", disciplinas) == \
+        "Processo Legislativo e Organização do Estado"
+
+
+@pytest.mark.parametrize("fala", [
+    "quero questões de ciências forenses, quais são os assuntos?",
+    "antes das questões, quais os temas disponíveis?",
+    "que tópicos você pode cobrar nas questões?",
+])
+def test_perguntar_assuntos_antes_de_escolher_nao_gera(fala):
+    assert pedido.treino(fala) is None
+
+
+def test_pedido_direto_com_assunto_continua_gerando():
+    assert pedido.treino("me dê 2 questões de papiloscopia") is not None
 
 
 @pytest.mark.parametrize("fala, quantidade", [

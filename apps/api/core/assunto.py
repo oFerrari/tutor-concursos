@@ -109,7 +109,7 @@ import unicodedata
 from . import pedido
 from .retrieval import RE_CITACAO
 
-VERSAO = "assunto-v10"
+VERSAO = "assunto-v13"
 
 # Teto da consulta. Embedding é MÉDIA do que entra: parede de texto dilui o
 # assunto exatamente como o art. 37 (13.059 caracteres) já se dilui no próprio
@@ -279,12 +279,34 @@ def disciplina_citada(texto: str, disciplinas: list[str] | None) -> str | None:
     if not texto or not disciplinas:
         return None
     palavras = {_sem_acento(p) for p in RE_PALAVRA.findall(texto.lower())}
+
+    def equivale(alvo: str) -> bool:
+        # Nomes de disciplina variam entre substantivo e adjetivo no uso real:
+        # "processo penal" precisa casar "Direito Processual Penal". O prefixo
+        # longo evita aproximações entre palavras curtas ou só vagamente afins.
+        return any(alvo == p or (min(len(alvo), len(p)) >= 7
+                                and alvo[:7] == p[:7]) for p in palavras)
+
     achadas = []
     for d in disciplinas:
         alvo = {_sem_acento(x) for x in palavras_de_conteudo(d)}
-        if alvo and alvo <= palavras:
+        # "Direito" é a categoria comum, não a parte distintiva do nome.
+        # Exigi-la faria "processo penal" não identificar a disciplina que o
+        # aluno acabou de nomear.
+        distintivas = alvo - {"direito"} if len(alvo) > 1 else alvo
+        if distintivas and all(equivale(x) for x in distintivas):
             achadas.append(d)
     return max(achadas, key=len) if achadas else None
+
+
+RE_TROCA_DISCIPLINA = re.compile(r"(?i)^\s*(?:e\s+)?(?:no|na|em)\b")
+
+
+def troca_de_disciplina(texto: str | None,
+                        disciplinas: list[str] | None) -> bool:
+    """A fala curta muda de gaveta, em vez de responder à pergunta anterior."""
+    return bool(texto and RE_TROCA_DISCIPLINA.search(texto)
+                and disciplina_citada(texto, disciplinas))
 
 
 def cita_dispositivo(texto: str) -> bool:
@@ -367,6 +389,38 @@ def pede_assunto(fala: str | None) -> bool:
                  if _sem_acento(x) not in PEDIDO])
 
 
+# Pronomes que apontam para o foco anterior em vez de nomear um foco novo.
+# Não entram em `VAZIAS` como conserto genérico: aqui a pergunta é específica
+# — "o pedido de treino trouxe tema próprio ou está dizendo *isso*?".
+REFERENCIA_VAGA_TREINO = {
+    "disso", "disto", "nisso", "nisto", "daquilo", "naquilo",
+}
+
+
+def pedido_de_treino_nomeia_assunto(
+        fala: str | None, disciplinas: list[str] | None = None) -> bool:
+    """O pedido de treino diz DE QUÊ, em vez de apontar para trás?
+
+    A regra anterior dizia que pedido de treino nunca nomeia assunto. O turno
+    real que derrubou essa premissa foi "quero questões de ciências forenses":
+    a rota descartou a fala inteira, herdou Direito Constitucional do histórico
+    e gerou questões de Mutação Constitucional e Controle Interno.
+
+    Nome de disciplina do edital é evidência explícita. Sem ele, sobra o
+    conteúdo real depois de retirar apenas referências vagas; assim "questões
+    de peculato" nomeia foco, enquanto "questões disso" continua herdando o
+    assunto anterior.
+    """
+    # `apos_treino=False`: continuação elíptica ("manda cinco", "agora uma")
+    # nunca traz tema próprio, mesmo que alguma palavra escape de `VAZIAS`.
+    if not fala or not pedido.treino(fala):
+        return False
+    if disciplina_citada(fala, disciplinas):
+        return True
+    return any(_sem_acento(p) not in REFERENCIA_VAGA_TREINO
+               for p in palavras_de_conteudo(fala))
+
+
 # O aluno PEDINDO exposição em vez de sabatina. Lista fechada e curta, como
 # `PEDIDO`, e pela mesma razão: quem carrega a decisão não é ela.
 EXPOSICAO = (
@@ -416,7 +470,8 @@ def _falas_antes(turnos: list[dict], pergunta: str | None) -> list[dict]:
     return turnos
 
 
-def e_eco(pergunta: str | None, turnos: list[dict] | None) -> bool:
+def e_eco(pergunta: str | None, turnos: list[dict] | None,
+          disciplinas: list[str] | None = None) -> bool:
     """
     A fala atual RESPONDE ao tutor, em vez de propor assunto?
 
@@ -454,7 +509,7 @@ def e_eco(pergunta: str | None, turnos: list[dict] | None) -> bool:
     if not (fala and fala.strip()):
         fala = next((t.get("texto") for t in reversed(turnos)
                      if t.get("autor") == "aluno"), None)
-    if pede_assunto(fala):
+    if pede_assunto(fala) or troca_de_disciplina(fala, disciplinas):
         return False
     anteriores = [t for t in _falas_antes(turnos, pergunta)
                   if t.get("autor") in ("aluno", "tutor")]
@@ -563,15 +618,30 @@ def em_foco(turnos: list[dict] | None = None, pergunta: str | None = None,
     # assunto é o que o TUTOR está perguntando — costurar as últimas respostas do
     # aluno é o que fez uma conversa INTEIRA sobre Lei Maria da Penha gerar
     # questão de ajuda de custo (L8112 art. 55) e mandato eletivo (art. 94).
-    if e_eco(pergunta, turnos):
+    if e_eco(pergunta, turnos, disciplinas):
         candidatas = _com_assunto(falas_de("tutor"), disciplinas)[:1]
         if not candidatas:
             return None
         herdado = _sem_citacao(candidatas[0])
         return _truncar(herdado) or None
 
-    # PEDIDO DE TREINO NÃO NOMEIA ASSUNTO, e ignorá-los aqui é estrutural, não
-    # mais uma palavra na lista `VAZIAS`.
+    # Uma troca explícita já contém o novo foco inteiro. Somar falas antigas
+    # reintroduziria justamente a disciplina que o aluno abandonou.
+    if troca_de_disciplina(pergunta, disciplinas):
+        return _truncar(" ".join((pergunta or "").split())) or None
+
+    # A disciplina atual explicitamente pedida já é foco suficiente. Sem esta
+    # saída, "quais são os assuntos de Ciências Forenses?" tinha 3 termos de
+    # conteúdo (menos que CONTEUDO_SUFICIENTE=4) e ganhava Processo Legislativo
+    # do turno anterior como reforço. Nome de disciplina solto como RESPOSTA
+    # continua fora: `pede_assunto` exige que o aluno retome a iniciativa.
+    if (pergunta and disciplina_citada(pergunta, disciplinas)
+            and pede_assunto(pergunta)):
+        return _truncar(" ".join(pergunta.split())) or None
+
+    # PEDIDO DE TREINO PODE OU NÃO NOMEAR ASSUNTO. "Me testa nisso" aponta
+    # para trás; "quero questões de Ciências Forenses" nomeia o foco atual e
+    # precisa vencer qualquer matéria antiga do histórico.
     #
     # Medido no cenário `pede_treino` logo que ele nasceu: a conversa era
     # "quero estudar peculato" → "me testa nisso" → "me da 3 questoes disso", e
@@ -582,9 +652,8 @@ def em_foco(turnos: list[dict] | None = None, pergunta: str | None = None,
     # treinar isso; as questões estão logo abaixo") que não nomeia matéria
     # nenhuma — então o fallback pro tutor também não salvava.
     #
-    # Com os pedidos fora, `em_foco` alcança "quero estudar peculato", que é o
-    # que a conversa é. Mesmo espírito de `e_eco`: a fala que não propõe assunto
-    # não deve decidir de qual artigo se cobra.
+    # Com os pedidos vagos fora, `em_foco` alcança "quero estudar peculato".
+    # Com pedido explícito, a própria fala atual vence por recência.
     # PERGUNTA SOBRE O SISTEMA TAMBÉM NÃO NOMEIA ASSUNTO, e pelo mesmo motivo.
     # Medido no cenário `meta`, turno 4: as três falas anteriores eram "como você
     # funciona?", "de onde você tira as respostas?" e "você é uma IA?" — nenhuma
@@ -594,8 +663,12 @@ def em_foco(turnos: list[dict] | None = None, pergunta: str | None = None,
     # verdade? de onde você tira as respostas?" e a busca devolveu falso
     # testemunho e prova pericial. O aluno pediu Direito Penal e recebeu o artigo
     # que casou com a palavra "perícia" da pergunta sobre a MÁQUINA.
+    if pedido_de_treino_nomeia_assunto(pergunta, disciplinas):
+        return _truncar(" ".join((pergunta or "").split())) or None
+
     do_aluno = [f for f in falas_de("aluno")
-                if not pedido.treino(f, apos_treino=True)
+                if (not pedido.treino(f, apos_treino=True)
+                    or pedido_de_treino_nomeia_assunto(f, disciplinas))
                 and not pedido.sobre_o_sistema(f)]
     if pergunta and not pedido.treino(pergunta, apos_treino=True):
         do_aluno.append(pergunta)
