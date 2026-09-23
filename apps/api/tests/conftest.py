@@ -27,7 +27,7 @@ from fastapi.testclient import TestClient
 from api import app
 from core import db, llm
 
-VERSAO = "conftest-v1"
+VERSAO = "conftest-v2"
 
 
 @pytest.fixture(scope="session")
@@ -154,3 +154,51 @@ def _indexar_sincrono(monkeypatch):
             material.reindexar_rotulo(documento_id)
 
     monkeypatch.setattr(material, "enfileirar", agora)
+
+
+# Tabelas cujas linhas nascem PÚBLICAS quando a fonte é pública — e que por
+# isso o CASCADE do usuário descartável não alcança. `contexto` entra junto
+# porque a série de Certo/Errado grava o texto-base antes dos itens.
+TABELAS_SEM_DONO_NO_TESTE = ("questao", "contexto")
+
+
+@pytest.fixture(autouse=True)
+def _sem_lixo_no_acervo(monkeypatch):
+    """Todo `INSERT INTO questao/contexto` feito por um teste é apagado no fim dele.
+
+    O dono da questão sai do CHUNK (026, `geracao.salvar`), nunca de parâmetro —
+    e é certo que seja assim em produção. O efeito colateral nos testes: gerar a
+    partir do CP público cria questão PÚBLICA, que sobrevive ao DELETE do usuário
+    descartável. Medido em 22/09/2026: 101 das 377 questões públicas eram lixo de
+    três testes ("Enunciado?", "assertiva 0", 16 cópias de "instrumento
+    contundente" presas ao CP art. 1º), e uma delas caiu no simulado de um aluno.
+
+    Por que rastrear o que ESTE processo inseriu, e não apagar "tudo que é
+    público e mais novo que o início do teste": a API de desenvolvimento roda em
+    outro processo sobre o mesmo banco, e o aluno pode estar gerando questão
+    pública pelo chat enquanto a suíte roda. Apagar por data levaria a dele.
+
+    Intercepta `db.query` e não uma função de `geracao`: qualquer caminho que
+    grave questão — o de hoje ou um teste escrito amanhã — passa por aqui sem
+    ninguém lembrar de listá-lo. `db.exec1` chama `query` pelo nome do módulo,
+    então é coberto também.
+    """
+    criadas: dict[str, list[int]] = {t: [] for t in TABELAS_SEM_DONO_NO_TESTE}
+    original = db.query
+
+    def query_rastreada(sql, params=None):
+        linhas = original(sql, params)
+        inicio = " ".join(sql.split()[:3]).lower()
+        for tabela in criadas:
+            if inicio == f"insert into {tabela}":
+                criadas[tabela].extend(l["id"] for l in linhas if "id" in l)
+        return linhas
+
+    monkeypatch.setattr(db, "query", query_rastreada)
+    yield
+    # Questão primeiro: ela aponta para o contexto. tentativa/progresso caem
+    # pelo CASCADE da 001/008.
+    for tabela in ("questao", "contexto"):
+        if criadas[tabela]:
+            original(f"DELETE FROM {tabela} WHERE id = ANY(%(ids)s)",
+                     {"ids": criadas[tabela]})
