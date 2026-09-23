@@ -128,6 +128,48 @@ export function DialogoQuestao({
     inicio.current = Date.now();
   }, [questao.id]);
 
+  // QUESTÃO ABANDONADA TAMBÉM É TENTATIVA. A gravação só acontecia no acerto ou
+  // no 3º erro; errar uma vez e seguir adiante não deixava rastro. Medido na
+  // auditoria de 22/09/2026: questão respondida errada no chat, aluno pediu a
+  // próxima, e o desempenho ficou idêntico — 29 questões do chat já tinham
+  // resposta e nenhuma tentativa. Contradiz a definição de origem do produto:
+  // questão feita no chat entra nas estatísticas.
+  //
+  // O gatilho é a DESMONTAGEM, não uma lista de situações: gerar questões novas
+  // substitui a lista do /tutor, trocar ou apagar a conversa a esvazia, voltar
+  // pra fila navega — em todas este componente sai da árvore. Só o fechamento da
+  // aba escapa, e o `pagehide` com `keepalive` cobre esse.
+  //
+  // Sair valendo "incorreta" é a decisão que `sair()` já tomava. Só grava o que
+  // teve resposta avaliada: questão gerada e nunca respondida não foi feita.
+  //
+  // Refs e não estado: a limpeza do efeito roda com o closure do primeiro
+  // render, e leria erros e resposta de quando o componente nasceu. A cópia é
+  // feita num efeito, depois de cada render confirmado — escrever em ref durante
+  // o render é o que `react-hooks/refs` proíbe.
+  const registrada = useRef(false);
+  const abandono = useRef({ resposta: "", erradas: 0, dicasPedidas: 0 });
+  useEffect(() => {
+    abandono.current = { resposta: ultimaResposta, erradas, dicasPedidas };
+  }, [ultimaResposta, erradas, dicasPedidas]);
+
+  useEffect(() => {
+    const qid = questao.id;
+    function gravarAbandono() {
+      const a = abandono.current;
+      if (registrada.current || !a.resposta) return;
+      registrada.current = true;
+      void registrarTentativa(qid, "incorreta", a.resposta, a.erradas + a.dicasPedidas,
+                              decorridos(inicio.current), conversaId, ultimoConceito.current,
+                              { keepalive: true }).catch(() => {});
+    }
+    window.addEventListener("pagehide", gravarAbandono);
+    return () => {
+      window.removeEventListener("pagehide", gravarAbandono);
+      gravarAbandono();
+    };
+  }, [questao.id, conversaId]);
+
   async function fechar(
     veredito: Avaliacao["veredito"],
     respostaFinal: string,
@@ -142,6 +184,7 @@ export function DialogoQuestao({
     // conta como erro; contar as duas juntaria a mesma falha duas vezes.
     const penalidade = erradasFinal + dicasPedidasFinal;
     const segundos = decorridos(inicio.current);
+    registrada.current = true;
     const r = await registrarTentativa(questao.id, veredito, respostaFinal, penalidade,
                                       segundos, conversaId, ultimoConceito.current);
     setResultado({

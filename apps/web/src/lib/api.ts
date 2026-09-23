@@ -1188,10 +1188,14 @@ export function registrarTentativa(
    *  ao servidor porque avaliar e registrar são duas chamadas e não existe
    *  sessão no servidor pra guardar nada entre elas — o `veredito` já viaja por
    *  este mesmo caminho. Sem isso o campo é gerado, pago, exibido e descartado. */
-  conceitoFaltante?: string | null
+  conceitoFaltante?: string | null,
+  /** `keepalive`: a requisição sobrevive ao fechamento da aba — é o que deixa
+   *  gravar a questão abandonada no `pagehide`, quando a página já está indo. */
+  opcoes: { keepalive?: boolean } = {}
 ): Promise<Registro> {
   return chamar<Registro>(`/questoes/${questaoId}/registrar`, {
     method: "POST",
+    keepalive: opcoes.keepalive,
     body: JSON.stringify({
       veredito,
       resposta,
