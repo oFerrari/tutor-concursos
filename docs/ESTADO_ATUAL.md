@@ -1,5 +1,8 @@
 # Estado atual — base zerada para simulação completa
 
+O placar da auditoria — o que foi resolvido, o que falta e a prontidão de MVP —
+mora em `docs/AUDITORIA_MVP.md`.
+
 ## 22/09/2026 — LEIA ANTES DE TUDO: o banco foi zerado de propósito
 
 A pedido do dono, a base foi limpa para ele subir um edital e materiais novos e

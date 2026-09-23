@@ -7,6 +7,7 @@ Portável (Antigravity, Claude Code, Cursor, Codex).
 - MAPA detalhado por demanda, fluxo, módulo, página e teste:
   `docs/MAPA_APLICACAO.md`.
 - CHECKPOINT mutável do trabalho: `docs/ESTADO_ATUAL.md`.
+- PLACAR da auditoria (resolvido × pendente, % de MVP): `docs/AUDITORIA_MVP.md`.
 - PORQUÊS e armadilhas medidas: `docs/DECISOES.md`.
 - O que o sistema NÃO faz, e o que já foi tentado e revertido: `docs/LIMITACOES.md`.
 - Catálogo de comandos: `docs/COMANDOS.md`. Migrações, uma a uma: `docs/SCHEMA.md`.
