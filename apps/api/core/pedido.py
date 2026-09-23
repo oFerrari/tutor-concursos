@@ -33,7 +33,7 @@ Aqui só se responde "ele quer treinar, e quantas".
 """
 import re
 
-VERSAO = "pedido-v9"
+VERSAO = "pedido-v10"
 
 # Pedido de TREINO. `quest(?:[ãa]o|[õo]es)` e não `quest[õo]es?`: o singular
 # leva "ã" e o plural "õ", e quem tem pressa digita sem acento — a primeira
@@ -200,6 +200,46 @@ def _adiado(fala: str) -> bool:
     return bool(RE_ADIADO.search(fala or ""))
 
 
+# PEDIDO NEGADO NÃO É PEDIDO. Relatado na bateria de 22/09/2026: "Tenho 20
+# minutos por dia. Só quero planejar a semana, sem iniciar aula ou questões
+# agora." gerou cinco questões — `treino("não quero questões")` devolvia
+# {"quantidade": 2}. A palavra estava lá; a ordem era a contrária.
+#
+# Mesmo formato de `_adiado`: a negação só vale quando GOVERNA a palavra de
+# treino, e só dentro da mesma oração — vírgula, ponto e "mas" encerram o
+# alcance. "não entendi, me dá mais questões" nega o entender, não o pedido.
+PALAVRA_TREINO = r"quest(?:[ãa]o|[õo]es)|exerc[íi]cios?|it(?:em|ens)|treino|treinar|simulados?"
+RE_PALAVRA_TREINO = re.compile(rf"(?i)\b(?:{PALAVRA_TREINO})\b")
+RE_NEGACAO = re.compile(
+    r"(?i)\b(?:n[ãa]o|sem|nem|nada\s+de|chega\s+de|par[ae]\s+de|dispenso)\b")
+RE_FIM_DE_ORACAO = re.compile(r"(?i)[,.;:!?]|\bmas\b")
+# Verbo de pedir ENTRE a negação e a palavra de treino devolve o pedido: em
+# "sem dica me dá 3 questões" o "sem" nega a dica e o "me dá" pede as questões.
+# Só não devolve quando vem colado à negação — "não me dá questões" e "não
+# quero questões" são a própria recusa.
+RE_VERBO_DE_PEDIR = re.compile(
+    r"(?i)\b(?:me\s+)?(?:d[áa]|dar|manda|mande|mandar|traz|traga|trazer|passa|passe|"
+    r"passar|gera|gere|gerar|fa[çz]a|fazer|cria|crie|criar|solta|solte|quero|queria)\b")
+# Negação em pergunta retórica é pedido: "por que você não me dá questões?".
+RE_PERGUNTA_RETORICA = re.compile(r"(?i)\bpor\s*qu[eê]\s+(?:voc[êe]\s+)?n[ãa]o\b")
+
+
+def _negado(fala: str) -> bool:
+    """A fala RECUSA o treino em vez de pedi-lo?"""
+    if not fala or RE_PERGUNTA_RETORICA.search(fala):
+        return False
+    for m in RE_PALAVRA_TREINO.finditer(fala):
+        antes = RE_FIM_DE_ORACAO.split(fala[:m.start()])[-1]
+        negacoes = list(RE_NEGACAO.finditer(antes))
+        if not negacoes:
+            continue
+        entre = antes[negacoes[-1].end():]
+        verbo = RE_VERBO_DE_PEDIR.search(entre)
+        if verbo is None or not entre[:verbo.start()].strip():
+            return True
+    return False
+
+
 def veio_de_treino(historico: list[dict] | None) -> bool:
     """A última fala do ALUNO já era pedido de treino?
 
@@ -261,7 +301,7 @@ def treino(fala: str, apos_treino: bool = False) -> dict | None:
     # Só vale quando o adiamento GOVERNA a palavra de treino (ela vem depois
     # dele na frase): "depois me dá questões" adia; "me dá 5 questões, depois a
     # gente vê a teoria" pede agora e fala de outra coisa em seguida.
-    if _adiado(fala):
+    if _adiado(fala) or _negado(fala):
         return None
     if RE_ESCOLHA_ASSUNTO.search(fala):
         return None

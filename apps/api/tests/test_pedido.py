@@ -19,7 +19,7 @@ import pytest
 
 from core import db, pedido, socratic
 
-VERSAO = "test-pedido-v3"
+VERSAO = "test-pedido-v4"
 
 
 @pytest.mark.parametrize("fala, quantidade", [
@@ -416,6 +416,37 @@ def test_treino_adiado_nao_gera_questao_agora():
     # E o adiamento só vale quando GOVERNA a palavra de treino: pedir agora e
     # falar de outra coisa depois continua sendo pedido.
     assert pedido.treino("me dá 3 questões, depois a gente vê a teoria")["quantidade"] == 3
+
+
+@pytest.mark.parametrize("fala", [
+    # A frase real da bateria de 22/09/2026, que gerou cinco questões.
+    "Tenho 20 minutos por dia. Só quero planejar a semana, sem iniciar aula ou questões agora.",
+    "não quero questões agora",
+    "sem questões por hoje",
+    "nem pensar em questões",
+    "chega de questões",
+    "não me dá questões agora",
+    "não precisa de exercícios",
+    "não quero mais simulado",
+])
+def test_treino_negado_nao_gera_questao(fala):
+    """A palavra "questões" estava lá; a ordem era a contrária."""
+    assert pedido.treino(fala) is None, fala
+
+
+@pytest.mark.parametrize("fala", [
+    # A negação governa OUTRA coisa — o pedido continua de pé.
+    "não entendi, me dá mais questões",
+    "sem dica me dá 3 questões",
+    "me dá 5 questões sem gabarito",
+    "questões que não sejam de lei seca",
+    # Pergunta retórica pede.
+    "não vai me dar questões?",
+    "por que você não me dá questões?",
+])
+def test_negacao_de_outra_coisa_continua_pedindo(fala):
+    """Super-acionar aqui cala pedido legítimo: o aluno pediu e nada veio."""
+    assert pedido.treino(fala) is not None, fala
 
 
 def test_pergunta_sobre_a_memoria_do_app_nao_busca_material():
