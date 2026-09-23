@@ -1,4 +1,40 @@
-# Estado atual — fase 0 fechada, fase 1 ainda não iniciada
+# Estado atual — base zerada para simulação completa
+
+## 22/09/2026 — LEIA ANTES DE TUDO: o banco foi zerado de propósito
+
+A pedido do dono, a base foi limpa para ele subir um edital e materiais novos e
+simular o uso completo da ferramenta. **Não restaure nada**: o estado antigo
+não é perda, é decisão.
+
+- Ficou: o usuário `andrei.ferrari11@gmail.com` (perfil zerado, para o
+  onboarding rodar de novo), uma única "Mesa principal", a lei seca pública (CP,
+  CF, ADCT, CPP, Lei 8.112, histórico da CF — 2.314 trechos), `migracao`,
+  `embedding_cache` e `telemetria_llm`.
+- Saiu: os outros 10 usuários, mesas, editais, tópicos, todos os materiais do
+  aluno, todas as questões (públicas também), tentativas, progresso, caderno,
+  simulados, conversas, diário de teoria e fila de melhoria.
+- Backup completo anterior: `.logs/backup-completo-antes-do-reset-20260922.sql.gz`
+  (pg_dump, fora do git).
+- `avaliar_retrieval.py` depois do reset: 23/34 top-1, 32/34 top-6 (baseline).
+
+**Risco para quem trabalha em paralelo neste banco:** `git pull` dispara o hook
+`post-merge`, que IMPORTA o estado do ref remoto `estado` — ou seja, traria de
+volta o banco de antes do reset. `sincronizar.sh` sem argumento faz o mesmo.
+Antes do reset, 169 questões antigas já tinham sido reimportadas por fora desta
+sessão, com as datas originais. Não rodar import de estado sem pedido do dono.
+
+### O que mudou no código nesta rodada (commits fe41b04..90f6374)
+
+- Testes não deixam mais questão pública no acervo (`conftest._sem_lixo_no_acervo`).
+- `pedido.treino` trata negação ("não quero questões" não gera questão).
+- Questão abandonada depois de uma resposta vira tentativa (DialogoQuestao).
+- Material entra na disciplina do edital a que pertence, pelo cabeçalho dos
+  tópicos (`mesa.mapa_do_acervo`); `mesa.contexto` separa `disciplinas` (nomeia)
+  de `recorte` (filtra). Disciplinas manuais SOMAM às do edital (decisão do dono).
+- 032: o desempenho deixa de contar questão privada de outro aluno.
+- Geração não grava a mesma pergunta duas vezes no mesmo trecho (Jaccard ≥ 0,9).
+
+## Histórico anterior (fase 0) — dados abaixo são de ANTES do reset
 
 Checkpoint verificado em 21/09/2026. Este arquivo registra o que falta; não
 substitui `git status`, o banco ou os testes. Atualize-o ao terminar cada item.

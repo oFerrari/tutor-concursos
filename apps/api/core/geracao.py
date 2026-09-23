@@ -42,7 +42,7 @@ import re
 
 from . import assunto, db, llm, mesa, retrieval, socratic
 
-VERSAO = "geracao-v5"
+VERSAO = "geracao-v6"
 
 MIN_TEXTO = 140          # abaixo disso é stub, revogado ou remissão
 MAX_POR_VEZ = 5          # teto por chamada: cota de LLM é o recurso escasso
@@ -165,6 +165,14 @@ def salvar(questoes: list[dict], lote: list[dict]) -> tuple[list[dict], list[str
         if chunk is None:
             descartes.append(motivo)
             continue
+        tipo = q.get("tipo", "resposta_livre")
+        existente = _ja_existe(q["enunciado"], chunk, tipo)
+        if existente is not None:
+            if existente["id"] in {s["id"] for s in salvas}:
+                descartes.append(f"duplicata de q{existente['id']} na mesma leva")
+            else:
+                salvas.append(existente)
+            continue
         nova = db.exec1(
             """INSERT INTO questao (documento_id, disciplina, tema, enunciado,
                                     gabarito, dicas, fonte_chunks, tipo, gabarito_ce,
@@ -180,10 +188,59 @@ def salvar(questoes: list[dict], lote: list[dict]) -> tuple[list[dict], list[str
              # `.get` com default preserva o contrato antigo: quem chamar
              # `salvar` com dicionário sem `tipo` (código anterior à 012)
              # continua gravando discursiva, não quebra nem grava NULL.
-             "tipo": q.get("tipo", "resposta_livre"), "ce": q.get("gabarito_ce")},
+             "tipo": tipo, "ce": q.get("gabarito_ce")},
         )
         salvas.append(nova)
     return salvas, descartes
+
+
+# A MESMA PERGUNTA NÃO VIRA OUTRA LINHA. Medido em 22/09/2026: "reparação do dano
+# no peculato culposo" existia 12 vezes, "emissão irregular de conhecimento de
+# depósito" 30 vezes em 4 redações — o gerador não olhava o que já havia no
+# trecho. Cada cópia infla os totais, divide o histórico do aluno entre linhas e
+# volta na fila como se fosse inédita.
+#
+# O LIMIAR É 0,9 E NÃO MENOR, e a razão é medida. Sobreposição de palavras de
+# conteúdo do enunciado, entre questões do MESMO trecho: de 0,90 a 0,95 todo par
+# amostrado era a mesma pergunta. Abaixo disso as paráfrases se misturam com
+# perguntas distintas do mesmo artigo — "pena cominada" × "conduta típica" deu
+# 0,42 e uma paráfrase real também deu 0,40. Resposta (gabarito) e sentido (e5)
+# foram medidos e também não separam: o e5 põe perguntas diferentes do mesmo
+# artigo em 0,88–0,94. Paráfrase fica, portanto, como limitação registrada —
+# apagar a pergunta sobre a pena achando que era a sobre a conduta é pior que
+# manter as duas.
+LIMIAR_DUPLICATA = 0.9
+
+
+def _palavras(texto: str) -> set[str]:
+    return {assunto._sem_acento(p) for p in assunto.palavras_de_conteudo(texto or "")}
+
+
+def semelhanca(a: str, b: str) -> float:
+    """Palavras de conteúdo em comum / palavras de conteúdo dos dois (Jaccard)."""
+    pa, pb = _palavras(a), _palavras(b)
+    return len(pa & pb) / len(pa | pb) if (pa | pb) else 0.0
+
+
+def _ja_existe(enunciado: str, chunk: dict, tipo: str) -> dict | None:
+    """A questão que já existe para este trecho e diz a mesma coisa, ou None.
+
+    Mesmo dono (a privada de um aluno não responde pela pública, nem pela de
+    outro), mesmo tipo (assertiva C/E e pergunta aberta sobre o mesmo ponto são
+    exercícios diferentes) e fora de série com texto associado — a série é
+    gravada inteira por `salvar_serie`, que não passa por aqui."""
+    for c in db.query(
+            """SELECT id, disciplina, tema, enunciado, gabarito, dicas, tipo,
+                      gabarito_ce, usuario_id
+                 FROM questao
+                WHERE fonte_chunks = %(f)s::bigint[] AND tipo = %(tipo)s
+                  AND usuario_id IS NOT DISTINCT FROM %(dono)s
+                  AND contexto_id IS NULL
+                ORDER BY id""",
+            {"f": [chunk["id"]], "tipo": tipo, "dono": chunk.get("dono")}):
+        if semelhanca(enunciado, c["enunciado"]) >= LIMIAR_DUPLICATA:
+            return c
+    return None
 
 
 # Trecho utilizável: dá pra provar de onde a questão saiu, não é histórico,

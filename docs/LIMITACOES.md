@@ -175,6 +175,32 @@ longo, `e_eco` devolve `False` e `em_foco` usa apenas a fala nova, sem arrastar
 a disciplina abandonada. A resposta simples ao menu ("direito penal") continua
 sem virar consulta. Coberto por `tests/test_assunto_troca_de_disciplina.py`.
 
+## Paráfrase da mesma pergunta não é detectada como duplicata (22/09/2026)
+
+A geração deixa de gravar a mesma pergunta no mesmo trecho quando o enunciado tem
+≥ 90% das palavras de conteúdo em comum (`geracao.LIMIAR_DUPLICATA`). Paráfrase
+com outra redação passa. Medidos três sinais, entre questões do mesmo trecho, e
+nenhum separa paráfrase de pergunta distinta do mesmo artigo: sobreposição do
+enunciado ("pena cominada" × "conduta típica" = 0,42; paráfrase real = 0,40),
+sobreposição do gabarito, e sentido pelo e5 (perguntas diferentes do mesmo
+artigo em 0,88–0,94). Um limiar mais baixo apagaria a pergunta sobre a pena
+achando que era a sobre a conduta.
+
+## A fila não alterna disciplinas (22/09/2026)
+
+As inéditas entram por `ORDER BY q.id`: a disciplina com questões mais antigas
+ocupa o teto antes das outras. Medido: Direito Administrativo, com 13 questões,
+não aparecia na fila de nenhuma mesa. Não é defeito do vocabulário — é rodízio,
+que ainda não existe.
+
+## Maestria sem gradiente — decisão pendente do dono (22/09/2026)
+
+"Dominada" é caixa ≥ 3, e acerto com dica não promove
+(`scheduler_regras.proxima_caixa`). No chat a dica aparece sozinha depois do
+primeiro erro, então quase nenhum acerto do chat promove. Resultado visível:
+"0% coberto" e "100% do edital aberto" depois de um mês de estudo. É regra
+pedagógica deliberada, não bug; mudar é decisão de produto.
+
 ## Aberto
 
 ### Débito de retrieval: a busca afoga a lei, e a consulta faz eco (16/09/2026)

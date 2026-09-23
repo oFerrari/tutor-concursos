@@ -33,7 +33,7 @@ import pytest
 
 from core import db, geracao, material, mesa, questoes, scheduler, simulado
 
-VERSAO = "test-questao-da-apostila-v2"
+VERSAO = "test-questao-da-apostila-v3"
 
 # Texto sem UM "Art." — é o que faz `material._e_lei_seca` recusar e cair no
 # fatiamento por janela, que é o chunk sem artigo que interessa aqui.
@@ -385,3 +385,37 @@ def test_desempenho_nao_conta_questao_privada_de_outra_pessoa(usuario, outro_usu
 
     assert linha(usuario["id"]) is None, "a questão privada do outro entrou no meu número"
     assert linha(outro_usuario["id"])["questoes"] == 1
+
+
+def test_mesma_pergunta_no_mesmo_trecho_nao_vira_outra_linha(client, usuario):
+    """Medido em 22/09/2026: a mesma pergunta existia 12 vezes num trecho, e cada
+    cópia voltava na fila como inédita. Mesma pergunta = mesmo trecho, mesmo dono,
+    mesmo tipo e ≥ 90% das palavras de conteúdo do enunciado em comum."""
+    doc = _apostila(client, usuario["headers"])
+    c = _chunk_sem_artigo(doc["id"])
+
+    [primeira], _ = geracao.salvar([_questao(trecho=1)], [c])
+
+    # Reescrita sem mudar o conteúdo: a existente é devolvida, nada é gravado.
+    reescrita = {**_questao(trecho=1),
+                 "enunciado": "O que caracteriza a ação de um instrumento contundente?"}
+    [devolvida], descartes = geracao.salvar([reescrita], [c])
+    assert devolvida["id"] == primeira["id"]
+    assert descartes == []
+
+    # Pergunta DIFERENTE sobre o mesmo trecho continua virando linha nova — é o
+    # que o limiar alto protege: "pena" e "conduta" do mesmo artigo são duas.
+    outra = {**_questao(trecho=1),
+             "enunciado": "Qual lesão o instrumento perfurante produz na pele?",
+             "gabarito": "Ferida punctória."}
+    [nova], _ = geracao.salvar([outra], [c])
+    assert nova["id"] != primeira["id"]
+
+    # Duas iguais na MESMA leva: entra uma, a outra vira descarte explicado.
+    salvas, descartes = geracao.salvar([_questao(trecho=1), _questao(trecho=1)], [c])
+    assert [s["id"] for s in salvas] == [primeira["id"]]
+    assert any("mesma leva" in d for d in descartes)
+
+    n = db.exec1("SELECT count(*) n FROM questao WHERE fonte_chunks = %(f)s::bigint[]",
+                 {"f": [c["id"]]})["n"]
+    assert n == 2, "só a primeira e a diferente existem"
