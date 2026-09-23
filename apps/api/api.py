@@ -174,7 +174,7 @@ def rota_mesa_atual(uid: int = Depends(usuario_atual),
     ("o acervo ainda não cobre estas disciplinas") em vez de mostrar uma
     lista vazia sem motivo. É a única rota que paga esse COUNT.
     """
-    return {**m, "questoes": mesa.contar_questoes(m["disciplinas"], uid)}
+    return {**m, "questoes": mesa.contar_questoes(m["recorte"], uid)}
 
 
 @app.get("/disciplinas")
@@ -393,12 +393,12 @@ def rota_apagar_me(body: ApagarContaBody, uid: int = Depends(usuario_atual)):
 # ----------------------------------------------------------------- fila/estudo
 @app.get("/fila")
 def rota_fila(uid: int = Depends(usuario_atual), m: dict = Depends(mesa_atual)):
-    return scheduler.fila(uid, disciplinas=m["disciplinas"])
+    return scheduler.fila(uid, disciplinas=m["recorte"])
 
 
 @app.get("/carga")
 def rota_carga(uid: int = Depends(usuario_atual), m: dict = Depends(mesa_atual)):
-    return scheduler.carga_hoje(uid, m["disciplinas"])
+    return scheduler.carga_hoje(uid, m["recorte"])
 
 
 @app.get("/sugestao")
@@ -414,8 +414,8 @@ def rota_sugestao(uid: int = Depends(usuario_atual), m: dict = Depends(mesa_atua
                      sem oferecer pra onde ir é só atrapalhar.
     """
     return {
-        "sugestao": ritmo.sugestao(uid, m["disciplinas"]),
-        "intervencao": ritmo.intervencao(uid, m["disciplinas"]),
+        "sugestao": ritmo.sugestao(uid, m["recorte"]),
+        "intervencao": ritmo.intervencao(uid, m["recorte"]),
     }
 
 
@@ -530,7 +530,7 @@ def rota_desafio(n_reincidentes: int = 3, n_novas: int = 5, n_simulado: int = 5,
     perfil = auth.perfil(uid)
     n_reincidentes, n_novas, n_simulado = desafio.proporcao_por_nivel(
         perfil, n_reincidentes, n_novas, n_simulado)
-    return desafio.montar(uid, n_reincidentes, n_novas, n_simulado, m["disciplinas"], minutos)
+    return desafio.montar(uid, n_reincidentes, n_novas, n_simulado, m["recorte"], minutos)
 
 
 # ------------------------------------------------------------------- simulado
@@ -557,7 +557,7 @@ def rota_iniciar_simulado(body: IniciarSimuladoBody, uid: int = Depends(usuario_
         mapa = questoes.obter_varias(body.questao_ids, uid)
         qs = [mapa[i] for i in body.questao_ids if i in mapa]
     else:
-        qs = simulado.selecionar(body.n, body.disciplina, m["disciplinas"], dono=uid)
+        qs = simulado.selecionar(body.n, body.disciplina, m["recorte"], dono=uid)
     if not qs:
         raise HTTPException(404, "nenhuma questão no acervo (ou disciplina inexistente)")
     sid = simulado.iniciar(uid, len(qs), body.minutos, m["id"], questao_ids=[q["id"] for q in qs],
@@ -676,12 +676,12 @@ def rota_historico_simulados(uid: int = Depends(usuario_atual), m: dict = Depend
 # --------------------------------------------------------------------- stats
 @app.get("/stats")
 def rota_stats(uid: int = Depends(usuario_atual), m: dict = Depends(mesa_atual)):
-    return scheduler.desempenho(uid, m["disciplinas"])
+    return scheduler.desempenho(uid, m["recorte"], m["mapa"])
 
 
 @app.get("/erros")
 def rota_erros(uid: int = Depends(usuario_atual), m: dict = Depends(mesa_atual)):
-    return scheduler.caderno_erros(uid, disciplinas=m["disciplinas"])
+    return scheduler.caderno_erros(uid, disciplinas=m["recorte"])
 
 
 @app.get("/conceitos")
@@ -698,7 +698,7 @@ def rota_conceitos(uid: int = Depends(usuario_atual), m: dict = Depends(mesa_atu
     lista simples; e um cliente que só quer o caderno passaria a pagar esta
     agregação sem pedir.
     """
-    return scheduler.conceitos_fracos(uid, m["disciplinas"], limite=12)
+    return scheduler.conceitos_fracos(uid, m["recorte"], limite=12)
 
 
 @app.get("/gasto")
@@ -715,7 +715,7 @@ def rota_gasto(dias: int = 1, uid: int = Depends(usuario_atual)):
 @app.get("/meta")
 def rota_meta(data: date | None = None, uid: int = Depends(usuario_atual),
               m: dict = Depends(mesa_atual)):
-    return scheduler.meta(uid, data, m["id"], m["disciplinas"])
+    return scheduler.meta(uid, data, m["id"], m["recorte"])
 
 
 # ------------------------------------------------------------------ perguntar
@@ -831,8 +831,11 @@ def rota_perguntar(body: PerguntaBody, uid: int = Depends(usuario_atual),
         # sorteava em toda a mesa e podia repetir exatamente a troca indevida.
         disciplina_pedida = assunto.disciplina_citada(body.pergunta,
                                                        m["disciplinas"])
-        disciplinas_geracao = ([disciplina_pedida] if disciplina_pedida
-                               else m["disciplinas"])
+        # A disciplina citada é nome do EDITAL ("Ciências Forenses"); o material
+        # que a cobre pode ter outro nome ("Criminalística"). Sem o mapa, o
+        # gerador procurava trecho com o nome do edital e não achava nenhum.
+        disciplinas_geracao = ([disciplina_pedida, *m["mapa"].get(disciplina_pedida, [])]
+                               if disciplina_pedida else m["recorte"])
         try:
             tipo = p["tipo"] or geracao.tipo_da_banca(m.get("banca"))
             g = geracao.sob_demanda(disciplinas_geracao, tema,
@@ -962,7 +965,7 @@ def rota_gerar_questoes(body: GerarQuestaoBody, uid: int = Depends(usuario_atual
 
     try:
         tipo = body.tipo or geracao.tipo_da_banca(m.get("banca"))
-        r = geracao.sob_demanda(m["disciplinas"], tema, body.quantidade, tipo,
+        r = geracao.sob_demanda(m["recorte"], tema, body.quantidade, tipo,
                                 usuario_id=uid)
     except geracao.SemMaterial as e:
         # 409, não 500: o pedido é válido e o sistema está são — o acervo é

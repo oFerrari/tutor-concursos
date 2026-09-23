@@ -17,9 +17,12 @@ FILTRO — o acervo inteiro, exatamente o comportamento de antes da migração
 010. Mesa recém-criada (antes de subir o PDF) é o caso normal disso, e é
 degradação graciosa, não defeito.
 """
+import re
+import unicodedata
+
 from . import db, questoes
 
-VERSAO = "mesa-v4"
+VERSAO = "mesa-v5"
 
 NOME_PADRAO = "Mesa principal"
 
@@ -111,15 +114,12 @@ def disciplinas(mesa_id: int | None) -> list[str] | None:
     O alvo desta mesa. Três respostas possíveis, e as três dizem coisas
     diferentes (migração 017):
 
-      lista do EDITAL — veio do PDF. Tem PRECEDÊNCIA sobre o manual: é o
-                        documento oficial, e é dele que `scheduler.meta`
-                        tira a data da prova. Deixar o manual sobrepor faria
-                        o recorte vir de um lugar e o prazo de outro — o
-                        mesmo defeito que a 010 evitou ao fazer disciplina e
-                        data saírem do MESMO "último edital".
-      lista MANUAL    — o aluno declarou o alvo na mão, porque o edital
-                        ainda não saiu. Metade do tempo de preparação de
-                        verdade é assim.
+      lista do EDITAL — veio do PDF. É dele que `scheduler.meta` tira a
+                        data da prova, e o prazo nunca sai de outro lugar.
+      lista MANUAL    — o aluno declarou na mão: o edital ainda não saiu,
+                        ou a leitura do PDF deixou alguma de fora. SOMA à
+                        do edital (união), não a substitui — ver o
+                        comentário no corpo.
       None            — ninguém declarou nada. NÃO filtra, de propósito:
                         escopo vazio deixaria fila, desafio, simulado e
                         stats todos vazios, e a mesa inútil no dia 1.
@@ -140,11 +140,18 @@ def disciplinas(mesa_id: int | None) -> list[str] | None:
         {"m": mesa_id},
     )
     do_edital = [l["disciplina"] for l in linhas]
-    if do_edital:
-        return do_edital
-
     r = db.exec1("SELECT disciplinas_manuais FROM mesa WHERE id = %(m)s", {"m": mesa_id})
-    return sorted(r["disciplinas_manuais"]) if r and r["disciplinas_manuais"] else None
+    manuais = list(r["disciplinas_manuais"] or []) if r else []
+
+    # O MANUAL SOMA AO EDITAL, decidido pelo dono em 22/09/2026: "é como se eu
+    # não tivesse pego todas ou faltasse ler alguma". Antes o edital tinha
+    # precedência e o manual era gravado sem nunca valer — a mesa Agente tinha
+    # [Administrativo, Constitucional] escolhidos e a mesma fila da mesa sem
+    # escolha nenhuma. Somar não reabre o defeito que a precedência evitava: o
+    # PRAZO continua saindo só do edital (`scheduler.meta`), e o recorte fica
+    # maior, nunca vindo de outro lugar.
+    juntas = {d.strip(): None for d in do_edital + manuais if d and d.strip()}
+    return sorted(juntas) if juntas else None
 
 
 def origem_do_alvo(mesa_id: int) -> str:
@@ -181,6 +188,94 @@ def disciplinas_do_acervo(usuario_id: int | None = None) -> list[str]:
             WHERE disciplina IS NOT NULL
               AND (usuario_id IS NULL OR usuario_id = %(u)s)
             ORDER BY 1""", {"u": usuario_id})]
+
+
+# ------------------------------------------------- do acervo para o alvo
+# O ACERVO E O EDITAL NÃO FALAM A MESMA LÍNGUA, e nenhum dos dois está errado.
+# O material chega com o nome que o professor deu ("Criminalística"); o edital
+# agrupa por outro ("Ciências Forenses"). Medido em 22/09/2026: as duas
+# disciplinas do acervo que não casavam por nome — Criminalística e Direito
+# Processual Penal — somavam 62 questões (15% do acervo) invisíveis em fila,
+# desempenho, caderno, simulado e mesa, e o desempenho mostrava 2/26 quando o
+# banco tinha 3/28.
+#
+# A ponte sai do PRÓPRIO edital, não de tabela de apelidos: o conteúdo
+# programático nomeia os blocos de cada disciplina ("2.2. Criminalística e
+# Documentoscopia: …", "7.1 Direito Processual Penal: …"). Isso vale para
+# qualquer edital que liste o programa — todos listam —, e um alias fixo
+# acertaria este concurso e erraria o próximo.
+#
+# Só o CABEÇALHO do tópico (antes do primeiro ":") conta: menção solta no meio
+# da lista ("…crimes contra a administração pública…") não é o edital dizendo
+# que aquela matéria mora ali.
+
+
+def _normal(texto: str) -> str:
+    """Minúsculas, sem acento, espaço único — para comparar nomes."""
+    sem = unicodedata.normalize("NFKD", texto or "").encode("ascii", "ignore").decode()
+    return " ".join(sem.lower().split())
+
+
+def _contem(maior: str, menor: str) -> bool:
+    """`menor` aparece em `maior` como palavras inteiras (já normalizados)."""
+    return bool(menor) and re.search(rf"(?<!\w){re.escape(menor)}(?!\w)", maior) is not None
+
+
+def _mesmo_nome(a: str, b: str) -> bool:
+    """A regra de nome que `filtro` já aplica: um contém o outro."""
+    na, nb = _normal(a), _normal(b)
+    return _contem(na, nb) or _contem(nb, na)
+
+
+def mapa_do_acervo(mesa_id: int | None, usuario_id: int | None,
+                   alvo: list[str] | None = None) -> dict[str, list[str]]:
+    """Disciplina do alvo -> disciplinas do acervo que pertencem a ela.
+
+    Pertence por NOME (um contém o outro, a regra de sempre) ou por PROGRAMA (o
+    nome do acervo aparece no cabeçalho de um tópico daquela disciplina no
+    edital mais recente da mesa). Uma disciplina do acervo pode pertencer a
+    duas do alvo; o recorte é a união, e quem precisa de UM dono usa
+    `dono_no_alvo`."""
+    alvo = disciplinas(mesa_id) if alvo is None else alvo
+    if not alvo:
+        return {}
+    cabecalhos: dict[str, list[str]] = {}
+    for linha in db.query(
+            """SELECT t.disciplina, t.texto FROM topico t
+                WHERE t.edital_id = (SELECT id FROM edital WHERE mesa_id = %(m)s
+                                     ORDER BY criado_em DESC, id DESC LIMIT 1)""",
+            {"m": mesa_id}):
+        cabecalhos.setdefault(linha["disciplina"], []).append(
+            _normal(linha["texto"].split(":", 1)[0]))
+    acervo = disciplinas_do_acervo(usuario_id)
+    return {
+        a: [d for d in acervo
+            if _mesmo_nome(a, d) or any(_contem(c, _normal(d)) for c in cabecalhos.get(a, []))]
+        for a in alvo
+    }
+
+
+def recorte(alvo: list[str] | None, mapa: dict[str, list[str]]) -> list[str] | None:
+    """O que as telas FILTRAM: o alvo mais o acervo que pertence a ele.
+
+    `None` continua querendo dizer "sem filtro" (mesa sem alvo nenhum). Os
+    nomes do alvo ficam na lista para `filtro` seguir casando por nome o que já
+    casava — o recorte novo é superconjunto do antigo, nunca menor."""
+    if alvo is None:
+        return None
+    return sorted({*alvo, *(d for membros in mapa.values() for d in membros)})
+
+
+def dono_no_alvo(disciplina: str, mapa: dict[str, list[str]]) -> str:
+    """O nome do EDITAL para uma disciplina do acervo — é o que a tela mostra.
+
+    Mais de um candidato: o que casa por nome vence o que casa por programa, e
+    o empate fica com a ordem do alvo. Sem candidato, o nome original."""
+    candidatos = [a for a, membros in mapa.items() if disciplina in membros]
+    if not candidatos:
+        return disciplina
+    por_nome = [a for a in candidatos if _mesmo_nome(a, disciplina)]
+    return (por_nome or candidatos)[0]
 
 
 # ------------------------------------------------------------------- CRUD
@@ -278,6 +373,10 @@ def listar(usuario_id: int) -> list[dict]:
         disc = disciplinas(m["id"])
         m["disciplinas"] = disc
         m["origem_alvo"] = origem_do_alvo(m["id"])
+        # Contagem e "último estudo" pelo RECORTE, não pelo nome do alvo: sem
+        # isto o cartão dizia "último estudo há 7 dias" no dia em que o aluno
+        # estudou Criminalística numa mesa cujo edital chama "Ciências Forenses".
+        disc = recorte(disc, mapa_do_acervo(m["id"], usuario_id, disc))
         r = db.exec1(
             f"""SELECT count(DISTINCT q.id) AS questoes,
                        count(DISTINCT q.id) FILTER (WHERE p.caixa >= 3) AS dominadas
@@ -395,5 +494,12 @@ def contexto(usuario_id: int, mesa_id: int | None = None) -> dict:
     m = obter(usuario_id, mesa_id) if mesa_id is not None else padrao(usuario_id)
     if not m:
         return {}
-    return {**m, "disciplinas": disciplinas(m["id"]),
+    # DOIS PAPÉIS, duas chaves. `disciplinas` NOMEIA (o prompt diz "disciplinas
+    # do edital", `assunto.disciplina_citada` reconhece a gaveta pela fala); o
+    # `recorte` FILTRA (fila, desempenho, caderno, simulado, meta). Trocar o
+    # significado de `disciplinas` em silêncio mudaria o prompt e a leitura de
+    # assunto junto — e "criminalística" deixaria de contar como assunto na fala.
+    alvo = disciplinas(m["id"])
+    mapa = mapa_do_acervo(m["id"], usuario_id, alvo)
+    return {**m, "disciplinas": alvo, "mapa": mapa, "recorte": recorte(alvo, mapa),
             "origem_alvo": origem_do_alvo(m["id"])}

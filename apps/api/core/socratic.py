@@ -18,7 +18,7 @@ from datetime import datetime
 from . import assunto, diario, llm, mesa as mesa_mod, pedido as pedido_mod, retrieval
 from .retrieval import referencia
 
-VERSAO = "socratic-v72"
+VERSAO = "socratic-v73"
 
 ESQUEMA_RESPOSTA_TUTOR = {
     "type": "OBJECT",
@@ -399,7 +399,8 @@ def _programa_em_foco(mesa_: dict | None, pergunta: str,
             "próximo, sem explicá-lo de memória.")
 
 
-def _resumo_desempenho(usuario_id: int, disciplinas: list[str] | None = None) -> str | None:
+def _resumo_desempenho(usuario_id: int, disciplinas: list[str] | None = None,
+                       mapa: dict[str, list[str]] | None = None) -> str | None:
     """
     Texto curto e pronto pra virar contexto de prompt — o modelo só LÊ este
     resumo, nunca soma nada sozinho. Import local (não no topo do módulo):
@@ -407,7 +408,7 @@ def _resumo_desempenho(usuario_id: int, disciplinas: list[str] | None = None) ->
     `avaliar()`/`gerar_questoes()`, que não tocam nisso.
     """
     from . import scheduler
-    dados = scheduler.desempenho(usuario_id, disciplinas)
+    dados = scheduler.desempenho(usuario_id, disciplinas, mapa)
     if not dados:
         return None
     linhas = [
@@ -1030,7 +1031,15 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     contexto_material = ("\n\n".join(
         f"ID da fonte: {c['id']}\n{retrieval.formatar_contexto([c])}"
         for c in chunks) if chunks else None)
-    contexto_desempenho = _resumo_desempenho(usuario_id, disciplinas) if usuario_id else None
+    # NOMEAR e FILTRAR são papéis diferentes (`mesa.contexto`): `disciplinas`
+    # segue nomeando para `em_foco` e o programa; o que ele JÁ FEZ sai do
+    # recorte, senão "quais matérias eu já estudei?" omitia a matéria cujo
+    # material tem outro nome no edital — medido: Criminalística sumia da
+    # resposta com 2 tentativas registradas.
+    recorte = (mesa_ or {}).get("recorte", disciplinas)
+    mapa = (mesa_ or {}).get("mapa")
+    contexto_desempenho = (_resumo_desempenho(usuario_id, recorte, mapa)
+                           if usuario_id else None)
     contexto_mesa = _resumo_mesa(mesa_)
     contexto_programa = _programa_em_foco(mesa_, pergunta, historico)
     contexto_perfil = _resumo_perfil(perfil)
@@ -1039,7 +1048,7 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     # RESPONDEU; isto diz o que vocês CONVERSARAM nos dias anteriores, que é
     # exatamente o que faltava pra Seção 10 do prompt ("você não é uma sessão em
     # branco") ter matéria-prima em vez de só ordem.
-    contexto_teoria = (diario.resumo_para_prompt(usuario_id, disciplinas=disciplinas)
+    contexto_teoria = (diario.resumo_para_prompt(usuario_id, disciplinas=recorte)
                        if usuario_id else None)
 
     # A guarda considera as QUATRO fontes, não duas. Ela olhava só material e

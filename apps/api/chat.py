@@ -42,7 +42,7 @@ from core import auth, desafio as desafio_mod
 from core import llm, mesa as mesa_mod, ritmo, scheduler, simulado as simulado_mod, socratic
 from core.config import CLI_USUARIO_EMAIL
 
-VERSAO = "chat-v22"
+VERSAO = "chat-v23"
 con = Console()
 MAX_DICAS = 3
 # A ÚLTIMA DICA NÃO SAI AUTOMÁTICA. Regra de produto, igual na tela
@@ -110,16 +110,16 @@ def estudar() -> None:
     uid = _usuario_id()
     m = _mesa(uid)
     _cabecalho_mesa(m)
-    pendentes = scheduler.fila(uid, disciplinas=m["disciplinas"])
+    pendentes = scheduler.fila(uid, disciplinas=m["recorte"])
     if not pendentes:
         con.print("[green]Nada pendente hoje.[/] Ingira material novo ou volte amanhã.")
         return
 
-    c = scheduler.carga_hoje(uid, m["disciplinas"])
+    c = scheduler.carga_hoje(uid, m["recorte"])
     con.print(f"[bold]{len(pendentes)}[/] questões na fila · "
               f"{c['revisoes']} revisões venceram, {c['ineditas']} inéditas"
               + (f" · [yellow]{c['atraso']} de atraso[/]" if c["atraso"] else "") + "\n")
-    _mostrar_sugestao(uid, m["disciplinas"])
+    _mostrar_sugestao(uid, m["recorte"])
 
     _estudar_lista(uid, pendentes)
 
@@ -271,7 +271,7 @@ def simulado(n: int = simulado_mod.N_PADRAO, minutos: int | None = None,
     m = _mesa(uid)
     if questoes is None:
         _cabecalho_mesa(m)
-        questoes = simulado_mod.selecionar(n, disciplinas=m["disciplinas"], dono=uid)
+        questoes = simulado_mod.selecionar(n, disciplinas=m["recorte"], dono=uid)
         if len(questoes) < n:
             con.print(f"[dim]só há {len(questoes)} questões no recorte desta mesa; "
                       f"simulado sai menor.[/]")
@@ -350,7 +350,7 @@ def desafio(n_reincidentes: int = 3, n_novas: int = 5, n_simulado: int = 5) -> N
     uid = _usuario_id()
     m = _mesa(uid)
     _cabecalho_mesa(m)
-    plano = desafio_mod.montar(uid, n_reincidentes, n_novas, n_simulado, m["disciplinas"])
+    plano = desafio_mod.montar(uid, n_reincidentes, n_novas, n_simulado, m["recorte"])
     if plano["total_questoes"] == 0:
         con.print("[yellow]Nada para compor um desafio ainda — "
                   "ingira material ou responda algumas questões primeiro.[/]")
@@ -361,7 +361,7 @@ def desafio(n_reincidentes: int = 3, n_novas: int = 5, n_simulado: int = 5) -> N
         f"{len(plano['mini_simulado'])} mini-simulado · "
         f"~{plano['estimativa_minutos']} min estimados",
         title="desafio de hoje", border_style="magenta"))
-    _mostrar_sugestao(uid, m["disciplinas"])
+    _mostrar_sugestao(uid, m["recorte"])
 
     if plano["reincidentes"]:
         con.print("\n[bold]bloco 1 — pontos fracos[/]")
@@ -394,7 +394,8 @@ def simulados() -> None:
 def perguntar(pergunta: str) -> None:
     uid = _usuario_id()
     with con.status("consultando o acervo…"):
-        r = socratic.explicar(pergunta, uid, _mesa(uid)["disciplinas"])
+        ctx = _mesa(uid)
+        r = socratic.explicar(pergunta, uid, ctx["disciplinas"], ctx)
     con.print(Markdown(r["resposta"]))
     if r["fontes"]:
         # Listar tudo que foi recuperado engana: o modelo usa uma fração.
@@ -413,7 +414,7 @@ def perguntar(pergunta: str) -> None:
 def erros() -> None:
     uid = _usuario_id()
     t = Table("tema", "disciplina", "vezes", "último", title="caderno de erros")
-    for e in scheduler.caderno_erros(uid, disciplinas=_mesa(uid)["disciplinas"]):
+    for e in scheduler.caderno_erros(uid, disciplinas=_mesa(uid)["recorte"]):
         t.add_row(e["tema"], e["disciplina"], str(e["vezes"]), str(e["ultima"]))
     con.print(t)
 
@@ -426,7 +427,8 @@ def _barra(pct: float | None, largura: int = 20) -> str:
 
 def stats(como_json: bool = False) -> None:
     uid = _usuario_id()
-    dados = scheduler.desempenho(uid, _mesa(uid)["disciplinas"])
+    ctx = _mesa(uid)
+    dados = scheduler.desempenho(uid, ctx["recorte"], ctx["mapa"])
     if como_json:
         # Mesma função que vai virar endpoint um dia — testar o JSON aqui
         # agora é testar o contrato exato que o frontend vai receber depois.
@@ -483,7 +485,7 @@ def main() -> int:
         uid = _usuario_id()
         mesa_ctx = _mesa(uid)
         _cabecalho_mesa(mesa_ctx)
-        m = scheduler.meta(uid, data, mesa_ctx["id"], mesa_ctx["disciplinas"])
+        m = scheduler.meta(uid, data, mesa_ctx["id"], mesa_ctx["recorte"])
         for k, v in m.items():
             if isinstance(v, dict):
                 con.print(f"{k.replace('_', ' ')}:")

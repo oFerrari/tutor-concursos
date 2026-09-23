@@ -15,7 +15,7 @@ import pytest
 
 from core import db, scheduler
 
-VERSAO = "test-mesa-v1"
+VERSAO = "test-mesa-v2"
 
 
 def _criar_mesa(client, usuario, nome, disciplina=None):
@@ -373,10 +373,14 @@ def test_alvo_manual_recorta_como_o_edital(client, usuario, duas_disciplinas):
     assert not any(q["disciplina"] == fora for q in fila)
 
 
-def test_edital_tem_precedencia_sobre_o_manual(client, usuario, duas_disciplinas):
-    """O PDF é o documento oficial, e é dele que a meta tira a data da
-    prova. Deixar o manual sobrepor faria o recorte vir de um lugar e o
-    prazo de outro — o defeito que a 010 evitou."""
+def test_manual_soma_ao_edital_e_o_prazo_segue_do_edital(client, usuario, duas_disciplinas):
+    """MUDANÇA DE CONTRATO, decidida pelo dono em 22/09/2026. Antes o edital
+    tinha precedência e o manual era gravado sem nunca valer: a mesa com
+    edital aceitava a escolha na tela e continuava com a mesma fila. Agora o
+    manual SOMA — "é como se eu não tivesse pego todas ou faltasse ler alguma".
+
+    O que a precedência protegia continua protegido: o PRAZO sai só do edital,
+    então o recorte cresce sem passar a vir de outro lugar."""
     manual, doPdf = duas_disciplinas
     m = _criar_mesa(client, usuario, "Os dois", disciplina=doPdf)
     client.patch(f"/mesas/{m['id']}", json={"disciplinas": [manual]},
@@ -384,7 +388,7 @@ def test_edital_tem_precedencia_sobre_o_manual(client, usuario, duas_disciplinas
 
     ctx = client.get("/mesa", headers=_cab(usuario, m)).json()
     assert ctx["origem_alvo"] == "edital"
-    assert ctx["disciplinas"] == [doPdf]
+    assert ctx["disciplinas"] == sorted([doPdf, manual])
 
 
 def test_disciplina_inexistente_no_acervo_e_recusada(client, usuario, duas_disciplinas):

@@ -30,7 +30,7 @@ from . import db, mesa, questoes
 from .scheduler_regras import (INTERVALOS, conta_como_erro, dias_ate_revisao,
                                orcamento_novas, proxima_caixa)
 
-VERSAO = "scheduler-v26"
+VERSAO = "scheduler-v27"
 
 # TETO_DIARIO: quantas questões por dia. NOVAS_POR_DIA=None significa "todo o
 # orçamento que sobrar depois das revisões" — cota fixa perdeu em todos os
@@ -333,12 +333,41 @@ def conceitos_fracos(usuario_id: int, disciplinas: list[str] | None = None,
     )
 
 
-def desempenho(usuario_id: int, disciplinas: list[str] | None = None) -> list[dict]:
-    return db.query(
+def desempenho(usuario_id: int, disciplinas: list[str] | None = None,
+               mapa: dict[str, list[str]] | None = None) -> list[dict]:
+    """Uma linha por disciplina. Com `mapa` (o da mesa), a linha leva o nome do
+    EDITAL: "Criminalística" e "Ciências Forenses" são a mesma matéria para quem
+    estuda, e duas linhas — uma delas escondida pelo recorte — era o que fazia a
+    tela mostrar 2/26 quando o banco tinha 3/28."""
+    linhas = db.query(
         f"SELECT * FROM v_desempenho_disciplina WHERE usuario_id = %(u)s "
         f"AND {mesa.filtro('disciplina')} ORDER BY pct_acerto NULLS LAST",
         {"u": usuario_id, "disc": disciplinas},
     )
+    return _no_nome_do_alvo(linhas, mapa) if mapa else linhas
+
+
+CONTADORES_DESEMPENHO = ("questoes", "dominadas", "tentativas", "acertos")
+
+
+def _no_nome_do_alvo(linhas: list[dict], mapa: dict[str, list[str]]) -> list[dict]:
+    """Soma as linhas que pertencem à mesma disciplina do alvo e refaz os
+    percentuais com a MESMA conta da view (v_desempenho_disciplina, 008) —
+    média de percentuais daria peso igual a disciplina de 2 e de 290 questões."""
+    grupos: dict[str, dict] = {}
+    for linha in linhas:
+        nome = mesa.dono_no_alvo(linha["disciplina"], mapa)
+        g = grupos.setdefault(nome, {**linha, "disciplina": nome,
+                                     **{c: 0 for c in CONTADORES_DESEMPENHO}})
+        for c in CONTADORES_DESEMPENHO:
+            g[c] += linha[c] or 0
+    for g in grupos.values():
+        g["pct_acerto"] = (round(100.0 * g["acertos"] / g["tentativas"], 1)
+                           if g["tentativas"] else None)
+        g["cobertura_pct"] = (round(100.0 * g["dominadas"] / g["questoes"], 1)
+                              if g["questoes"] else 0.0)
+    return sorted(grupos.values(),
+                  key=lambda g: (g["pct_acerto"] is None, g["pct_acerto"] or 0))
 
 
 def meta(usuario_id: int, data_prova: date | None = None, mesa_id: int | None = None,

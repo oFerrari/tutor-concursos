@@ -49,7 +49,7 @@ from pathlib import Path
 
 from . import db, mesa as mesa_mod, questoes
 
-VERSAO = "edital-v8"
+VERSAO = "edital-v9"
 
 MESES = {"janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5,
          "junho": 6, "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10,
@@ -1011,28 +1011,50 @@ def cobertura(edital_id: int, usuario_id: int) -> list[dict]:
     tópico individual). `caixa` mudou de tabela (agora vive em `progresso`,
     por usuário) — por isso o LEFT JOIN em vez do antigo WHERE direto em
     questao.
+
+    CONTA PELA MESMA REGRA DAS OUTRAS TELAS (`mesa.filtro` + `mesa.mapa_do_acervo`).
+    Antes o casamento era de um sentido só — `questao ILIKE '%<nome do edital>%'`
+    —, e "Direito Penal" nunca cabia dentro de "Direito Penal E Legislação Penal
+    Extravagante": o Meu edital dizia 0 questões de Penal enquanto o Desempenho
+    mostrava 292. Duas regras para a mesma pergunta é o jeito de as telas se
+    contradizerem.
+
+    As disciplinas MANUAIS da mesa entram como linha própria, com 0 tópicos: foi
+    o aluno dizendo que o PDF deixou uma de fora (`mesa.disciplinas`), e uma
+    disciplina que vale em todo o resto e some desta tabela é a tela mentindo.
     """
-    topicos = db.query(
+    topicos = {t["disciplina"]: t["n"] for t in db.query(
         "SELECT disciplina, count(*) AS n FROM topico WHERE edital_id = %(e)s GROUP BY disciplina",
         {"e": edital_id},
-    )
+    )}
+    dono_mesa = db.exec1("SELECT mesa_id FROM edital WHERE id = %(e)s", {"e": edital_id})
+    mesa_id = dono_mesa["mesa_id"] if dono_mesa else None
+    alvo = list(topicos)
+    for d in mesa_mod.disciplinas(mesa_id) or []:
+        if d not in topicos:
+            alvo.append(d)
+    mapa = mesa_mod.mapa_do_acervo(mesa_id, usuario_id, alvo) if mesa_id else {}
+
     resultado = []
-    for t in topicos:
+    for disciplina in alvo:
         r = db.exec1(
             f"""SELECT count(DISTINCT q.id) AS total,
                        count(DISTINCT q.id) FILTER (WHERE p.caixa >= 3) AS dominadas
                 FROM questao q
                 LEFT JOIN progresso p ON p.questao_id = q.id AND p.usuario_id = %(u)s
-                WHERE q.disciplina ILIKE %(d)s AND {questoes.do_aluno('q')}""",
-            {"d": f"%{t['disciplina']}%", "u": usuario_id, "dono": usuario_id},
+                WHERE {mesa_mod.filtro('q.disciplina')} AND {questoes.do_aluno('q')}""",
+            {"disc": [disciplina, *mapa.get(disciplina, [])], "u": usuario_id,
+             "dono": usuario_id},
         ) or {"total": 0, "dominadas": 0}
+        n_topicos = topicos.get(disciplina, 0)
         cobertura_pct = 100 * r["dominadas"] / r["total"] if r["total"] else 0.0
         resultado.append({
-            "disciplina": t["disciplina"],
-            "topicos_no_edital": t["n"],
+            "disciplina": disciplina,
+            "topicos_no_edital": n_topicos,
             "questoes_disciplina": r["total"],
             "cobertura_pct": round(cobertura_pct, 1),
-            "topicos_pendentes_estimado": round(t["n"] * (1 - cobertura_pct / 100)),
+            "topicos_pendentes_estimado": round(n_topicos * (1 - cobertura_pct / 100)),
+            "manual": disciplina not in topicos,
         })
     return resultado
 
