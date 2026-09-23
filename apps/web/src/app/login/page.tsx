@@ -36,7 +36,10 @@ export default function PaginaLogin() {
     try {
       const { token } = await login(email, senha);
       setToken(token);
-      router.push("/");
+      // Entrar é escolher a missão do dia: a mesa decide o recorte de tudo o
+      // que vem depois. Ir direto ao painel usava a mesa que sobrou do último
+      // acesso sem perguntar — e numa conta nova, uma mesa que ninguém criou.
+      router.push("/mesas");
     } catch (e) {
       // ErroApi.message já vem do "detail" do FastAPI — mesma mensagem
       // que auth.py devolve pra email/senha errados ou conta inexistente.

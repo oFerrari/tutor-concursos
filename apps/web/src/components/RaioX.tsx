@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { X } from "lucide-react";
 import { Carga, Desempenho, EditalAtual, ErroCaderno, Mesa, Meta } from "@/lib/api";
-import { FLASHCARDS_NA_FILA, LIGA } from "@/mock/prototipo";
 
 /**
  * "Raio-X do aluno" — a terceira coluna do protótipo. Painel de contexto
@@ -14,9 +13,10 @@ import { FLASHCARDS_NA_FILA, LIGA } from "@/mock/prototipo";
  * Meta, maestria, carga e ofensiva vêm de endpoint real (`/meta`,
  * `/edital`, `/stats`, `/carga`, `/erros`) — ofensiva saiu do mock nesta
  * revisão (era OFENSIVA.dias; agora é `carga.ofensiva_dias`, calculado em
- * `scheduler.ofensiva_dias()`). Liga e "flashcards na fila" continuam
- * vitrine — estão em `mock/prototipo.ts`, com o que falta no backend
- * anotado lá.
+ * `scheduler.ofensiva_dias()`). Liga e "flashcards na fila" SAÍRAM em
+ * 22/09/2026: eram constantes do protótipo (28 flashcards, 7º de 42) exibidas
+ * como dado numa conta sem questão nenhuma. Número fictício na coluna que o
+ * aluno lê como "quanto a memória está devendo" é pior que coluna menor.
  */
 
 function formatarDataProva(iso: string | null | undefined): string | null {
@@ -132,20 +132,15 @@ export function RaioX({ meta, mesa, edital, desempenho, carga, erros, onFechar }
         )}
       </div>
 
-      {/* ------------------------------------------------ ofensiva + liga */}
-      <div className="grid grid-cols-2 gap-2.5">
-        <div className="painel">
-          <p className="rotulo mb-1.5">ofensiva</p>
-          <p className="text-xl font-semibold">🔥 {carga?.ofensiva_dias ?? 0}</p>
-          <p className="mt-0.5 text-[11.5px] text-subtle">
-            {carga?.ofensiva_dias ? "dias seguidos" : "estude hoje pra começar"}
-          </p>
-        </div>
-        <div className="painel">
-          <p className="rotulo mb-1.5">liga</p>
-          <p className="text-xl font-semibold">🏆 {LIGA.nome}</p>
-          <p className="mt-0.5 text-[11.5px] text-subtle">{LIGA.posicao}</p>
-        </div>
+      {/* ------------------------------------------------------ ofensiva */}
+      {/* A "liga" (Ouro, 7º de 42) saiu: era constante do protótipo, sem ranking
+          nenhum por trás, e mostrava 42 alunos numa base com um usuário só. */}
+      <div className="painel">
+        <p className="rotulo mb-1.5">ofensiva</p>
+        <p className="text-xl font-semibold">🔥 {carga?.ofensiva_dias ?? 0}</p>
+        <p className="mt-0.5 text-[11.5px] text-subtle">
+          {carga?.ofensiva_dias ? "dias seguidos" : "estude hoje pra começar"}
+        </p>
       </div>
 
       {/* --------------------------------------------- cards de maestria */}
@@ -204,10 +199,6 @@ export function RaioX({ meta, mesa, edital, desempenho, carga, erros, onFechar }
               <span className={`mono-num ${(erros?.length ?? 0) > 0 ? "text-accent-text" : "text-body"}`}>
                 {erros?.length ?? 0}
               </span>
-            </div>
-            <div className="dado-linha">
-              <span className="text-[#b6b6bd]">Flashcards na fila</span>
-              <span className="mono-num text-body">{FLASHCARDS_NA_FILA}</span>
             </div>
           </div>
           <Link href="/fila" className="btn-ghost mt-3.5 w-full text-[12.5px]">

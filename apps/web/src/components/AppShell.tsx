@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import { Header } from "@/components/Header";
 import { RaioX } from "@/components/RaioX";
@@ -18,6 +18,7 @@ import {
   getEdital,
   getErros,
   getMesaAtual,
+  getMesas,
   getMeta,
   getStats,
   getToken,
@@ -114,10 +115,37 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     getErros().then(setErros).catch(() => {});
   }, []);
 
+  // PORTÃO DA MESA. Conta sem mesa nenhuma vai pro lobby ANTES de o miolo
+  // montar — e o motivo é o backend: `mesa.padrao()` cria "Mesa principal"
+  // sozinho na primeira requisição que chega sem X-Mesa-Id (é o que a CLI e os
+  // testes esperam). Qualquer tela do app dispara requisições assim ao montar,
+  // então no primeiro acesso a mesa aparecia criada sem o aluno ter criado
+  // nada — relatado em 22/09/2026. `GET /mesas` só LÊ, não cria.
+  //
+  // Sem token não trava: a própria página manda pro login.
+  const router = useRouter();
+  const [liberado, setLiberado] = useState(false);
   useEffect(() => {
-    if (semCasca) return;
+    if (semCasca || liberado) return;
+    let vivo = true;
+    const temMesa = getToken() ? getMesas().then((ms) => ms.length > 0) : Promise.resolve(true);
+    temMesa
+      .then((tem) => {
+        if (!vivo) return;
+        if (tem) setLiberado(true);
+        else router.replace("/mesas");
+      })
+      // API fora do ar não pode prender a tela: a página mostra o erro dela.
+      .catch(() => vivo && setLiberado(true));
+    return () => {
+      vivo = false;
+    };
+  }, [pathname, semCasca, liberado, router]);
+
+  useEffect(() => {
+    if (semCasca || !liberado) return;
     carregar();
-  }, [pathname, semCasca, carregar]);
+  }, [pathname, semCasca, liberado, carregar]);
 
   // O elemento que de fato ROLA (o `<main>`) — a seta de voltar ao topo
   // precisa dele, e ninguém mais deve ter que adivinhar qual é.
@@ -138,6 +166,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="relative z-[1] flex min-w-0 flex-1 flex-col overflow-y-auto">{children}</div>
       </div>
     );
+  }
+
+  // Enquanto o portão confere, nada do miolo monta — é ele que dispararia a
+  // criação automática da mesa.
+  if (!liberado) {
+    return <div className="flex h-screen overflow-hidden" />;
   }
 
   const railVisivel = montado && railDisponivel && railAberto && !foco;

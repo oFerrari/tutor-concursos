@@ -58,7 +58,5 @@
  *     nada que ordene contas. É o mais caro, e o menos útil.
  */
 export const OFENSIVA = { dias: 12, recorde: 21 };
-export const LIGA = { nome: "Ouro", posicao: "7º de 42" };
 export const TEMPO_MEDIO = { valor: "1m 48s", nota: "por questão" };
 export const ACERTO_NOTA = "+4 pts vs. mês anterior";
-export const FLASHCARDS_NA_FILA = 28;

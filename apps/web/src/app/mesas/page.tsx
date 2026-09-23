@@ -427,7 +427,8 @@ function ConteudoMesas() {
       </div>
 
       <h1 className="text-[30px]">
-        Bem-vindo de volta. Qual é a <span className="text-accent-text">missão de hoje</span>?
+        {mesas !== null && mesas.length === 0 ? "Bem-vindo." : "Bem-vindo de volta."} Qual é a{" "}
+        <span className="text-accent-text">missão de hoje</span>?
       </h1>
       <p className="mb-7 mt-2 text-[15px] text-muted">
         Cada mesa guarda o edital do seu concurso e recorta a fila, o painel e os simulados pelas
@@ -562,8 +563,8 @@ function ConteudoMesas() {
       {mesas !== null && mesas.length === 0 && !criando && (
         <p className="mt-5 callout-info">
           <span className="font-semibold text-accent-text">Primeira vez · </span>
-          você ainda não criou nenhuma mesa. Enquanto não criar, o app usa uma mesa padrão sem
-          edital — ou seja, mostra o acervo inteiro.
+          crie sua primeira mesa para começar. É nela que ficam o edital do seu concurso e o
+          recorte da fila, do desempenho e dos simulados — o resto do app abre depois dela.
         </p>
       )}
 
