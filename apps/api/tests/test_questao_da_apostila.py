@@ -33,7 +33,7 @@ import pytest
 
 from core import db, geracao, material, mesa, questoes, scheduler, simulado
 
-VERSAO = "test-questao-da-apostila-v1"
+VERSAO = "test-questao-da-apostila-v2"
 
 # Texto sem UM "Art." — é o que faz `material._e_lei_seca` recusar e cair no
 # fatiamento por janela, que é o chunk sem artigo que interessa aqui.
@@ -356,3 +356,32 @@ def test_apagar_a_conta_leva_a_questao_privada(client, usuario):
     q = _privada_de(client, usuario)
     db.query("DELETE FROM usuario WHERE id = %(i)s", {"i": usuario["id"]})
     assert db.exec1("SELECT id FROM questao WHERE id = %(i)s", {"i": q["id"]}) is None
+
+
+def test_desempenho_nao_conta_questao_privada_de_outra_pessoa(usuario, outro_usuario):
+    """A view do desempenho (008) nasceu antes de existir questão privada e fazia
+    `CROSS JOIN questao`: o "0 de N questões" de um aluno contava as questões da
+    apostila de OUTRO. Não vazava conteúdo, só o número — e o número contradizia
+    o Meu edital (30 contra 22, medido em 22/09/2026). Corrigido na 032."""
+    disciplina = "Disciplina Sintética Só Do Outro"
+    doc = db.exec1("INSERT INTO documento (titulo, tipo, disciplina, usuario_id) "
+                   "VALUES ('apostila do outro', 'aula', %(d)s, %(u)s) RETURNING id",
+                   {"d": disciplina, "u": outro_usuario["id"]})["id"]
+    qid = db.exec1(
+        "INSERT INTO questao (documento_id, disciplina, tema, enunciado, gabarito, dicas, "
+        "fonte_chunks, usuario_id) VALUES (%(d)s, %(disc)s, 't', 'e?', 'g.', '[]'::jsonb, "
+        "'{}', %(u)s) RETURNING id",
+        {"d": doc, "disc": disciplina, "u": outro_usuario["id"]})["id"]
+    # A view só lista quem tem progresso; os dois precisam existir nela.
+    publica = db.exec1("SELECT id FROM questao WHERE usuario_id IS NULL LIMIT 1")["id"]
+    for dono, q in ((usuario["id"], publica), (outro_usuario["id"], qid)):
+        db.query("INSERT INTO progresso (usuario_id, questao_id, caixa, prox_revisao) "
+                 "VALUES (%(u)s, %(q)s, 0, CURRENT_DATE)", {"u": dono, "q": q})
+
+    def linha(dono):
+        return db.exec1("SELECT questoes FROM v_desempenho_disciplina "
+                        "WHERE usuario_id = %(u)s AND disciplina = %(d)s",
+                        {"u": dono, "d": disciplina})
+
+    assert linha(usuario["id"]) is None, "a questão privada do outro entrou no meu número"
+    assert linha(outro_usuario["id"])["questoes"] == 1

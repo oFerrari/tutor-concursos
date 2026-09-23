@@ -38,7 +38,8 @@ db/028_url_do_material.sql documento.url: de onde o material veio, quando veio d
 db/029_fila_melhoria.sql feedback `/erro`/`/feedback` preso à conversa e à resposta do tutor comentada
 db/030_telemetria_llm.sql provedor/modelo, tokens, status e origem de cada chamada de LLM
 db/031_estudo_teoria.sql diário por usuário/dia/assunto para teoria conversada atravessar sessões
+db/032_desempenho_sem_questao_alheia.sql o denominador do desempenho deixa de contar questão privada de outro aluno
 ```
 
-Próximo número livre: **032**. Confirme no diretório e com
+Próximo número livre: **033**. Confirme no diretório e com
 `python migrar.py --listar` antes de criar.

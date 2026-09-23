@@ -76,7 +76,7 @@ python migrar.py --listar     # estado do schema
 ```
 
 **Migrações:** só por `python migrar.py`. Nunca `psql -f` — fora do runner não
-entra no livro-razão (023). A próxima é a **032**.
+entra no livro-razão (023). A próxima é a **033**.
 
 ---
 
