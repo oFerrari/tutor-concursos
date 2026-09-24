@@ -39,7 +39,8 @@ db/029_fila_melhoria.sql feedback `/erro`/`/feedback` preso à conversa e à res
 db/030_telemetria_llm.sql provedor/modelo, tokens, status e origem de cada chamada de LLM
 db/031_estudo_teoria.sql diário por usuário/dia/assunto para teoria conversada atravessar sessões
 db/032_desempenho_sem_questao_alheia.sql o denominador do desempenho deixa de contar questão privada de outro aluno
+db/033_documento_tipo_edital.sql          `documento.tipo` aceita 'edital': edital subido como material fica listado e fora da busca
 ```
 
-Próximo número livre: **033**. Confirme no diretório e com
+Próximo número livre: **034**. Confirme no diretório e com
 `python migrar.py --listar` antes de criar.

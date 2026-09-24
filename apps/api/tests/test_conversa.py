@@ -73,8 +73,9 @@ def test_fonte_persiste_se_foi_citada_ou_so_consultada(client, usuario, monkeypa
     mensagens = client.get(f"/conversas/{resposta['conversa_id']}",
                            headers=usuario["headers"]).json()["mensagens"]
     fontes = next(m["fontes"] for m in mensagens if m["autor"] == "tutor")
+    campos = ("id", "titulo", "norma", "artigo", "citada")
 
-    assert fontes == [
+    assert [{k: f[k] for k in campos} for f in fontes] == [
         {"id": 901, "titulo": "Código Penal", "norma": "CP",
          "artigo": "312", "citada": True},
         {"id": 902, "titulo": "Código de Processo Penal", "norma": "CPP",

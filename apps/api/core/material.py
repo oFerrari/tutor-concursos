@@ -39,11 +39,12 @@ import json
 import queue
 import threading
 import time
+import unicodedata
 import re
 
 from . import chunking, db, embeddings
 
-VERSAO = "material-v28"
+VERSAO = "material-v29"
 
 LOTE = 32
 MIN_CHARS = 200
@@ -108,6 +109,48 @@ ESQUEMA_CLASSE = {
 # constitucionais" está escrito. Mandar o PDF inteiro multiplicaria a cota por
 # nada, e num curso de 14 aulas isso são 14 chamadas.
 MAX_CHARS_CLASSE = 6_000
+
+
+# O QUE FAZ DE UM TEXTO UM EDITAL: o vocabulário do certame, não o nome do
+# concurso. Medido em 24/09/2026 em 18 materiais reais: o edital tinha 17 destas
+# 23 marcas e 2,8 "inscri" por mil palavras; nenhuma apostila passou de 7 marcas
+# nem de 0,2 — nem a aula de Administrativo sobre concurso público, nem a de
+# direitos políticos, que fala de "candidato" 3,8 vezes por mil palavras.
+MARCAS_DE_EDITAL = (
+    "conteudo programatico", "das inscricoes", "da inscricao", "taxa de inscricao",
+    "cronograma", "banca examinadora", "prova objetiva", "provas objetivas", "do cargo",
+    "dos cargos", "numero de vagas", "vagas", "requisitos para", "homologacao",
+    "recurso contra", "candidato", "candidatos", "edital n", "comissao organizadora",
+    "isencao", "prova discursiva", "classificacao final", "posse")
+MARCAS_MINIMAS_EDITAL = 12
+INSCRICAO_POR_MIL_PALAVRAS = 1.0
+
+
+def parece_edital(texto: str) -> bool:
+    """O material é o edital de um concurso, e não matéria? Ver `MARCAS_DE_EDITAL`.
+
+    As duas condições juntas: marca espalhada sozinha aparece em aula que fala
+    de concurso público; a densidade de "inscrição" sozinha, num resumo curto
+    sobre o tema. Edital tem as duas."""
+    t = unicodedata.normalize("NFKD", (texto or "").lower()).encode("ascii", "ignore").decode()
+    palavras = len(t.split())
+    if not palavras:
+        return False
+    marcas = sum(1 for m in MARCAS_DE_EDITAL if m in t)
+    inscricao = 1000 * len(re.findall(r"inscri", t)) / palavras
+    return marcas >= MARCAS_MINIMAS_EDITAL and inscricao >= INSCRICAO_POR_MIL_PALAVRAS
+
+
+def marcar_se_edital(documento_id: int, texto: str) -> bool:
+    """Material que é edital vira `tipo='edital'` (033): fica na biblioteca, sai da
+    busca, e não é classificado — edital não tem disciplina nem assunto. Lei seca
+    não é tocada: a detecção é para o que o aluno subiu como aula."""
+    if not parece_edital(texto):
+        return False
+    r = db.exec1("""UPDATE documento SET tipo = 'edital', disciplina = NULL, assunto = NULL
+                     WHERE id = %(i)s AND tipo IN ('aula', 'resumo') RETURNING id""",
+                 {"i": documento_id})
+    return bool(r)
 
 
 def e_referencia(tipo: str | None, chunks: list[dict] | None = None) -> bool:
@@ -1072,7 +1115,8 @@ def indexar(documento_id: int, nome: str, dados: bytes) -> None:
     #     IndeterminateDatatype no UPDATE virou "falha na leitura" num arquivo
     #     com todos os trechos gravados. Rótulo é enfeite; índice é o produto.
     try:
-        _classificar_se_faltar(documento_id, texto, chunks)
+        if not marcar_se_edital(documento_id, texto):
+            _classificar_se_faltar(documento_id, texto, chunks)
     except Exception:
         pass
 
@@ -1254,6 +1298,66 @@ def _classificar_se_faltar(documento_id: int, texto: str,
                       SET disciplina = %s, assunto = %s, classificado_por = %s
                     WHERE id = %s""",
                 (disc, assu, de_quem, documento_id))
+
+
+def reclassificar_pelo_edital(usuario_id: int, mesa_id: int) -> list[int]:
+    """Refaz, com o vocabulário do edital recém-chegado, o palpite de disciplina do modelo.
+
+    O classificador escolhe entre os nomes que conhece NAQUELE momento. Medido
+    em 24/09/2026: a Aula 00 de Ciências Forenses, subida antes do edital, virou
+    "Direito Processual Penal" — e o edital da PC-PR não tem essa disciplina,
+    então a apostila ficou fora de toda a mesa ("essa matéria não veio no seu
+    material", disse o tutor). Com o vocabulário do edital, o mesmo modelo
+    acerta 3 de 3.
+
+    NÃO BASTA OLHAR O QUE O MAPA DEIXA DE FORA, e foi a primeira versão: o edital
+    da PC-PR põe "Direito Processual Penal" dentro de "Direito Penal e Legislação
+    Penal Extravagante" (itens 6.2 e 7.1), então a apostila de Ciências Forenses
+    rotulada Processual Penal estava "no edital" — na disciplina errada. O aluno
+    pediu Ciências Forenses, o tutor respondeu que não havia material, e a
+    conversa derivou para o inquérito policial. Com o vocabulário do edital o
+    modelo devolve Ciências Forenses 3 de 3, e as apostilas de controle
+    (Administrativo, Raciocínio Lógico) não mudam.
+
+    SÓ o que o MODELO rotulou: o que o aluno digitou é decisão dele. O palpite
+    novo só é aceito se cair no edital e for diferente do atual. Uma chamada ao
+    modelo por material, uma vez por edital confirmado. Devolve os ids trocados;
+    quem chama reindexa o rótulo deles."""
+    from . import mesa as mesa_mod
+    alvo = mesa_mod.disciplinas(mesa_id)
+    if not alvo:
+        return []
+    mapa = mesa_mod.mapa_do_acervo(mesa_id, usuario_id, alvo)
+    fora = db.query(
+        """SELECT id, disciplina, origem FROM documento
+            WHERE usuario_id = %(u)s AND classificado_por = 'modelo'
+              AND tipo IN ('aula', 'resumo') AND status = 'pronto'""", {"u": usuario_id})
+    if not fora:
+        return []
+    vocabulario = vocabulario_do_aluno(usuario_id)
+    trocados = []
+    for d in fora:
+        texto = "\n\n".join(r["texto"] for r in db.query(
+            "SELECT texto FROM chunk WHERE documento_id = %(i)s ORDER BY ordem LIMIT 12",
+            {"i": d["id"]}))
+        palpite = classificar(texto, vocabulario, com_assunto=False, nome_arquivo=d["origem"])
+        nova = (palpite.get("disciplina") or "").strip()
+        if nova and nova != d["disciplina"] and mesa_mod.no_alvo(nova, mapa):
+            db.query("UPDATE documento SET disciplina = %(n)s WHERE id = %(i)s",
+                     {"n": nova, "i": d["id"]})
+            trocados.append(d["id"])
+    return trocados
+
+
+def reclassificar_e_reindexar(usuario_id: int, mesa_id: int) -> None:
+    """Para `BackgroundTasks`: classifica (LLM) e reindexa o rótulo (embedding)
+    fora do request. Silencioso como `_classificar_se_faltar`: rótulo é enfeite
+    do índice, e falhar aqui não pode derrubar a confirmação do edital."""
+    try:
+        for documento_id in reclassificar_pelo_edital(usuario_id, mesa_id):
+            reindexar_rotulo(documento_id)
+    except Exception:
+        pass
 
 
 def atualizar(usuario_id: int, documento_id: int, disciplina: str | None = None,

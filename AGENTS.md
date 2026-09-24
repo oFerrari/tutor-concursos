@@ -33,7 +33,7 @@
 
 ## Projeto e rotas de referência
 - Tutor socrático pessoal para concursos, separado de dados empresariais. Backend FastAPI/Python `apps/api` (8000); frontend Next.js/React `apps/web` (3000); PostgreSQL/pgvector (5433); monorepo Yarn/Turbo.
-- Entrada de chat/RAG: `api.py:/perguntar` → `conversa.py`, `assunto.py`, `socratic.py`, `retrieval.py`, `pedido.py`, `geracao.py`.
+- Entrada de chat/RAG: `api.py:/perguntar` → `conversa.py`, `assunto.py`, `leitura.py` (ler o material na ordem), `socratic.py`, `retrieval.py`, `pedido.py`, `geracao.py`.
 - Frontend: `apps/web/src/lib/api.ts` e `apps/web/src/app/`. Outros módulos: `docs/MAPA_APLICACAO.md`, sob demanda.
 - Migrações: somente `python migrar.py`, nunca `psql -f`; confirme a próxima numeração antes de criar. Comandos operacionais: `docs/COMANDOS.md`.
 - Invariantes: questão privada não cruza usuários; pool usa `questoes.do_aluno()`; dono de questão gerada vem do chunk; `fonte_chunks` referencia fonte real; artigo fora do lote descarta questão; `certo_errado` exige `gabarito_ce` e não admite veredito `parcial`; texto de LLM não vai para `usuario.perfil`; progresso pertence ao usuário; filtros de dono/mesa ficam dentro das CTEs de retrieval híbrido.

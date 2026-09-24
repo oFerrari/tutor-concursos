@@ -556,6 +556,11 @@ export type Fonte = {
   /** Calculado pelo servidor ANTES de limpar a citação da prosa. Não tentar
    *  reconstruir pelo número do artigo: CP 312 e CPP 312 colidem. */
   citada?: boolean;
+  /** Rótulo legível do material do aluno (o `titulo` é o nome do arquivo). */
+  assunto?: string | null;
+  pagina?: number | null;
+  /** O trecho veio da LEITURA EM SEQUÊNCIA (`core/leitura.py`), não da busca. */
+  sequencial?: boolean;
 };
 
 /** Um turno do chat. Sem `conversaId`, o servidor abre uma conversa e
@@ -840,7 +845,9 @@ export type Material = {
   /** Procedência do rótulo: `aluno` digitou, `modelo` leu o começo do texto.
    *  A tela usa isso pra pedir conferência só no palpite. */
   classificado_por: "aluno" | "modelo" | "acervo" | null;
-  tipo: "aula" | "resumo" | "jurisprudencia";
+  /** `edital` quem marca é o servidor (033, `material.parece_edital`): o aluno
+   *  subiu um edital como aula. Fica listado, fora da busca do tutor. */
+  tipo: "aula" | "resumo" | "jurisprudencia" | "edital";
   status: "processando" | "pronto" | "falha";
   /** Razão da falha, em texto — "PDF protegido", "precisa de OCR". null quando
    *  não falhou. Sem ela o aluno vê "falha" e não sabe o que fazer. */

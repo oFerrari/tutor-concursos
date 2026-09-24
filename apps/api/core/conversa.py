@@ -35,7 +35,7 @@ import re
 
 from . import db, diario
 
-VERSAO = "conversa-v4"
+VERSAO = "conversa-v5"
 
 JANELA = 8          # turnos (aluno+tutor) devolvidos como histórico
 MAX_TITULO = 60
@@ -81,6 +81,45 @@ def retitular(conversa_id: int, pergunta: str, citadas: list[dict]) -> str | Non
            RETURNING titulo""",
         {"t": titulo, "c": conversa_id})
     return r["titulo"] if r else None
+
+
+def ultima_leitura(conversa_id: int) -> dict | None:
+    """Onde a leitura em sequência parou nesta conversa (`core/leitura.py`).
+
+    Lê `mensagem.fontes` das últimas respostas do tutor: a mais recente com
+    fonte `sequencial` é o marcador, e o maior `ordem` dela é o ponto. Nenhum
+    estado novo — é o registro do que o tutor usou, que já existia.
+    `foi_a_ultima` diz se a resposta mais recente do tutor foi de leitura: é o
+    que decide se um "certo" do aluno avança a leitura ou responde a uma pergunta."""
+    respostas = db.query(
+        """SELECT fontes FROM mensagem
+            WHERE conversa_id = %(c)s AND autor = 'tutor'
+            ORDER BY id DESC LIMIT 20""", {"c": conversa_id})
+    for i, r in enumerate(respostas):
+        lidas = [f for f in (r["fontes"] or []) if f.get("sequencial") and f.get("ordem") is not None]
+        if lidas:
+            return {"documento_id": lidas[-1]["documento_id"],
+                    "ordem": max(f["ordem"] for f in lidas),
+                    "ids": [f["id"] for f in lidas],
+                    "foi_a_ultima": i == 0}
+    return None
+
+
+def material_recente(conversa_id: int, respostas: int = 6) -> int | None:
+    """O material DO ALUNO de que a conversa está tratando: o citado mais
+    recentemente nas últimas respostas do tutor (o consultado, se nenhum foi
+    citado). É o que `leitura.escolher_material` usa quando o aluno pede "na
+    ordem" sem nomear matéria — a fala dele é sobre estudar, e o assunto é o
+    da conversa."""
+    for r in db.query(
+            """SELECT fontes FROM mensagem
+                WHERE conversa_id = %(c)s AND autor = 'tutor'
+                ORDER BY id DESC LIMIT %(l)s""", {"c": conversa_id, "l": respostas}):
+        materiais = [f for f in (r["fontes"] or []) if f.get("material") and f.get("documento_id")]
+        citados = [f for f in materiais if f.get("citada")]
+        if citados or materiais:
+            return (citados or materiais)[0]["documento_id"]
+    return None
 
 
 def criar(usuario_id: int, mesa_id: int | None, primeira_pergunta: str) -> dict:
@@ -146,6 +185,26 @@ def mensagens(conversa_id: int, limite: int | None = None) -> list[dict]:
            ) t ORDER BY id""",
         {"c": conversa_id, "l": limite},
     )
+
+
+def com_rotulo_das_fontes(msgs: list[dict]) -> list[dict]:
+    """Completa `assunto` e `pagina` das fontes gravadas antes de 24/09/2026.
+
+    A tela passou a rotular material do aluno pelo assunto e pela página, e as
+    mensagens antigas só guardavam o `titulo` — o nome do arquivo. Lido pelo id
+    do trecho; trecho que já não existe (material reindexado) fica como estava."""
+    faltam = {f["id"] for m in msgs for f in (m.get("fontes") or [])
+              if f.get("id") and "assunto" not in f}
+    if not faltam:
+        return msgs
+    rotulos = {r["id"]: r for r in db.query(
+        """SELECT c.id, c.pagina, d.assunto FROM chunk c JOIN documento d ON d.id = c.documento_id
+            WHERE c.id = ANY(%(i)s) AND d.usuario_id IS NOT NULL""", {"i": list(faltam)})}
+    for m in msgs:
+        m["fontes"] = [{**f, "assunto": rotulos[f["id"]]["assunto"], "pagina": rotulos[f["id"]]["pagina"]}
+                       if f.get("id") in rotulos and "assunto" not in f else f
+                       for f in (m.get("fontes") or [])]
+    return msgs
 
 
 def gravar(conversa_id: int, autor: str, texto: str, fontes: list | None = None) -> dict:

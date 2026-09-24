@@ -23,7 +23,7 @@ import re
 from . import db
 from .embeddings import embed_consulta
 
-VERSAO = "retrieval-v9"
+VERSAO = "retrieval-v10"
 RRF_K = 60  # constante de amortecimento padrão do RRF
 
 # Material `historico` (livro de emendas: "Redação Anterior", múltiplas
@@ -73,8 +73,12 @@ GENERICOS = {"art", "arts", "artigo", "artigos", "paragrafo", "parágrafo",
              "paragrafos", "parágrafos", "inciso", "incisos", "caput",
              "lei", "codigo", "código", "cf", "cp", "cpp"}
 
+# `documento_id`, `ordem` e `dono` servem à LEITURA EM SEQUÊNCIA (`core/leitura.py`):
+# o trecho que a busca achou é o ponto de entrada no material, e o resto dele se
+# lê pela ordem.
 CAMPOS = """c.id, c.texto, c.norma, c.artigo, c.paragrafo, c.rubrica, c.secao,
-            c.pagina, d.titulo, d.disciplina, d.assunto, d.tipo"""
+            c.pagina, c.documento_id, c.ordem, d.titulo, d.disciplina, d.assunto,
+            d.tipo, d.usuario_id AS dono"""
 
 # DONO DO MATERIAL (migração 019). "O público MAIS o meu", e nada além.
 #
@@ -106,6 +110,12 @@ DONO = "(d.usuario_id IS NULL OR d.usuario_id = %(uid)s)"
 # o reingest.py já precisou e do `%s::text` da 020.
 MESA = ("(%(mid)s::bigint IS NULL OR d.usuario_id IS NULL"
         " OR d.mesa_id IS NULL OR d.mesa_id = %(mid)s)")
+
+# EDITAL NÃO É FONTE (033). O edital de outro concurso, subido como aula, voltava
+# em três turnos de uma conversa sobre Ciências Forenses (24/09/2026): ensinar a
+# partir dele é ensinar "das inscrições". Fica na biblioteca, fora da busca.
+# Vai junto de MESA porque todo lugar que recorta a mesa escolhe fonte.
+MESA = f"({MESA} AND d.tipo <> 'edital')"
 
 SQL_HIBRIDA = f"""
 WITH sem AS (

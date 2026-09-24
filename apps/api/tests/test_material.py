@@ -1267,3 +1267,33 @@ def test_classificador_ve_o_edital_do_aluno_e_nao_o_material_alheio(client, usua
     assert "Matéria Sintética Alheia" not in vocabulario
     assert "Matéria Sintética Alheia" in material.vocabulario_do_aluno(outro_usuario["id"])
 
+
+
+def test_edital_novo_reclassifica_o_palpite_do_modelo_e_nao_o_do_aluno(client, usuario, llm_falso):
+    """Material rotulado pelo MODELO antes do edital é reclassificado com o
+    vocabulário novo, se o palpite cair no edital. O que o aluno digitou fica."""
+    import json
+    m = client.post("/mesas", json={"nome": "Concurso sintético"}, headers=usuario["headers"]).json()
+    eid = db.exec1("INSERT INTO edital (mesa_id, titulo) VALUES (%(m)s, 'Edital sintético') "
+                   "RETURNING id", {"m": m["id"]})["id"]
+    db.query("INSERT INTO topico (edital_id, disciplina, ordem, texto) VALUES "
+             "(%(e)s, 'Ciências Sintéticas', 1, '1.1 Perícia: conceito.')", {"e": eid})
+
+    def doc(disciplina, por):
+        return db.exec1(
+            "INSERT INTO documento (titulo, tipo, disciplina, usuario_id, classificado_por, status) "
+            "VALUES ('aula', 'aula', %(d)s, %(u)s, %(p)s, 'pronto') RETURNING id",
+            {"d": disciplina, "u": usuario["id"], "p": por})["id"]
+    palpite_fora, digitado_fora = doc("Processo Sintético", "modelo"), doc("Processo Sintético", "aluno")
+    for d in (palpite_fora, digitado_fora):
+        db.query("INSERT INTO chunk (documento_id, ordem, texto) VALUES (%(d)s, 0, 'Perícia e perito.')",
+                 {"d": d})
+    llm_falso.retorno = json.dumps({"disciplina": "Ciências Sintéticas", "assunto": ""})
+
+    assert material.reclassificar_pelo_edital(usuario["id"], m["id"]) == [palpite_fora]
+    disc = {r["id"]: r["disciplina"] for r in db.query(
+        "SELECT id, disciplina FROM documento WHERE id = ANY(%(i)s)",
+        {"i": [palpite_fora, digitado_fora]})}
+    assert disc == {palpite_fora: "Ciências Sintéticas", digitado_fora: "Processo Sintético"}
+    # E uma segunda passada não faz nada: o material já está no edital.
+    assert material.reclassificar_pelo_edital(usuario["id"], m["id"]) == []

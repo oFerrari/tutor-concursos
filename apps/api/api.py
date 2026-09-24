@@ -44,7 +44,7 @@ from core import (assunto, auth, conversa, desafio, edital, geracao, material, m
 from core.config import CORS_ORIGINS
 from core.llm import ErroLLM
 
-VERSAO = "api-v12"
+VERSAO = "api-v13"
 
 app = FastAPI(title="Tutor de concursos — API", version=VERSAO)
 
@@ -199,7 +199,8 @@ class EditalManualBody(BaseModel):
 
 
 @app.post("/edital/manual", status_code=201)
-def rota_edital_manual(body: EditalManualBody, uid: int = Depends(usuario_atual),
+def rota_edital_manual(body: EditalManualBody, fundo: BackgroundTasks,
+                       uid: int = Depends(usuario_atual),
                        m: dict = Depends(mesa_atual)):
     """Edital declarado à MÃO, sem PDF.
 
@@ -230,6 +231,7 @@ def rota_edital_manual(body: EditalManualBody, uid: int = Depends(usuario_atual)
         mesa.atualizar(uid, m["id"], disciplinas_manuais=[])
     except Exception:
         pass
+    fundo.add_task(material.reclassificar_e_reindexar, uid, m["id"])
     return {**novo, "cobertura": edital.cobertura(novo["id"], uid)}
 
 
@@ -783,15 +785,33 @@ def rota_perguntar(body: PerguntaBody, uid: int = Depends(usuario_atual),
                              "mensagem_tutor_id": item["mensagem_tutor_id"]}}
 
     historico = conversa.historico_para_prompt(conv["id"])
+    # Lido ANTES de gravar a fala: o marcador é o da última resposta do tutor.
+    leitura_atual = conversa.ultima_leitura(conv["id"])
+    material_recente = conversa.material_recente(conv["id"])
     conversa.gravar(conv["id"], "aluno", body.pergunta)
     try:
         r = socratic.explicar(body.pergunta, uid, m["disciplinas"], m, historico,
-                              auth.perfil(uid))
+                              auth.perfil(uid), leitura_atual=leitura_atual,
+                              material_recente=material_recente)
     except ErroLLM as e:
-        raise HTTPException(503, f"LLM indisponível: {e}")
+        # A tela desenha este `detail` como balão do tutor. "LLM indisponível:
+        # resposta truncada em 1500 tokens. Aumente max_tokens…" foi exatamente o
+        # que o aluno leu em 24/09/2026 — instrução de programador no lugar da
+        # aula. O motivo técnico fica no log, onde alguém pode agir sobre ele.
+        print(f"[tutor] /perguntar sem resposta do modelo: {e}")
+        raise HTTPException(503, "Não consegui responder agora — o modelo não devolveu a "
+                                 "resposta. Mande de novo em instantes; sua pergunta ficou "
+                                 "guardada na conversa.")
 
+    # `sequencial`, `documento_id` e `ordem` são o marcador da leitura em
+    # sequência (`conversa.ultima_leitura`); `pagina` e `assunto` são o que a
+    # tela mostra no lugar do nome do arquivo.
     fontes = [{"id": f["id"], "titulo": f["titulo"], "norma": f.get("norma"),
-               "artigo": f.get("artigo"), "citada": bool(f.get("citada"))}
+               "artigo": f.get("artigo"), "citada": bool(f.get("citada")),
+               "assunto": f.get("assunto"), "pagina": f.get("pagina"),
+               "documento_id": f.get("documento_id"), "ordem": f.get("ordem"),
+               "sequencial": bool(f.get("sequencial")),
+               "material": f.get("dono") is not None and f.get("tipo") in ("aula", "resumo")}
               for f in r["fontes"]]
     novo_titulo = conversa.retitular(conv["id"], body.pergunta,
                                      [f for f in r["fontes"] if f.get("citada")])
@@ -884,7 +904,7 @@ def rota_obter_conversa(cid: int, uid: int = Depends(usuario_atual)):
     conv = conversa.obter(uid, cid)
     if not conv:
         raise HTTPException(404, "conversa não encontrada")
-    return {**conv, "mensagens": conversa.mensagens(cid)}
+    return {**conv, "mensagens": conversa.com_rotulo_das_fontes(conversa.mensagens(cid))}
 
 
 @app.post("/conversas/{cid}/desfazer")
@@ -997,9 +1017,10 @@ def _titulo_do_upload(arquivo: UploadFile) -> str | None:
 
 
 @app.post("/edital")
-def rota_ingerir_edital(arquivo: UploadFile = File(...), titulo: str | None = Form(None),
+def rota_ingerir_edital(fundo: BackgroundTasks,
+                        arquivo: UploadFile = File(...), titulo: str | None = Form(None),
                         orgao: str | None = Form(None), banca: str | None = Form(None),
-                        m: dict = Depends(mesa_atual)):
+                        uid: int = Depends(usuario_atual), m: dict = Depends(mesa_atual)):
     """O edital entra NA MESA do header (migração 010) — é ele que define
     quais disciplinas ela passa a mostrar, então subir o PDF é o que
     transforma uma mesa recém-criada num recorte de verdade."""
@@ -1014,10 +1035,12 @@ def rota_ingerir_edital(arquivo: UploadFile = File(...), titulo: str | None = Fo
         # chamado "tmpcmrpqinr" e era isso que a tela mostrava. O fallback
         # certo aqui é o nome que o usuário enviou; o `stem` de `ingerir()`
         # só faz sentido pra CLI, onde o caminho é um arquivo de verdade.
-        return edital.ingerir(m["id"], caminho, titulo=titulo or _titulo_do_upload(arquivo),
-                              orgao=orgao, banca=banca)
+        r = edital.ingerir(m["id"], caminho, titulo=titulo or _titulo_do_upload(arquivo),
+                           orgao=orgao, banca=banca)
     finally:
         caminho.unlink(missing_ok=True)
+    fundo.add_task(material.reclassificar_e_reindexar, uid, m["id"])
+    return r
 
 
 # ----------------------------------------------------- edital: curadoria
@@ -1081,19 +1104,22 @@ class ConfirmarRascunhoBody(BaseModel):
 
 
 @app.post("/editais/rascunho/{rid}/confirmar")
-def rota_confirmar_rascunho(rid: int, body: ConfirmarRascunhoBody,
+def rota_confirmar_rascunho(rid: int, body: ConfirmarRascunhoBody, fundo: BackgroundTasks,
                             uid: int = Depends(usuario_atual),
                             m: dict = Depends(mesa_atual)):
     """Grava na MESA do header o que a pessoa curou — não o que o extrator
     achou. A partir daqui isso é edital de verdade e passa a recortar a
     mesa."""
     try:
-        return rascunho.confirmar(uid, rid, m["id"],
-                                  [d.model_dump() for d in body.disciplinas],
-                                  titulo=body.titulo, data_prova=body.data_prova,
-                                  orgao=body.orgao, banca=body.banca, cargo=body.cargo)
+        r = rascunho.confirmar(uid, rid, m["id"],
+                               [d.model_dump() for d in body.disciplinas],
+                               titulo=body.titulo, data_prova=body.data_prova,
+                               orgao=body.orgao, banca=body.banca, cargo=body.cargo)
     except rascunho.ErroRascunho as e:
         raise HTTPException(400, str(e))
+    # O edital traz o vocabulário que faltava ao classificador (ver a função).
+    fundo.add_task(material.reclassificar_e_reindexar, uid, m["id"])
+    return r
 
 
 @app.get("/edital")

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowUp, Check, ClipboardList, Pencil, Square } from "lucide-react";
+import { ArrowRight, ArrowUp, Check, ClipboardList, Eye, EyeOff, Pencil, Square } from "lucide-react";
 import { MarcaGlifo } from "@/components/Marca";
 import { BalaoQuestao } from "@/components/BalaoQuestao";
 import { GerarQuestoes } from "@/components/GerarQuestoes";
@@ -21,6 +21,7 @@ import {
   Questao,
 } from "@/lib/api";
 import { sair } from "@/lib/cache";
+import { usePreferencia } from "@/lib/preferencia";
 
 /**
  * O Tutor — conversa real com o professor e questões pedidas durante ela.
@@ -37,15 +38,51 @@ import { sair } from "@/lib/cache";
  */
 type Mensagem =
   | { autor: "usuario"; texto: string }
-  | { autor: "tutor"; texto: string; citadas: string[]; consultadas: string[] }
+  | { autor: "tutor"; texto: string; citadas: string[]; consultadas: string[]; leitura: boolean }
   // O AVISO DO PRÓPRIO APP (029), não fala de ninguém: "feedback salvo". Terceiro
   // valor em vez de um balão de tutor com texto fabricado — a 016 já resolveu
   // isso no BANCO quando `autor` ganhou `evento`, e escrever aqui um balão do
   // tutor que o modelo nunca gerou seria trazer o mesmo defeito pela tela.
   | { autor: "sistema"; texto: string };
 
-function referencia(f: Fonte): string {
-  return f.artigo ? `${f.titulo}, art. ${f.artigo}` : f.titulo;
+/** Faixa de páginas legível: [3, 4, 5, 9] -> "3–5, 9". */
+function paginas(ps: number[]): string {
+  const ordenadas = [...new Set(ps)].sort((a, b) => a - b);
+  const faixas: string[] = [];
+  for (let i = 0; i < ordenadas.length; i++) {
+    const ini = ordenadas[i];
+    while (i + 1 < ordenadas.length && ordenadas[i + 1] === ordenadas[i] + 1) i++;
+    faixas.push(ini === ordenadas[i] ? `${ini}` : `${ini}–${ordenadas[i]}`);
+  }
+  return faixas.join(", ");
+}
+
+/**
+ * As etiquetas de fonte de uma resposta, citadas e consultadas.
+ *
+ * MATERIAL DO ALUNO PELO ASSUNTO, e com as páginas: o `titulo` dele é o nome
+ * do PDF ("curso-392569-aula-00-prof-juliana-sganzerla-9bbd-completo"), que
+ * aparecia repetido quatro vezes embaixo de uma resposta. Os trechos do mesmo
+ * material viram UMA etiqueta com a faixa de páginas. Lei continua "título,
+ * art. N". Uma função para os dois caminhos — ao vivo e reabrindo a conversa —,
+ * porque foi a divergência entre eles que já deixou etiqueta repetida passar.
+ */
+function etiquetas(fontes: Fonte[]) {
+  const grupos = new Map<string, { citada: boolean; paginas: number[] }>();
+  for (const f of fontes) {
+    const nome = f.artigo ? `${f.titulo}, art. ${f.artigo}` : f.assunto || f.titulo;
+    const g = grupos.get(nome) ?? { citada: false, paginas: [] };
+    g.citada ||= f.citada === true;
+    if (!f.artigo && f.pagina) g.paginas.push(f.pagina);
+    grupos.set(nome, g);
+  }
+  const citadas: string[] = [];
+  const consultadas: string[] = [];
+  for (const [nome, g] of grupos) {
+    const rotulo = g.paginas.length ? `${nome}, p. ${paginas(g.paginas)}` : nome;
+    (g.citada ? citadas : consultadas).push(rotulo);
+  }
+  return { citadas, consultadas, leitura: fontes.some((f) => f.sequencial === true) };
 }
 
 export default function PaginaTutor() {
@@ -57,6 +94,10 @@ export default function PaginaTutor() {
   // pergunta abre uma no servidor e devolve o id, então não há chamada
   // extra só pra criar (migração 014).
   const [conversaId, setConversaId] = useState<number | null>(null);
+  // O OLHO DAS FONTES. Pedido do dono (24/09/2026): a lista do que o tutor leu
+  // fica sempre à mostra e disputa a atenção com a resposta. Uma escolha só,
+  // para todas as respostas, e lembrada neste navegador.
+  const [fontesVisiveis, setFontesVisiveis] = usePreferencia("tutor:fontes-visiveis", true);
   // Questões geradas DENTRO desta conversa, respondidas aqui mesmo. Antes o
   // botão empurrava pra /fila: você pedia questão no meio de um raciocínio
   // e era jogado pra outra tela — o que quebra exatamente o que a conversa
@@ -312,14 +353,10 @@ export default function PaginaTutor() {
       // que a busca híbrida recuperou (mas o modelo não usou) vira
       // "consultado". Listar tudo igual como "fonte" mascarava essa
       // diferença; mesma lógica que existia em /perguntar e em chat.py.
-      const citadas = new Set<string>();
-      const consultadas = new Set<string>();
-      for (const f of r.fontes) {
-        // O servidor leu as citações ANTES de limpar os colchetes da prosa e
-        // devolve a decisão por fonte. Recalcular por `art. N` na tela marcava
-        // CP 312 E CPP 312 como citados quando a resposta usava só um deles.
-        (f.citada === true ? citadas : consultadas).add(referencia(f));
-      }
+      // O servidor leu as citações ANTES de limpar os colchetes da prosa e
+      // devolve a decisão por fonte. Recalcular por `art. N` na tela marcava
+      // CP 312 E CPP 312 como citados quando a resposta usava só um deles.
+      const rotulos = etiquetas(r.fontes);
       // FEEDBACK: cartão do sistema, e o turno acaba aqui. Não há fontes pra
       // separar em citadas/consultadas, não há questão pra gerar, e a conversa
       // não guarda o bilhete — por isso o `return` em vez de seguir o fluxo
@@ -331,7 +368,7 @@ export default function PaginaTutor() {
       }
       setMensagens((m) => [
         ...m,
-        { autor: "tutor", texto: r.resposta, citadas: [...citadas], consultadas: [...consultadas] },
+        { autor: "tutor", texto: r.resposta, ...rotulos },
       ]);
       // QUESTÕES QUE O SERVIDOR JÁ GEROU porque a fala pedia treino
       // (`core/pedido.py`). Mesmo destino das que vinham do botão — `setGeradas`
@@ -365,6 +402,7 @@ export default function PaginaTutor() {
           texto: err instanceof ErroApi ? err.message : "Não deu pra conectar com a API",
           citadas: [],
           consultadas: [],
+          leitura: false,
         },
       ]);
     } finally {
@@ -405,25 +443,7 @@ export default function PaginaTutor() {
               if (m.autor === "aluno") {
                 return { autor: "usuario" as const, texto: m.texto };
               }
-              // SET, não array: o mesmo documento aparece em mais de um chunk, e
-              // `referencia()` devolve só o título quando não há artigo (material
-              // do aluno, tipo `historico`) — então a mesma etiqueta repetia. O
-              // React reclamou disso no log, com a chave literal:
-              // "Encountered two children with the same key,
-              // `curso-392722-aula-04-2787-completo`". O caminho AO VIVO já
-              // deduplicava com Set; só o de reabrir não, e a divergência entre
-              // os dois é que deixou passar.
-              const citadas = new Set<string>();
-              const consultadas = new Set<string>();
-              for (const f of m.fontes) {
-                (f.citada === true ? citadas : consultadas).add(referencia(f));
-              }
-              return {
-                autor: "tutor" as const,
-                texto: m.texto,
-                citadas: [...citadas],
-                consultadas: [...consultadas],
-              };
+              return { autor: "tutor" as const, texto: m.texto, ...etiquetas(m.fontes) };
             })
         );
         // AO REABRIR, CAI NO FIM — é onde a conversa parou. `irAoFim` mexe no
@@ -601,11 +621,32 @@ export default function PaginaTutor() {
                 <div className="min-w-0 flex-1">
                   <div className="balao-tutor">
                     <TextoDoTutor texto={m.texto} />
-                    {(m.citadas.length > 0 || m.consultadas.length > 0) && (
-                      <div className="mt-3 space-y-1.5 border-t border-line-soft pt-3">
+                    {(m.citadas.length > 0 || m.consultadas.length > 0) && !fontesVisiveis && (
+                      <button
+                        type="button"
+                        onClick={() => setFontesVisiveis(true)}
+                        className="mt-3 inline-flex items-center gap-1.5 text-[12px] text-subtle hover:text-muted"
+                        aria-label="mostrar as fontes das respostas"
+                        title="Mostrar as fontes"
+                      >
+                        <EyeOff className="h-3.5 w-3.5" />
+                        fontes ({m.citadas.length + m.consultadas.length})
+                      </button>
+                    )}
+                    {(m.citadas.length > 0 || m.consultadas.length > 0) && fontesVisiveis && (
+                      <div className="relative mt-3 space-y-1.5 border-t border-line-soft pt-3 pr-7">
+                        <button
+                          type="button"
+                          onClick={() => setFontesVisiveis(false)}
+                          className="absolute right-0 top-2.5 rounded-md p-1 text-subtle hover:bg-surface-hover hover:text-muted"
+                          aria-label="ocultar as fontes das respostas"
+                          title="Ocultar as fontes"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                        </button>
                         {m.citadas.length > 0 && (
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="rotulo">citado</span>
+                            <span className="rotulo">{m.leitura ? "lido do material" : "citado"}</span>
                             {m.citadas.map((c) => (
                               <span key={c} className="badge-neutral">{c}</span>
                             ))}
@@ -622,6 +663,22 @@ export default function PaginaTutor() {
                       </div>
                     )}
                   </div>
+                  {/* CONTINUAR A LEITURA é botão, não frase. O prompt mandava o
+                      tutor fechar dizendo 'diga "continua"', e em quatro turnos
+                      seguidos a frase saiu igual — virou tique. A tela oferece o
+                      passo; o texto só diz o que vem a seguir. Só na ÚLTIMA
+                      resposta: nas antigas o botão avançaria de onde a leitura
+                      já não está. */}
+                  {m.leitura && i === mensagens.length - 1 && !pensando && (
+                    <button
+                      type="button"
+                      onClick={() => perguntarAoTutor("continua")}
+                      className="btn-ghost mt-2 inline-flex items-center gap-1.5 text-[12.5px]"
+                    >
+                      Continuar a leitura
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
             )

@@ -81,6 +81,7 @@ core/rascunho.py      curadoria do edital antes de virar oficial
 core/geracao.py       gera questão do acervo E da apostila do aluno, com proveniência
 core/conversa.py      conversa persistida, janela de histórico, desfazer turno
 core/assunto.py       assunto em foco da conversa -> consulta que vai à busca (puro)
+core/leitura.py       ler o material do aluno NA ORDEM ("continua"), marcador em mensagem.fontes
 core/pedido.py        o aluno pediu treino/simulado? (puro)
 core/scheduler*.py    fila, registro, caderno de erros, meta — por usuario_id; regras puras à parte
 core/simulado.py      prova sob condição de exame, corrige no fim
@@ -147,7 +148,7 @@ Scripts da raiz: `setup.sh` (sobe tudo), `testar.sh` (qualidade da resposta),
   (o CASCADE da 009 limpa o resto).
 - Migração: `python migrar.py` aplica; **commitar não aplica**. Nunca por
   `psql -f` — fora do runner ela não entra no livro-razão (023), e o banco fica
-  com o efeito sem registro. A PRÓXIMA é a **033**; confira com
+  com o efeito sem registro. A PRÓXIMA é a **034**; confira com
   `migrar.py --listar` (há dois pares 018/019 repetidos, não crie um terceiro).
 - `.env` e `acervo/` fora do git; `corpus/` e `dados/progresso.json` no git.
   SQL só em migração numerada.

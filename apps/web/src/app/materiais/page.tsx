@@ -1207,6 +1207,30 @@ export default function PaginaMateriais() {
         Só endereço público (o servidor recusa IP interno). PDF ou página; o texto é extraído.
       </p>
 
+      {/* EDITAL SUBIDO COMO MATERIAL (033). Sem este aviso ele sumiria de todas
+          as abas — nenhuma é "edital" — e o aluno não saberia por que o
+          arquivo que subiu não aparece nem responde nada no tutor. */}
+      {(porTipo.get("edital")?.length ?? 0) > 0 && (
+        <div className="callout-warning mt-7 !p-3.5 text-[13px] leading-[1.6]">
+          <p>
+            {porTipo.get("edital")!.length === 1 ? "Este arquivo parece" : "Estes arquivos parecem"} ser
+            edital de concurso, não matéria — por isso o tutor não {porTipo.get("edital")!.length === 1 ? "o" : "os"} usa
+            para ensinar:{" "}
+            <span className="font-medium text-foreground">
+              {porTipo.get("edital")!.map((m) => m.titulo).join(", ")}
+            </span>
+            .
+          </p>
+          <p className="mt-1.5 text-muted">
+            Se é o edital da sua prova, suba em{" "}
+            <Link href="/meta" className="text-accent-text">
+              Meu edital
+            </Link>{" "}
+            — lá ele vira o mapa das disciplinas e da data da prova.
+          </p>
+        </div>
+      )}
+
       <div className="mb-2.5 mt-7 flex flex-wrap items-baseline justify-between gap-3">
         {/* UM BOTÃO POR TIPO, com o rótulo do próprio seletor do formulário —
             "Jurisprudência" aqui é a mesma string de lá porque as duas leem

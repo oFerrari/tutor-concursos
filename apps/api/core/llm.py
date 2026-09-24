@@ -24,7 +24,7 @@ from .config import (GEMINI_API_KEY, GEMINI_MODEL, GEMINI_RESERVAS, LLM_PROVIDER
 # 120s nao bastava no plano gratuito. Configuravel via LLM_TIMEOUT no .env.
 TIMEOUT = httpx.Timeout(float(os.getenv("LLM_TIMEOUT", "240")))
 DEBUG_FILE = Path(".llm_debug.txt")
-VERSAO = "llm-v18"
+VERSAO = "llm-v19"
 
 # Temperatura padrão de TODA chamada do produto. Era um literal repetido nos dois
 # adaptadores; virou constante quando o `temperatura=` apareceu, porque dois
@@ -41,6 +41,13 @@ ESPERA = (3, 10, 25)   # backoff entre tentativas, em segundos
 
 class ErroLLM(RuntimeError):
     pass
+
+
+class ErroTruncado(ErroLLM):
+    """O modelo parou no teto de tokens. Subclasse, e não mensagem a comparar:
+    quem chama pode tentar de novo com mais folga — o que `socratic.explicar`
+    faz — em vez de a frase "resposta truncada em 1500 tokens" chegar ao aluno,
+    que foi o que aconteceu em 24/09/2026 no meio de uma leitura."""
 
 
 class LLM:
@@ -187,8 +194,8 @@ class Gemini(LLM):
         # Truncar no meio de um JSON é a causa mais comum de "JSON inválido".
         # Melhor falhar com o motivo real do que devolver texto pela metade.
         if motivo == "MAX_TOKENS":
-            raise ErroLLM(f"resposta truncada em {max_tokens} tokens. "
-                          f"Aumente max_tokens ou reduza a quantidade pedida.")
+            raise ErroTruncado(f"resposta truncada em {max_tokens} tokens. "
+                               f"Aumente max_tokens ou reduza a quantidade pedida.")
         if motivo == "SAFETY":
             raise ErroLLM("resposta bloqueada pelos filtros do Gemini.")
         if not texto:

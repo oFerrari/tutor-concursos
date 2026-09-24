@@ -1,0 +1,151 @@
+"""Leitura em sequência: pedir para avançar lê o material na ordem dele.
+
+As falas dos testes puros são as da conversa real de 24/09/2026 em que o aluno
+pediu cinco vezes para estudar "na ordem", "como apostila", "sem perguntas" —
+e recebeu uma frase e uma pergunta por turno, com a conversa derivando para o
+inquérito policial. O material do teste de ponta a ponta é inventado.
+"""
+import json
+
+from core import conversa, db, leitura, material
+
+VERSAO = "test-leitura-v1"
+
+
+def test_frases_reais_de_quem_quer_ler_comecam_a_leitura():
+    for fala in ("eu queria estudar na ordem entender o conceito inteiro da materia",
+                 "não porisso eu quero que você ja traga todo o conteudo sobre esse topico 2.1",
+                 "eu quero ver na ordem de aprendizado que os materiais que eu subi trazem",
+                 "não e neste primeiro momento eu não quero responder perguntas eu só queroa a historia a explicação",
+                 "ja falei que eu quero aprender o conteudo como se estivesse lendo a apostila, sem pausas"):
+        assert leitura.intencao(fala, False, False) == "inicio", fala
+
+
+def test_certo_so_avanca_depois_de_um_turno_de_leitura():
+    """Depois de uma pergunta do tutor, "certo" é resposta a ela."""
+    assert leitura.intencao("certo..", ultima_foi_leitura=True, ha_leitura=True) == "continua"
+    assert leitura.intencao("certo..", ultima_foi_leitura=False, ha_leitura=True) is None
+    assert leitura.intencao("certo..", ultima_foi_leitura=False, ha_leitura=False) is None
+
+
+def test_continua_retoma_a_leitura_mesmo_depois_de_uma_duvida():
+    assert leitura.intencao("continua", ultima_foi_leitura=False, ha_leitura=True) == "continua"
+    assert leitura.intencao("pode seguir", ultima_foi_leitura=False, ha_leitura=True) == "continua"
+    assert leitura.intencao("continua", ultima_foi_leitura=False, ha_leitura=False) is None
+
+
+def test_pergunta_no_meio_da_leitura_vai_a_busca():
+    assert leitura.intencao("o que é perito ad hoc?", True, True) is None
+    assert leitura.intencao("aprofunda essa parte", True, True) == "aprofunda"
+
+
+def test_insistir_no_pedido_de_leitura_nao_troca_de_material():
+    assert not leitura.nomeia_outro_assunto(
+        "ja falei que eu quero aprender o conteudo como se estivesse lendo a apostila, sem pausas")
+    assert leitura.nomeia_outro_assunto("quero ler na ordem a parte de balística forense")
+
+
+def test_sumario_vira_roteiro_e_nao_come_a_janela():
+    sumario = "Sumário\nPerícias ........ 4\nPeritos ........ 11\nNomeação ........ 19\n"
+    assert leitura.e_sumario(sumario)
+    assert not leitura.e_sumario("Texto corrido sobre perícia. " * 20)
+    linhas = [{"texto": sumario}] + [{"texto": "x" * 1200} for _ in range(5)]
+
+    janela, seguinte = leitura._selecionar(linhas)
+
+    assert len(janela) == 1 + 2 and seguinte is linhas[3]
+
+
+def _aula(client, usuario):
+    paragrafos = [f"Seção {i}: o instituto sintético número {i} tem regra própria, "
+                  f"requisito próprio e efeito próprio no caso concreto. " * 5 for i in range(40)]
+    corpo = "\n\n".join(paragrafos).encode()
+    doc = client.post("/materiais", files={"arquivo": ("aula-00.txt", corpo, "text/plain")},
+                      data={"disciplina": "Ciências Sintéticas", "tipo": "aula"},
+                      headers=usuario["headers"]).json()
+    assert material.esperar_fila(30)
+    return doc["id"]
+
+
+def _turno(client, usuario, llm_falso, fala, cid=None, retorno="Aula sobre o trecho."):
+    llm_falso.retorno = retorno
+    corpo = {"pergunta": fala, **({"conversa_id": cid} if cid else {})}
+    r = client.post("/perguntar", json=corpo, headers=usuario["headers"])
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_leitura_avanca_pela_ordem_e_volta_depois_da_duvida(client, usuario, llm_falso):
+    doc = _aula(client, usuario)
+
+    r = _turno(client, usuario, llm_falso,
+               "quero estudar o instituto sintético na ordem do material, sem perguntas")
+    cid = r["conversa_id"]
+    primeira = conversa.ultima_leitura(cid)
+    assert primeira and primeira["documento_id"] == doc and primeira["foi_a_ultima"]
+    ordens = [c["ordem"] for c in db.query(
+        "SELECT ordem FROM chunk WHERE id = ANY(%(i)s) ORDER BY ordem", {"i": primeira["ids"]})]
+    assert ordens[0] == 0, "começar a ler é começar do começo do material"
+    assert "Leitura do material do aluno" in llm_falso.chamadas[-1]["prompt"]
+
+    _turno(client, usuario, llm_falso, "certo..", cid)
+    segunda = conversa.ultima_leitura(cid)
+    assert segunda["documento_id"] == doc and min(
+        c["ordem"] for c in db.query("SELECT ordem FROM chunk WHERE id = ANY(%(i)s)",
+                                     {"i": segunda["ids"]})) == primeira["ordem"] + 1
+
+    # Dúvida no meio: vai à busca, e a leitura fica onde estava.
+    _turno(client, usuario, llm_falso, "o que é o requisito próprio do instituto número 3?", cid,
+           retorno=json.dumps({"resposta": "É isto.", "fontes_usadas": []}))
+    depois_da_duvida = conversa.ultima_leitura(cid)
+    assert not depois_da_duvida["foi_a_ultima"] and depois_da_duvida["ordem"] == segunda["ordem"]
+
+    _turno(client, usuario, llm_falso, "continua", cid)
+    terceira = conversa.ultima_leitura(cid)
+    assert min(c["ordem"] for c in db.query("SELECT ordem FROM chunk WHERE id = ANY(%(i)s)",
+                                            {"i": terceira["ids"]})) == segunda["ordem"] + 1
+
+
+def test_pedir_para_ler_na_ordem_le_o_material_da_conversa_e_nao_o_da_busca(monkeypatch):
+    """Medido em 24/09/2026 com o modelo real: a fala sobre ESTUDAR ("na ordem,
+    o conceito inteiro, depois questões") foi à busca e voltou a lista de
+    gabaritos de outra apostila; o tutor escreveu sobre perícia em cima dela."""
+    monkeypatch.setattr(leitura, "documento_para",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("não devia buscar")))
+    fala = ("eu queria estudar na ordem entender o conceito inteiro da materia os mais "
+            "importante, depois fazer questões se me sentir preparado")
+
+    assert leitura.escolher_material(fala, fala, [], material_recente=2200, disciplinas=None,
+                                     mapa=None, usuario_id=1, mesa_id=None) == 2200
+
+
+def test_turno_termina_a_frase_e_o_seguinte_nao_a_repete():
+    """Medido em 24/09/2026: um turno terminou em "que serve para esclarecer e"
+    e o seguinte abriu em "prestar informações à Justiça" — a sobreposição do
+    chunker e a quebra de página do PDF, lidas em sequência."""
+    a = "Texto anterior completo. A perícia é um exame que serve para esclarecer e"
+    b = ("serve para esclarecer e\n\nprestar informações à Justiça. Na esfera criminal, "
+         "busca-se a materialidade.")
+    c = "busca-se a materialidade.\n\nNovo parágrafo sobre peritos."
+
+    [turno1] = leitura.emendar([{"texto": a}], None, {"texto": b})
+    turno2 = leitura.emendar([{"texto": b}, {"texto": c}], a, None)
+
+    assert turno1["texto"].endswith("esclarecer e prestar informações à Justiça.")
+    assert [t["texto"] for t in turno2] == ["Na esfera criminal, busca-se a materialidade.",
+                                          "Novo parágrafo sobre peritos."]
+
+
+def test_sem_fim_de_frase_por_perto_o_corte_fica():
+    """Emendar meia página para fechar uma frase seria pior que o corte."""
+    longo = "palavra " * 200
+    [t] = leitura.emendar([{"texto": "Frase sem fim e"}], None, {"texto": longo})
+    assert t["texto"] == "Frase sem fim e"
+
+
+def test_ordem_como_materia_nao_comeca_leitura():
+    for pergunta in ("o que diz a CF sobre a ordem econômica?",
+                     "na ordem social, o que diz o art. 193?",
+                     "qual a ordem de vocação hereditária?",
+                     "a ordem pública justifica a prisão preventiva?"):
+        assert leitura.intencao(pergunta, True, True) is None, pergunta

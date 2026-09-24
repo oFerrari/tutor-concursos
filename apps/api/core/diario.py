@@ -20,7 +20,7 @@ diário de linhas que enganam a leitura do dia seguinte.
 """
 from . import db
 
-VERSAO = "diario-v2"
+VERSAO = "diario-v3"
 
 MAX_ASSUNTO = 120       # casa com o CHECK da 031
 DIAS_PADRAO = 7         # janela do bloco que vai ao prompt
@@ -118,8 +118,14 @@ def _quando(dias_atras: int) -> str:
 
 
 def resumo_para_prompt(usuario_id: int, dias: int = DIAS_PADRAO,
-                       disciplinas: list[str] | None = None) -> str | None:
+                       disciplinas: list[str] | None = None,
+                       convite: bool = True) -> str | None:
     """Texto pronto pro bloco `### Teoria que vocês já conversaram`.
+
+    `convite=False` tira a marca "NENHUMA questão respondida". Ela existe para
+    o convite a testar que o prompt manda fazer UMA vez; chegando em todo
+    turno, o tutor a obedecia em todo turno — três ofertas de questão em seis
+    turnos, medido em 24/09/2026. Quem chama liga a marca só na abertura.
 
     Uma linha por assunto, com o dia por extenso relativo ("ontem", "há 3
     dias") em vez da data: a pergunta que isto responde é "o que estudamos
@@ -144,7 +150,7 @@ def resumo_para_prompt(usuario_id: int, dias: int = DIAS_PADRAO,
         if r["disciplina"]:
             parte += f"; MATÉRIA: {r['disciplina']}"
         parte += f"; QUANDO: {_quando(r['dias_atras'])}; {r['turnos']} turno(s) de conversa"
-        if r["questoes_no_dia"] == 0:
+        if r["questoes_no_dia"] == 0 and convite:
             parte += " — NENHUMA questão respondida nesse dia"
         elif r["questoes_no_dia"]:
             parte += f" e {r['questoes_no_dia']} questão(ões) respondida(s)"

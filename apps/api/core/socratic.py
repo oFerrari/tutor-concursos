@@ -15,10 +15,10 @@ import re
 import unicodedata
 from datetime import datetime
 
-from . import assunto, diario, llm, mesa as mesa_mod, pedido as pedido_mod, retrieval
+from . import assunto, db, diario, leitura, llm, mesa as mesa_mod, pedido as pedido_mod, retrieval
 from .retrieval import referencia
 
-VERSAO = "socratic-v75"
+VERSAO = "socratic-v76"
 
 ESQUEMA_RESPOSTA_TUTOR = {
     "type": "OBJECT",
@@ -544,6 +544,42 @@ def _resumo_mesa(mesa_: dict | None) -> str | None:
     return "\n".join(linhas)
 
 
+RE_NUMERO_DA_AULA = re.compile(r"(?i)\baula[\s_-]*(\d{1,3})\b")
+MAX_ITENS_BIBLIOTECA = 30
+
+
+def _resumo_biblioteca(usuario_id: int | None, mesa_: dict | None) -> str | None:
+    """O que o aluno TEM de material, por disciplina — o inventário, não a busca.
+
+    Medido em 24/09/2026: "eu preciso saber sobre o que você tem material" foi
+    respondido pelos trechos que a busca trouxe naquele turno (três tópicos de
+    uma aula só), e um turno antes o tutor tinha dito que a matéria "não veio
+    no seu material" — havia uma apostila inteira dela. A lista vem do banco,
+    com o nome do EDITAL para a disciplina (o mapa da mesa) e o assunto no
+    lugar do nome do arquivo. Edital subido como material não entra (033)."""
+    if not usuario_id:
+        return None
+    docs = db.query(
+        """SELECT disciplina, assunto, titulo FROM documento
+            WHERE usuario_id = %(u)s AND tipo IN ('aula', 'resumo', 'jurisprudencia')
+              AND status = 'pronto'
+            ORDER BY disciplina NULLS LAST, titulo""", {"u": usuario_id})
+    if not docs:
+        return "O aluno ainda não subiu material próprio: só há a lei seca do acervo."
+    mapa = (mesa_ or {}).get("mapa") or {}
+    grupos: dict[str, list[str]] = {}
+    for d in docs[:MAX_ITENS_BIBLIOTECA]:
+        disc = (mesa_mod.dono_no_alvo(d["disciplina"], mapa) if d["disciplina"]
+                else "sem disciplina identificada")
+        aula = RE_NUMERO_DA_AULA.search(d["titulo"] or "")
+        nome = d["assunto"] or d["titulo"]
+        grupos.setdefault(disc, []).append(f"{nome} (aula {aula.group(1)})" if aula else nome)
+    linhas = [f"- {disc}: {'; '.join(itens)}" for disc, itens in grupos.items()]
+    if len(docs) > MAX_ITENS_BIBLIOTECA:
+        linhas.append(f"- e mais {len(docs) - MAX_ITENS_BIBLIOTECA} material(is)")
+    return "\n".join(linhas)
+
+
 # ------------------------------------------------------- citação com fonte
 
 # Toda citação que o tutor escreve. O formato é o de `retrieval.referencia`,
@@ -819,9 +855,10 @@ SISTEMA_TUTOR = """Você é professor de concursos conversando com um aluno espe
 
 Na dúvida entre dois tipos, vale o de número menor.
 
+0. LEITURA DO MATERIAL — o contexto traz "### Leitura do material do aluno — em ordem". Vence todos os tipos abaixo: siga a seção "Leitura do material em ordem".
 1. SOCIAL/HUMOR — saudação, piada, desabafo, "tudo bem?", fala com "kkk" ou "rs". Mesmo quando também responde à pergunta anterior, abra com UMA frase leve e concreta sobre a brincadeira; a segunda linha pode retomar uma única ideia da matéria. Mencionar manhã/tarde/noite não é cumprimentar: não dê nova saudação se ele não cumprimentou nesta fala.
 2. PEDIDO DE TREINO — "me dá questões", "quero treinar". Uma ou duas linhas. Não fecha com pergunta.
-3. PEDIDO DE MAPA OU PLANEJAMENTO — "o que mais cai", "o que estudar primeiro", "como vamos estudar por dia", "quero questões; quais são os assuntos?". Dê lista ou plano curto. Quando ele pedir os assuntos antes de escolher as questões, liste os assuntos e espere a escolha: não diga que há questões abaixo nem comece o treino. Fique no planejamento até o fim: não retome nem teste o conteúdo que estava sendo tratado antes. Se ele perguntou COMO será o plano, termine depois de responder; não pergunte qual matéria quer começar nem o empurre para estudar uma agora.
+3. PEDIDO DE MAPA OU PLANEJAMENTO — "o que você tem de material", "o que mais cai", "o que estudar primeiro", "como vamos estudar por dia", "quero questões; quais são os assuntos?". Dê lista ou plano curto. Quando ele pedir os assuntos antes de escolher as questões, liste os assuntos e espere a escolha: não diga que há questões abaixo nem comece o treino. O que ele TEM de material sai de "### Material que o aluno subiu", nunca dos trechos recuperados no turno: nomeie os materiais da disciplina e diga o que o edital cobra e nenhum deles cobre. Fique no planejamento até o fim: não retome nem teste o conteúdo que estava sendo tratado antes. Se ele perguntou COMO será o plano, termine depois de responder; não pergunte qual matéria quer começar nem o empurre para estudar uma agora.
 4. PEDIDO DE EXPOSIÇÃO — "quero ler", "me explica", "não quero pergunta agora". Até 2 parágrafos, sem pergunta de diagnóstico, fechando com oferta de continuar.
 5. ABERTURA DE DISCIPLINA — ele nomeia a matéria inteira. Um parágrafo de conceito e um de distinção. Fecha com pergunta.
 6. CONTINUIDADE — resposta curta ("sei", "blz", "e daí?"), dúvida no ponto atual. TRÊS a QUATRO LINHAS: uma ideia, um exemplo curto, uma pergunta.
@@ -852,6 +889,24 @@ Termine com uma pergunta ou sugestão que seja o próximo passo para este aluno,
 NUNCA repita o fechamento do turno anterior. Se você já ofereceu seguir para um ponto e ele seguiu com outra dúvida, a oferta anterior morreu — não a reapresente com outras palavras. E NÃO ofereça questões em dois turnos seguidos: oferta recusada uma vez vira ruído que ele aprende a ignorar, e aí o convite não funciona nem quando é a hora certa. Na dúvida, feche ensinando: uma pergunta sobre o que você acabou de explicar vale mais que um cardápio.
 
 OFERECER O PRÓXIMO PONTO NÃO É O FECHAMENTO PADRÃO. Numa conversa, no máximo um turno em cada três termina oferecendo seguir para o próximo ponto; os outros terminam com uma pergunta que faça o aluno usar o que você acabou de explicar. A mesma fórmula de fechamento, com outras palavras ou não, em quase todo turno foi medida como tique. Vale para a pergunta final também: começá-la do mesmo jeito em turnos seguidos — o mesmo verbo, a mesma construção — é o mesmo tique. Pergunte o conteúdo direto (um caso para ele resolver, uma escolha entre duas hipóteses, o que muda se um elemento faltar), não se ele consegue ou percebe algo.
+
+## Leitura do material em ordem
+
+Quando o contexto traz a leitura do material, o aluno pediu para estudar pelo material dele, na ordem dele, como quem lê a apostila com um professor ao lado. Você dá a aula daquele trecho.
+
+EXPLIQUE TUDO O QUE O TRECHO TRAZ, na ordem em que ele traz, sem pular conceito. É aula, não resumo: o tamanho acompanha o trecho. Não encurte — cada parágrafo de conteúdo do trecho vira pelo menos um parágrafo seu, com o exemplo quando couber; quem pediu leitura quer ler o material inteiro, só que explicado. Aqui NÃO valem o limite de parágrafos, o "um micro-tópico por resposta", o "uma divisão por vez" nem o fechamento com pergunta.
+
+Organize para ler: subtítulo curto (### Título) quando o trecho muda de ideia, lista quando ele enumera, e um exemplo concreto para cada conceito central, dito como exemplo. Palavra-chave em negrito, com parcimônia.
+
+FIEL AO TRECHO, E SÓ A ELE. O que você explica é o que está escrito nos trechos da leitura — nada da conversa anterior, do edital ou da sua memória entra como conteúdo. Não acrescente conceito, número, prazo ou posição de tribunal que o trecho não traga; artigo de lei citado no trecho você pode citar. Se o trecho não for do assunto que vocês vinham tratando, diga isso numa linha e explique o trecho assim mesmo: escrever sobre outro assunto e atribuí-lo ao material é a pior falha possível aqui.
+
+Capa, sumário, apresentação do curso (metodologia, a quem se destina, como foi montado), apresentação do professor, contatos, redes sociais, propaganda e instruções de uso da apostila NÃO são matéria: pule sem mencionar. No COMEÇO do material, o sumário vira no máximo três linhas de roteiro ("Esta aula passa por: …") antes do conteúdo.
+
+Sem pergunta de diagnóstico, sem pedir que ele perceba ou consiga algo, sem oferecer questões no meio da leitura.
+
+Feche com UMA linha no formato "A seguir: <assunto>.", com o ASSUNTO do que vem depois, deduzido de "### A seguir no material" — em palavras suas, nunca copiando o começo daquele trecho. Turno de leitura não cumprimenta nem se despede. Não diga ao aluno o que ele pode digitar nem o convide a continuar: a tela já oferece o botão de seguir a leitura.
+
+Material que terminou: diga que acabou, recapitule em até cinco itens o que ele cobriu e ofereça treinar com questões desse conteúdo antes de seguir — nomeando o próximo material, se houver.
 
 ## 4. O que você pode afirmar
 
@@ -966,11 +1021,55 @@ Primeira mensagem, com ele cumprimentando: cumprimente de volta em UMA linha e p
 Pergunte o rumo UMA VEZ SÓ. Se você já perguntou e a resposta dele não escolheu nada — outro cumprimento, "tudo bem e você?", "vamos lá" —, NÃO repita a pergunta nem reapresente a lista. ESCOLHA você uma disciplina do edital dele, diga em meia linha que está começando por ela, e comece. Ele corrige numa palavra se quiser outra; insistir no cardápio gasta o turno sem sair do lugar."""
 
 
+MAX_TOKENS_RESPOSTA = 1500
+MAX_TOKENS_FOLGA = 4000      # segunda chance, não o padrão: resposta longa demais é defeito do turno
+MAX_TOKENS_LEITURA = 6000    # aula de uma seção do material (`core/leitura.py`)
+
+
+def _com_folga(gerar):
+    """Gera com o teto normal e, se o modelo bater nele, tenta UMA vez com folga.
+    A mensagem de truncamento não pode ser a resposta que o aluno lê."""
+    try:
+        return gerar(MAX_TOKENS_RESPOSTA)
+    except llm.ErroTruncado:
+        return gerar(MAX_TOKENS_FOLGA)
+
+
+def _bloco_de_leitura(plano: dict) -> str:
+    """A seção do prompt que traz a janela do material, em ordem, e o que vem
+    depois dela — para o tutor anunciar o próximo passo sem inventá-lo."""
+    trechos = plano["trechos"]
+    if plano["fim"]:
+        prox = plano.get("proximo_material")
+        seguinte = (f"Próximo material desta disciplina: {prox['assunto'] or prox['titulo']}."
+                    if prox else "Não há outro material desta disciplina na biblioteca do aluno.")
+        return ("### Leitura do material do aluno — em ordem\n"
+                f"O material terminou: não há mais trecho depois do último que vocês leram. {seguinte}")
+    c0 = trechos[0]
+    cabecalho = (f"Material: {c0.get('assunto') or c0.get('titulo')}"
+                 + (f" ({c0['disciplina']})" if c0.get("disciplina") else "")
+                 + (". COMEÇO do material." if plano["comeco"] else ".")
+                 + (" O aluno pediu para APROFUNDAR estes mesmos trechos: explique de novo, "
+                    "mais devagar e com outros exemplos." if plano["intencao"] == "aprofunda" else ""))
+    corpo = retrieval.formatar_contexto(trechos)
+    if plano.get("seguinte"):
+        depois = "### A seguir no material\n" + plano["seguinte"]["texto"][:leitura.CHARS_DO_PROXIMO]
+    elif plano.get("proximo_material"):
+        prox = plano["proximo_material"]
+        depois = ("### A seguir no material\nEstes são os últimos trechos deste material. "
+                  f"Próximo material desta disciplina: {prox['assunto'] or prox['titulo']}.")
+    else:
+        depois = "### A seguir no material\nEstes são os últimos trechos deste material."
+    return f"### Leitura do material do aluno — em ordem\n{cabecalho}\n\n{corpo}\n\n{depois}"
+
+
 def explicar(pergunta: str, usuario_id: int | None = None,
              disciplinas: list[str] | None = None,
              mesa_: dict | None = None,
              historico: list[dict] | None = None,
-             perfil: dict | None = None) -> dict:
+             perfil: dict | None = None,
+             leitura_atual: dict | None = None,
+             material_recente: int | None = None) -> dict:
     """
     Modo livre: aluno pergunta, tutor responde ancorado no acervo E no
     próprio desempenho real (quando usuario_id vem preenchido).
@@ -1031,11 +1130,25 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     # `None` = ninguém nomeou assunto nenhum ainda ("olá", "vamos" como primeira
     # fala). NÃO buscar é melhor que buscar por isso: seis artigos sorteados no
     # contexto são um convite pro modelo discorrer sobre eles.
-    chunks = (retrieval.buscar(consulta, n=6, usuario_id=usuario_id, mesa_id=mesa_id)
-              if consulta else [])
-    contexto_material = ("\n\n".join(
-        f"ID da fonte: {c['id']}\n{retrieval.formatar_contexto([c])}"
-        for c in chunks) if chunks else None)
+    # LER OU BUSCAR (`core/leitura.py`): pedido de avanço lê o material do aluno
+    # na ordem dele, a partir de onde a leitura parou; pergunta vai à busca por
+    # sentido, como sempre. `leitura_atual` é o marcador, lido de `mensagem.fontes`
+    # por quem tem a conversa (`conversa.ultima_leitura`).
+    plano = leitura.planejar(pergunta, consulta or assunto.em_foco(historico, pergunta, disciplinas),
+                             leitura_atual, usuario_id, mesa_id, historico=historico,
+                             material_recente=material_recente, disciplinas=disciplinas,
+                             mapa=(mesa_ or {}).get("mapa"))
+    if plano:
+        chunks = plano["trechos"]
+        contexto_material = None
+        contexto_leitura = _bloco_de_leitura(plano)
+    else:
+        chunks = (retrieval.buscar(consulta, n=6, usuario_id=usuario_id, mesa_id=mesa_id)
+                  if consulta else [])
+        contexto_leitura = None
+        contexto_material = ("\n\n".join(
+            f"ID da fonte: {c['id']}\n{retrieval.formatar_contexto([c])}"
+            for c in chunks) if chunks else None)
     # NOMEAR e FILTRAR são papéis diferentes (`mesa.contexto`): `disciplinas`
     # segue nomeando para `em_foco` e o programa; o que ele JÁ FEZ sai do
     # recorte, senão "quais matérias eu já estudei?" omitia a matéria cujo
@@ -1046,6 +1159,7 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     contexto_desempenho = (_resumo_desempenho(usuario_id, recorte, mapa)
                            if usuario_id else None)
     contexto_mesa = _resumo_mesa(mesa_)
+    contexto_biblioteca = _resumo_biblioteca(usuario_id, mesa_)
     contexto_programa = _programa_em_foco(mesa_, pergunta, historico)
     contexto_perfil = _resumo_perfil(perfil)
     contexto_tom = _tom_da_fala(pergunta)
@@ -1053,7 +1167,8 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     # RESPONDEU; isto diz o que vocês CONVERSARAM nos dias anteriores, que é
     # exatamente o que faltava pra Seção 10 do prompt ("você não é uma sessão em
     # branco") ter matéria-prima em vez de só ordem.
-    contexto_teoria = (diario.resumo_para_prompt(usuario_id, disciplinas=recorte)
+    contexto_teoria = (diario.resumo_para_prompt(usuario_id, disciplinas=recorte,
+                                                 convite=not historico)
                        if usuario_id else None)
 
     # A guarda considera as QUATRO fontes, não duas. Ela olhava só material e
@@ -1063,8 +1178,8 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     # e recebia resposta enlatada, quando é exatamente a pergunta que o
     # concurso-alvo e o perfil declarado respondem sem precisar de artigo nenhum.
     # Regressão pega por `test_perfil.py`, não em uso.
-    if not (contexto_material or contexto_desempenho or contexto_mesa or contexto_perfil
-            or contexto_programa or contexto_teoria):
+    if not (contexto_material or contexto_leitura or contexto_desempenho or contexto_mesa
+            or contexto_perfil or contexto_programa or contexto_teoria):
         return {"resposta": ("Não encontrei isso no material, e ainda não tenho nenhum "
                              "desempenho seu registrado.") if consulta else
                             ("Me diga de que matéria ou assunto você quer tratar — ainda não "
@@ -1089,9 +1204,13 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     if contexto_mesa or contexto_perfil:
         bloco = "\n".join(x for x in (contexto_mesa, contexto_perfil) if x)
         partes.append(f"### Contexto do aluno\n{bloco}")
+    if contexto_biblioteca:
+        partes.append(f"### Material que o aluno subiu (biblioteca)\n{contexto_biblioteca}")
     if contexto_programa:
         partes.append(contexto_programa)
-    if contexto_material:
+    if contexto_leitura:
+        partes.append(contexto_leitura)
+    elif contexto_material:
         partes.append(f"### Trechos de lei recuperados\n{contexto_material}")
     else:
         # A AUSÊNCIA DE MATERIAL É DECLARADA, não omitida. Sem esta seção o
@@ -1139,7 +1258,16 @@ def explicar(pergunta: str, usuario_id: int | None = None,
 
     sistema = SISTEMA_TUTOR
     usadas: set[int] = set()
-    if chunks:
+    if plano:
+        # Na leitura as fontes são CONHECIDAS — são a janela que nós mesmos
+        # escolhemos —, então não há `fontes_usadas` a pedir, e sem JSON a
+        # resposta longa não arrisca truncar no meio de um envelope. O orçamento
+        # é outro porque o tamanho é outro: aula de uma seção, não réplica.
+        resposta = llm.obter().gerar("\n\n".join(partes), sistema,
+                                     max_tokens=MAX_TOKENS_LEITURA)
+        usadas = {c["id"] for c in chunks if not leitura.e_sumario(c["texto"])} or \
+            {c["id"] for c in chunks}
+    elif chunks:
         sistema += (
             "\n\nFormato de saída: JSON com resposta (o texto para o aluno) e "
             "fontes_usadas (IDs inteiros dos trechos efetivamente usados para "
@@ -1148,12 +1276,13 @@ def explicar(pergunta: str, usuario_id: int | None = None,
             "recuperado, nem fonte citada só no histórico. Se nenhum sustenta "
             "a resposta, use lista vazia. IDs e metadados ficam fora da prosa."
         )
-        dados = llm.obter().gerar_json(
-            "\n\n".join(partes), sistema, max_tokens=1500,
-            schema=ESQUEMA_RESPOSTA_TUTOR, tentativas=1)
+        dados = _com_folga(lambda teto: llm.obter().gerar_json(
+            "\n\n".join(partes), sistema, max_tokens=teto,
+            schema=ESQUEMA_RESPOSTA_TUTOR, tentativas=1))
         resposta, usadas = _resposta_com_fontes(dados, chunks)
     else:
-        resposta = llm.obter().gerar("\n\n".join(partes), sistema, max_tokens=1500)
+        resposta = _com_folga(lambda teto: llm.obter().gerar(
+            "\n\n".join(partes), sistema, max_tokens=teto))
 
     # A ORDEM IMPORTA: tira as questões ANTES de limpar citações. Questão escrita
     # pelo modelo vem cheia de "art. 37" inventado, e limpar citação primeiro
@@ -1188,7 +1317,7 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     # eventualmente escrever, sem usá-las para atribuir fontes.
     resposta = limpar_citacoes(resposta, chunks)
 
-    fontes = [{**c, "citada": c["id"] in usadas} for c in chunks]
+    fontes = [{**c, "citada": c["id"] in usadas, "sequencial": bool(plano)} for c in chunks]
     return {"resposta": resposta, "fontes": fontes,
             "questoes_do_modelo_tiradas": questoes_tiradas}
 

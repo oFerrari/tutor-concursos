@@ -86,42 +86,57 @@ function formatar(linha: string, chave: string) {
  *  linha do item alinhar com a primeira em vez de voltar à margem. */
 const ITEM = /^\s*(\d{1,2}[.)]|[-–•·*])\s+/;
 
+/** Título de seção: "### Perícias" (1 a 4 cerquilhas). A leitura em sequência
+ *  (`core/leitura.py`) organiza a aula por subtítulos, e a tela mostrava os
+ *  "###" crus no meio do texto. */
+const TITULO = /^\s*#{1,4}\s+(.+?)\s*#*\s*$/;
+
+function bloco(linhas: string[], chave: string) {
+  const cheias = linhas.filter((l) => l.trim());
+  if (!cheias.length) return null;
+  const lista = cheias.length > 1 && cheias.every((l) => ITEM.test(l));
+  if (lista) {
+    return (
+      <ul key={chave} className="space-y-1.5">
+        {cheias.map((l, li) => {
+          const marca = ITEM.exec(l);
+          return (
+            <li key={li} className="flex gap-2">
+              <span className="shrink-0 select-none text-muted tabular-nums">
+                {marca ? marca[1].replace(/[-–•*]/, "·") : "·"}
+              </span>
+              <span className="min-w-0">{formatar(l.replace(ITEM, ""), `${chave}-${li}`)}</span>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
+  return (
+    <p key={chave} className="whitespace-pre-wrap">
+      {formatar(linhas.join("\n").trim(), chave)}
+    </p>
+  );
+}
+
 export function TextoDoTutor({ texto }: { texto: string }) {
   // Parágrafo é linha em branco; dentro dele, cada linha é uma linha. Isso
   // preserva as listas que o modelo escreve uma por linha sem transformá-las
-  // em prosa corrida.
+  // em prosa corrida. Um título pode vir colado ao parágrafo que abre ("###
+  // Peritos\nO perito oficial…"): vira título e o resto segue como bloco.
   const paragrafos = texto.trim().split(/\n{2,}/);
   return (
     <div className="space-y-2.5 text-[15px] leading-[1.65]">
-      {paragrafos.map((par, pi) => {
+      {paragrafos.flatMap((par, pi) => {
         const linhas = par.split("\n");
-        const lista = linhas.length > 1 && linhas.every((l) => ITEM.test(l) || !l.trim());
-        if (lista) {
-          return (
-            <ul key={pi} className="space-y-1.5">
-              {linhas
-                .filter((l) => l.trim())
-                .map((l, li) => {
-                  const marca = ITEM.exec(l);
-                  return (
-                    <li key={li} className="flex gap-2">
-                      <span className="shrink-0 select-none text-muted tabular-nums">
-                        {marca ? marca[1].replace(/[-–•*]/, "·") : "·"}
-                      </span>
-                      <span className="min-w-0">
-                        {formatar(l.replace(ITEM, ""), `${pi}-${li}`)}
-                      </span>
-                    </li>
-                  );
-                })}
-            </ul>
-          );
-        }
-        return (
-          <p key={pi} className="whitespace-pre-wrap">
-            {formatar(par, String(pi))}
-          </p>
-        );
+        const titulo = TITULO.exec(linhas[0] ?? "");
+        if (!titulo) return [bloco(linhas, String(pi))];
+        return [
+          <h3 key={`${pi}-t`} className="pt-1.5 text-[15.5px] font-semibold text-foreground">
+            {formatar(titulo[1].replace(/^\*\*(.+)\*\*$/, "$1"), `${pi}-t`)}
+          </h3>,
+          bloco(linhas.slice(1), `${pi}-c`),
+        ];
       })}
     </div>
   );

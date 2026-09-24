@@ -22,7 +22,7 @@ import unicodedata
 
 from . import db, questoes
 
-VERSAO = "mesa-v5"
+VERSAO = "mesa-v6"
 
 NOME_PADRAO = "Mesa principal"
 
@@ -264,6 +264,14 @@ def recorte(alvo: list[str] | None, mapa: dict[str, list[str]]) -> list[str] | N
     if alvo is None:
         return None
     return sorted({*alvo, *(d for membros in mapa.values() for d in membros)})
+
+
+def no_alvo(disciplina: str, mapa: dict[str, list[str]]) -> bool:
+    """A disciplina do acervo cai em alguma disciplina do alvo? Pelo mapa já
+    montado ou, para um nome que ainda não está em material nenhum, pela
+    mesma regra de nome de `filtro`."""
+    return any(disciplina in membros or _mesmo_nome(alvo, disciplina)
+               for alvo, membros in mapa.items())
 
 
 def dono_no_alvo(disciplina: str, mapa: dict[str, list[str]]) -> str:
