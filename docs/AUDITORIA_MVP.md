@@ -27,6 +27,19 @@ análise da conversa real de 24/09 (Ciências Forenses) e o que saiu dela.
 1. **Hooks de estado (1.8):** manter push/pull levando o banco, ou desligar.
 2. **Maestria (2.8):** manter a regra atual ou dar gradiente.
 
+### Pendente com o modelo real (deixado para depois pelo dono, 24/09)
+
+Depende de cota do Gemini; nada disto está feito:
+
+1. **Limitar o raciocínio do modelo nas chamadas do chat.** Causa medida do
+   "resposta truncada em 1500 tokens": a reserva `gemini-3.5-flash` gastou ~1.450
+   dos 1.500 tokens pensando e 45 escrevendo (telemetria 807/809, 20:50 de 23/09).
+   Descobrir qual campo o modelo aceita (`thinkingBudget` ou `thinkingLevel`) e
+   conferir na coluna `tokens_pensamento` (034).
+2. Ver se o cache implícito vale para as instruções fixas (`tokens_cache`).
+3. Conferir o streaming (`/perguntar/fluxo`) no navegador com o modelo real.
+4. Conversa de validação (`./testar.sh`) depois das mudanças de prompt.
+
 ### Próximos passos, em ordem
 
 1. **Usar a leitura na tela** (10.1): conferir o botão "Continuar a leitura", o
