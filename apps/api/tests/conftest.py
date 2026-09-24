@@ -27,7 +27,7 @@ from fastapi.testclient import TestClient
 from api import app
 from core import db, llm
 
-VERSAO = "conftest-v3"
+VERSAO = "conftest-v4"
 
 
 @pytest.fixture(scope="session")
@@ -147,6 +147,28 @@ class _LLMFalso(llm.LLM):
                 and not self.retorno.lstrip().startswith(("{", "["))):
             return json.dumps({"resposta": self.retorno, "fontes_usadas": []})
         return self.retorno
+
+
+class _LLMBloqueado(llm.LLM):
+    """O que `llm.obter()` devolve em teste que NÃO pediu `llm_falso`: falha como
+    falha o provedor fora do ar, sem rede.
+
+    Medido em 24/09/2026 pela telemetria (030): cada rodada da suíte fazia
+    dezenas de chamadas REAIS ao Gemini — o classificador de material roda em
+    todo upload, e só os testes que pediam `llm_falso` o tinham dublado. Um
+    teste de upload sozinho fez 4 requisições (uma por modelo da reserva); em
+    dois dias foram ~600, e a cota diária acabou em 429 nos quatro modelos no
+    meio do uso do dono. `ErroLLM` e não exceção nova: é o que o código já sabe
+    tratar (o classificador segue sem rótulo), então o teste enxerga o mesmo
+    comportamento de "provedor indisponível" — só que de graça."""
+
+    def gerar(self, *args, **kwargs):
+        raise llm.ErroLLM("teste sem llm_falso: chamada real ao LLM bloqueada")
+
+
+@pytest.fixture(autouse=True)
+def _sem_llm_de_verdade(monkeypatch):
+    monkeypatch.setattr(llm, "obter", lambda: _LLMBloqueado())
 
 
 @pytest.fixture
