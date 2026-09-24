@@ -23,9 +23,9 @@ Sem histórico ainda (usuário novo), cai num default documentado abaixo.
 import re
 
 from . import db, mesa, questoes
-from .scheduler import CAMPOS_Q, JOIN_CTX
+from .scheduler import CAMPOS_Q, JOIN_CTX, ineditas_em_rodizio
 
-VERSAO = "desafio-v6"
+VERSAO = "desafio-v7"
 
 _RE_HORAS = re.compile(r"^(\d+(?:\.\d)?)h\+?$")
 
@@ -143,14 +143,12 @@ def _novas(usuario_id: int, limite: int, excluir: set[int],
     if limite <= 0:
         return []
     return db.query(
-        f"""SELECT {CAMPOS_Q}, 0 AS caixa, CURRENT_DATE AS prox_revisao
-            FROM questao q {JOIN_CTX}
-            WHERE NOT EXISTS (SELECT 1 FROM progresso p
-                              WHERE p.usuario_id = %(u)s AND p.questao_id = q.id)
-              AND q.id <> ALL(%(ex)s)
-              AND {mesa.filtro('q.disciplina')}
-              AND {questoes.do_aluno('q')}
-            ORDER BY q.id LIMIT %(l)s""",
+        ineditas_em_rodizio(
+            f"""NOT EXISTS (SELECT 1 FROM progresso p
+                             WHERE p.usuario_id = %(u)s AND p.questao_id = q.id)
+                AND q.id <> ALL(%(ex)s)
+                AND {mesa.filtro('q.disciplina')}
+                AND {questoes.do_aluno('q')}"""),
         {"u": usuario_id, "l": limite, "ex": list(excluir) or [-1],
          "disc": disciplinas, "dono": usuario_id},
     )

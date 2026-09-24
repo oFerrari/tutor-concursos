@@ -43,7 +43,7 @@ import re
 
 from . import chunking, db, embeddings
 
-VERSAO = "material-v27"
+VERSAO = "material-v28"
 
 LOTE = 32
 MIN_CHARS = 200
@@ -169,7 +169,7 @@ def classificar(texto: str, disciplinas_conhecidas: list[str] | None = None,
         "Você recebe o começo de um material de estudo para concurso público "
         "brasileiro (apostila, aula, resumo ou jurisprudência) e devolve a "
         "DISCIPLINA e o ASSUNTO dele.\n\n"
-        f"Disciplinas que já existem no acervo: {conhecidas}.\n"
+        f"Disciplinas que este aluno já tem (acervo e edital): {conhecidas}.\n"
         "PREFIRA um desses nomes quando o material for da mesma matéria, "
         "escrito igual — é por nome que o recorte da mesa encontra o material "
         "depois, e \"Direito Const.\" não casa com \"Direito Constitucional\". "
@@ -1173,6 +1173,32 @@ def reindexar_rotulo(documento_id: int) -> bool:
     return True
 
 
+def vocabulario_do_aluno(usuario_id: int | None) -> list[str]:
+    """Os nomes de disciplina que o classificador deve preferir, pra ESTE aluno.
+
+    O acervo dele (público + o próprio material) E as disciplinas dos editais
+    e alvos manuais das mesas dele. Antes era `SELECT DISTINCT disciplina FROM
+    documento` sem dono: o nome da matéria que OUTRO aluno cadastrou ia pro
+    prompt — o vazamento que `mesa.disciplinas_do_acervo` documenta — e o
+    edital não entrava. Medido em 22/09/2026: a Aula 00 de Ciências Forenses
+    virou "Direito Processual Penal" porque "Ciências Forenses" ainda não
+    existia em material nenhum, embora fosse disciplina da mesa do aluno.
+
+    `usuario_id=None` (material público) devolve só o acervo público."""
+    return [r["disciplina"] for r in db.query(
+        """SELECT disciplina FROM documento
+            WHERE disciplina IS NOT NULL
+              AND (usuario_id IS NULL OR usuario_id = %(u)s)
+           UNION
+           SELECT t.disciplina FROM topico t
+             JOIN edital e ON e.id = t.edital_id
+             JOIN mesa m ON m.id = e.mesa_id
+            WHERE m.usuario_id = %(u)s AND t.disciplina IS NOT NULL
+           UNION
+           SELECT unnest(disciplinas_manuais) FROM mesa WHERE usuario_id = %(u)s
+           ORDER BY 1""", {"u": usuario_id})]
+
+
 def _classificar_se_faltar(documento_id: int, texto: str,
                            chunks: list[dict] | None = None) -> None:
     """Preenche disciplina/assunto quando o aluno não disse.
@@ -1189,8 +1215,8 @@ def _classificar_se_faltar(documento_id: int, texto: str,
     """
     with db.conexao_isolada() as c:
         with c.cursor() as cur:
-            cur.execute("SELECT disciplina, assunto, tipo, origem, classificado_por "
-                        "FROM documento WHERE id=%s", (documento_id,))
+            cur.execute("SELECT disciplina, assunto, tipo, origem, classificado_por, "
+                        "usuario_id FROM documento WHERE id=%s", (documento_id,))
             atual = cur.fetchone()
         if not atual:
             return
@@ -1199,9 +1225,7 @@ def _classificar_se_faltar(documento_id: int, texto: str,
         # reindexação gastaria cota pra descartar a resposta.
         if atual["disciplina"] and (atual["assunto"] or referencia):
             return
-        conhecidas = [r["disciplina"] for r in
-                      db.query("SELECT DISTINCT disciplina FROM documento "
-                               "WHERE disciplina IS NOT NULL ORDER BY 1")]
+        conhecidas = vocabulario_do_aluno(atual["usuario_id"])
         palpite = classificar(texto, conhecidas, com_assunto=not referencia,
                               nome_arquivo=atual.get("origem"))
         if not palpite:

@@ -30,7 +30,7 @@ from . import db, mesa, questoes
 from .scheduler_regras import (INTERVALOS, conta_como_erro, dias_ate_revisao,
                                orcamento_novas, proxima_caixa)
 
-VERSAO = "scheduler-v27"
+VERSAO = "scheduler-v28"
 
 # TETO_DIARIO: quantas questões por dia. NOVAS_POR_DIA=None significa "todo o
 # orçamento que sobrar depois das revisões" — cota fixa perdeu em todos os
@@ -60,6 +60,31 @@ CAMPOS_Q = ("q.id, q.disciplina, q.tema, q.enunciado, q.gabarito, q.dicas, "
             "q.tipo, q.gabarito_ce, q.contexto_id, q.ordem_no_contexto, "
             "x.texto AS contexto")
 JOIN_CTX = "LEFT JOIN contexto x ON x.id = q.contexto_id"
+
+
+def ineditas_em_rodizio(onde: str) -> str:
+    """SQL das inéditas que passam em `onde`, uma disciplina de cada vez.
+
+    `ORDER BY q.id` deixava a disciplina com as questões mais antigas ocupar a
+    cota inteira: medido em 22/09/2026, Direito Administrativo, com 13
+    questões, não aparecia na fila de mesa nenhuma. Agora a 1ª de cada
+    disciplina, depois a 2ª de cada, e assim por diante.
+
+    A volta é por UNIDADE, não por questão: a série Certo/Errado (013) conta
+    como uma, e seus itens saem juntos e em ordem — partir o texto-base com
+    questão de outra matéria no meio obrigaria o aluno a reler o texto.
+
+    `onde` usa o alias `q` e os parâmetros de quem chama; `%(l)s` é o limite."""
+    return f"""SELECT {CAMPOS_Q}, 0 AS caixa, CURRENT_DATE AS prox_revisao
+                 FROM (SELECT u.*, dense_rank() OVER (PARTITION BY u.disciplina
+                                                     ORDER BY u.unidade) AS volta
+                         FROM (SELECT q.*, min(q.id) OVER (
+                                          PARTITION BY COALESCE(q.contexto_id, -q.id)) AS unidade
+                                 FROM questao q
+                                WHERE {onde}) u) q
+                 {JOIN_CTX}
+                ORDER BY q.volta, q.disciplina, q.unidade, q.ordem_no_contexto NULLS FIRST, q.id
+                LIMIT %(l)s"""
 
 
 def fila(usuario_id: int, teto: int = TETO_DIARIO, novas: int | None = NOVAS_POR_DIA,
@@ -96,14 +121,11 @@ def fila(usuario_id: int, teto: int = TETO_DIARIO, novas: int | None = NOVAS_POR
     if sobra == 0:
         return revisoes
     inéditas = db.query(
-        f"""SELECT {CAMPOS_Q}, 0 AS caixa, CURRENT_DATE AS prox_revisao
-            FROM questao q {JOIN_CTX}
-            WHERE NOT EXISTS (SELECT 1 FROM progresso p
-                              WHERE p.usuario_id = %(u)s AND p.questao_id = q.id)
-              AND {mesa.filtro('q.disciplina')}
-              AND {questoes.do_aluno('q')}
-            ORDER BY q.id
-            LIMIT %(l)s""",
+        ineditas_em_rodizio(
+            f"""NOT EXISTS (SELECT 1 FROM progresso p
+                             WHERE p.usuario_id = %(u)s AND p.questao_id = q.id)
+                AND {mesa.filtro('q.disciplina')}
+                AND {questoes.do_aluno('q')}"""),
         {"u": usuario_id, "l": sobra, "disc": disciplinas, "dono": usuario_id},
     )
     return revisoes + inéditas

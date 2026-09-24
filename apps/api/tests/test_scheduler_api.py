@@ -99,3 +99,29 @@ def test_revisao_vencida_aparece_na_fila_como_revisao(client, usuario, questao_i
 
     carga = client.get("/carga", headers=usuario["headers"]).json()
     assert carga["revisoes"] >= 1
+
+
+def test_ineditas_alternam_disciplinas_e_serie_certo_errado_sai_inteira(usuario):
+    """`ORDER BY q.id` deixava a disciplina de questões mais antigas ocupar a
+    cota inteira (Direito Administrativo, 13 questões, fora de toda fila em
+    22/09/2026). A série C/E conta como uma unidade e sai junta, em ordem."""
+    from core import scheduler
+    antiga, nova = "Disciplina Rodízio Antiga", "Disciplina Rodízio Nova"
+
+    def questao(disciplina, **extra):
+        campos = {"d": disciplina, "tipo": "resposta_livre", "ce": None, "c": None, "o": None, **extra}
+        return db.exec1(
+            "INSERT INTO questao (disciplina, tema, enunciado, gabarito, tipo, gabarito_ce, "
+            "contexto_id, ordem_no_contexto) VALUES (%(d)s, 't', 'e?', 'g.', %(tipo)s, %(ce)s, "
+            "%(c)s, %(o)s) RETURNING id", campos)["id"]
+
+    velhas = [questao(antiga) for _ in range(4)]
+    ctx = db.exec1("INSERT INTO contexto (disciplina, texto) VALUES (%(d)s, 'Texto-base sintético.') "
+                   "RETURNING id", {"d": nova})["id"]
+    serie = [questao(nova, tipo="certo_errado", ce=True, c=ctx, o=i) for i in (1, 2)]
+    avulsa = questao(nova)
+
+    ids = [q["id"] for q in scheduler.fila(usuario["id"], teto=5, novas=5,
+                                           disciplinas=[antiga, nova])]
+
+    assert ids == [velhas[0], *serie, velhas[1], avulsa]

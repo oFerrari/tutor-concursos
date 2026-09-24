@@ -5,7 +5,7 @@ import pytest
 
 from core import db, embeddings, material, retrieval
 
-VERSAO = "test-material-v12"
+VERSAO = "test-material-v13"
 TXT = ("MEU RESUMO PARTICULAR\n\nO mnemônico QUIXOTEBRAVO organiza os prazos "
        "recursais do processo penal conforme minha anotação de aula. " * 10).encode()
 
@@ -1247,3 +1247,23 @@ def test_material_de_link_guarda_o_endereco(client, usuario):
     _esperar_indexacao()
     direto = [m for m in material.listar(usuario["id"]) if m["id"] == doc["id"]][0]
     assert direto["url"] is None
+
+
+def test_classificador_ve_o_edital_do_aluno_e_nao_o_material_alheio(client, usuario, outro_usuario):
+    """O nome da matéria que OUTRO aluno cadastrou ia pro prompt do
+    classificador; a disciplina do edital da mesa deste aluno, não."""
+    db.query("INSERT INTO documento (titulo, tipo, disciplina, usuario_id) "
+             "VALUES ('do outro', 'aula', 'Matéria Sintética Alheia', %(u)s)",
+             {"u": outro_usuario["id"]})
+    m = client.post("/mesas", json={"nome": "Concurso sintético"}, headers=usuario["headers"]).json()
+    eid = db.exec1("INSERT INTO edital (mesa_id, titulo) VALUES (%(m)s, 'Edital sintético') "
+                   "RETURNING id", {"m": m["id"]})["id"]
+    db.query("INSERT INTO topico (edital_id, disciplina, ordem, texto) "
+             "VALUES (%(e)s, 'Disciplina Sintética Do Edital', 1, '1.1 Tópico.')", {"e": eid})
+
+    vocabulario = material.vocabulario_do_aluno(usuario["id"])
+
+    assert "Disciplina Sintética Do Edital" in vocabulario
+    assert "Matéria Sintética Alheia" not in vocabulario
+    assert "Matéria Sintética Alheia" in material.vocabulario_do_aluno(outro_usuario["id"])
+
