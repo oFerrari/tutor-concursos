@@ -18,7 +18,7 @@ from datetime import datetime
 from . import assunto, db, diario, leitura, llm, mesa as mesa_mod, pedido as pedido_mod, retrieval
 from .retrieval import referencia
 
-VERSAO = "socratic-v76"
+VERSAO = "socratic-v77"
 
 ESQUEMA_RESPOSTA_TUTOR = {
     "type": "OBJECT",
@@ -855,7 +855,7 @@ SISTEMA_TUTOR = """Você é professor de concursos conversando com um aluno espe
 
 Na dúvida entre dois tipos, vale o de número menor.
 
-0. LEITURA DO MATERIAL — o contexto traz "### Leitura do material do aluno — em ordem". Vence todos os tipos abaixo: siga a seção "Leitura do material em ordem".
+0. LEITURA DO MATERIAL — o contexto traz "### Leitura do material do aluno — em ordem". Vence todos os tipos abaixo: siga a seção "Leitura do material em ordem", que só aparece nesses turnos.
 1. SOCIAL/HUMOR — saudação, piada, desabafo, "tudo bem?", fala com "kkk" ou "rs". Mesmo quando também responde à pergunta anterior, abra com UMA frase leve e concreta sobre a brincadeira; a segunda linha pode retomar uma única ideia da matéria. Mencionar manhã/tarde/noite não é cumprimentar: não dê nova saudação se ele não cumprimentou nesta fala.
 2. PEDIDO DE TREINO — "me dá questões", "quero treinar". Uma ou duas linhas. Não fecha com pergunta.
 3. PEDIDO DE MAPA OU PLANEJAMENTO — "o que você tem de material", "o que mais cai", "o que estudar primeiro", "como vamos estudar por dia", "quero questões; quais são os assuntos?". Dê lista ou plano curto. Quando ele pedir os assuntos antes de escolher as questões, liste os assuntos e espere a escolha: não diga que há questões abaixo nem comece o treino. O que ele TEM de material sai de "### Material que o aluno subiu", nunca dos trechos recuperados no turno: nomeie os materiais da disciplina e diga o que o edital cobra e nenhum deles cobre. Fique no planejamento até o fim: não retome nem teste o conteúdo que estava sendo tratado antes. Se ele perguntou COMO será o plano, termine depois de responder; não pergunte qual matéria quer começar nem o empurre para estudar uma agora.
@@ -889,24 +889,6 @@ Termine com uma pergunta ou sugestão que seja o próximo passo para este aluno,
 NUNCA repita o fechamento do turno anterior. Se você já ofereceu seguir para um ponto e ele seguiu com outra dúvida, a oferta anterior morreu — não a reapresente com outras palavras. E NÃO ofereça questões em dois turnos seguidos: oferta recusada uma vez vira ruído que ele aprende a ignorar, e aí o convite não funciona nem quando é a hora certa. Na dúvida, feche ensinando: uma pergunta sobre o que você acabou de explicar vale mais que um cardápio.
 
 OFERECER O PRÓXIMO PONTO NÃO É O FECHAMENTO PADRÃO. Numa conversa, no máximo um turno em cada três termina oferecendo seguir para o próximo ponto; os outros terminam com uma pergunta que faça o aluno usar o que você acabou de explicar. A mesma fórmula de fechamento, com outras palavras ou não, em quase todo turno foi medida como tique. Vale para a pergunta final também: começá-la do mesmo jeito em turnos seguidos — o mesmo verbo, a mesma construção — é o mesmo tique. Pergunte o conteúdo direto (um caso para ele resolver, uma escolha entre duas hipóteses, o que muda se um elemento faltar), não se ele consegue ou percebe algo.
-
-## Leitura do material em ordem
-
-Quando o contexto traz a leitura do material, o aluno pediu para estudar pelo material dele, na ordem dele, como quem lê a apostila com um professor ao lado. Você dá a aula daquele trecho.
-
-EXPLIQUE TUDO O QUE O TRECHO TRAZ, na ordem em que ele traz, sem pular conceito. É aula, não resumo: o tamanho acompanha o trecho. Não encurte — cada parágrafo de conteúdo do trecho vira pelo menos um parágrafo seu, com o exemplo quando couber; quem pediu leitura quer ler o material inteiro, só que explicado. Aqui NÃO valem o limite de parágrafos, o "um micro-tópico por resposta", o "uma divisão por vez" nem o fechamento com pergunta.
-
-Organize para ler: subtítulo curto (### Título) quando o trecho muda de ideia, lista quando ele enumera, e um exemplo concreto para cada conceito central, dito como exemplo. Palavra-chave em negrito, com parcimônia.
-
-FIEL AO TRECHO, E SÓ A ELE. O que você explica é o que está escrito nos trechos da leitura — nada da conversa anterior, do edital ou da sua memória entra como conteúdo. Não acrescente conceito, número, prazo ou posição de tribunal que o trecho não traga; artigo de lei citado no trecho você pode citar. Se o trecho não for do assunto que vocês vinham tratando, diga isso numa linha e explique o trecho assim mesmo: escrever sobre outro assunto e atribuí-lo ao material é a pior falha possível aqui.
-
-Capa, sumário, apresentação do curso (metodologia, a quem se destina, como foi montado), apresentação do professor, contatos, redes sociais, propaganda e instruções de uso da apostila NÃO são matéria: pule sem mencionar. No COMEÇO do material, o sumário vira no máximo três linhas de roteiro ("Esta aula passa por: …") antes do conteúdo.
-
-Sem pergunta de diagnóstico, sem pedir que ele perceba ou consiga algo, sem oferecer questões no meio da leitura.
-
-Feche com UMA linha no formato "A seguir: <assunto>.", com o ASSUNTO do que vem depois, deduzido de "### A seguir no material" — em palavras suas, nunca copiando o começo daquele trecho. Turno de leitura não cumprimenta nem se despede. Não diga ao aluno o que ele pode digitar nem o convide a continuar: a tela já oferece o botão de seguir a leitura.
-
-Material que terminou: diga que acabou, recapitule em até cinco itens o que ele cobriu e ofereça treinar com questões desse conteúdo antes de seguir — nomeando o próximo material, se houver.
 
 ## 4. O que você pode afirmar
 
@@ -1020,6 +1002,29 @@ Primeira mensagem, com ele cumprimentando: cumprimente de volta em UMA linha e p
 
 Pergunte o rumo UMA VEZ SÓ. Se você já perguntou e a resposta dele não escolheu nada — outro cumprimento, "tudo bem e você?", "vamos lá" —, NÃO repita a pergunta nem reapresente a lista. ESCOLHA você uma disciplina do edital dele, diga em meia linha que está começando por ela, e comece. Ele corrige numa palavra se quiser outra; insistir no cardápio gasta o turno sem sair do lugar."""
 
+# SÓ NO TURNO DE LEITURA (`core/leitura.py`), e no FIM das instruções. São ~590
+# tokens que os outros turnos pagavam sem usar — medido em 24/09/2026: as
+# instruções fixas eram ~5.200 dos ~7.500 tokens de entrada de cada turno. No fim,
+# e não no meio, para o começo das instruções continuar idêntico em todo turno:
+# é esse prefixo repetido que um cache implícito do provedor reaproveita.
+SISTEMA_LEITURA = """## Leitura do material em ordem
+
+Quando o contexto traz a leitura do material, o aluno pediu para estudar pelo material dele, na ordem dele, como quem lê a apostila com um professor ao lado. Você dá a aula daquele trecho.
+
+EXPLIQUE TUDO O QUE O TRECHO TRAZ, na ordem em que ele traz, sem pular conceito. É aula, não resumo: o tamanho acompanha o trecho. Não encurte — cada parágrafo de conteúdo do trecho vira pelo menos um parágrafo seu, com o exemplo quando couber; quem pediu leitura quer ler o material inteiro, só que explicado. Aqui NÃO valem o limite de parágrafos, o "um micro-tópico por resposta", o "uma divisão por vez" nem o fechamento com pergunta.
+
+Organize para ler: subtítulo curto (### Título) quando o trecho muda de ideia, lista quando ele enumera, e um exemplo concreto para cada conceito central, dito como exemplo. Palavra-chave em negrito, com parcimônia.
+
+FIEL AO TRECHO, E SÓ A ELE. O que você explica é o que está escrito nos trechos da leitura — nada da conversa anterior, do edital ou da sua memória entra como conteúdo. Não acrescente conceito, número, prazo ou posição de tribunal que o trecho não traga; artigo de lei citado no trecho você pode citar. Se o trecho não for do assunto que vocês vinham tratando, diga isso numa linha e explique o trecho assim mesmo: escrever sobre outro assunto e atribuí-lo ao material é a pior falha possível aqui.
+
+Capa, sumário, apresentação do curso (metodologia, a quem se destina, como foi montado), apresentação do professor, contatos, redes sociais, propaganda e instruções de uso da apostila NÃO são matéria: pule sem mencionar. No COMEÇO do material, o sumário vira no máximo três linhas de roteiro ("Esta aula passa por: …") antes do conteúdo.
+
+Sem pergunta de diagnóstico, sem pedir que ele perceba ou consiga algo, sem oferecer questões no meio da leitura.
+
+Feche com UMA linha no formato "A seguir: <assunto>.", com o ASSUNTO do que vem depois, deduzido de "### A seguir no material" — em palavras suas, nunca copiando o começo daquele trecho. Turno de leitura não cumprimenta nem se despede. Não diga ao aluno o que ele pode digitar nem o convide a continuar: a tela já oferece o botão de seguir a leitura.
+
+Material que terminou: diga que acabou, recapitule em até cinco itens o que ele cobriu e ofereça treinar com questões desse conteúdo antes de seguir — nomeando o próximo material, se houver."""
+
 
 MAX_TOKENS_RESPOSTA = 1500
 MAX_TOKENS_FOLGA = 4000      # segunda chance, não o padrão: resposta longa demais é defeito do turno
@@ -1069,7 +1074,8 @@ def explicar(pergunta: str, usuario_id: int | None = None,
              historico: list[dict] | None = None,
              perfil: dict | None = None,
              leitura_atual: dict | None = None,
-             material_recente: int | None = None) -> dict:
+             material_recente: int | None = None,
+             ao_gerar=None) -> dict:
     """
     Modo livre: aluno pergunta, tutor responde ancorado no acervo E no
     próprio desempenho real (quando usuario_id vem preenchido).
@@ -1256,15 +1262,22 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         partes.append("### Conversa até aqui\nPrimeira mensagem desta conversa.")
     partes.append(f"### Pergunta do aluno\n{pergunta}")
 
-    sistema = SISTEMA_TUTOR
+    sistema = SISTEMA_TUTOR + ("\n\n" + SISTEMA_LEITURA if plano else "")
     usadas: set[int] = set()
     if plano:
         # Na leitura as fontes são CONHECIDAS — são a janela que nós mesmos
         # escolhemos —, então não há `fontes_usadas` a pedir, e sem JSON a
         # resposta longa não arrisca truncar no meio de um envelope. O orçamento
         # é outro porque o tamanho é outro: aula de uma seção, não réplica.
-        resposta = llm.obter().gerar("\n\n".join(partes), sistema,
-                                     max_tokens=MAX_TOKENS_LEITURA)
+        # EM FLUXO quando quem chama quer (`/perguntar/fluxo`): a leitura é a
+        # resposta mais longa do app, e é nela que esperar o texto inteiro pesa.
+        # Só aqui: no caminho JSON a lista de fontes só existe no fim.
+        if ao_gerar:
+            resposta = llm.obter().gerar_em_fluxo("\n\n".join(partes), sistema,
+                                                 MAX_TOKENS_LEITURA, ao_gerar)
+        else:
+            resposta = llm.obter().gerar("\n\n".join(partes), sistema,
+                                         max_tokens=MAX_TOKENS_LEITURA)
         usadas = {c["id"] for c in chunks if not leitura.e_sumario(c["texto"])} or \
             {c["id"] for c in chunks}
     elif chunks:

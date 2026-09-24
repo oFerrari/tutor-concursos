@@ -168,13 +168,13 @@ class _LLMBloqueado(llm.LLM):
 
 @pytest.fixture(autouse=True)
 def _sem_llm_de_verdade(monkeypatch):
-    monkeypatch.setattr(llm, "obter", lambda: _LLMBloqueado())
+    monkeypatch.setattr(llm, "obter", lambda *a, **k: _LLMBloqueado())
 
 
 @pytest.fixture
 def llm_falso(monkeypatch):
     fake = _LLMFalso()
-    monkeypatch.setattr(llm, "obter", lambda: fake)
+    monkeypatch.setattr(llm, "obter", lambda *a, **k: fake)
     return fake
 
 

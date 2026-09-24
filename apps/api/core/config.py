@@ -28,6 +28,13 @@ GEMINI_RESERVAS = [m.strip() for m in os.getenv(
 ).split(",") if m.strip()]
 OLLAMA_URL      = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL", "qwen3:8b")
+# CLASSIFICAR MATERIAL NO MODELO LOCAL (24/09/2026): é a chamada mais frequente
+# do app (uma por upload, uma por material a cada edital novo) e a mais simples
+# — disciplina e assunto a partir do começo do texto. `ollama` aqui tira essa
+# chamada da cota do Gemini; vazio mantém tudo no LLM_PROVIDER. O Gemini fica de
+# reserva: Ollama fora do ar não deixa material sem rótulo.
+LLM_CLASSIFICADOR = os.getenv("LLM_CLASSIFICADOR", "").strip()
+OLLAMA_MODEL_CLASSIFICADOR = os.getenv("OLLAMA_MODEL_CLASSIFICADOR", OLLAMA_MODEL)
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "intfloat/multilingual-e5-base")
 
 JWT_SECRET       = os.getenv("JWT_SECRET", "")

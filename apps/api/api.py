@@ -26,14 +26,18 @@ usuario_id, então pedir a mesa de outra pessoa dá 404, não os dados dela.
 Sem header, cai na mesa padrão da conta (`mesa.padrao`) — é o que mantém a
 CLI e qualquer cliente que ainda não conhece mesas funcionando igual.
 """
+import json
+import queue
 import tempfile
+import threading
 from datetime import date
 from pathlib import Path
 
 from fastapi import (BackgroundTasks, Depends, FastAPI, File, Form, Header, HTTPException,
                      UploadFile)
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import Response, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from starlette.concurrency import run_in_threadpool
 
@@ -44,7 +48,7 @@ from core import (assunto, auth, conversa, desafio, edital, geracao, material, m
 from core.config import CORS_ORIGINS
 from core.llm import ErroLLM
 
-VERSAO = "api-v13"
+VERSAO = "api-v14"
 
 app = FastAPI(title="Tutor de concursos — API", version=VERSAO)
 
@@ -743,6 +747,53 @@ def rota_perguntar(body: PerguntaBody, uid: int = Depends(usuario_atual),
     fica registrada — reabrir a conversa e não encontrar o que você mesmo
     escreveu é a pior forma de perder confiança no histórico.
     """
+    return _turno_do_chat(body, uid, m)
+
+
+@app.post("/perguntar/fluxo")
+def rota_perguntar_em_fluxo(body: PerguntaBody, uid: int = Depends(usuario_atual),
+                            m: dict = Depends(mesa_atual)):
+    """O MESMO turno de `/perguntar`, transmitido: eventos SSE `{"pedaco": texto}`
+    enquanto o modelo escreve, e um `{"fim": <a resposta de /perguntar>}` — ou
+    `{"erro": {"status", "detail"}}` — no final.
+
+    A tela recebe a aula da leitura em sequência surgindo, em vez de olhar um
+    indicador por segundos. Mesma requisição ao modelo, mesmo gasto de cota:
+    muda só quando o texto chega. Turno que não é leitura não transmite
+    pedaços (a lista de fontes do JSON só existe no fim) e chega inteiro no
+    `fim`, igual ao caminho de sempre.
+
+    O turno roda numa thread e fala com a resposta por uma fila: o gerador do
+    `StreamingResponse` só repassa. Aluno que fecha a aba não interrompe o
+    turno — ele termina e fica gravado, como no `/perguntar`."""
+    fila: queue.Queue = queue.Queue()
+
+    def trabalho():
+        try:
+            r = _turno_do_chat(body, uid, m, ao_gerar=lambda t: fila.put(("pedaco", t)))
+            fila.put(("fim", jsonable_encoder(r)))
+        except HTTPException as e:
+            fila.put(("erro", {"status": e.status_code, "detail": e.detail}))
+        except Exception as e:  # noqa: BLE001 — a thread não tem quem veja a exceção
+            print(f"[tutor] /perguntar/fluxo falhou: {type(e).__name__}: {e}")
+            fila.put(("erro", {"status": 500, "detail": "Erro interno ao responder."}))
+
+    threading.Thread(target=trabalho, daemon=True).start()
+
+    def eventos():
+        while True:
+            tipo, dado = fila.get()
+            yield f"data: {json.dumps({tipo: dado}, ensure_ascii=False)}\n\n"
+            if tipo != "pedaco":
+                return
+
+    return StreamingResponse(eventos(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+def _turno_do_chat(body: PerguntaBody, uid: int, m: dict, ao_gerar=None) -> dict:
+    """O corpo de `/perguntar`, compartilhado com `/perguntar/fluxo`."""
+
     if body.conversa_id is None:
         conv = conversa.criar(uid, m["id"], body.pergunta)
     else:
@@ -792,7 +843,7 @@ def rota_perguntar(body: PerguntaBody, uid: int = Depends(usuario_atual),
     try:
         r = socratic.explicar(body.pergunta, uid, m["disciplinas"], m, historico,
                               auth.perfil(uid), leitura_atual=leitura_atual,
-                              material_recente=material_recente)
+                              material_recente=material_recente, ao_gerar=ao_gerar)
     except ErroLLM as e:
         # A tela desenha este `detail` como balão do tutor. "LLM indisponível:
         # resposta truncada em 1500 tokens. Aumente max_tokens…" foi exatamente o

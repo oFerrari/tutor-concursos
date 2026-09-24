@@ -119,6 +119,9 @@ export default function PaginaTutor() {
    *  formal" — falso, e o aluno acredita e deixa de usar o que existe. */
   const [pediuSimulado, setPediuSimulado] = useState(false);
   const [pensando, setPensando] = useState(false);
+  // O texto da resposta enquanto ela CHEGA (`/perguntar/fluxo`). `null` = nada
+  // transmitido ainda; o balão provisório some quando a resposta final entra.
+  const [rascunho, setRascunho] = useState<string | null>(null);
   // Qual comando está destacado no menu da barra. Vive aqui e não dentro do
   // menu porque o TECLADO é quem o move, e o teclado está no campo.
   const [comandoAtivo, setComandoAtivo] = useState(0);
@@ -335,7 +338,15 @@ export default function PaginaTutor() {
     const controlador = new AbortController();
     abortar.current = controlador;
     try {
-      const r = await perguntar(texto, conversaId ?? undefined, controlador.signal);
+      const r = await perguntar(texto, conversaId ?? undefined, controlador.signal, (pedaco) => {
+        // Acompanha o texto só de quem já está no fim: quem subiu para reler um
+        // parágrafo não pode ser arrastado para baixo a cada pedaço.
+        const el = scroller.current;
+        const noFim = !el || el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+        setRascunho((atual) => (atual ?? "") + pedaco);
+        if (noFim) irAoFim();
+      });
+      setRascunho(null);
       // Guardar o id é o que faz o SEGUNDO turno ter memória do
       // primeiro: sem ele cada pergunta abriria conversa nova e o
       // histórico não voltaria pro modelo.
@@ -407,6 +418,7 @@ export default function PaginaTutor() {
       ]);
     } finally {
       abortar.current = null;
+      setRascunho(null);
       setPensando(false);
       irAoFim(true);
     }
@@ -684,10 +696,23 @@ export default function PaginaTutor() {
             )
           )}
 
+          {rascunho && (
+            <div className="flex items-start gap-3">
+              <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] bg-accent text-accent-foreground">
+                <MarcaGlifo className="h-4 w-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="balao-tutor">
+                  <TextoDoTutor texto={rascunho} />
+                </div>
+              </div>
+            </div>
+          )}
+
           {pensando && (
             <div className="flex items-center gap-3 pl-[42px]">
               <p className="rotulo animate-[pxPulse_1.4s_ease-in-out_infinite]">
-                consultando o acervo
+                {rascunho ? "escrevendo" : "consultando o acervo"}
               </p>
               {/* PARAR. O quadradinho é a convenção de todo chat, e a razão é
                   prática: digitou errado, viu na hora, e não quer esperar a

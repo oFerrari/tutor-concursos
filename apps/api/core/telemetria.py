@@ -48,15 +48,19 @@ def origem() -> str | None:
 def registrar(provedor: str, modelo: str, status_code: int,
               tokens_input: int | None = None,
               tokens_output: int | None = None,
-              origem_chamada: str | None = None) -> None:
+              origem_chamada: str | None = None,
+              tokens_pensamento: int | None = None,
+              tokens_cache: int | None = None) -> None:
     """Grava a tentativa. Silencioso por contrato — ver regra 1 no topo."""
     try:
         db.query(
             "INSERT INTO telemetria_llm (provedor, modelo, tokens_input, tokens_output, "
-            "                            status_code, origem_chamada) "
-            "VALUES (%(p)s, %(m)s, %(ti)s, %(to)s, %(s)s, %(o)s)",
+            "                            status_code, origem_chamada, tokens_pensamento, "
+            "                            tokens_cache) "
+            "VALUES (%(p)s, %(m)s, %(ti)s, %(to)s, %(s)s, %(o)s, %(tp)s, %(tc)s)",
             {"p": provedor, "m": modelo, "ti": tokens_input, "to": tokens_output,
-             "s": status_code, "o": origem_chamada or origem()})
+             "s": status_code, "o": origem_chamada or origem(),
+             "tp": tokens_pensamento, "tc": tokens_cache})
     except Exception:
         pass
 

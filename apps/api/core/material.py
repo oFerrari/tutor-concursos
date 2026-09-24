@@ -258,7 +258,7 @@ def classificar(texto: str, disciplinas_conhecidas: list[str] | None = None,
     if nome:
         corpo = f"NOME DO ARQUIVO: {nome}\n\nTRECHO DO CONTEÚDO:\n{corpo}"
     try:
-        r = llm.obter().gerar_json(corpo, sistema,
+        r = llm.obter("classificar").gerar_json(corpo, sistema,
                                    max_tokens=200, schema=ESQUEMA_CLASSE)
     except Exception:
         return {}
@@ -643,7 +643,7 @@ def norma_ja_no_acervo(chunks: list[dict]) -> str | None:
             """SELECT c.norma FROM chunk c JOIN documento d ON d.id = c.documento_id
                 WHERE d.usuario_id IS NULL AND c.norma IS NOT NULL
                   AND c.artigo = %(a)s
-                  AND regexp_replace(c.texto, '\s+', ' ', 'g') LIKE %(p)s""",
+                  AND regexp_replace(c.texto, '\\s+', ' ', 'g') LIKE %(p)s""",
             {"a": c["artigo"], "p": f"%{prefixo}%"},
         ):
             achados[r["norma"]] = achados.get(r["norma"], 0) + 1

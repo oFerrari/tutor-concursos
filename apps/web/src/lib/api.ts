@@ -605,15 +605,7 @@ export function ehComandoDeFeedback(fala: string): boolean {
   return /^\s*\/(erro|feedback|bug)\b/i.test(fala);
 }
 
-export function perguntar(
-  pergunta: string,
-  conversaId?: number,
-  /** Pra PARAR a resposta. Aborta o fetch — o pedido ao modelo que já saiu não
-   *  volta atrás, mas o que vem DEPOIS dele (gerar questões, gravar a resposta)
-   *  é o que se evita, e a pessoa deixa de ficar presa numa tela que ela já
-   *  sabe que não quer. */
-  sinal?: AbortSignal
-): Promise<{
+export type RespostaPergunta = {
   resposta: string;
   fontes: Fonte[];
   conversa_id: number;
@@ -638,12 +630,66 @@ export function perguntar(
    *  `false` com `resposta` de instrução = comando sem texto. */
   feedback_salvo?: boolean;
   feedback?: { id: number; mensagem_tutor_id: number | null };
-}> {
-  return chamar("/perguntar", {
+};
+
+export async function perguntar(
+  pergunta: string,
+  conversaId?: number,
+  /** Pra PARAR a resposta. Aborta o fetch — o pedido ao modelo que já saiu não
+   *  volta atrás, mas o que vem DEPOIS dele (gerar questões, gravar a resposta)
+   *  é o que se evita, e a pessoa deixa de ficar presa numa tela que ela já
+   *  sabe que não quer. */
+  sinal?: AbortSignal,
+  /** Com ele, o turno vem EM FLUXO (`/perguntar/fluxo`): cada pedaço do texto
+   *  chega aqui enquanto o modelo escreve — hoje, na leitura do material —, e a
+   *  promessa resolve com a mesma resposta de sempre. */
+  aoPedaco?: (texto: string) => void
+): Promise<RespostaPergunta> {
+  const corpo = JSON.stringify({ pergunta, conversa_id: conversaId });
+  if (!aoPedaco) {
+    return chamar("/perguntar", { method: "POST", signal: sinal, body: corpo });
+  }
+  const token = getToken();
+  const resposta = await fetch(`${API_URL}/perguntar/fluxo`, {
     method: "POST",
     signal: sinal,
-    body: JSON.stringify({ pergunta, conversa_id: conversaId }),
+    body: corpo,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...cabecalhoMesa(),
+    },
   });
+  if (!resposta.ok || !resposta.body) {
+    const erro = await resposta.json().catch(() => ({}));
+    const detalhe = erro.detail ?? `erro ${resposta.status}`;
+    tratarMesaSumida(resposta.status, detalhe);
+    throw new ErroApi(resposta.status, detalhe);
+  }
+  // SSE à mão: `EventSource` não faz POST nem manda o token no cabeçalho.
+  const leitor = resposta.body.getReader();
+  const decodificador = new TextDecoder();
+  let pendente = "";
+  for (;;) {
+    const { value, done } = await leitor.read();
+    if (done) break;
+    pendente += decodificador.decode(value, { stream: true });
+    const eventos = pendente.split("\n\n");
+    pendente = eventos.pop() ?? "";
+    for (const bruto of eventos) {
+      const linha = bruto.split("\n").find((l) => l.startsWith("data:"));
+      if (!linha) continue;
+      const ev = JSON.parse(linha.slice(5)) as {
+        pedaco?: string;
+        fim?: RespostaPergunta;
+        erro?: { status: number; detail: string };
+      };
+      if (ev.pedaco) aoPedaco(ev.pedaco);
+      if (ev.erro) throw new ErroApi(ev.erro.status, ev.erro.detail);
+      if (ev.fim) return ev.fim;
+    }
+  }
+  throw new ErroApi(0, "A resposta foi interrompida antes do fim.");
 }
 
 // ------------------------------------------------------------------ conversas

@@ -176,7 +176,7 @@ def test_material_so_fica_pronto_depois_de_rotulado(client, usuario, llm_falso):
 
     espia = _Espia()
     from core import llm as _llm
-    _llm.obter = lambda: espia  # o monkeypatch do fixture já restaura no fim
+    _llm.obter = lambda *a, **k: espia  # o monkeypatch do fixture já restaura no fim
 
     r = client.post("/materiais", files={"arquivo": (nome, TXT, "text/plain")},
                     data={"tipo": "resumo"}, headers=usuario["headers"])

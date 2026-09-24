@@ -149,3 +149,46 @@ def test_ordem_como_materia_nao_comeca_leitura():
                      "qual a ordem de vocação hereditária?",
                      "a ordem pública justifica a prisão preventiva?"):
         assert leitura.intencao(pergunta, True, True) is None, pergunta
+
+
+def _eventos(client, usuario, corpo):
+    r = client.post("/perguntar/fluxo", json=corpo, headers=usuario["headers"])
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/event-stream")
+    return [json.loads(l[5:]) for l in r.text.splitlines() if l.startswith("data:")]
+
+
+def test_fluxo_transmite_a_leitura_e_termina_com_a_resposta_de_sempre(client, usuario, llm_falso):
+    _aula(client, usuario)
+    llm_falso.retorno = "### Instituto\nAula sobre o trecho."
+
+    ev = _eventos(client, usuario, {"pergunta": "quero ler o instituto sintético na ordem do material"})
+
+    assert [e for e in ev if "pedaco" in e] == [{"pedaco": "### Instituto\nAula sobre o trecho."}]
+    fim = ev[-1]["fim"]
+    assert fim["resposta"].startswith("### Instituto") and fim["conversa_id"]
+    assert any(f.get("sequencial") for f in fim["fontes"])
+
+
+def test_fluxo_de_pergunta_comum_chega_inteiro_no_fim(client, usuario, llm_falso):
+    llm_falso.retorno = "Resposta do tutor."
+    ev = _eventos(client, usuario, {"pergunta": "boa noite"})
+    assert [list(e) for e in ev] == [["fim"]] and ev[0]["fim"]["resposta"] == "Resposta do tutor."
+
+
+def test_fluxo_sem_modelo_vira_evento_de_erro(client, usuario, llm_falso):
+    from core import llm
+    llm_falso.excecao = llm.ErroLLM("provedor fora")
+    [ev] = _eventos(client, usuario, {"pergunta": "o que é peculato?"})
+    assert ev["erro"]["status"] == 503 and "Não consegui responder" in ev["erro"]["detail"]
+
+
+def test_regras_da_leitura_so_vao_no_turno_de_leitura(client, usuario, llm_falso):
+    """~590 tokens que todo turno pagava sem usar (24/09/2026)."""
+    from core import socratic
+    _aula(client, usuario)
+    r = _turno(client, usuario, llm_falso, "quero ler o instituto sintético na ordem do material")
+    assert socratic.SISTEMA_LEITURA in llm_falso.chamadas[-1]["sistema"]
+    _turno(client, usuario, llm_falso, "o que é o requisito do instituto número 2?", r["conversa_id"],
+           retorno=json.dumps({"resposta": "É isto.", "fontes_usadas": []}))
+    assert socratic.SISTEMA_LEITURA not in llm_falso.chamadas[-1]["sistema"]
+    assert llm_falso.chamadas[-1]["sistema"].startswith(socratic.SISTEMA_TUTOR)
