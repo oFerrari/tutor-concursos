@@ -27,7 +27,7 @@ from fastapi.testclient import TestClient
 from api import app
 from core import db, llm
 
-VERSAO = "conftest-v2"
+VERSAO = "conftest-v3"
 
 
 @pytest.fixture(scope="session")
@@ -66,28 +66,63 @@ def outro_usuario(client):
     db.query("DELETE FROM usuario WHERE id = %(id)s", {"id": u["id"]})
 
 
+DISCIPLINAS_SINTETICAS = ("Disciplina Sintética Alfa", "Disciplina Sintética Beta")
+QUESTOES_SINTETICAS_POR_DISCIPLINA = 3
+
+
 @pytest.fixture
-def questao_id():
-    """Reaproveita uma questão real do acervo compartilhado — gerar questão
-    nova custa cota de LLM (core/socratic.py `gerar_questoes`), e os testes
-    de scheduler/multiusuário não precisam de uma questão NOVA, só de uma
-    que já exista pra registrar tentativa contra ela.
+def acervo():
+    """Garante questão PÚBLICA em pelo menos duas disciplinas.
+
+    O acervo comum pode estar vazio de propósito — o dono zerou o banco em
+    22/09/2026 para usar a ferramenta como aluno novo — e 52 testes passaram a
+    pular calados, entre eles os de fila, simulado e isolamento entre alunos.
+    Quando o acervo real não basta, semeia questões sintéticas; elas são
+    `INSERT INTO questao ... RETURNING id` por `db.query`, então
+    `_sem_lixo_no_acervo` as apaga no fim do teste como apaga qualquer outra.
+
+    Acervo real suficiente fica como está: teste que rodava contra ele segue
+    rodando contra ele.
+
+    Cada disciplina ganha também um `documento` público: é dele, e não da
+    questão, que `mesa.disciplinas_do_acervo` tira o que o aluno pode escolher
+    como alvo manual. O documento sai aqui mesmo, no fim."""
+    linhas = db.query("""SELECT disciplina, count(*) AS n FROM questao
+                          WHERE usuario_id IS NULL GROUP BY disciplina""")
+    if len(linhas) >= 2 and all(l["n"] >= 2 for l in linhas[:2]):
+        yield
+        return
+    documentos = []
+    for disciplina in DISCIPLINAS_SINTETICAS:
+        doc = db.exec1("""INSERT INTO documento (titulo, tipo, disciplina)
+                          VALUES (%(t)s, 'aula', %(d)s) RETURNING id""",
+                       {"t": f"Material sintético de {disciplina}", "d": disciplina})["id"]
+        documentos.append(doc)
+        for i in range(1, QUESTOES_SINTETICAS_POR_DISCIPLINA + 1):
+            db.query("""INSERT INTO questao (documento_id, disciplina, tema, enunciado, gabarito)
+                        VALUES (%(doc)s, %(d)s, %(t)s, %(e)s, %(g)s) RETURNING id""",
+                     {"doc": doc, "d": disciplina, "t": f"Tema sintético {i}",
+                      "e": f"Enunciado sintético {i} de {disciplina}?",
+                      "g": f"Gabarito sintético {i}."})
+    yield
+    db.query("DELETE FROM documento WHERE id = ANY(%(ids)s)", {"ids": documentos})
+
+
+@pytest.fixture
+def questao_id(acervo):
+    """Uma questão PÚBLICA que já exista pra registrar tentativa contra ela —
+    gerar questão nova custaria cota de LLM (`socratic.gerar_questoes`).
 
     PÚBLICA, explicitamente: desde a 026 a tabela também guarda questão com
     dono (gerada da apostila de um aluno), e "uma questão qualquer" passou a
     poder ser a de outra pessoa."""
-    r = db.exec1("SELECT id FROM questao WHERE usuario_id IS NULL ORDER BY id LIMIT 1")
-    if not r:
-        pytest.skip("acervo vazio — ingira e gere ao menos uma questão antes de rodar isto")
-    return r["id"]
+    return db.exec1("SELECT id FROM questao WHERE usuario_id IS NULL ORDER BY id LIMIT 1")["id"]
 
 
 @pytest.fixture
-def duas_questoes():
-    linhas = db.query("SELECT id FROM questao WHERE usuario_id IS NULL ORDER BY id LIMIT 2")
-    if len(linhas) < 2:
-        pytest.skip("acervo precisa de pelo menos 2 questões")
-    return [r["id"] for r in linhas]
+def duas_questoes(acervo):
+    return [r["id"] for r in db.query(
+        "SELECT id FROM questao WHERE usuario_id IS NULL ORDER BY id LIMIT 2")]
 
 
 class _LLMFalso(llm.LLM):

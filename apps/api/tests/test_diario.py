@@ -1,8 +1,42 @@
 """Regressões do diário de teoria e do uso dele pelo tutor."""
 
-from core import diario, socratic
+import json
 
-VERSAO = "test-diario-v1"
+from core import diario, retrieval, socratic
+
+VERSAO = "test-diario-v2"
+
+
+def _turno(monkeypatch, llm_falso, fontes_usadas, resposta="Explicação do assunto."):
+    """Um turno de `explicar` com três trechos recuperados: "Concussão" é o
+    rótulo mais frequente na BUSCA, "Peculato" o único citado."""
+    chunks = [
+        {"id": 21, "titulo": "CP", "artigo": "316", "rubrica": "Concussão",
+         "disciplina": "Direito Penal", "texto": "Exigir vantagem indevida."},
+        {"id": 22, "titulo": "CP", "artigo": "316", "rubrica": "Concussão",
+         "disciplina": "Direito Penal", "texto": "§ 1º excesso de exação."},
+        {"id": 23, "titulo": "CP", "artigo": "312", "rubrica": "Peculato",
+         "disciplina": "Direito Penal", "texto": "Apropriar-se o funcionário público."},
+    ]
+    anotados = []
+    monkeypatch.setattr(retrieval, "buscar", lambda *a, **kw: chunks)
+    monkeypatch.setattr(diario, "anotar", lambda u, cs: anotados.append(diario.rotulo(cs)))
+    llm_falso.retorno = json.dumps({"resposta": resposta, "fontes_usadas": fontes_usadas})
+    socratic.explicar("me explica peculato", usuario_id=1)
+    return anotados
+
+
+def test_diario_anota_o_que_a_resposta_citou_e_nao_o_que_a_busca_trouxe(monkeypatch, llm_falso):
+    """Medido em 22/09/2026: o diário gravava o rótulo mais frequente entre os
+    RECUPERADOS, e o tutor disse no dia seguinte "você estudou Constitucional"
+    a quem tinha estudado Administrativo."""
+    assert _turno(monkeypatch, llm_falso, [23]) == [("Peculato", "Direito Penal")]
+
+
+def test_resposta_sem_fonte_citada_nao_vira_estudo(monkeypatch, llm_falso):
+    """Saudação, pedido de plano, "de que assunto você quer tratar?": a busca
+    pode ter trazido trecho, mas a aula não aconteceu."""
+    assert _turno(monkeypatch, llm_falso, []) == [None]
 
 
 def test_resumo_separa_materia_de_assunto(monkeypatch):

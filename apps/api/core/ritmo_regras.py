@@ -51,7 +51,8 @@ def sugestao_disciplina_fraca(desempenho: list[dict],
         return None
     pior = min(candidatas, key=lambda d: d["pct_acerto"])
     return (f"{pior['disciplina']} está em {pior['pct_acerto']:.0f}% de acerto "
-            f"({pior['tentativas']} tentativas) — vale focar aqui hoje.")
+            f"({pior['tentativas']} {'tentativa' if pior['tentativas'] == 1 else 'tentativas'}) "
+            "— vale focar aqui hoje.")
 
 
 def sugestao_reincidencia(erros: list[dict],

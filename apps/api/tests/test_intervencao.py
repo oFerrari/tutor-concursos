@@ -63,7 +63,7 @@ def test_sem_assunto_comum_ainda_interrompe():
     assert r and "3 erros seguidos" in r["texto"]
 
 
-def test_rota_devolve_sugestao_e_intervencao_juntas(client, usuario):
+def test_rota_devolve_sugestao_e_intervencao_juntas(client, usuario, acervo):
     """Quem responde uma questão precisa dos dois e não deve pagar dois
     round-trips."""
     r = client.get("/sugestao", headers=usuario["headers"]).json()
@@ -84,7 +84,7 @@ def test_rota_devolve_sugestao_e_intervencao_juntas(client, usuario):
     assert r["intervencao"]["pergunta"]      # sempre leva pra algum lugar
 
 
-def test_intervencao_respeita_a_mesa(client, usuario):
+def test_intervencao_respeita_a_mesa(client, usuario, acervo):
     """Errar em Penal não deve parar a sessão de quem sentou na mesa que só
     cobre Constitucional — mesmo recorte do resto de `ritmo`."""
     linhas = db.query("""SELECT DISTINCT disciplina FROM questao

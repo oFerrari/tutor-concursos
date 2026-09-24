@@ -18,7 +18,7 @@ from datetime import datetime
 from . import assunto, diario, llm, mesa as mesa_mod, pedido as pedido_mod, retrieval
 from .retrieval import referencia
 
-VERSAO = "socratic-v73"
+VERSAO = "socratic-v74"
 
 ESQUEMA_RESPOSTA_TUTOR = {
     "type": "OBJECT",
@@ -413,7 +413,8 @@ def _resumo_desempenho(usuario_id: int, disciplinas: list[str] | None = None,
         return None
     linhas = [
         f"- {d['disciplina']}: {d['dominadas']}/{d['questoes']} dominadas, "
-        f"{d['pct_acerto'] or 0}% de acerto em {d['tentativas']} tentativas, "
+        f"{d['pct_acerto'] or 0}% de acerto em {d['tentativas']} "
+        f"{'tentativa' if d['tentativas'] == 1 else 'tentativas'}, "
         f"{d['cobertura_pct'] or 0}% de cobertura"
         for d in dados
     ]
@@ -1150,12 +1151,6 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     else:
         resposta = llm.obter().gerar("\n\n".join(partes), sistema, max_tokens=1500)
 
-    # O DIÁRIO SÓ REGISTRA AULA QUE ACONTECEU: depois da geração, porque LLM
-    # indisponível não é estudo, e o `raise` de `gerar` já saiu daqui. Turno sem
-    # material (saudação, desabafo, meta-pergunta) não tem rótulo e não entra —
-    # `diario.rotulo` devolve None e a função não faz nada.
-    diario.anotar(usuario_id, chunks)
-
     # A ORDEM IMPORTA: tira as questões ANTES de limpar citações. Questão escrita
     # pelo modelo vem cheia de "art. 37" inventado, e limpar citação primeiro
     # gastaria trabalho num texto que vai ser apagado inteiro.
@@ -1174,6 +1169,16 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     # Se a limpeza retirou questões, não atribua fontes a conteúdo removido.
     if questoes_tiradas:
         usadas.clear()
+
+    # O DIÁRIO SÓ REGISTRA AULA QUE ACONTECEU: depois da geração, porque LLM
+    # indisponível não é estudo, e o `raise` de `gerar` já saiu daqui. E só com
+    # os trechos que SUSTENTARAM a resposta, não com os recuperados: medido em
+    # 22/09/2026, a saudação e o pedido de plano deixaram "Direitos sociais"
+    # no diário, a troca pra Administrativo gravou a rubrica de um artigo que
+    # nem entrou na resposta — e no dia seguinte o tutor disse "você estudou
+    # Constitucional" a quem tinha estudado Administrativo. Recuperar é a busca
+    # oferecendo; citar é a aula acontecendo. Sem fonte citada, nada entra.
+    diario.anotar(usuario_id, [c for c in chunks if c["id"] in usadas])
 
     # Mantém a proteção contra referências inline inválidas que o modelo
     # eventualmente escrever, sem usá-las para atribuir fontes.

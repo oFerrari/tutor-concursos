@@ -57,7 +57,7 @@ export function Kpis({
       valor: geral.pct == null ? "—" : `${geral.pct.toFixed(0)}%`,
       nota:
         geral.tentativas > 0
-          ? `${geral.acertos} de ${geral.tentativas} tentativas`
+          ? `${geral.acertos} de ${geral.tentativas} ${geral.tentativas === 1 ? "tentativa" : "tentativas"}`
           : "sem tentativa ainda",
       cor: "var(--foreground)",
     },

@@ -14,7 +14,7 @@ O que estes testes travam:
 """
 from core import conversa, db, socratic
 
-VERSAO = "test-conversa-v3"
+VERSAO = "test-conversa-v4"
 
 
 def _resposta_falsa(fake, texto="resposta do tutor"):
@@ -155,7 +155,7 @@ def test_titulo_sai_da_primeira_pergunta_sem_llm(usuario, llm_falso):
 
 
 # ------------------------------------ evolução dentro da conversa (016)
-def test_resposta_a_questao_entra_na_linha_do_tempo(client, usuario, llm_falso):
+def test_resposta_a_questao_entra_na_linha_do_tempo(client, usuario, llm_falso, acervo):
     """
     O ponto da 016: o que o aluno FAZ vale mais que o que ele diz. Dizer
     "não entendi" é relato; errar a questão é evidência — e antes disso o
@@ -184,7 +184,7 @@ def test_resposta_a_questao_entra_na_linha_do_tempo(client, usuario, llm_falso):
     assert "2 dica" in evento[0]["texto"]
 
 
-def test_evento_chega_ao_prompt_rotulado_como_fato(client, usuario, llm_falso):
+def test_evento_chega_ao_prompt_rotulado_como_fato(client, usuario, llm_falso, acervo):
     """Evento NÃO pode entrar como fala: "(o aluno errou)" dito por "Você"
     faria o modelo tratar aquilo como coisa que ele mesmo afirmou antes."""
     _resposta_falsa(llm_falso)
@@ -206,7 +206,7 @@ def test_evento_chega_ao_prompt_rotulado_como_fato(client, usuario, llm_falso):
     assert "ERROU" in prompt
 
 
-def test_registrar_sem_conversa_nao_cria_evento(client, usuario, llm_falso):
+def test_registrar_sem_conversa_nao_cria_evento(client, usuario, llm_falso, acervo):
     """Fila, /questao e desafio não têm conversa — e não devem inventar uma.
     O evento existe pra conversa em curso, não pra toda tentativa."""
     _resposta_falsa(llm_falso)
@@ -223,7 +223,7 @@ def test_registrar_sem_conversa_nao_cria_evento(client, usuario, llm_falso):
     assert not [m for m in msgs if m["autor"] == "evento"]
 
 
-def test_conversa_de_outro_usuario_nao_recebe_evento(client, usuario, outro_usuario, llm_falso):
+def test_conversa_de_outro_usuario_nao_recebe_evento(client, usuario, outro_usuario, llm_falso, acervo):
     """`conversa_id` vem do cliente: sem checar posse, daria pra escrever na
     linha do tempo de qualquer um. `conversa.obter` já é escopado."""
     _resposta_falsa(llm_falso)
@@ -351,3 +351,39 @@ def test_explicar_nao_devolve_questao_escrita_pelo_modelo(client, usuario, llm_f
     assert "Questão 1" not in texto and "Questão 2" not in texto, \
         "a questão escrita pelo modelo saiu pela rota — limpar_questoes não está ligada"
     assert texto.startswith("Vamos treinar isso")
+
+
+def test_titulo_sai_da_primeira_aula_e_nao_da_saudacao(client, usuario, llm_falso, monkeypatch):
+    """Medido em 22/09/2026: "boa noite" era o título, em Recentes, de uma
+    conversa sobre proposições. O título passa a ser o do primeiro turno com
+    fonte citada — e depois dele não muda mais."""
+    import json
+    from core import retrieval
+    trecho = {"id": 91, "titulo": "Apostila", "texto": "Proposição composta é...",
+              "assunto": "Proposições compostas", "disciplina": "Raciocínio Lógico"}
+    llm_falso.retorno = "Boa noite! Que assunto vamos estudar?"
+    r = client.post("/perguntar", json={"pergunta": "boa noite"},
+                    headers=usuario["headers"]).json()
+    assert r["titulo"] == "boa noite"
+
+    monkeypatch.setattr(retrieval, "buscar", lambda *a, **kw: [trecho])
+    llm_falso.retorno = json.dumps({"resposta": "Proposição composta é...", "fontes_usadas": [91]})
+    r = client.post("/perguntar", json={"pergunta": "quero estudar proposições compostas hoje",
+                                        "conversa_id": r["conversa_id"]},
+                    headers=usuario["headers"]).json()
+    assert r["titulo"] == "quero estudar proposições compostas hoje"
+
+    r = client.post("/perguntar", json={"pergunta": "e a negação da condicional, como fica?",
+                                        "conversa_id": r["conversa_id"]},
+                    headers=usuario["headers"]).json()
+    assert r["titulo"] == "quero estudar proposições compostas hoje"
+    [linha] = [c for c in client.get("/conversas", headers=usuario["headers"]).json()
+               if c["id"] == r["conversa_id"]]
+    assert linha["titulo"] == "quero estudar proposições compostas hoje"
+
+
+def test_fala_curta_na_primeira_aula_usa_o_assunto_citado():
+    citadas = [{"assunto": "Proposições compostas", "disciplina": "Raciocínio Lógico"}]
+    assert conversa.titulo_da_aula("sim, pode", citadas) == "Proposições compostas"
+    assert conversa.titulo_da_aula("sim, pode", []) is None
+

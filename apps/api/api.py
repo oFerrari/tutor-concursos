@@ -44,7 +44,7 @@ from core import (assunto, auth, conversa, desafio, edital, geracao, material, m
 from core.config import CORS_ORIGINS
 from core.llm import ErroLLM
 
-VERSAO = "api-v11"
+VERSAO = "api-v12"
 
 app = FastAPI(title="Tutor de concursos — API", version=VERSAO)
 
@@ -793,6 +793,10 @@ def rota_perguntar(body: PerguntaBody, uid: int = Depends(usuario_atual),
     fontes = [{"id": f["id"], "titulo": f["titulo"], "norma": f.get("norma"),
                "artigo": f.get("artigo"), "citada": bool(f.get("citada"))}
               for f in r["fontes"]]
+    novo_titulo = conversa.retitular(conv["id"], body.pergunta,
+                                     [f for f in r["fontes"] if f.get("citada")])
+    if novo_titulo:
+        conv = {**conv, "titulo": novo_titulo}
     conversa.gravar(conv["id"], "tutor", r["resposta"], fontes)
 
     # ---- TREINO PEDIDO NA CONVERSA: o app monta as questões, sem botão.
@@ -1094,9 +1098,13 @@ def rota_confirmar_rascunho(rid: int, body: ConfirmarRascunhoBody,
 
 @app.get("/edital")
 def rota_edital_atual(uid: int = Depends(usuario_atual), m: dict = Depends(mesa_atual)):
+    """`null` com 200 quando a mesa não tem edital, e não 404: não ter edital é
+    estado normal de mesa (estudo avulso, edital que ainda não saiu), e a tela
+    pede esta rota em toda navegação — 33 erros vermelhos no console numa
+    sessão de aluno novo (22/09/2026), nenhum deles defeito."""
     ed = edital.mais_recente(m["id"])
     if not ed:
-        raise HTTPException(404, "nenhum edital ingerido ainda")
+        return None
     return {**ed, "cobertura": edital.cobertura(ed["id"], uid)}
 
 

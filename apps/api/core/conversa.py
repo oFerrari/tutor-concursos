@@ -25,10 +25,17 @@ lei. Preferimos esquecer o turno 1 a esquecer o art. 37.
 TÍTULO VEM DA PRIMEIRA PERGUNTA, sem LLM: gastar uma chamada pra resumir
 "o que diz o art. 312?" em três palavras é pagar por enfeite. Truncar a
 pergunta é honesto e reconhecível na lista.
-"""
-from . import db
 
-VERSAO = "conversa-v3"
+E É REFEITO NA PRIMEIRA AULA (`retitular`): conversa que abre com "boa noite"
+ficava "boa noite" na lista de Recentes, sobre proposições (medido em
+22/09/2026). O primeiro turno com fonte CITADA é onde a matéria aparece; dali
+em diante o título não muda mais.
+"""
+import re
+
+from . import db, diario
+
+VERSAO = "conversa-v4"
 
 JANELA = 8          # turnos (aluno+tutor) devolvidos como histórico
 MAX_TITULO = 60
@@ -39,6 +46,41 @@ def _titulo_de(pergunta: str) -> str:
     if len(limpa) <= MAX_TITULO:
         return limpa or "conversa"
     return limpa[:MAX_TITULO].rsplit(" ", 1)[0] + "…"
+
+
+PALAVRAS_PARA_TITULO = 3   # abaixo disso a fala é "sim", "pode", "explica peculato"
+
+
+def titulo_da_aula(pergunta: str, citadas: list[dict]) -> str | None:
+    """O título do turno em que a aula começou, ou None se ela não começou.
+
+    PURO. A fala do aluno quando ela diz do que se trata; o assunto dos
+    trechos citados quando ela é curta demais pra dizer ("sim, pode")."""
+    if not citadas:
+        return None
+    if len(re.findall(r"\w{4,}", pergunta or "")) >= PALAVRAS_PARA_TITULO:
+        return _titulo_de(pergunta)
+    r = diario.rotulo(citadas)
+    return _titulo_de(r[0] if r else pergunta)
+
+
+def retitular(conversa_id: int, pergunta: str, citadas: list[dict]) -> str | None:
+    """Troca o título pelo da primeira aula; depois dela, não mexe mais.
+
+    Chamar ANTES de gravar a resposta do tutor deste turno: "primeira aula" é
+    nenhuma mensagem anterior do tutor com fonte citada."""
+    titulo = titulo_da_aula(pergunta, citadas)
+    if not titulo:
+        return None
+    r = db.exec1(
+        """UPDATE conversa SET titulo = %(t)s
+            WHERE id = %(c)s
+              AND NOT EXISTS (SELECT 1 FROM mensagem
+                               WHERE conversa_id = %(c)s AND autor = 'tutor'
+                                 AND fontes @> '[{"citada": true}]')
+           RETURNING titulo""",
+        {"t": titulo, "c": conversa_id})
+    return r["titulo"] if r else None
 
 
 def criar(usuario_id: int, mesa_id: int | None, primeira_pergunta: str) -> dict:

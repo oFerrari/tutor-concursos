@@ -81,7 +81,7 @@ export default function PaginaMeta() {
     try {
       setEdital(await getEdital());
     } catch {
-      setEdital(null); // 404 = ainda não ingeriu nenhum edital — normal, não é erro
+      setEdital(null); // rede ou API fora — sem edital já volta `null` com 200
     }
   }
 

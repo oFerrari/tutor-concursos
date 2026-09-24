@@ -1069,8 +1069,9 @@ export async function baixarMaterial(id: number, nomeSugerido: string): Promise<
   URL.revokeObjectURL(url);
 }
 
-export function getEdital(): Promise<EditalAtual> {
-  return chamar<EditalAtual>("/edital");
+/** `null` quando a mesa não tem edital — estado normal, não erro. */
+export function getEdital(): Promise<EditalAtual | null> {
+  return chamar<EditalAtual | null>("/edital");
 }
 
 // ------------------------------------------------- edital: curadoria

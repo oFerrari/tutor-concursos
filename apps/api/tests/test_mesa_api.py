@@ -42,7 +42,7 @@ def _cab(usuario, mesa):
 
 
 @pytest.fixture
-def duas_disciplinas():
+def duas_disciplinas(acervo):
     """Duas disciplinas do acervo PÚBLICO.
 
     O `usuario_id IS NULL` não é enfeite — é o mesmo defeito que
@@ -306,7 +306,7 @@ def test_apagar_mesa_leva_o_edital_mas_nao_o_que_voce_aprendeu(client, usuario, 
 
 
 # ------------------------------------------------------------- simulado
-def test_simulado_fica_etiquetado_com_a_mesa(client, usuario):
+def test_simulado_fica_etiquetado_com_a_mesa(client, usuario, acervo):
     mesa_a = _criar_mesa(client, usuario, "Prova A")
     mesa_b = _criar_mesa(client, usuario, "Prova B")
 
@@ -320,7 +320,7 @@ def test_simulado_fica_etiquetado_com_a_mesa(client, usuario):
                                                    headers=_cab(usuario, mesa_b)).json()]
 
 
-def test_simulado_sobrevive_a_mesa_apagada(client, usuario):
+def test_simulado_sobrevive_a_mesa_apagada(client, usuario, acervo):
     """ON DELETE SET NULL (não CASCADE): a prova que você já fez é
     histórico de desempenho seu, só etiquetado com a mesa."""
     m = _criar_mesa(client, usuario, "Mesa efêmera")
@@ -334,7 +334,7 @@ def test_simulado_sobrevive_a_mesa_apagada(client, usuario):
 
 
 # ------------------------------- alvo declarado à mão, sem edital (017)
-def test_mesa_nova_nao_tem_alvo_e_ainda_assim_e_utilizavel(client, usuario):
+def test_mesa_nova_nao_tem_alvo_e_ainda_assim_e_utilizavel(client, usuario, acervo):
     """
     O relato que originou a 017: mesa recém-criada aparecia com "4/54
     questões · 7%" — número verdadeiro no lugar errado (é o progresso da
@@ -584,7 +584,8 @@ def test_edital_manual_recusa_so_o_vazio_completo(client, usuario):
     assert client.post("/edital/manual", json={"disciplinas": ["", "  "]},
                        headers=cab).status_code == 400
     # E nada foi gravado no caminho.
-    assert client.get("/edital", headers=cab).status_code == 404
+    r = client.get("/edital", headers=cab)
+    assert r.status_code == 200 and r.json() is None
 
 
 def test_edital_manual_limpa_o_nome_da_materia_e_recusa_colagem(client, usuario):

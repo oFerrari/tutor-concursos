@@ -47,7 +47,7 @@ def test_sem_orcamento_nada_muda():
     assert desafio.orcamento_blocos(99, 3, 5, 5) == (3, 5, 5)
 
 
-def test_minutos_usam_a_velocidade_real_do_aluno(client, usuario):
+def test_minutos_usam_a_velocidade_real_do_aluno(client, usuario, acervo):
     """
     O ponto que separa isto de um número chutado: 20 minutos de quem
     responde em 30s rende mais que de quem responde em 120s. Prometer "10

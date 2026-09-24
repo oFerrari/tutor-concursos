@@ -358,7 +358,7 @@ def test_apagar_a_conta_leva_a_questao_privada(client, usuario):
     assert db.exec1("SELECT id FROM questao WHERE id = %(i)s", {"i": q["id"]}) is None
 
 
-def test_desempenho_nao_conta_questao_privada_de_outra_pessoa(usuario, outro_usuario):
+def test_desempenho_nao_conta_questao_privada_de_outra_pessoa(usuario, outro_usuario, questao_id):
     """A view do desempenho (008) nasceu antes de existir questão privada e fazia
     `CROSS JOIN questao`: o "0 de N questões" de um aluno contava as questões da
     apostila de OUTRO. Não vazava conteúdo, só o número — e o número contradizia
@@ -373,7 +373,7 @@ def test_desempenho_nao_conta_questao_privada_de_outra_pessoa(usuario, outro_usu
         "'{}', %(u)s) RETURNING id",
         {"d": doc, "disc": disciplina, "u": outro_usuario["id"]})["id"]
     # A view só lista quem tem progresso; os dois precisam existir nela.
-    publica = db.exec1("SELECT id FROM questao WHERE usuario_id IS NULL LIMIT 1")["id"]
+    publica = questao_id
     for dono, q in ((usuario["id"], publica), (outro_usuario["id"], qid)):
         db.query("INSERT INTO progresso (usuario_id, questao_id, caixa, prox_revisao) "
                  "VALUES (%(u)s, %(q)s, 0, CURRENT_DATE)", {"u": dono, "q": q})

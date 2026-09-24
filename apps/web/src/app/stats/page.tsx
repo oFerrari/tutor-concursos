@@ -168,7 +168,7 @@ export default function PaginaStats() {
                   nota={
                     d.pct_acerto == null
                       ? "sem tentativa ainda"
-                      : `${d.acertos} de ${d.tentativas} tentativas`
+                      : `${d.acertos} de ${d.tentativas} ${d.tentativas === 1 ? "tentativa" : "tentativas"}`
                   }
                 />
               ))}

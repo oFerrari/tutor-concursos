@@ -231,12 +231,14 @@ export default function PaginaPanorama() {
               {pior && pior.pct_acerto != null && (
                 <p>
                   <span className="text-accent-text">{pior.disciplina}</span> — {pior.pct_acerto.toFixed(0)}%
-                  de acerto em {pior.tentativas} tentativas.
+                  de acerto em {pior.tentativas} {pior.tentativas === 1 ? "tentativa" : "tentativas"}.
                 </p>
               )}
               {carga.atraso > 0 && (
                 <p>
-                  <span className="text-warning">{carga.atraso} revisões atrasadas</span> — entram primeiro
+                  <span className="text-warning">
+                    {carga.atraso} {carga.atraso === 1 ? "revisão atrasada" : "revisões atrasadas"}
+                  </span> — entram primeiro
                   na fila de hoje.
                 </p>
               )}
@@ -246,7 +248,7 @@ export default function PaginaPanorama() {
             </div>
             {erros.length > 0 && (
               <Link href="/erros" className="btn-ghost mt-3.5 w-full text-[12.5px]">
-                Abrir o caderno ({erros.length} reincidências)
+                Abrir o caderno ({erros.length} {erros.length === 1 ? "reincidência" : "reincidências"})
               </Link>
             )}
           </section>
