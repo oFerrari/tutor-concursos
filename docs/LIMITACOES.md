@@ -217,6 +217,16 @@ na Aula 00 de Ciências Forenses, e com estes limites conhecidos:
 - **Apresentação do curso** às vezes ainda é explicada no primeiro turno: a
   regra está no prompt, sem filtro em código (ver 5.1 da auditoria).
 
+## Classificador de material no modelo local — medido e desligado (24/09/2026)
+
+`LLM_CLASSIFICADOR=ollama` existe (`llm.obter("classificar")`, Gemini de reserva),
+mas fica DESLIGADO nesta máquina. Medido nos 17 materiais do dono, contra os
+rótulos atuais: `qwen2.5:3b` acertou a disciplina em **5/17**, mandou seis aulas
+de Constitucional para Administrativo, devolveu disciplina vazia em seis, e
+levou 23 s por material (Gemini: ~1 s). Modelo de 7B não cabe com folga em 7 GB
+de RAM. Ligar só numa máquina com memória para um modelo maior, e depois de
+repetir a mesma medição (régua = rótulos atuais que o aluno não corrigiu).
+
 ## Aberto
 
 ### Débito de retrieval: a busca afoga a lei, e a consulta faz eco (16/09/2026)

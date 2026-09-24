@@ -148,7 +148,7 @@ Scripts da raiz: `setup.sh` (sobe tudo), `testar.sh` (qualidade da resposta),
   (o CASCADE da 009 limpa o resto).
 - Migração: `python migrar.py` aplica; **commitar não aplica**. Nunca por
   `psql -f` — fora do runner ela não entra no livro-razão (023), e o banco fica
-  com o efeito sem registro. A PRÓXIMA é a **034**; confira com
+  com o efeito sem registro. A PRÓXIMA é a **035**; confira com
   `migrar.py --listar` (há dois pares 018/019 repetidos, não crie um terceiro).
 - `.env` e `acervo/` fora do git; `corpus/` e `dados/progresso.json` no git.
   SQL só em migração numerada.
