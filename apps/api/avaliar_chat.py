@@ -92,7 +92,7 @@ from core import (assunto, auth, conversa, db, geracao, llm, mesa, pedido,
 from core.config import CLI_USUARIO_EMAIL, EMBEDDING_MODEL
 from core.llm import ErroLLM
 
-VERSAO = "avaliar-chat-v27"
+VERSAO = "avaliar-chat-v28"
 
 # Conta descartável, como manda o AGENTS.md: nada aqui pode encostar na conta
 # real. O `ON DELETE CASCADE` da 009 limpa tudo de uma vez em `--limpar`.
@@ -640,10 +640,19 @@ def checar(fala: str, resposta: str, chunks: list[dict],
             gravadas = {r["id"]: r["fonte_chunks"] for r in db.query(
                 "SELECT id, fonte_chunks FROM questao WHERE id = ANY(%(i)s)",
                 {"i": ids})} if ids else {}
-            sem_fonte = [q for q in questoes if not gravadas.get(q.get("id"))]
+            # Questão que NÃO EXISTE MAIS não é questão sem fonte: `--reprocessar`
+            # relê conversa antiga contra o banco de hoje, e o banco foi zerado em
+            # 22/09/2026. Contar a ausência como "sem proveniência" acusou 16
+            # defeitos que nunca aconteceram.
+            sumidas = [q for q in questoes if q.get("id") not in gravadas]
+            sem_fonte = [q for q in questoes
+                         if q.get("id") in gravadas and not gravadas[q["id"]]]
             if sem_fonte:
                 achados.append(("erro", f"{len(sem_fonte)} questão(ões) gerada(s) SEM "
                                         f"proveniência (fonte_chunks vazio)"))
+            if sumidas:
+                achados.append(("aviso", f"{len(sumidas)} questão(ões) desta conversa não "
+                                         f"existem mais no banco — proveniência não conferida"))
             if len(questoes) != p_treino["quantidade"]:
                 achados.append(("aviso", f"pediu {p_treino['quantidade']} questão(ões) e "
                                          f"veio(ram) {len(questoes)}"))

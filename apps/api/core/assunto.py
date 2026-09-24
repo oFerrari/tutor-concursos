@@ -109,7 +109,7 @@ import unicodedata
 from . import pedido
 from .retrieval import RE_CITACAO
 
-VERSAO = "assunto-v13"
+VERSAO = "assunto-v14"
 
 # Teto da consulta. Embedding é MÉDIA do que entra: parede de texto dilui o
 # assunto exatamente como o art. 37 (13.059 caracteres) já se dilui no próprio
@@ -330,6 +330,17 @@ def diz_assunto(texto: str) -> bool:
     return len(palavras_de_conteudo(texto)) >= MIN_CONTEUDO
 
 
+# PERGUNTA QUE O ALUNO FAZ, na forma de quem pergunta — e não de quem responde.
+# "?" sozinho não serve: responder ao tutor em forma de pergunta é comum e está
+# medido ("dependencia?", "quando nao for crime realizado em ambito
+# doméstico?"). O que separa é a ABERTURA: pedir definição, diferença, modo ou
+# motivo, ou "e o/a <assunto>?" puxando o próximo ponto.
+RE_PERGUNTA_DO_ALUNO = re.compile(
+    r"(?i)^\s*(?:e\s+)?(?:o\s+qu[eê]\s+(?:[eé]|s[aã]o|significa|diz|caracteriza|configura)"
+    r"|qual|quais|como\s+(?:funciona|fica|[eé]|se)|por\s*qu[eê]|pra\s+qu[eê]|para\s+qu[eê])\b"
+    r"|^\s*e\s+(?:o|a|os|as)\s+\w")
+
+
 def pede_assunto(fala: str | None) -> bool:
     """O aluno TOMA a iniciativa nesta fala — cita dispositivo ou pede algo?
 
@@ -357,6 +368,15 @@ def pede_assunto(fala: str | None) -> bool:
     # risco de errar pra mais é baixo — a fala continua saindo das candidatas a
     # ASSUNTO em `em_foco`, que é onde o estrago aconteceria.
     if pedido.treino(fala, apos_treino=True):
+        return True
+    # PERGUNTA NOVA COM ASSUNTO PRÓPRIO também é iniciativa. Medido em
+    # 23/09/2026 (`./testar.sh --falas`, peculato): "o que é peculato culposo?"
+    # e "e o peculato mediante erro de outrem?" vinham depois de uma pergunta
+    # do tutor, caíam no eco, e a consulta virava a resposta ANTERIOR dele. O
+    # art. 313 não veio, e o tutor afirmou que o peculato mediante erro "está
+    # no art. 312". Sem assunto próprio ("quais são?") continua sendo eco.
+    if RE_PERGUNTA_DO_ALUNO.search(fala) and [
+            x for x in palavras_de_conteudo(fala) if _sem_acento(x) not in PEDIDO]:
         return True
     cruas = {_sem_acento(x) for x in RE_PALAVRA.findall(fala.lower())}
     if not (PEDIDO & cruas):

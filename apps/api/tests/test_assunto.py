@@ -515,3 +515,23 @@ def test_risada_nao_e_assunto():
     assert assunto.palavras_de_conteudo("hahaha adorei") == ["adorei"]
     # "hurto" não é risada, é erro de digitação de uma palavra de matéria.
     assert assunto.palavras_de_conteudo("hurto ou furto?") == ["hurto", "furto"]
+
+
+def test_pergunta_nova_do_aluno_nao_e_eco_da_pergunta_do_tutor():
+    """Medido em 23/09/2026 (`./testar.sh --falas`): depois de o tutor fechar com
+    pergunta, "e o peculato mediante erro de outrem?" caía no eco, a consulta
+    virava a resposta ANTERIOR do tutor, o art. 313 não vinha, e o tutor afirmou
+    que o peculato mediante erro "está no art. 312". Abrir como quem pergunta,
+    com assunto próprio, é retomar a iniciativa; "quais são?" continua eco."""
+    historico = [
+        {"autor": "aluno", "texto": "quero estudar peculato"},
+        {"autor": "tutor", "texto": "No peculato culposo, o funcionário concorre por "
+                                    "descuido. Consegue ver o efeito da reparação do dano?"},
+    ]
+    for fala in ("e o peculato mediante erro de outrem?", "o que é peculato culposo?",
+                 "qual a diferença entre peculato e concussão?"):
+        assert not assunto.e_eco(fala, historico), fala
+        assert assunto.em_foco(historico, fala).startswith(fala), fala
+    for resposta in ("quais são?", "dependencia?",
+                     "quando nao for crime realizado em ambito doméstico?"):
+        assert assunto.e_eco(resposta, historico), resposta
