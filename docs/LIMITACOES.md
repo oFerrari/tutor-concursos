@@ -200,6 +200,23 @@ primeiro erro, então quase nenhum acerto do chat promove. Resultado visível:
 "0% coberto" e "100% do edital aberto" depois de um mês de estudo. É regra
 pedagógica deliberada, não bug; mudar é decisão de produto.
 
+## Leitura em sequência — o que ela ainda não faz (24/09/2026)
+
+`core/leitura.py` lê o material do aluno na ordem dele. Medido com o modelo real
+na Aula 00 de Ciências Forenses, e com estes limites conhecidos:
+
+- **Começa sempre do começo do material.** "Lê como apostila a parte de
+  balística" abre o material da disciplina desde o início, não na seção pedida.
+- **Um material por vez.** No fim, o tutor nomeia o próximo da disciplina (pela
+  ordem do título), mas quem pede para seguir é o aluno.
+- **"Continuar a leitura" só aparece na última resposta**, e a conversa só
+  retoma a leitura pelas últimas 20 respostas do tutor.
+- **A janela é por tamanho de texto** (~3500 caracteres; o dobro no começo, que
+  é capa, sumário e apresentação em toda apostila). Trecho de parágrafo enorme,
+  como o texto justificado que o pypdf extrai palavra por linha, pode vir sozinho.
+- **Apresentação do curso** às vezes ainda é explicada no primeiro turno: a
+  regra está no prompt, sem filtro em código (ver 5.1 da auditoria).
+
 ## Aberto
 
 ### Débito de retrieval: a busca afoga a lei, e a consulta faz eco (16/09/2026)

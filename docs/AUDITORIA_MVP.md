@@ -1,48 +1,40 @@
 # Auditoria do tutor — placar do MVP
 
-## ▶ ONDE PARAMOS — 23/09/2026, fim do dia (retomar daqui)
+## ▶ ONDE PARAMOS — 24/09/2026 (retomar daqui)
 
-**Leia isto primeiro.** O resto do arquivo é o placar item a item.
+**Leia isto primeiro.** O resto do arquivo é o placar item a item. A seção 10 é a
+análise da conversa real de 24/09 (Ciências Forenses) e o que saiu dela.
 
-### Estado do ambiente ao encerrar
+### Estado do ambiente
 
 - **Serviços:** API (8000), front (3000) e banco (5433) de pé (`./setup.sh --subir`).
-- **Banco:** o do uso real do dono, sem importação. 1 usuário
-  (`andrei.ferrari11@gmail.com`, senha `12345678`), 1 "Mesa principal",
-  **nenhum edital**, lei seca pública intacta, 0 questão pública.
-- **Material:** os 18 PDFs **reindexados** em 23/09 com a moldura removida (8.1):
-  3874 trechos, 0 com nome/CPF, 100% com página, 18/18 prontos. As 2 questões
-  do aluno foram remapeadas para o trecho novo (9.1).
-- **Suíte:** 516 testes, 0 pulados (eram 52 pulados com o acervo vazio — 9.4).
-  Busca: 23/34 top-1, 32/34 top-6, igual à linha de base.
+- **Banco:** só `andrei.ferrari11@gmail.com` (senha `12345678`), 1 mesa com o
+  **edital da PC-PR** (110 tópicos, subido pelo dono em 24/09). Migração **033**
+  aplicada. Diário limpo das 4 linhas antigas (backup em
+  `.logs/backup-diario-antigo-20260924.json`).
+- **Material:** 18 PDFs; a apostila de Ciências Forenses agora está em Ciências
+  Forenses (era "Direito Processual Penal"); o edital da Transpetro virou
+  `tipo='edital'` (fora da busca, com aviso na tela de materiais).
+- **Suíte:** 528 testes, 0 pulados. Busca intacta (23/34, 32/34).
 
-### Git — atenção
+### Git
 
-- `develop` local está **10 commits à frente** do GitHub (de `6246645` a `05e233e`).
-- O ref `estado` no GitHub ainda guarda o banco de 10/09; o próximo `git push`
-  comum publica o atual por cima. **Não rodar `git pull` antes desse push.**
+- `develop` local à frente do GitHub desde `6246645`; o push é do dono.
+  **Não rodar `git pull` antes desse push** (o hook importaria o estado de 10/09).
 
 ### Perguntas em aberto para o dono
 
-1. **Edital:** subir o da PC-PR na mesa? Com ele, a classificação acerta Ciências
-   Forenses (medido, 8.7) e o mapa de disciplinas passa a valer.
-2. **Hooks de estado (1.8):** manter push/pull levando o banco, ou desligar.
-3. **Maestria (2.8):** manter a regra atual ou dar gradiente.
-4. **Diário antigo (8.2):** as linhas de `estudo_teoria` gravadas antes do conserto
-   ("Direitos sociais" etc.) continuam lá. Apagar as de 22/09 ou deixar envelhecer
-   (a janela é de 7 dias)?
+1. **Hooks de estado (1.8):** manter push/pull levando o banco, ou desligar.
+2. **Maestria (2.8):** manter a regra atual ou dar gradiente.
 
 ### Próximos passos, em ordem
 
-1. **5.1/5.2 — curadoria:** capa/apresentação que vira questão; tema inventado.
-   É a dimensão mais atrasada do placar.
-2. **6.6 — resto do tique:** fechamento ainda repete pergunta (2/6 "Consegue…?",
-   uma pergunta repetida entre turnos). Medir numa conversa mais longa (`--livre`).
-3. **8.7 — reclassificar quando o edital chega** (material classificado pelo
-   modelo antes de existir o vocabulário do edital).
-4. **3.5/8.6 — edital subido como aula:** detectar e avisar.
-5. **6.1/6.2 — selo e CITADO legíveis** (nome do edital; título do material).
-6. **Telas (seção 7).**
+1. **Usar a leitura na tela** (10.1): conferir o botão "Continuar a leitura", o
+   olho das fontes e as etiquetas por assunto/página no navegador.
+2. **5.1/5.2 — curadoria:** capa/apresentação que vira questão; tema inventado.
+   A mesma regra serviria à leitura (LIMITACOES).
+3. **Leitura a partir de uma seção** ("lê a parte de balística") — LIMITACOES.
+4. **6.6 — resto do tique** e **telas (seção 7)**.
 
 ### O que falta simular (continuação da bateria de aluno novo)
 
@@ -102,21 +94,21 @@ Legenda: ✅ resolvido · 🟡 resolvido em parte · ⏳ pendente · 🔶 decis�
 
 ## Prontidão de MVP (parte do tutor)
 
-| Dimensão | 21/09 | 22/09 | 23/09 | O que mudou / o que falta |
-|---|---:|---:|---:|---|
-| Segurança e alucinação | 85 | 85 | 85 | Artigo errado por consulta errada (9.3) achado e corrigido; falta medir em volume |
-| Busca (retrieval) | 85 | 85 | 88 | Linha de base intacta (23/34, 32/34); pergunta nova do aluno deixa de buscar pela resposta anterior do tutor (9.3) |
-| Integridade do acervo | 30 | 80 | 85 | Reindexar não deixa mais questão citando trecho apagado (9.1). Falta conferir conteúdo × trecho |
-| Estatísticas refletem o uso | 35 | 70 | 80 | Diário só com o que a resposta citou (8.2). Falta gradiente da maestria |
-| Mesa e edital | 35 | 70 | 80 | Fila e desafio em rodízio de disciplinas (3.3). Falta reclassificar quando o edital chega |
-| Obedecer ao pedido | 40 | 60 | 70 | Responde a pergunta feita, sem "isso vem depois" (4.4, 1 conversa real) |
-| Qualidade da questão gerada | 30 | 45 | 45 | Falta: capa/apresentação vira questão; tema inventado |
-| Fluxo de conversa | 50 | 55 | 65 | "Sigo para…?" 0 vezes em 6 turnos; "Consegue…?" de 6/6 para 2/6 |
-| Privacidade do material | — | 50 | 90 | Nome/CPF em 0 trechos (8.1); classificador não vê mais matéria de outro aluno (9.2) |
-| Telas e navegação | — | 55 | 60 | Plural, título da conversa, /edital sem 404. Falta Mesas no layout, rótulos, celular |
-| **Total** | **~45%** | **~65%** | **~75%** | Média simples das dimensões |
+| Dimensão | 21/09 | 22/09 | 23/09 | 24/09 | O que mudou / o que falta |
+|---|---:|---:|---:|---:|---|
+| Segurança e alucinação | 85 | 85 | 85 | 85 | Leitura fiel ao trecho medida com o modelo real; material errado ⇒ texto inventado foi achado e fechado (10.3) |
+| Busca (retrieval) | 85 | 85 | 88 | 90 | Edital fora da busca (10.4); leitura em sequência para quem pede avanço (10.1) |
+| Integridade do acervo | 30 | 80 | 85 | 85 | Reindexar não deixa mais questão citando trecho apagado (9.1). Falta conferir conteúdo × trecho |
+| Estatísticas refletem o uso | 35 | 70 | 80 | 85 | Diário antigo limpo; convite a testar só na abertura (10.9) |
+| Mesa e edital | 35 | 70 | 80 | 85 | Edital novo reclassifica o palpite do modelo (10.5); edital subido como aula detectado (10.4) |
+| Obedecer ao pedido | 40 | 60 | 70 | 80 | "Na ordem", "como apostila", "sem perguntas" viram leitura em sequência (10.1) |
+| Qualidade da questão gerada | 30 | 45 | 45 | 45 | Falta: capa/apresentação vira questão; tema inventado |
+| Fluxo de conversa | 50 | 55 | 65 | 75 | Aula expositiva longa e contínua; "continua" é botão; inventário responde "o que você tem" (10.6) |
+| Privacidade do material | — | 50 | 90 | 90 | Nome/CPF em 0 trechos (8.1); classificador não vê mais matéria de outro aluno (9.2) |
+| Telas e navegação | — | 55 | 60 | 70 | Olho das fontes, etiqueta por assunto e página, títulos no texto, erro legível (10.7, 10.8) |
+| **Total** | **~45%** | **~65%** | **~75%** | **~79%** | Média simples das dimensões |
 
-O que separa 75% de um MVP de mercado está agora concentrado em **a curadoria do
+O que separa 79% de um MVP de mercado está agora concentrado em **a curadoria do
 que vira questão** (fonte que não é matéria, tema inventado) e no **polimento da
 conversa e das telas**. O motor — busca, dados, estatística, privacidade — está à
 frente.
@@ -251,3 +243,28 @@ painel sem número fictício (2.9).
 5. **Telas** (7.x): polimento, uma tela por vez.
 6. **Decisões do dono** (1.8, 2.8, diário antigo): hooks de estado, gradiente da
    maestria, linhas do diário gravadas antes do conserto.
+
+## 10. A conversa real de 24/09/2026 — Ciências Forenses "como apostila"
+
+O dono pediu cinco vezes, com palavras diferentes, para estudar pelo material na
+ordem e sem perguntas ("na ordem", "todo o conteúdo do tópico 2.1", "na ordem que
+os materiais trazem", "não quero responder perguntas", "como se estivesse lendo a
+apostila, sem pausas"). Recebeu uma frase e uma pergunta por turno, a conversa
+derivou para o inquérito policial do CPP, e o último turno foi a mensagem
+"LLM indisponível: resposta truncada em 1500 tokens". Repetida com o modelo real
+depois dos consertos (sem gravar nada na conta), a mesma sequência lê a Aula 00
+de Ciências Forenses do começo, em ordem, com 275–458 palavras por turno.
+
+| | Falha | Causa medida | Estado |
+|---|---|---|---|
+| 10.1 | **Não havia como ler o material na ordem** | A busca por sentido não conhece ordem: cada turno trazia os 6 trechos mais parecidos com a fala, de qualquer lugar | ✅ `core/leitura.py` — pedido de avanço ("continua", "segue", "certo" depois de leitura, "como apostila", "na ordem do material") lê os próximos trechos por `chunk.ordem`; pergunta no meio vai à busca e a leitura fica onde estava; "aprofunda" reexplica a mesma janela. Marcador em `mensagem.fontes` (`sequencial`, `ordem`) — sem migração. Prompt: turno tipo 0, aula expositiva sem limite de parágrafos e sem pergunta de diagnóstico |
+| 10.2 | Resposta curta demais para substituir o PDF | Prompt limitava exposição a 2 parágrafos e fechava com pergunta; `max_tokens=1500` | ✅ leitura com 6000 tokens de teto e regra "não encurte"; primeira janela dobrada (capa/sumário/apresentação); emenda de frase entre turnos (a sobreposição do chunker e a quebra de página faziam turno terminar em "esclarecer e") |
+| 10.3 | **Leitura do material errado virava texto inventado** | Achado nos testes: "estudar na ordem… o conceito inteiro" foi à busca e voltou gabarito de Administrativo; o modelo escreveu sobre perícia em cima dele | ✅ o material sai da conversa (disciplina nomeada → material citado há pouco → disciplina das falas recentes → busca por último); prompt "fiel ao trecho, e só a ele" |
+| 10.4 | Edital de outro concurso (Transpetro) como fonte | Subido como aula; a busca do chat não recorta por disciplina | ✅ migração 033 (`tipo='edital'`), `material.parece_edital` (≥ 12 de 23 marcas e ≥ 1 "inscri"/mil palavras: edital 17 e 2,8; nenhuma apostila acima de 7 e 0,2); aviso em Meus materiais com link para Meu edital |
+| 10.5 | "Essa matéria não veio no seu material" — havia a apostila | Classificada como Processual Penal antes do edital; o edital põe Processual Penal dentro de Penal | ✅ confirmar edital reclassifica o palpite do MODELO com o vocabulário do edital (3/3 Ciências Forenses; controles estáveis); o que o aluno digitou não muda |
+| 10.6 | "O que você tem de material?" respondido pelos trechos do turno | Não havia inventário no prompt | ✅ `### Material que o aluno subiu`, por disciplina do edital, com assunto e número da aula |
+| 10.7 | Fontes sempre à mostra, com nome de arquivo repetido | — | ✅ olho para ocultar/mostrar (lembrado no navegador); etiqueta por assunto com faixa de páginas; "lido do material" na leitura |
+| 10.8 | "LLM indisponível: resposta truncada em 1500 tokens…" na tela | Detalhe técnico do 503 virava balão do tutor | ✅ uma segunda tentativa com folga quando o modelo bate no teto (`llm.ErroTruncado`); aviso legível ao aluno, motivo no log |
+| 10.9 | Abertura "vamos continuar Direito Administrativo, licença para atividade política" | Linhas do diário gravadas antes do conserto 8.2 | ✅ linhas apagadas com backup. E o convite a testar ("NENHUMA questão") só vai ao prompt na abertura: chegava em todo turno e o tutor oferecia questão em 3 de 6 turnos |
+| 10.10 | "Vamos por partes para não acumular" — recusou "todo o conteúdo do 2.1" | Regra UMA DIVISÃO POR VEZ | ✅ o pedido vira leitura (10.1), onde a regra não vale |
+
