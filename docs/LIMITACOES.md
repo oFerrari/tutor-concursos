@@ -186,12 +186,11 @@ sobreposição do gabarito, e sentido pelo e5 (perguntas diferentes do mesmo
 artigo em 0,88–0,94). Um limiar mais baixo apagaria a pergunta sobre a pena
 achando que era a sobre a conduta.
 
-## A fila não alterna disciplinas (22/09/2026)
+## ~~A fila não alterna disciplinas~~ — resolvido em 23/09/2026
 
-As inéditas entram por `ORDER BY q.id`: a disciplina com questões mais antigas
-ocupa o teto antes das outras. Medido: Direito Administrativo, com 13 questões,
-não aparecia na fila de nenhuma mesa. Não é defeito do vocabulário — é rodízio,
-que ainda não existe.
+Registrado em 22/09 (inéditas por `ORDER BY q.id`, Direito Administrativo fora de
+toda fila). Resolvido por `scheduler.ineditas_em_rodizio` (`fe96b3d`): 1ª de cada
+disciplina, depois a 2ª, com a série Certo/Errado contando como uma unidade.
 
 ## Maestria sem gradiente — decisão pendente do dono (22/09/2026)
 
