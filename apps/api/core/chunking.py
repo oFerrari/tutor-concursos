@@ -28,9 +28,11 @@ Ambas entram no campo `texto`, não só em coluna separada: o embedding e o
 tsvector são calculados sobre `texto`, então o que não estiver ali não é
 recuperável nem por semântica nem por palavra-chave.
 """
+import math
 import re
+from collections import Counter
 
-VERSAO = "chunking-v13"
+VERSAO = "chunking-v14"
 
 RE_ARTIGO = re.compile(r"(?im)^\s*Art\.?\s*(\d+[\-\wºo]*)")
 RE_PARAGRAFO = re.compile(r"(?im)^\s*(?:§\s*(\d+[\wºo]*)|Par[áa]grafo\s+[úu]nico)")
@@ -313,18 +315,119 @@ def taxa_colisao_artigo(chunks: list[dict]) -> float:
     return colisoes / len(chunks)
 
 
-def chunk_generico(texto: str, alvo: int = 1100, sobreposicao: int = 150) -> list[dict]:
-    paragrafos = [p.strip() for p in re.split(r"\n\s*\n", texto) if p.strip()]
-    chunks, atual = [], ""
-    for p in paragrafos:
+# CABEÇALHO, RODAPÉ E MARCA D'ÁGUA NÃO SÃO MATÉRIA. Medido em 22/09/2026 numa
+# apostila real: 160–167 de 219 trechos começavam com as mesmas cinco linhas —
+# nome da aula, concurso, site do curso, número da página e a marca d'água com
+# o CPF e o NOME do aluno que comprou o PDF. Três efeitos, todos ruins: o CPF ia
+# ao LLM externo em todo prompt que usava o trecho; o vetor de cada trecho ficava
+# parecido com o de todos os outros; e o braço lexical casava o nome da matéria
+# em tudo, porque ele estava em todo trecho.
+#
+# A regra é por FREQUÊNCIA dentro do MESMO documento, não por lista: linha que
+# aparece em pelo menos metade das páginas é moldura da página, seja qual for o
+# curso, o concurso ou o aluno. Os números viram "#" na comparação, então
+# "35" e "36", ou "07180871192 - FULANO" em qualquer PDF de qualquer comprador,
+# contam como a mesma linha repetida.
+FRACAO_DE_PAGINAS_MOLDURA = 0.5
+PAGINAS_MINIMAS_MOLDURA = 3
+# Quantas linhas não vazias, de cada borda da página, podem ser moldura. Medido
+# em 23/09/2026 em 17 PDFs de dois sites: a moldura mais funda estava a 7 linhas
+# da borda; palavra solta de texto justificado (o pypdf extrai "de", "que", "a"
+# numa linha só em algumas apostilas) ficava a 40+ linhas, e aparecia em mais da
+# metade das páginas — sem esta faixa, a regra apagava palavras do conteúdo.
+LINHAS_DE_BORDA_MOLDURA = 8
+
+
+def _linha_comparavel(linha: str) -> str:
+    return re.sub(r"\d+", "#", " ".join(linha.split()))
+
+
+def _na_borda(pagina: str) -> list[tuple[str, bool]]:
+    """Cada linha da página e se ela está na faixa da borda (linha em branco,
+    nunca: ela não conta na distância e não é moldura)."""
+    linhas = pagina.splitlines()
+    cheias = [i for i, l in enumerate(linhas) if l.strip()]
+    borda = set(cheias[:LINHAS_DE_BORDA_MOLDURA] + cheias[-LINHAS_DE_BORDA_MOLDURA:])
+    return [(l, i in borda) for i, l in enumerate(linhas)]
+
+
+def sem_moldura(paginas: list[str]) -> list[str]:
+    """As páginas sem cabeçalho, rodapé e marca d'água.
+
+    Moldura é linha que aparece NA BORDA de pelo menos metade das páginas. Só a
+    ocorrência da borda sai: o mesmo "12" solto no meio da página é célula de
+    tabela, não número de página.
+
+    Documento curto (menos de `PAGINAS_MINIMAS_MOLDURA` páginas) volta intacto:
+    sem páginas bastantes, repetição não distingue moldura de conteúdo. Linha em
+    branco fica — é ela que separa parágrafo para o chunker."""
+    if len(paginas) < PAGINAS_MINIMAS_MOLDURA:
+        return paginas
+    marcadas = [_na_borda(p) for p in paginas]
+    presenca = Counter()
+    for linhas in marcadas:
+        presenca.update({_linha_comparavel(l) for l, borda in linhas if borda})
+    corte = max(PAGINAS_MINIMAS_MOLDURA, math.ceil(len(paginas) * FRACAO_DE_PAGINAS_MOLDURA))
+    moldura = {l for l, n in presenca.items() if n >= corte}
+    if not moldura:
+        return paginas
+    return ["\n".join(l for l, borda in linhas
+                      if not (borda and _linha_comparavel(l) in moldura))
+            for linhas in marcadas]
+
+
+# Fração das palavras do trecho ANTIGO que o novo precisa conter pra ser "o
+# mesmo trecho, recortado de outro jeito". Reindexar troca o corte (moldura
+# que saiu, alvo de tamanho que mudou), não o conteúdo; abaixo da metade, o
+# trecho antigo não sobreviveu e dizer que sobreviveu seria proveniência falsa.
+LIMIAR_CORRESPONDENCIA = 0.5
+
+
+def _palavras_de_conteudo(texto: str) -> set[str]:
+    return set(re.findall(r"\w{4,}", texto.lower()))
+
+
+def correspondente(antigo: str, novos: list[str]) -> int | None:
+    """Índice do trecho novo que continua o `antigo`, ou None se nenhum continua.
+
+    Por CONTEÚDO e não por posição: a ordem muda quando o corte muda, e
+    `questao.fonte_chunks` guarda id cru — reindexar sem remapear deixava a
+    questão do aluno apontando pra trecho apagado."""
+    palavras = _palavras_de_conteudo(antigo)
+    if not palavras or not novos:
+        return None
+    cobertura = [len(palavras & _palavras_de_conteudo(n)) / len(palavras) for n in novos]
+    melhor = max(range(len(novos)), key=cobertura.__getitem__)
+    return melhor if cobertura[melhor] >= LIMIAR_CORRESPONDENCIA else None
+
+
+def chunk_paginado(paginas: list[str], alvo: int = 1100, sobreposicao: int = 150) -> list[dict]:
+    """O corte de `chunk_generico`, sabendo em que página cada trecho começa.
+
+    A página é a do primeiro parágrafo NOVO do trecho — a sobreposição herdada do
+    anterior não conta, porque é dele. `chunk.pagina` estava vazio em 100% dos
+    trechos, e o tutor, perguntado "em que página está isso?", não tinha como
+    responder."""
+    itens = [(p.strip(), n) for n, pagina in enumerate(paginas, 1)
+             for p in re.split(r"\n\s*\n", pagina) if p.strip()]
+    chunks, atual, pagina = [], "", None
+    for p, n in itens:
         if len(atual) + len(p) + 2 <= alvo:
+            if not atual:
+                pagina = n
             atual = f"{atual}\n\n{p}" if atual else p
         else:
             if atual:
-                chunks.append(atual)
+                chunks.append((atual, pagina))
             atual = (atual[-sobreposicao:] + "\n\n" + p) if atual else p
+            pagina = n
     if atual:
-        chunks.append(atual)
+        chunks.append((atual, pagina))
     return [{"texto": c, "norma": None, "artigo": None, "paragrafo": None,
-             "inciso": None, "rubrica": None, "secao": None}
-            for c in chunks if len(c) > 80]
+             "inciso": None, "rubrica": None, "secao": None, "pagina": n}
+            for c, n in chunks if len(c) > 80]
+
+
+def chunk_generico(texto: str, alvo: int = 1100, sobreposicao: int = 150) -> list[dict]:
+    """Texto sem páginas (TXT, HTML, link): o mesmo corte, sem número de página."""
+    return [{**c, "pagina": None} for c in chunk_paginado([texto], alvo, sobreposicao)]

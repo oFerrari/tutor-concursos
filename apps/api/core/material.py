@@ -35,6 +35,7 @@ coberto duas vezes: a norma nula e o `ORDER BY d.tipo = 'lei' DESC` de
 `por_dispositivo` mantêm a lei oficial na frente da cópia do aluno.
 """
 import hashlib
+import json
 import queue
 import threading
 import time
@@ -42,7 +43,7 @@ import re
 
 from . import chunking, db, embeddings
 
-VERSAO = "material-v25"
+VERSAO = "material-v27"
 
 LOTE = 32
 MIN_CHARS = 200
@@ -250,8 +251,31 @@ def _limpar(texto: str) -> str:
     return texto.translate(_LIXO)
 
 
+def _extrair_paginas(nome: str, dados: bytes) -> list[str] | None:
+    """As páginas do PDF, já sem cabeçalho, rodapé e marca d'água; `None` se não
+    for PDF. A moldura sai AQUI, antes de qualquer destino do texto, pelo mesmo
+    motivo de `_limpar`: o CPF do comprador impresso em toda página não pode
+    chegar ao chunk, ao vetor nem ao prompt do LLM externo por caminho nenhum."""
+    if not nome.lower().endswith(".pdf"):
+        return None
+    import io
+    from pypdf import PdfReader
+    try:
+        reader = PdfReader(io.BytesIO(dados))
+        # PDF com senha: o pypdf não estoura na abertura, estoura ao ler
+        # a página — e a mensagem crua ("file has not been decrypted") não
+        # diz ao aluno o que fazer.
+        if getattr(reader, "is_encrypted", False):
+            raise ErroMaterial("PDF protegido por senha — remova a proteção e suba de novo")
+        return chunking.sem_moldura([_limpar(p.extract_text() or "") for p in reader.pages])
+    except ErroMaterial:
+        raise
+    except Exception as e:
+        raise ErroMaterial(f"não consegui abrir este PDF ({type(e).__name__})")
+
+
 def _extrair(nome: str, dados: bytes) -> str:
-    """Bytes -> texto. PDF via pypdf; qualquer outra coisa como texto puro."""
+    """Bytes -> texto. PDF via pypdf (sem moldura); qualquer outra coisa como texto puro."""
     baixo = nome.lower()
     if baixo.endswith((".htm", ".html", ".xhtml")):
         # HTML por LINK já era tratado em `baixar` (pelo content-type); por
@@ -264,21 +288,9 @@ def _extrair(nome: str, dados: bytes) -> str:
         # como utf-8 com `errors="ignore"` come os acentos em silêncio — texto
         # sem acento casa pior na busca e fica ilegível na citação.
         return _limpar(_html_para_texto(_decodificar(dados)))
-    if baixo.endswith(".pdf"):
-        import io
-        from pypdf import PdfReader
-        try:
-            reader = PdfReader(io.BytesIO(dados))
-            # PDF com senha: o pypdf não estoura na abertura, estoura ao ler
-            # a página — e a mensagem crua ("file has not been decrypted") não
-            # diz ao aluno o que fazer.
-            if getattr(reader, "is_encrypted", False):
-                raise ErroMaterial("PDF protegido por senha — remova a proteção e suba de novo")
-            return _limpar("\n\n".join((p.extract_text() or "") for p in reader.pages))
-        except ErroMaterial:
-            raise
-        except Exception as e:
-            raise ErroMaterial(f"não consegui abrir este PDF ({type(e).__name__})")
+    paginas = _extrair_paginas(nome, dados)
+    if paginas is not None:
+        return "\n\n".join(paginas)
     return _limpar(dados.decode("utf-8", errors="ignore"))
 
 
@@ -598,7 +610,7 @@ def norma_ja_no_acervo(chunks: list[dict]) -> str | None:
     return norma if batidas / len(amostra) >= LIMIAR_DUPLICATA else None
 
 
-def _dividir(texto: str, nome: str) -> list[dict]:
+def _dividir(texto: str, nome: str, paginas: list[str] | None = None) -> list[dict]:
     """Divide pelo chunker CERTO pro tipo de texto.
 
     Lei seca pelo `chunk_lei` (um chunk por artigo, com `artigo` preenchido —
@@ -610,7 +622,8 @@ def _dividir(texto: str, nome: str) -> list[dict]:
         chunks = chunking.chunk_lei(chunking.normalizar_lei(texto), norma=None)
         if chunks:
             return chunks
-    return chunking.chunk_generico(texto)
+    # PDF sabe a página de cada trecho; texto puro, HTML e link não têm página.
+    return chunking.chunk_paginado(paginas) if paginas else chunking.chunk_generico(texto)
 
 
 def registrar(usuario_id: int, nome: str, dados: bytes,
@@ -705,13 +718,14 @@ def registrar(usuario_id: int, nome: str, dados: bytes,
         volta = {k: v for k, v in ja.items() if k not in ("chunks", "tem_arquivo")}
         return {**volta, "status": "processando", "chunks": 0, "retomado": True}
 
-    texto = _extrair(nome, dados)
+    paginas = _extrair_paginas(nome, dados)
+    texto = "\n\n".join(paginas) if paginas is not None else _extrair(nome, dados)
     if len(texto.strip()) < MIN_CHARS:
         raise ErroMaterial(
             "quase nenhum texto foi extraído — este PDF provavelmente é imagem "
             "escaneada. Rode OCR (ocrmypdf) e suba de novo.")
 
-    chunks = _dividir(texto, nome)
+    chunks = _dividir(texto, nome, paginas)
     if not chunks:
         raise ErroMaterial("não consegui dividir este material em trechos")
 
@@ -883,14 +897,15 @@ def indexar(documento_id: int, nome: str, dados: bytes) -> None:
     banco.
     """
     try:
-        texto = _extrair(nome, dados)
+        paginas = _extrair_paginas(nome, dados)
+        texto = "\n\n".join(paginas) if paginas is not None else _extrair(nome, dados)
         # `_dividir` e não `chunk_generico` direto: `indexar` reextrai dos bytes
         # por decisão (ver docstring), então ele tem a MESMA escolha de chunker a
         # fazer que o `registrar`. Trocar só num dos dois foi o que fiz primeiro,
         # e o efeito foi silencioso: a CF reindexada voltou com 1074 janelas
         # genéricas e zero artigo, exatamente como antes, porque o caminho que
         # roda de verdade é este.
-        chunks = _dividir(texto, nome)
+        chunks = _dividir(texto, nome, paginas)
     except Exception as e:  # noqa: BLE001 — ver o comentário do except final
         with db.conexao_isolada() as c, c.cursor() as cur:
             cur.execute("UPDATE documento SET status='falha', erro=%s WHERE id=%s",
@@ -987,6 +1002,18 @@ def indexar(documento_id: int, nome: str, dados: bytes) -> None:
             # economiza CPU e deixa o material num estado que ninguém sabe
             # descrever (parcial? completo? de qual versão do arquivo?).
             # Repetir trabalho é mais barato que dado ambíguo no acervo.
+            # O QUE AS QUESTÕES CITAM, antes de apagar: `fonte_chunks` guarda id
+            # cru, e o DELETE abaixo deixava a questão gerada desta apostila
+            # apontando pra trecho que não existe mais. `reingest.py` já
+            # remapeava a lei pública; o material do aluno, não.
+            with c.cursor() as cur:
+                cur.execute("""SELECT ch.id, ch.texto FROM chunk ch
+                                WHERE ch.documento_id = %s
+                                  AND EXISTS (SELECT 1 FROM questao q
+                                               WHERE ch.id = ANY(q.fonte_chunks))""",
+                            (documento_id,))
+                citados = cur.fetchall()
+            novos: list[tuple[int, str]] = []
             with c.cursor() as cur:
                 cur.execute("DELETE FROM chunk WHERE documento_id = %s", (documento_id,))
                 cur.execute("UPDATE documento SET status='processando', erro=NULL WHERE id=%s",
@@ -1001,11 +1028,15 @@ def indexar(documento_id: int, nome: str, dados: bytes) -> None:
                         cur.execute(
                             """INSERT INTO chunk (documento_id, ordem, texto, norma,
                                                   artigo, paragrafo, inciso, rubrica,
-                                                  secao, embedding, rotulo)
-                               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                                                  secao, pagina, embedding, rotulo)
+                               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                               RETURNING id""",
                             (documento_id, i + j, x["texto"], x["norma"], x["artigo"],
                              x["paragrafo"], x["inciso"], x.get("rubrica"),
-                             x.get("secao"), v, rotulo_lex))
+                             x.get("secao"), x.get("pagina"), v, rotulo_lex))
+                        novos.append((cur.fetchone()["id"], x["texto"]))
+            if citados:
+                _remapear_fontes(c, citados, novos)
             with c.cursor() as cur:
                 # `chunks_total` é reescrito, não só o status: ele foi gravado
                 # em `registrar` com a contagem daquele momento, e a contagem
@@ -1061,6 +1092,34 @@ def indexar(documento_id: int, nome: str, dados: bytes) -> None:
     # a linha ainda vai mudar na tela.
     with db.conexao_isolada() as c, c.cursor() as cur:
         cur.execute("UPDATE documento SET status='pronto' WHERE id=%s", (documento_id,))
+
+
+def _remapear_fontes(c, citados: list[dict], novos: list[tuple[int, str]]) -> None:
+    """Aponta `fonte_chunks` do trecho apagado para o trecho novo que o continua.
+
+    Sem correspondente, o id antigo FICA, declarado no log — mesma escolha do
+    `reingest.py`: id órfão não atribui cobertura a artigo nenhum (a sequência
+    não reusa id), e sumir com ele esconderia que a proveniência se perdeu."""
+    textos = [t for _, t in novos]
+    mapa, orfaos = {}, []
+    for antigo in citados:
+        k = chunking.correspondente(antigo["texto"], textos)
+        if k is None:
+            orfaos.append(antigo["id"])
+        else:
+            mapa[antigo["id"]] = novos[k][0]
+    if mapa:
+        with c.cursor() as cur:
+            cur.execute("""UPDATE questao
+                              SET fonte_chunks = ARRAY(
+                                  SELECT COALESCE((%s::jsonb ->> f::text)::bigint, f)
+                                    FROM unnest(fonte_chunks) WITH ORDINALITY AS u(f, n)
+                                   ORDER BY n)
+                            WHERE fonte_chunks && %s::bigint[]""",
+                        (json.dumps({str(k): v for k, v in mapa.items()}), list(mapa)))
+    if orfaos:
+        print(f"[tutor] {len(orfaos)} trecho(s) citado(s) por questão sem correspondente "
+              f"na reindexação; fonte_chunks ficou com o id antigo: {orfaos[:5]}")
 
 
 def reindexar_rotulo(documento_id: int) -> bool:

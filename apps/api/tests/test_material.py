@@ -5,7 +5,7 @@ import pytest
 
 from core import db, embeddings, material, retrieval
 
-VERSAO = "test-material-v11"
+VERSAO = "test-material-v12"
 TXT = ("MEU RESUMO PARTICULAR\n\nO mnemônico QUIXOTEBRAVO organiza os prazos "
        "recursais do processo penal conforme minha anotação de aula. " * 10).encode()
 
@@ -326,6 +326,42 @@ def test_indexar_e_idempotente(client, usuario):
         material.indexar(doc["id"], "Resumo.txt", TXT)
     n = db.exec1("SELECT count(*) AS n FROM chunk WHERE documento_id=%(i)s", {"i": doc["id"]})["n"]
     assert n == doc["chunks_total"]
+
+
+def test_reindexar_mantem_a_questao_apontando_pro_trecho_que_existe(client, usuario):
+    """`fonte_chunks` guarda id cru e reindexar recria todos os trechos. Sem
+    remapear, a questão gerada da apostila passava a citar trecho apagado —
+    e reindexar é o que se faz toda vez que a extração melhora."""
+    corpo = "\n\n".join(f"Parágrafo sobre o instituto {nome}, com prazo, forma e efeito próprios. " * 6
+                         for nome in ("alfa", "beta", "gama", "delta", "épsilon")).encode()
+    doc = client.post("/materiais", files={"arquivo": ("Resumo.txt", corpo, "text/plain")},
+                      data={"disciplina": "Direito Civil", "tipo": "resumo"},
+                      headers=usuario["headers"]).json()
+    citado = db.exec1("""SELECT id, texto FROM chunk WHERE documento_id = %(d)s
+                          AND texto LIKE '%%instituto gama%%' ORDER BY ordem LIMIT 1""",
+                      {"d": doc["id"]})
+    qid = db.exec1(
+        "INSERT INTO questao (documento_id, disciplina, tema, enunciado, gabarito, fonte_chunks, "
+        "usuario_id) VALUES (%(d)s, 'Direito Civil', 'Gama', 'O que é o instituto gama?', 'g.', "
+        "%(f)s, %(u)s) RETURNING id",
+        {"d": doc["id"], "f": [citado["id"]], "u": usuario["id"]})["id"]
+
+    material.indexar(doc["id"], "Resumo.txt", corpo)
+
+    [fonte] = db.exec1("SELECT fonte_chunks FROM questao WHERE id = %(q)s", {"q": qid})["fonte_chunks"]
+    novo = db.exec1("SELECT documento_id, texto FROM chunk WHERE id = %(i)s", {"i": fonte})
+    assert fonte != citado["id"], "o trecho antigo foi apagado; o id tem de ser outro"
+    assert novo and novo["documento_id"] == doc["id"]
+    assert "instituto gama" in novo["texto"]
+
+
+def test_trecho_sem_continuacao_nao_ganha_correspondente_inventado():
+    from core import chunking
+    novos = ["Texto sobre prescrição e decadência no direito civil.",
+             "Texto sobre posse, propriedade e usucapião extraordinária."]
+
+    assert chunking.correspondente("posse propriedade usucapião extraordinária", novos) == 1
+    assert chunking.correspondente("competência tributária da união federal", novos) is None
 
 
 def test_reindexar_de_outro_aluno_da_404(client, usuario, outro_usuario):
