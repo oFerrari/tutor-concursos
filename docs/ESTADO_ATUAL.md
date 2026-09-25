@@ -9,7 +9,7 @@ A pedido do dono, a base foi limpa para ele subir um edital e materiais novos e
 simular o uso completo da ferramenta. **Não restaure nada**: o estado antigo
 não é perda, é decisão.
 
-- Ficou: o usuário `andrei.ferrari11@gmail.com` (perfil zerado, para o
+- Ficou: a conta do dono (perfil zerado, para o
   onboarding rodar de novo), uma única "Mesa principal", a lei seca pública (CP,
   CF, ADCT, CPP, Lei 8.112, histórico da CF — 2.314 trechos), `migracao`,
   `embedding_cache` e `telemetria_llm`.

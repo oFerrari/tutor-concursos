@@ -10,6 +10,7 @@ Portável (Antigravity, Claude Code, Cursor, Codex).
 - PLACAR da auditoria (resolvido × pendente, % de MVP): `docs/AUDITORIA_MVP.md`.
 - PORQUÊS e armadilhas medidas: `docs/DECISOES.md`.
 - O que o sistema NÃO faz, e o que já foi tentado e revertido: `docs/LIMITACOES.md`.
+- O que fica para quando houver planos pagos (gasta mais cota): `docs/PLANOS.md`.
 - Catálogo de comandos: `docs/COMANDOS.md`. Migrações, uma a uma: `docs/SCHEMA.md`.
 
 **AI Memory:** use o escopo declarado em `.ai-memory.toml` apenas quando a

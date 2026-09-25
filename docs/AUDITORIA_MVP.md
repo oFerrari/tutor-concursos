@@ -8,7 +8,7 @@ análise da conversa real de 24/09 (Ciências Forenses) e o que saiu dela.
 ### Estado do ambiente
 
 - **Serviços:** API (8000), front (3000) e banco (5433) de pé (`./setup.sh --subir`).
-- **Banco:** só `andrei.ferrari11@gmail.com` (senha `12345678`), 1 mesa com o
+- **Banco:** só a conta do dono, 1 mesa com o
   **edital da PC-PR** (110 tópicos, subido pelo dono em 24/09). Migração **033**
   aplicada. Diário limpo das 4 linhas antigas (backup em
   `.logs/backup-diario-antigo-20260924.json`).
