@@ -49,7 +49,9 @@ def test_sumario_vira_roteiro_e_nao_come_a_janela():
     sumario = "Sumário\nPerícias ........ 4\nPeritos ........ 11\nNomeação ........ 19\n"
     assert leitura.e_sumario(sumario)
     assert not leitura.e_sumario("Texto corrido sobre perícia. " * 20)
-    linhas = [{"texto": sumario}] + [{"texto": "x" * 1200} for _ in range(5)]
+    # Trechos de 40% da janela: cabem dois, o terceiro passaria do limite.
+    tamanho = int(leitura.JANELA_CHARS * 0.4)
+    linhas = [{"texto": sumario}] + [{"texto": "x" * tamanho} for _ in range(5)]
 
     janela, seguinte = leitura._selecionar(linhas)
 
@@ -192,3 +194,39 @@ def test_regras_da_leitura_so_vao_no_turno_de_leitura(client, usuario, llm_falso
            retorno=json.dumps({"resposta": "É isto.", "fontes_usadas": []}))
     assert socratic.SISTEMA_LEITURA not in llm_falso.chamadas[-1]["sistema"]
     assert llm_falso.chamadas[-1]["sistema"].startswith(socratic.SISTEMA_TUTOR)
+
+
+def test_questoes_sobre_isto_saem_do_trecho_lido(client, usuario, llm_falso):
+    """Medido em 24/09/2026: lida a parte de federação, as questões saíram de
+    outras páginas do mesmo material — o gerador refazia a busca pelo tema."""
+    _aula(client, usuario)
+    r = _turno(client, usuario, llm_falso, "quero ler o instituto sintético na ordem do material")
+    lidos = conversa.ultima_leitura(r["conversa_id"])["ids"]
+    llm_falso.retorno = json.dumps([{"tema": "t", "enunciado": "Qual o efeito do instituto?",
+                                     "gabarito": "O efeito próprio.", "dicas": ["a", "b", "c"],
+                                     "trecho": 1}])
+
+    g = client.post("/questoes/gerar", json={"quantidade": 1, "conversa_id": r["conversa_id"]},
+                    headers=usuario["headers"]).json()
+
+    assert g["questoes"], g
+    fonte = db.exec1("SELECT fonte_chunks FROM questao WHERE id = %(q)s",
+                     {"q": g["questoes"][0]["id"]})["fonte_chunks"]
+    assert set(fonte) <= set(lidos)
+
+
+def test_planejamento_nao_e_leitura_e_muleta_antes_do_continua_vale():
+    assert leitura.intencao("eu queria um mapa mental e uma trilha de aprendizagem completa "
+                            "seguindo a ordem do edital", False, False) is None
+    assert leitura.intencao("em continua o conteudo de direito administrativo", False, True) == "continua"
+    assert leitura.intencao("não continua", False, True) is None
+
+
+def test_fala_informal_da_bateria_de_24_09():
+    """Falas da bateria com o modelo real que não disparavam a leitura."""
+    assert leitura.intencao("vamo le o conteudo de direito constitucional pela apostila",
+                            False, False) == "inicio"
+    assert leitura.intencao("prossiga", False, True) == "continua"
+    assert leitura.intencao("volta pro direito administrativo, continua de onde parou",
+                            False, True) == "inicio"
+    assert leitura.intencao("tá muito resumido, quero mais completo", True, True) == "aprofunda"

@@ -28,14 +28,21 @@ import re
 
 from . import assunto, db, retrieval
 
-VERSAO = "leitura-v3"
+VERSAO = "leitura-v4"
 
 # Quanto texto do material entra por turno. Um trecho tem ~1100 caracteres
 # (`chunking.chunk_paginado`); três a quatro dão uma seção de apostila — o
 # bastante para uma explicação inteira, pouco o bastante para caber com folga
 # no prompt e na resposta.
-JANELA_CHARS = 3500
-MAX_TRECHOS = 4
+JANELA_CHARS = 4500
+MAX_TRECHOS = 6
+# MEDIDO em 24/09/2026 com o modelo real: a resposta fica perto de 300 palavras
+# qualquer que seja o tamanho do trecho. Com 3500 caracteres isso era 60–80% do
+# texto; dobrada para 7000 (14000 no começo), a mesma resposta virou 15% —
+# resumo, o contrário do "igual ao PDF" pedido. A janela média e a META DE
+# TAMANHO (`meta_de_palavras`) no prompt é que fazem a aula cobrir o trecho.
+PROPORCAO_DA_AULA = 0.7
+
 # Quanto do trecho seguinte vai como "a seguir no material": só para o tutor
 # anunciar o próximo passo sem inventá-lo.
 CHARS_DO_PROXIMO = 300
@@ -57,6 +64,8 @@ RE_INICIO = re.compile(
     r"(?:edital|material|materiais|apostila|aula|conte[uú]do|curso|livro)"
     r"|\baul[aã]o\b|\b(?:lendo|ler)\s+(?:um|uma|o|a)?\s*(?:pdf|livro|apostila|material)\b"
     r"|\btodo\s+o\s+conceito"
+    # "vamo lê o conteúdo de constitucional pela apostila" (bateria de 24/09/2026)
+    r"|\bpel[ao]\s+(?:apostila|material|pdf|livro)\b"
     r"|\bdo\s+come[cç]o\b|\bdesde\s+o\s+in[ií]cio"
     r"|\btodo\s+o\s+conte[uú]do|\bconte[uú]do\s+(?:inteiro|completo|todo)"
     r"|\bsem\s+(?:pausas?|perguntas?)\b"
@@ -65,9 +74,20 @@ RE_INICIO = re.compile(
 
 # AVANÇAR, dito como pedido: vale mesmo que o turno anterior tenha sido uma
 # dúvida no meio da leitura — "continua" retoma de onde a leitura parou.
+# Aceita até duas palavras de muleta antes ("em continua o conteúdo de…",
+# "ok, continua", "então segue") — medido em 24/09/2026, "em continua" caía na
+# busca. Muleta é lista fechada: "não continua" não pode virar avanço.
 RE_AVANCO = re.compile(
-    r"(?i)^\s*(?:pode\s+)?(?:continu[aeo]r?|segu[eai]r?|pr[oó]xim[oa]|avan[cç]a(?:r)?"
+    r"(?i)^\s*(?:(?:em|ent[aã]o|ok|okay|certo|agora|bom|beleza|blz|t[aá]|show|entendi|vamos)"
+    r"\b[\s,.!]*){0,2}(?:pode\s+)?(?:continu[aeo]r?|segu[eai]r?|pr[oó]xim[oa]|avan[cç]a(?:r)?"
+    r"|prossig\w*|prossegu\w*"
     r"|vamos\s+(?:em\s+frente|l[aá])|manda\s+(?:mais|o\s+resto)|e\s+depois|mais)\b")
+
+# RETOMAR: "volta pro Administrativo, continua de onde parou", "retoma de onde
+# paramos" — não começa com "continua", e caía na busca (bateria de 24/09/2026).
+RE_RETOMA = re.compile(
+    r"(?i)\b(?:de\s+onde\s+(?:parou|paramos|parei)|onde\s+(?:parou|paramos|parei)|retoma\w*"
+    r"|volta\w*\s+(?:pr[oa]|para\s+[oa]|ao|[aà])\b)")
 
 # CONCORDAR não é pedir nada — só vira "continua" quando o turno anterior foi
 # de leitura. Depois de uma pergunta do tutor, "certo" é resposta a ela.
@@ -77,7 +97,18 @@ RE_CONCORDA = re.compile(
 
 # MESMA JANELA, MAIS FUNDO: o aluno não quer o próximo trecho, quer este melhor.
 RE_APROFUNDA = re.compile(
-    r"(?i)\b(?:aprofund\w*|detalh\w*|explica\s+melhor|mais\s+devagar|n[aã]o\s+entendi)")
+    r"(?i)\b(?:aprofund\w*|detalh\w*|explica\s+melhor|mais\s+devagar|n[aã]o\s+entendi"
+    r"|resum\w*\s+demais|muito\s+resumid\w*|mais\s+complet\w*|complet\w*\s+(?:como|igual)\b)")
+
+# PLANEJAR NÃO É LER. "Um mapa mental e uma trilha de aprendizagem seguindo a
+# ordem do edital" disparou leitura em 24/09/2026 e abriu uma apostila; o pedido
+# era o do tipo 3 do prompt (mapa/planejamento).
+RE_PLANEJAMENTO = re.compile(
+    r"(?i)\b(?:mapa\s+mental|mapa\s+da\s+mat[eé]ria|trilha|plano\s+de\s+estudos?|cronograma"
+    r"|roteiro\s+de\s+estudos?)\b")
+
+# "Do começo" recomeça o material mesmo que ele já tenha sido lido em parte.
+RE_DO_COMECO = re.compile(r"(?i)\b(?:do\s+come[cç]o|desde\s+o\s+in[ií]cio|do\s+zero|de\s+novo)\b")
 
 # Linha de sumário: título, pontilhado ou reticências, número de página.
 RE_LINHA_DE_SUMARIO = re.compile(r"(?:\.{4,}|…{2,}|(?:\.\s){3,})\s*\d{1,3}\s*$")
@@ -91,6 +122,13 @@ completo todo toda pausa pausas pergunta perguntas explicacao explicação histo
 história aula expositiva comeco começo inicio início aprender estudar entender ver
 primeiro momento neste nesse falei sequencia sequência aprendizado subi trazem
 """.split())
+
+
+def meta_de_palavras(trechos: list[dict]) -> int:
+    """Quantas palavras a aula deste turno deve ter: ~70% do texto de conteúdo
+    da janela (sumário fora). Sem a meta, o modelo resume."""
+    palavras = sum(len(c["texto"].split()) for c in trechos if not e_sumario(c["texto"]))
+    return max(150, int(palavras * PROPORCAO_DA_AULA))
 
 
 def e_sumario(texto: str) -> bool:
@@ -107,7 +145,9 @@ def intencao(fala: str | None, ultima_foi_leitura: bool, ha_leitura: bool) -> st
     `ha_leitura`: existe leitura em andamento nesta conversa, ainda que o turno
     anterior tenha sido uma dúvida respondida pela busca."""
     fala = fala or ""
-    if RE_INICIO.search(fala):
+    if RE_PLANEJAMENTO.search(fala):
+        return None
+    if RE_INICIO.search(fala) or RE_RETOMA.search(fala):
         return "inicio"
     if ha_leitura and RE_AVANCO.search(fala):
         return "continua"
@@ -256,7 +296,7 @@ def primeiro_material_da_disciplina(disciplina: str, mapa: dict | None,
 def escolher_material(fala: str | None, consulta: str | None, historico: list[dict] | None,
                       material_recente: int | None, disciplinas: list[str] | None,
                       mapa: dict | None, usuario_id: int, mesa_id: int | None,
-                      foco: str | None = None) -> int | None:
+                      foco: str | None = None, marcadores: dict | None = None) -> int | None:
     """Qual material do aluno ler, quando a leitura começa.
 
     A BUSCA É O ÚLTIMO RECURSO, e foi medido por quê (24/09/2026, conversa real
@@ -277,8 +317,13 @@ def escolher_material(fala: str | None, consulta: str | None, historico: list[di
     # matéria seria ensinar o assunto errado com cara de leitura.
     citada = foco or assunto.disciplina_citada(fala or "", disciplinas)
     if citada:
+        # O material dela que foi LIDO por último, se houver: "continua o
+        # conteúdo de Administrativo" retoma de onde parou, não do primeiro.
+        for doc in sorted((marcadores or {}), key=lambda d: marcadores[d]["quando"], reverse=True):
+            if da_disciplina(doc, citada, mapa):
+                return doc
         return primeiro_material_da_disciplina(citada, mapa, usuario_id)
-    if material_recente:
+    if material_recente and (not foco or da_disciplina(material_recente, foco, mapa)):
         return material_recente
     for t in reversed((historico or [])[-8:]):
         if t.get("autor") == "aluno" and (d := assunto.disciplina_citada(t.get("texto") or "",
@@ -308,14 +353,20 @@ def planejar(fala: str | None, consulta: str | None, ultima: dict | None,
              usuario_id: int | None, mesa_id: int | None, *,
              historico: list[dict] | None = None, material_recente: int | None = None,
              disciplinas: list[str] | None = None, mapa: dict | None = None,
-             foco: str | None = None) -> dict | None:
+             foco: str | None = None, marcadores: dict | None = None) -> dict | None:
     """O plano de leitura deste turno, ou None para seguir pela busca comum.
 
     `ultima` é `conversa.ultima_leitura`: {"documento_id", "ordem", "ids",
-    "foi_a_ultima", "material_recente"} ou None."""
+    "foi_a_ultima"} ou None. `marcadores` é `conversa.marcadores_de_leitura`:
+    onde o aluno parou em CADA material, em qualquer conversa — é o que faz
+    voltar a uma matéria retomar dela em vez de recomeçar."""
     if not usuario_id:
         return None
     qual = intencao(fala, bool(ultima and ultima["foi_a_ultima"]), bool(ultima))
+    # "Continua o conteúdo de Administrativo" sem leitura nesta conversa: é
+    # pedido para ler a matéria nomeada, retomando de onde parou nela.
+    if not qual and foco and RE_AVANCO.search(fala or "") and not RE_PLANEJAMENTO.search(fala or ""):
+        qual = "inicio"
     if not qual:
         return None
 
@@ -333,13 +384,15 @@ def planejar(fala: str | None, consulta: str | None, ultima: dict | None,
         documento_id, depois_de = ultima["documento_id"], ultima["ordem"]
     else:
         documento_id = escolher_material(fala, consulta, historico, material_recente,
-                                         disciplinas, mapa, usuario_id, mesa_id, foco)
+                                         disciplinas, mapa, usuario_id, mesa_id, foco, marcadores)
         if documento_id is None:
             return None
         if ultima and ultima["documento_id"] == documento_id:
             depois_de = ultima["ordem"]
         else:
-            depois_de = -1
+            depois_de = (marcadores or {}).get(documento_id, {}).get("ordem", -1)
+    if RE_DO_COMECO.search(fala or ""):
+        depois_de = -1
 
     trechos, seguinte = janela(documento_id, depois_de, usuario_id)
     anterior = (db.exec1("SELECT texto FROM chunk WHERE documento_id = %(d)s AND ordem = %(o)s",

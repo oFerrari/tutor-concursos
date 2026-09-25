@@ -42,7 +42,7 @@ import re
 
 from . import assunto, db, llm, mesa, retrieval, socratic
 
-VERSAO = "geracao-v6"
+VERSAO = "geracao-v7"
 
 MIN_TEXTO = 140          # abaixo disso é stub, revogado ou remissão
 MAX_POR_VEZ = 5          # teto por chamada: cota de LLM é o recurso escasso
@@ -304,6 +304,30 @@ def _uteis(achados: list[dict], dono: int | None) -> list[dict]:
     )
     ranking = {c["id"]: i for i, c in enumerate(achados)}
     return sorted(linhas, key=lambda r: ranking.get(r["id"], 99))
+
+
+def _dos_trechos(ids: list[int], limite: int, dono: int | None) -> list[int]:
+    """Dos trechos que a resposta do tutor ACABOU de usar, os que servem de fonte.
+
+    "Quero questões sobre isto" depois de uma leitura refazia a busca pelo
+    assunto da conversa e voltava outras páginas do mesmo material — medido em
+    24/09/2026: lida a parte de federação, as questões saíram de "livros
+    sagrados em acervos públicos" (p. 187 e 212). "Isto" é o que foi lido.
+
+    O dono é conferido aqui (público ou do próprio aluno), porque os ids vêm
+    do histórico e não de uma busca que já filtrou. Sumário fica de fora, e a
+    escolha se espalha pela janela em vez de pegar só o começo."""
+    from .leitura import e_sumario
+    linhas = db.query(
+        """SELECT c.id, c.texto FROM chunk c JOIN documento d ON d.id = c.documento_id
+            WHERE c.id = ANY(%(i)s) AND (d.usuario_id IS NULL OR d.usuario_id = %(u)s)""",
+        {"i": ids, "u": dono})
+    validos = {r["id"] for r in linhas if not e_sumario(r["texto"])}
+    ordem = [i for i in ids if i in validos]
+    if len(ordem) <= limite:
+        return ordem
+    passo = len(ordem) / limite
+    return [ordem[int(k * passo)] for k in range(limite)]
 
 
 def _por_tema(tema: str, limite: int, dono: int | None = None) -> list[int]:
@@ -573,7 +597,8 @@ def _fonte(c: dict) -> str:
 def sob_demanda(disciplinas: list[str] | None = None, tema: str | None = None,
                 quantidade: int = 3, tipo: str = "resposta_livre",
                 com_contexto: bool | None = None,
-                usuario_id: int | None = None) -> dict:
+                usuario_id: int | None = None,
+                trechos: list[int] | None = None) -> dict:
     """
     Gera até `quantidade` questões e grava as que têm proveniência.
 
@@ -591,8 +616,10 @@ def sob_demanda(disciplinas: list[str] | None = None, tema: str | None = None,
     seguinte — contexto pago duas vezes sem ganho de cobertura.
     """
     quantidade = max(1, min(quantidade, MAX_POR_VEZ))
-    ids = (_por_tema(tema, quantidade, usuario_id) if tema
-           else _por_disciplina(disciplinas, quantidade, usuario_id))
+    ids = _dos_trechos(trechos, quantidade, usuario_id) if trechos else []
+    if not ids:
+        ids = (_por_tema(tema, quantidade, usuario_id) if tema
+               else _por_disciplina(disciplinas, quantidade, usuario_id))
     # TROCA DE ASSUNTO DECLARADA. O fallback já existia e estava certo — cair
     # pro recorte é melhor que devolver vazio a quem pediu questão —, mas era
     # SILENCIOSO, e isso o transformava em mentira: relatado com transcrição, o

@@ -18,7 +18,7 @@ from datetime import datetime
 from . import assunto, db, diario, leitura, llm, mesa as mesa_mod, pedido as pedido_mod, retrieval
 from .retrieval import referencia
 
-VERSAO = "socratic-v78"
+VERSAO = "socratic-v79"
 
 ESQUEMA_RESPOSTA_TUTOR = {
     "type": "OBJECT",
@@ -548,7 +548,8 @@ RE_NUMERO_DA_AULA = re.compile(r"(?i)\baula[\s_-]*(\d{1,3})\b")
 MAX_ITENS_BIBLIOTECA = 30
 
 
-def _resumo_biblioteca(usuario_id: int | None, mesa_: dict | None) -> str | None:
+def _resumo_biblioteca(usuario_id: int | None, mesa_: dict | None,
+                       marcadores: dict | None = None) -> str | None:
     """O que o aluno TEM de material, por disciplina — o inventário, não a busca.
 
     Medido em 24/09/2026: "eu preciso saber sobre o que você tem material" foi
@@ -560,10 +561,12 @@ def _resumo_biblioteca(usuario_id: int | None, mesa_: dict | None) -> str | None
     if not usuario_id:
         return None
     docs = db.query(
-        """SELECT disciplina, assunto, titulo FROM documento
-            WHERE usuario_id = %(u)s AND tipo IN ('aula', 'resumo', 'jurisprudencia')
-              AND status = 'pronto'
-            ORDER BY disciplina NULLS LAST, titulo""", {"u": usuario_id})
+        """SELECT d.id, d.disciplina, d.assunto, d.titulo,
+                  (SELECT max(c.pagina) FROM chunk c WHERE c.documento_id = d.id) AS paginas
+             FROM documento d
+            WHERE d.usuario_id = %(u)s AND d.tipo IN ('aula', 'resumo', 'jurisprudencia')
+              AND d.status = 'pronto'
+            ORDER BY d.disciplina NULLS LAST, d.titulo""", {"u": usuario_id})
     if not docs:
         return "O aluno ainda não subiu material próprio: só há a lei seca do acervo."
     mapa = (mesa_ or {}).get("mapa") or {}
@@ -573,7 +576,17 @@ def _resumo_biblioteca(usuario_id: int | None, mesa_: dict | None) -> str | None
                 else "sem disciplina identificada")
         aula = RE_NUMERO_DA_AULA.search(d["titulo"] or "")
         nome = d["assunto"] or d["titulo"]
-        grupos.setdefault(disc, []).append(f"{nome} (aula {aula.group(1)})" if aula else nome)
+        nome = f"{nome} (aula {aula.group(1)})" if aula else nome
+        # ATÉ ONDE ELE LEU (`conversa.marcadores_de_leitura`): o tutor sabe o que
+        # já foi estudado de cada material e de onde retomar, em vez de tratar a
+        # biblioteca como um poço de respostas sem memória.
+        lido = (marcadores or {}).get(d["id"])
+        if lido:
+            pag = db.exec1("SELECT pagina FROM chunk WHERE documento_id = %(d)s AND ordem = %(o)s",
+                           {"d": d["id"], "o": lido["ordem"]})
+            if pag and pag["pagina"]:
+                nome += f" — lido até a p. {pag['pagina']}" + (f" de {d['paginas']}" if d["paginas"] else "")
+        grupos.setdefault(disc, []).append(nome)
     linhas = [f"- {disc}: {'; '.join(itens)}" for disc, itens in grupos.items()]
     if len(docs) > MAX_ITENS_BIBLIOTECA:
         linhas.append(f"- e mais {len(docs) - MAX_ITENS_BIBLIOTECA} material(is)")
@@ -1021,7 +1034,7 @@ Capa, sumário, apresentação do curso (metodologia, a quem se destina, como fo
 
 Sem pergunta de diagnóstico, sem pedir que ele perceba ou consiga algo, sem oferecer questões no meio da leitura.
 
-Feche com UMA linha no formato "A seguir: <assunto>.", com o ASSUNTO do que vem depois, deduzido de "### A seguir no material" — em palavras suas, nunca copiando o começo daquele trecho. Turno de leitura não cumprimenta nem se despede. Não diga ao aluno o que ele pode digitar nem o convide a continuar: a tela já oferece o botão de seguir a leitura.
+Feche com UMA linha no formato "A seguir: <assunto>.", com o ASSUNTO do que vem depois, deduzido de "### A seguir no material" — em palavras suas, nunca copiando o começo daquele trecho. Turno de leitura não cumprimenta nem se despede: nada de "Boa noite", nem quando a leitura troca de matéria. Não diga ao aluno o que ele pode digitar nem o convide a continuar: a tela já oferece o botão de seguir a leitura.
 
 Material que terminou: diga que acabou, recapitule em até cinco itens o que ele cobriu e ofereça treinar com questões desse conteúdo antes de seguir — nomeando o próximo material, se houver."""
 
@@ -1054,8 +1067,11 @@ def _bloco_sem_material(disciplina: str, mesa_: dict | None) -> str:
             f"O aluno está tratando de {disciplina}, e NÃO há material dessa disciplina: nem na "
             f"biblioteca dele, nem no acervo. Nenhum trecho recuperado é dela.{programa}\n"
             f"Diga isso na PRIMEIRA frase, sem rodeio. NÃO ensine {disciplina} de memória — "
-            f"estrutura de órgão, competência, prazo, número, nada que dependa da lei. Mostre o "
-            f"que o edital cobra, diga que ele pode subir o material (a lei ou a apostila desses "
+            f"estrutura de órgão, competência, princípio, prazo, número, nada que dependa da "
+            f"lei. Vale MESMO que ele tenha aceitado uma proposta sua de começar por um item "
+            f"dela (\"sim\", \"pode ser\"): sem o texto você não tem a aula, e dizer que tem "
+            f"é a pior falha possível aqui. Também não OFEREÇA ensinar item dela. Mostre o que "
+            f"o edital cobra, diga que ele pode subir o material (a lei ou a apostila desses "
             f"itens) em Meus materiais para vocês lerem juntos, e ofereça seguir por uma "
             f"disciplina que ele já tem em \"### Material que o aluno subiu\".")
 
@@ -1077,6 +1093,8 @@ def _bloco_de_leitura(plano: dict) -> str:
                  + (" O aluno pediu para APROFUNDAR estes mesmos trechos: explique de novo, "
                     "mais devagar e com outros exemplos." if plano["intencao"] == "aprofunda" else ""))
     corpo = retrieval.formatar_contexto(trechos)
+    cabecalho += (f" TAMANHO DA AULA DESTE TURNO: cerca de {leitura.meta_de_palavras(trechos)} "
+                  "palavras — explique o trecho inteiro, sem resumir.")
     if plano.get("seguinte"):
         depois = "### A seguir no material\n" + plano["seguinte"]["texto"][:leitura.CHARS_DO_PROXIMO]
     elif plano.get("proximo_material"):
@@ -1095,7 +1113,8 @@ def explicar(pergunta: str, usuario_id: int | None = None,
              perfil: dict | None = None,
              leitura_atual: dict | None = None,
              material_recente: int | None = None,
-             ao_gerar=None) -> dict:
+             ao_gerar=None,
+             marcadores: dict | None = None) -> dict:
     """
     Modo livre: aluno pergunta, tutor responde ancorado no acervo E no
     próprio desempenho real (quando usuario_id vem preenchido).
@@ -1172,7 +1191,7 @@ def explicar(pergunta: str, usuario_id: int | None = None,
              leitura.planejar(pergunta, consulta or assunto.em_foco(historico, pergunta, disciplinas),
                               leitura_atual, usuario_id, mesa_id, historico=historico,
                               material_recente=material_recente, disciplinas=disciplinas,
-                              mapa=mapa_mesa, foco=foco))
+                              mapa=mapa_mesa, foco=foco, marcadores=marcadores))
     if plano:
         chunks = plano["trechos"]
         contexto_material = None
@@ -1209,7 +1228,7 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     contexto_desempenho = (_resumo_desempenho(usuario_id, recorte, mapa)
                            if usuario_id else None)
     contexto_mesa = _resumo_mesa(mesa_)
-    contexto_biblioteca = _resumo_biblioteca(usuario_id, mesa_)
+    contexto_biblioteca = _resumo_biblioteca(usuario_id, mesa_, marcadores)
     contexto_programa = _programa_em_foco(mesa_, pergunta, historico)
     contexto_perfil = _resumo_perfil(perfil)
     contexto_tom = _tom_da_fala(pergunta)

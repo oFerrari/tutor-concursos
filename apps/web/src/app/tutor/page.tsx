@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowRight, ArrowUp, Check, ClipboardList, Eye, EyeOff, Pencil, Square } from "lucide-react";
@@ -103,7 +103,16 @@ export default function PaginaTutor() {
   // e era jogado pra outra tela — o que quebra exatamente o que a conversa
   // acabou de construir. Elas continuam entrando na fila normal (são
   // gravadas no acervo); a diferença é onde você as responde.
-  const [geradas, setGeradas] = useState<Questao[]>([]);
+  //
+  // ANCORADAS NA CONVERSA (24/09/2026): cada questão guarda depois de QUAL fala
+  // do aluno ela nasceu (`ancora` = quantas falas dele existiam). Antes elas
+  // ficavam sempre no fim da lista, e a fala seguinte do aluno — "continua o
+  // conteúdo de Administrativo" — aparecia ACIMA delas, com a resposta nova
+  // espremida entre questões de outro assunto.
+  const [geradas, setGeradas] = useState<{ q: Questao; ancora: number }[]>([]);
+  // Questões de falas anteriores ficam recolhidas; o aluno abre as que quiser.
+  const [abertas, setAbertas] = useState<Set<number>>(new Set());
+  const falasDoAluno = useRef(0);
   /** O acervo não tinha trecho do assunto da conversa e o gerador caiu pro
    *  recorte da mesa. As questões valem e têm proveniência — só não são do que
    *  vocês estavam tratando, e dizer isso é obrigação: sem o aviso, o tutor
@@ -193,6 +202,51 @@ export default function PaginaTutor() {
   // respondendo uma pergunta que não é dele — a mesma razão de a mesa padrão ser
   // resolvida no servidor e nunca recalculada aqui.
   const alunoJaFalou = mensagens.some((m) => m.autor === "usuario");
+  // Para cada mensagem, quantas falas do aluno existem até ela: é a âncora das
+  // questões geradas naquele turno.
+  const ordinalDaFala = useMemo(() => {
+    let n = 0;
+    return mensagens.map((m) => (m.autor === "usuario" ? ++n : n));
+  }, [mensagens]);
+  const falasDoAlunoNaTela = ordinalDaFala.length ? ordinalDaFala[ordinalDaFala.length - 1] : 0;
+  useEffect(() => {
+    falasDoAluno.current = falasDoAlunoNaTela;
+  }, [falasDoAlunoNaTela]);
+
+  /** As questões nascidas no turno `ancora`, no ponto da conversa em que
+   *  nasceram. Depois que o aluno fala de novo, recolhem numa linha — mas
+   *  continuam montadas (só escondidas): desmontar perderia a resposta em
+   *  curso e dispararia o registro de abandono do `DialogoQuestao`. */
+  function questoesDa(ancora: number) {
+    return geradas
+      .filter((g) => g.ancora === ancora)
+      .map(({ q }) => {
+        const recolhida = ancora < falasDoAlunoNaTela && !abertas.has(q.id);
+        return (
+          <div key={q.id} className="mt-3">
+            {recolhida && (
+              <button
+                type="button"
+                onClick={() => setAbertas((a) => new Set(a).add(q.id))}
+                className="btn-ghost inline-flex max-w-full items-center gap-1.5 text-[12.5px]"
+              >
+                <ClipboardList className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">Questão · {q.tema}</span>
+                <span className="shrink-0 text-subtle">— abrir</span>
+              </button>
+            )}
+            <div className={recolhida ? "hidden" : ""}>
+              <BalaoQuestao
+                tipo={q.tipo}
+                questao={q}
+                conversaId={conversaId ?? undefined}
+                onFechado={() => setGeradas((atual) => atual.filter((x) => x.q.id !== q.id))}
+              />
+            </div>
+          </div>
+        );
+      });
+  }
   const ultimaResposta = [...mensagens].reverse().find((m) => m.autor === "tutor");
   const ultimaRespostaTemFonte =
     ultimaResposta?.autor === "tutor" && (ultimaResposta.citadas.length > 0 || ultimaResposta.leitura);
@@ -395,9 +449,13 @@ export default function PaginaTutor() {
       setForaDoAssunto(Boolean(r.questoes_fora_do_assunto));
       setPediuSimulado(Boolean(r.simulado_pedido));
       if (r.questoes?.length) {
-        setGeradas(
-          r.questoes.map((q) => ({ ...q, caixa: 0, prox_revisao: "" }) as Questao)
-        );
+        setGeradas((atual) => [
+          ...atual,
+          ...r.questoes.map((q) => ({
+            q: { ...q, caixa: 0, prox_revisao: "" } as Questao,
+            ancora: falasDoAluno.current,
+          })),
+        ]);
       }
     } catch (err) {
       // ABORTO NÃO É ERRO. Quem clicou em parar já sabe o que
@@ -684,6 +742,8 @@ export default function PaginaTutor() {
                       passo; o texto só diz o que vem a seguir. Só na ÚLTIMA
                       resposta: nas antigas o botão avançaria de onde a leitura
                       já não está. */}
+                  {(i === mensagens.length - 1 || mensagens[i + 1].autor === "usuario") &&
+                    questoesDa(ordinalDaFala[i])}
                   {m.leitura && i === mensagens.length - 1 && !pensando && (
                     <button
                       type="button"
@@ -760,16 +820,6 @@ export default function PaginaTutor() {
               </p>
             </div>
           )}
-          {geradas.map((q) => (
-            <div key={q.id} className="pl-[42px]">
-              <BalaoQuestao
-                tipo={q.tipo}
-                questao={q}
-                conversaId={conversaId ?? undefined}
-                onFechado={() => setGeradas((atual) => atual.filter((x) => x.id !== q.id))}
-              />
-            </div>
-          ))}
 
           {/* Treinar o que acabou de ser explicado, sem trocar de tela. Só
               `conversaId` vai daqui: o servidor lê a conversa e decide o assunto
@@ -789,9 +839,13 @@ export default function PaginaTutor() {
                 rotulo="Quero questões sobre isto"
                 conversaId={conversaId ?? undefined}
                 onQuestoes={(qs) =>
-                  setGeradas(
-                    qs.map((q) => ({ ...q, caixa: 0, prox_revisao: "" }) as Questao)
-                  )
+                  setGeradas((atual) => [
+                    ...atual,
+                    ...qs.map((q) => ({
+                      q: { ...q, caixa: 0, prox_revisao: "" } as Questao,
+                      ancora: falasDoAluno.current,
+                    })),
+                  ])
                 }
               />
             </div>

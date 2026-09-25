@@ -48,7 +48,7 @@ from core import (assunto, auth, conversa, desafio, edital, geracao, material, m
 from core.config import CORS_ORIGINS
 from core.llm import ErroLLM
 
-VERSAO = "api-v14"
+VERSAO = "api-v15"
 
 app = FastAPI(title="Tutor de concursos — API", version=VERSAO)
 
@@ -839,11 +839,13 @@ def _turno_do_chat(body: PerguntaBody, uid: int, m: dict, ao_gerar=None) -> dict
     # Lido ANTES de gravar a fala: o marcador é o da última resposta do tutor.
     leitura_atual = conversa.ultima_leitura(conv["id"])
     material_recente = conversa.material_recente(conv["id"])
+    marcadores = conversa.marcadores_de_leitura(uid)
     conversa.gravar(conv["id"], "aluno", body.pergunta)
     try:
         r = socratic.explicar(body.pergunta, uid, m["disciplinas"], m, historico,
                               auth.perfil(uid), leitura_atual=leitura_atual,
-                              material_recente=material_recente, ao_gerar=ao_gerar)
+                              material_recente=material_recente, ao_gerar=ao_gerar,
+                              marcadores=marcadores)
     except ErroLLM as e:
         # A tela desenha este `detail` como balão do tutor. "LLM indisponível:
         # resposta truncada em 1500 tokens. Aumente max_tokens…" foi exatamente o
@@ -913,9 +915,15 @@ def _turno_do_chat(body: PerguntaBody, uid: int, m: dict, ao_gerar=None) -> dict
                                if disciplina_pedida else m["recorte"])
         try:
             tipo = p["tipo"] or geracao.tipo_da_banca(m.get("banca"))
+            # Pedido vago ("me testa nisso") cobra o que acabou de ser explicado;
+            # pedido que nomeia assunto ou disciplina segue pela busca.
+            vago = not (disciplina_pedida or assunto.pedido_de_treino_nomeia_assunto(
+                body.pergunta, m["disciplinas"]))
             g = geracao.sob_demanda(disciplinas_geracao, tema,
                                     p["quantidade"], tipo,
-                                    usuario_id=uid)
+                                    usuario_id=uid,
+                                    trechos=conversa.trechos_citados_recentes(conv["id"])
+                                    if vago else None)
             questoes = g["questoes"]
             # A TROCA DE ASSUNTO VIAJA ATÉ A TELA. O acervo não tinha trecho do
             # que a conversa tratava, o gerador caiu pro recorte da mesa (certo)
@@ -1037,10 +1045,14 @@ def rota_gerar_questoes(body: GerarQuestaoBody, uid: int = Depends(usuario_atual
         # acerto. `socratic.explicar` já passava isto; este caminho não.
         tema = assunto.em_foco(conversa.historico_para_prompt(conv["id"]),
                                disciplinas=m["disciplinas"])
+    # "ISTO" É O QUE A ÚLTIMA RESPOSTA USOU (`geracao._dos_trechos`); o tema fica
+    # de reserva, para quando não houver trecho citado.
+    trechos = (conversa.trechos_citados_recentes(conv["id"])
+               if conv and not body.tema else None)
 
     try:
         tipo = body.tipo or geracao.tipo_da_banca(m.get("banca"))
-        r = geracao.sob_demanda(m["recorte"], tema, body.quantidade, tipo,
+        r = geracao.sob_demanda(m["recorte"], tema, body.quantidade, tipo, trechos=trechos,
                                 usuario_id=uid)
     except geracao.SemMaterial as e:
         # 409, não 500: o pedido é válido e o sistema está são — o acervo é

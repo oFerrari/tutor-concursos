@@ -95,6 +95,7 @@ migrar.py             aplica as migrações de db/ que faltam — ÚNICO mecanis
 ingest.py reingest.py gerar.py edital.py       ingestão e geração em lote
 diagnostico.py avaliar_retrieval.py simular.py aferição sem LLM (e sem banco, os dois últimos)
 avaliar_chat.py       aluno SINTÉTICO conversa com o tutor (via ./testar.sh)
+bateria_conversa.py   cenários contra o material de uma conta REAL, modelo real, sem gravar nada
 sincronizar.py        exporta/importa o estado de um usuário entre máquinas
 semear_demo.py        conta descartável com dado plausível, pra olhar a TELA
 ```

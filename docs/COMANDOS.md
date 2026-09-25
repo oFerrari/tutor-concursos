@@ -151,3 +151,14 @@ curl -s -X PATCH localhost:8000/edital/data-prova -H "Authorization: Bearer $TOK
      -H 'content-type: application/json' -d '{"data_prova":"2026-11-15"}'
 ```
 
+## Bateria de conversa sobre material real (sem gravar nada)
+
+```bash
+python bateria_conversa.py cenarios/leitura_e_sem_material.json --email voce@x
+```
+
+Roda os cenários (fala + expectativa: `"sem"`, `"ler:<disciplina>"`, `"busca"`)
+com o modelo real sobre a biblioteca e o edital da conta, e marca ✗ o que falhar.
+Não grava conversa, mensagem nem diário. Uma chamada ao modelo por turno. Sai com
+código 1 se houver falha.
+

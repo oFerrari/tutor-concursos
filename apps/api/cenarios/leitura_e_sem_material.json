@@ -1,0 +1,168 @@
+[
+ {
+  "nome": "1. a conversa real (legislação sem material → administrativo → leitura)",
+  "turnos": [
+   [
+    "opa",
+    null
+   ],
+   [
+    "eu queria estudar sobre legislação institucional da pcpr vc tem material disso?",
+    "sem"
+   ],
+   [
+    "então você não consegue me ensina nada do que ta em legislação?",
+    "sem"
+   ],
+   [
+    "eu queria sim um mapa mental e um trilha de aprendizagem completa seguindo a ordem do edital",
+    "busca"
+   ],
+   [
+    "sim",
+    null
+   ],
+   [
+    "você ta falando de legislação institucional ou direito administrativo?",
+    null
+   ],
+   [
+    "ta mais a legislação institucional cobre mais principios alem desses eu queria um resumao dos conceitos mesmo",
+    "sem"
+   ],
+   [
+    "pode ser",
+    null
+   ],
+   [
+    "ta mais você ta me trazendo resumos eu quero aprender o conteudo como a apostila ensina, la você tem um pdf com varias paginas",
+    "ler:"
+   ],
+   [
+    "continua",
+    "ler:"
+   ],
+   [
+    "em continua o conteudo de direito constitucional",
+    "ler:Direito Constitucional"
+   ],
+   [
+    "continua o conteudo de direito administrativo",
+    "ler:Direito Administrativo"
+   ]
+  ]
+ },
+ {
+  "nome": "2. leitura com dúvida no meio e aprofundar",
+  "turnos": [
+   [
+    "bora estudar raciocinio logico na ordem da apostila",
+    "ler:Raciocínio"
+   ],
+   [
+    "blz",
+    "ler:Raciocínio"
+   ],
+   [
+    "o que é uma tautologia?",
+    "busca"
+   ],
+   [
+    "continua",
+    "ler:Raciocínio"
+   ],
+   [
+    "aprofunda essa parte",
+    "ler:Raciocínio"
+   ]
+  ]
+ },
+ {
+  "nome": "3. matérias do edital sem material, ditas de jeitos diferentes",
+  "turnos": [
+   [
+    "me ensina estatística",
+    "sem"
+   ],
+   [
+    "e contabilidade geral, tem algo?",
+    "sem"
+   ],
+   [
+    "quero aprender língua portuguesa do começo",
+    "sem"
+   ],
+   [
+    "tá, então vamos de ciências forenses como apostila",
+    "ler:Ciências Forenses"
+   ]
+  ]
+ },
+ {
+  "nome": "4. trocar de matéria e voltar de onde parou",
+  "turnos": [
+   [
+    "quero ler direito administrativo na ordem da apostila",
+    "ler:Direito Administrativo"
+   ],
+   [
+    "continua",
+    "ler:Direito Administrativo"
+   ],
+   [
+    "agora ciências forenses na ordem do material",
+    "ler:Ciências Forenses"
+   ],
+   [
+    "continua",
+    "ler:Ciências Forenses"
+   ],
+   [
+    "volta pro direito administrativo, continua de onde parou",
+    "ler:Direito Administrativo"
+   ],
+   [
+    "tá muito resumido, quero mais completo",
+    "ler:Direito Administrativo"
+   ]
+  ]
+ },
+ {
+  "nome": "5. fora do edital e sem material",
+  "turnos": [
+   [
+    "me explica direito tributário, o que é tributo?",
+    null
+   ],
+   [
+    "e o ICMS, como funciona?",
+    null
+   ]
+  ]
+ },
+ {
+  "nome": "6. informal, com erro de digitação",
+  "turnos": [
+   [
+    "vamo le o conteudo de direito constitucional pela apostila",
+    "ler:Direito Constitucional"
+   ],
+   [
+    "ok continua",
+    "ler:Direito Constitucional"
+   ],
+   [
+    "nao entendi essa parte",
+    "ler:Direito Constitucional"
+   ],
+   [
+    "prossiga",
+    "ler:Direito Constitucional"
+   ],
+   [
+    "mano me da um resumao de tudo q vimos",
+    null
+   ]
+  ]
+ }
+]

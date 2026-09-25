@@ -109,7 +109,7 @@ import unicodedata
 from . import pedido
 from .retrieval import RE_CITACAO
 
-VERSAO = "assunto-v15"
+VERSAO = "assunto-v16"
 
 # Teto da consulta. Embedding é MÉDIA do que entra: parede de texto dilui o
 # assunto exatamente como o art. 37 (13.059 caracteres) já se dilui no próprio
@@ -334,14 +334,60 @@ completo completa disso nisso isso dele dela deles delas aquilo aulao aula aulas
 resumao resumir trazendo trazer traga traz tivesse lendo leitura ler pdf apostila livro
 material materiais conteudo explicacao historia sequencia parte partes detalhe detalhes
 detalhado edital topico item ponto comeco inicio pausa pausas pergunta perguntas
+resumos conceito consegue conseguir consegues nada falando fala trazendo mais alem
+cobre cobrem querer impossivel varias varios paginas pagina ensinar ensina ensinando
+mapa mental trilha aprendizagem plano cronograma roteiro estudo estudos
 """.split())
 
 
-def traz_assunto_proprio(fala: str | None) -> bool:
-    """A fala nomeia assunto, além de pedir e de falar do estudo? "me explica
-    peculato" sim; "certo, queria aprender todo o conceito disso" não."""
+def traz_assunto_proprio(fala: str | None, disciplinas: list[str] | None = None) -> bool:
+    """A fala nomeia assunto, além de pedir, de falar do estudo e de nomear a
+    gaveta? "me explica peculato" sim; "certo, queria aprender todo o conceito
+    disso" não; "então você não consegue me ensinar nada de legislação?" também
+    não — "legislação" é pedaço do nome da disciplina, não assunto dentro dela
+    (mesmo princípio de `_com_assunto`)."""
+    gaveta = {_sem_acento(x) for d in (disciplinas or []) for x in palavras_de_conteudo(d)}
     return any(_sem_acento(p) not in PEDIDO and _sem_acento(p) not in VOCABULARIO_DE_ESTUDO
+               and _sem_acento(p) not in gaveta
                for p in palavras_de_conteudo(fala or ""))
+
+
+# Aceitar sem escolher: "pode ser", "sim", "bora".
+RE_ACEITE = re.compile(r"(?i)^\s*(?:pode\s+ser|pode|sim|s|bora|vamos|claro|isso|quero|ok|okay|"
+                       r"blz|beleza|certo|fechou|t[aá]|uhum|aham)\W*$")
+
+
+def disciplina_da_conversa(historico: list[dict] | None,
+                           disciplinas: list[str] | None,
+                           fala: str | None = None) -> str | None:
+    """A última disciplina nomeada na conversa — pelo aluno, ou pelo tutor quando
+    ele nomeou UMA só (a proposta que o aluno aceita com "pode ser"). Medido em
+    24/09/2026: "Quer seguir por Direito Administrativo?" → "pode ser" → "sim";
+    olhando só as falas do aluno, a matéria de antes (Legislação) continuava
+    valendo, e a leitura seguinte abriu uma apostila de Constitucional. Fala do
+    tutor que cita duas ou mais disciplinas não decide nada."""
+    for t in reversed((historico or [])[-12:]):
+        texto = t.get("texto") or ""
+        if t.get("autor") == "aluno":
+            if (d := _disciplina_aproximada(texto, disciplinas)):
+                return d
+        elif t.get("autor") == "tutor":
+            # Do tutor, só o NOME INTEIRO: a regra frouxa de `disciplina_citada`
+            # (prefixo de 7 letras) lia "esfera administrativa", numa aula de
+            # perícia, como o tutor nomeando "Direito Administrativo" — e a
+            # leitura de Ciências Forenses pulava para Administrativo (medido na
+            # bateria de 24/09/2026).
+            normal = " ".join(_sem_acento(p) for p in RE_PALAVRA.findall(texto.lower()))
+            citadas = [d for d in disciplinas or []
+                       if " ".join(_sem_acento(p) for p in RE_PALAVRA.findall(d.lower())) in normal]
+            if len(citadas) == 1:
+                return citadas[0]
+            # "Constitucional ou Administrativo?" → "pode ser": a escolha está em
+            # aberto (o prompt manda o tutor escolher). Voltar mais para trás
+            # ressuscitava a matéria sem material de antes da oferta.
+            if len(citadas) >= 2 and RE_ACEITE.match(fala or ""):
+                return None
+    return None
 
 
 def disciplina_em_foco(fala: str | None, historico: list[dict] | None,
@@ -357,12 +403,9 @@ def disciplina_em_foco(fala: str | None, historico: list[dict] | None,
     if not disciplinas:
         return None
     propria = _disciplina_aproximada(fala, disciplinas)
-    if propria or traz_assunto_proprio(fala):
+    if propria or traz_assunto_proprio(fala, disciplinas):
         return propria
-    for t in reversed((historico or [])[-12:]):
-        if t.get("autor") == "aluno" and (d := _disciplina_aproximada(t.get("texto"), disciplinas)):
-            return d
-    return None
+    return disciplina_da_conversa(historico, disciplinas, fala)
 
 
 RE_TROCA_DISCIPLINA = re.compile(r"(?i)^\s*(?:e\s+)?(?:no|na|em)\b")

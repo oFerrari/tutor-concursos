@@ -296,3 +296,34 @@ todos). O botão "Quero questões sobre isto" aparecia embaixo de tudo.
 | 11.3 | Pedido de leitura não disparava | Faltavam "seguir a ordem do edital", "aulão", "lendo um pdf", "todo o conceito" | ✅ gatilhos novos; e a leitura lê o material da matéria EM FOCO, nunca o de outra |
 | 11.4 | Botão de questões sem assunto | Aparecia sob qualquer resposta | ✅ só com fonte citada ou leitura na última resposta |
 
+## 12. Conversa real de 24/09/2026 (3ª) e a primeira bateria sobre material real
+
+A conversa: "você não consegue me ensinar nada de legislação?" voltou a inventar;
+"mapa mental e trilha seguindo a ordem do edital" abriu uma apostila de
+Constitucional; "sim" a uma oferta do próprio tutor o fez ensinar a Constituição
+do PR sem material; a reclamação "você tá me trazendo resumos…" leu Constitucional
+em vez do Administrativo combinado; "em continua o conteúdo de Administrativo" não
+foi reconhecido; as questões "sobre isto" saíram de outras páginas e ficaram
+grudadas no fim da conversa. Cada turno foi conferido contra `mensagem.fontes`.
+
+| | Falha | Estado |
+|---|---|---|
+| 12.1 | Matéria em foco perdida em fala de reclamação ou aceite | ✅ nome da disciplina e vocabulário de estudo não contam como assunto novo; proposta do tutor com UMA matéria conta; oferta com duas deixa a escolha em aberto; em fala do tutor só o nome inteiro vale |
+| 12.2 | Planejamento virava leitura; "em continua", "prossiga", "volta pro X, de onde parou", "pela apostila" não disparavam | ✅ `leitura-v4` |
+| 12.3 | Voltar a uma matéria recomeçava a apostila | ✅ `conversa.marcadores_de_leitura`: onde parou em CADA material, em todas as conversas |
+| 12.4 | Leitura resumia (~300 palavras por turno qualquer que fosse o trecho) | ✅ meta de tamanho no prompt (70% das palavras do trecho); janela de 4.500 caracteres. Janela dobrada foi medida e revertida: com o dobro de texto a resposta caiu para 15% dele |
+| 12.5 | Tutor não sabia o que já foi lido | ✅ inventário diz "lido até a p. X de Y" por material |
+| 12.6 | Questões "sobre isto" de outras páginas | ✅ saem dos trechos que a última resposta citou (`geracao._dos_trechos`) |
+| 12.7 | Questões grudadas no fim da conversa | ✅ ancoradas no turno em que nasceram; recolhem em "Questão · tema — abrir" quando a conversa segue. Conferido no navegador com a API simulada |
+| 12.8 | Aceitar ("sim") oferta do tutor destravava ensinar sem material | ✅ regra explícita no bloco de cobertura |
+
+**A bateria** (`bateria_conversa.py`, 6 cenários, 34 turnos com o modelo real):
+0 falhas na última rodada. Pegou e ajudou a consertar 12.1 (texto de perícia com
+"esfera administrativa" lido como o tutor nomeando Direito Administrativo), 12.2,
+12.3 e 12.4. Fica pendente e observado:
+- "não entendi essa parte" / "aprofunda" reexplicam o trecho, mas mais curto que a
+  primeira leitura (89–163 palavras);
+- "sim" depois de uma oferta com duas matérias: o tutor escolhe e começa, mas sem
+  citar a apostila;
+- "resumão de tudo que vimos" sai curto (40–80 palavras).
+

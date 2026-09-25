@@ -35,7 +35,7 @@ import re
 
 from . import db, diario
 
-VERSAO = "conversa-v5"
+VERSAO = "conversa-v6"
 
 JANELA = 8          # turnos (aluno+tutor) devolvidos como histórico
 MAX_TITULO = 60
@@ -103,6 +103,45 @@ def ultima_leitura(conversa_id: int) -> dict | None:
                     "ids": [f["id"] for f in lidas],
                     "foi_a_ultima": i == 0}
     return None
+
+
+def marcadores_de_leitura(usuario_id: int, dias: int = 90) -> dict[int, dict]:
+    """Onde o aluno parou em CADA material, em todas as conversas dele.
+
+    {documento_id: {"ordem", "quando"}} — a posição da resposta de leitura MAIS
+    RECENTE de cada material (não o maior `ordem` já lido: quem recomeçou do
+    zero está no começo). Sem estado novo: é `mensagem.fontes`, como
+    `ultima_leitura`. Medido em 24/09/2026: trocar de Constitucional para
+    Administrativo e voltar recomeçava a apostila, porque o marcador só
+    enxergava a última leitura da conversa."""
+    marcadores: dict[int, dict] = {}
+    for r in db.query(
+            """SELECT m.fontes, m.criada_em FROM mensagem m JOIN conversa c ON c.id = m.conversa_id
+                WHERE c.usuario_id = %(u)s AND m.autor = 'tutor'
+                  AND m.criada_em > now() - make_interval(days => %(d)s)
+                  AND m.fontes @> '[{"sequencial": true}]'
+                ORDER BY m.id""", {"u": usuario_id, "d": dias}):
+        lidas = [f for f in r["fontes"] if f.get("sequencial") and f.get("ordem") is not None
+                 and f.get("documento_id")]
+        if lidas:
+            marcadores[lidas[-1]["documento_id"]] = {"ordem": max(f["ordem"] for f in lidas),
+                                                     "quando": r["criada_em"]}
+    return marcadores
+
+
+def trechos_citados_recentes(conversa_id: int, respostas: int = 3) -> list[int]:
+    """Os trechos que a última resposta do tutor COM fonte citada usou — é o
+    "isto" de "quero questões sobre isto". Até 3 respostas para trás: o pedido de
+    treino no chat grava antes a própria resposta curta ("vamos treinar"), que
+    não cita nada."""
+    for r in db.query(
+            """SELECT fontes FROM mensagem
+                WHERE conversa_id = %(c)s AND autor = 'tutor'
+                ORDER BY id DESC LIMIT %(l)s""", {"c": conversa_id, "l": respostas}):
+        citados = [f["id"] for f in (r["fontes"] or []) if f.get("citada") and f.get("id")]
+        if citados:
+            return citados
+    return []
 
 
 def material_recente(conversa_id: int, respostas: int = 6) -> int | None:
