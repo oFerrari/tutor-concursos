@@ -28,7 +28,7 @@ import re
 
 from . import assunto, db, retrieval
 
-VERSAO = "leitura-v2"
+VERSAO = "leitura-v3"
 
 # Quanto texto do material entra por turno. Um trecho tem ~1100 caracteres
 # (`chunking.chunk_paginado`); três a quatro dão uma seção de apostila — o
@@ -50,6 +50,13 @@ RE_INICIO = re.compile(
     r"|conte[uú]do|curso|livro)|de\s+aprendizado|que\b|e\b|entend|pra\b|para\b))"
     r"|\bcomo\s+(?:se\s+(?:estivesse|fosse)\s+)?(?:lendo\s+)?(?:uma\s+|a\s+)?apostila"
     r"|\bleitura\s+corrida|\bler\s+o\s+material|\baula\s+expositiva"
+    # Medido em 24/09/2026, falas que pediam leitura e não disparavam:
+    # "seguir a ordem do edital", "um aulão", "como se tivesse lendo um pdf",
+    # "aprender todo o conceito disso".
+    r"|\b(?:seguir|sigo|siga|segue|seguindo)\s+(?:a\s+|na\s+)?ordem\s+d[oa]s?\s+"
+    r"(?:edital|material|materiais|apostila|aula|conte[uú]do|curso|livro)"
+    r"|\baul[aã]o\b|\b(?:lendo|ler)\s+(?:um|uma|o|a)?\s*(?:pdf|livro|apostila|material)\b"
+    r"|\btodo\s+o\s+conceito"
     r"|\bdo\s+come[cç]o\b|\bdesde\s+o\s+in[ií]cio"
     r"|\btodo\s+o\s+conte[uú]do|\bconte[uú]do\s+(?:inteiro|completo|todo)"
     r"|\bsem\s+(?:pausas?|perguntas?)\b"
@@ -223,12 +230,21 @@ def documento_para(consulta: str | None, usuario_id: int, mesa_id: int | None) -
     return None
 
 
+def nomes_da_disciplina(disciplina: str, mapa: dict | None) -> list[str]:
+    return list({disciplina, *((mapa or {}).get(disciplina) or [])})
+
+
+def da_disciplina(documento_id: int, disciplina: str, mapa: dict | None) -> bool:
+    r = db.exec1("SELECT disciplina FROM documento WHERE id = %(i)s", {"i": documento_id})
+    return bool(r and r["disciplina"] in nomes_da_disciplina(disciplina, mapa))
+
+
 def primeiro_material_da_disciplina(disciplina: str, mapa: dict | None,
                                     usuario_id: int) -> int | None:
     """O primeiro material da disciplina, pela ordem do título ("aula-00"
     antes de "aula-01"). `disciplina` é o nome do EDITAL; o mapa da mesa diz
     quais nomes do acervo moram nela ("Criminalística" em "Ciências Forenses")."""
-    nomes = list({disciplina, *((mapa or {}).get(disciplina) or [])})
+    nomes = nomes_da_disciplina(disciplina, mapa)
     r = db.exec1(
         """SELECT id FROM documento
             WHERE usuario_id = %(u)s AND disciplina = ANY(%(n)s)
@@ -239,7 +255,8 @@ def primeiro_material_da_disciplina(disciplina: str, mapa: dict | None,
 
 def escolher_material(fala: str | None, consulta: str | None, historico: list[dict] | None,
                       material_recente: int | None, disciplinas: list[str] | None,
-                      mapa: dict | None, usuario_id: int, mesa_id: int | None) -> int | None:
+                      mapa: dict | None, usuario_id: int, mesa_id: int | None,
+                      foco: str | None = None) -> int | None:
     """Qual material do aluno ler, quando a leitura começa.
 
     A BUSCA É O ÚLTIMO RECURSO, e foi medido por quê (24/09/2026, conversa real
@@ -253,7 +270,12 @@ def escolher_material(fala: str | None, consulta: str | None, historico: list[di
     Por isso, nesta ordem: a disciplina que a própria fala nomeia; o material
     do aluno que o tutor acabou de citar (é dele que a conversa trata); a
     disciplina nomeada nas falas recentes; e só então a busca."""
-    citada = assunto.disciplina_citada(fala or "", disciplinas)
+    # A MATÉRIA EM FOCO manda (`assunto.disciplina_em_foco`): o material citado há
+    # pouco pode ser de outra — medido em 24/09/2026, o aluno trocou para
+    # Legislação Institucional e o último material citado era de Constitucional.
+    # Sem material da matéria em foco, não se lê nada: ler a apostila de outra
+    # matéria seria ensinar o assunto errado com cara de leitura.
+    citada = foco or assunto.disciplina_citada(fala or "", disciplinas)
     if citada:
         return primeiro_material_da_disciplina(citada, mapa, usuario_id)
     if material_recente:
@@ -285,7 +307,8 @@ def proximo_material(documento_id: int, usuario_id: int) -> dict | None:
 def planejar(fala: str | None, consulta: str | None, ultima: dict | None,
              usuario_id: int | None, mesa_id: int | None, *,
              historico: list[dict] | None = None, material_recente: int | None = None,
-             disciplinas: list[str] | None = None, mapa: dict | None = None) -> dict | None:
+             disciplinas: list[str] | None = None, mapa: dict | None = None,
+             foco: str | None = None) -> dict | None:
     """O plano de leitura deste turno, ou None para seguir pela busca comum.
 
     `ultima` é `conversa.ultima_leitura`: {"documento_id", "ordem", "ids",
@@ -301,11 +324,16 @@ def planejar(fala: str | None, consulta: str | None, ultima: dict | None,
         return {"intencao": qual, "trechos": trechos, "seguinte": None,
                 "comeco": False, "fim": False, "proximo_material": None} if trechos else None
 
+    # Leitura de OUTRA matéria não continua quando a conversa mudou de matéria.
+    if ultima and foco and not da_disciplina(ultima["documento_id"], foco, mapa):
+        ultima = None
+        if qual in ("continua", "aprofunda"):
+            qual = "inicio"
     if ultima and (qual == "continua" or not nomeia_outro_assunto(fala)):
         documento_id, depois_de = ultima["documento_id"], ultima["ordem"]
     else:
         documento_id = escolher_material(fala, consulta, historico, material_recente,
-                                         disciplinas, mapa, usuario_id, mesa_id)
+                                         disciplinas, mapa, usuario_id, mesa_id, foco)
         if documento_id is None:
             return None
         if ultima and ultima["documento_id"] == documento_id:

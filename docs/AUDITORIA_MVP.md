@@ -281,3 +281,18 @@ de Ciências Forenses do começo, em ordem, com 275–458 palavras por turno.
 | 10.9 | Abertura "vamos continuar Direito Administrativo, licença para atividade política" | Linhas do diário gravadas antes do conserto 8.2 | ✅ linhas apagadas com backup. E o convite a testar ("NENHUMA questão") só vai ao prompt na abertura: chegava em todo turno e o tutor oferecia questão em 3 de 6 turnos |
 | 10.10 | "Vamos por partes para não acumular" — recusou "todo o conteúdo do 2.1" | Regra UMA DIVISÃO POR VEZ | ✅ o pedido vira leitura (10.1), onde a regra não vale |
 
+## 11. Conversa real de 24/09/2026 (2ª) — matéria sem material
+
+O aluno pediu Legislação Estadual e Institucional, que não tinha em material
+nenhum, e pediu "seguir a ordem do edital", "um aulão", "como se tivesse lendo um
+pdf". Nenhum turno foi de leitura, e o tutor descreveu por cinco turnos uma
+"estrutura da Polícia Civil" que não estava em trecho algum (0 fontes citadas em
+todos). O botão "Quero questões sobre isto" aparecia embaixo de tudo.
+
+| | Falha | Causa medida | Estado |
+|---|---|---|---|
+| 11.1 | **Inventou conteúdo de matéria sem material** | A busca trouxe trechos de Constitucional e o prompt não sabia que a matéria pedida não tinha fonte | ✅ `assunto.disciplina_em_foco` + bloco "### Cobertura do material": trechos de outra matéria saem, o tutor diz na 1ª frase que não há material, mostra o que o edital cobra e pede o material. Validado com o modelo real (4 turnos honestos) |
+| 11.2 | "Legislação institucional" não era reconhecida como a disciplina | `disciplina_citada` exige todas as palavras distintivas | ✅ nome de 3+ palavras casa com 2 e 60%; continuação ("todo o conceito disso") herda a matéria, pergunta com assunto próprio não |
+| 11.3 | Pedido de leitura não disparava | Faltavam "seguir a ordem do edital", "aulão", "lendo um pdf", "todo o conceito" | ✅ gatilhos novos; e a leitura lê o material da matéria EM FOCO, nunca o de outra |
+| 11.4 | Botão de questões sem assunto | Aparecia sob qualquer resposta | ✅ só com fonte citada ou leitura na última resposta |
+

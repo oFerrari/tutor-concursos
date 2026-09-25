@@ -109,7 +109,7 @@ import unicodedata
 from . import pedido
 from .retrieval import RE_CITACAO
 
-VERSAO = "assunto-v14"
+VERSAO = "assunto-v15"
 
 # Teto da consulta. Embedding é MÉDIA do que entra: parede de texto dilui o
 # assunto exatamente como o art. 37 (13.059 caracteres) já se dilui no próprio
@@ -297,6 +297,72 @@ def disciplina_citada(texto: str, disciplinas: list[str] | None) -> str | None:
         if distintivas and all(equivale(x) for x in distintivas):
             achadas.append(d)
     return max(achadas, key=len) if achadas else None
+
+
+def _disciplina_aproximada(texto: str | None, disciplinas: list[str] | None) -> str | None:
+    """`disciplina_citada`, e se ela não achar, o nome LONGO dito pela metade.
+
+    "legislação institucional da pc pr" não casava "Legislação Estadual E
+    Institucional": `disciplina_citada` exige todas as palavras distintivas, e o
+    aluno falou duas de três (24/09/2026). Nome de três ou mais palavras
+    distintivas casa com pelo menos duas e 60% delas; nome curto continua
+    exigindo o nome inteiro — "penal" sozinho não pode escolher entre "Direito
+    Penal" e "Processual Penal"."""
+    exata = disciplina_citada(texto or "", disciplinas)
+    if exata or not texto or not disciplinas:
+        return exata
+    palavras = {_sem_acento(p) for p in RE_PALAVRA.findall(texto.lower())}
+    melhor, nota = None, 0
+    for d in disciplinas:
+        alvo = {_sem_acento(x) for x in palavras_de_conteudo(d)} - {"direito"}
+        if len(alvo) < 3:
+            continue
+        casadas = sum(1 for a in alvo if any(
+            a == p or (min(len(a), len(p)) >= 7 and a[:7] == p[:7]) for p in palavras))
+        if casadas >= 2 and casadas / len(alvo) >= 0.6 and casadas > nota:
+            melhor, nota = d, casadas
+    return melhor
+
+
+# O VOCABULÁRIO DE ESTUDAR, não o de uma matéria: "seguir a ordem", "todo o
+# conceito disso", "um aulão", "como se tivesse lendo um pdf" — as falas de
+# 24/09/2026 que continuavam a matéria anterior sem nomeá-la. Lista de palavras
+# de conversa sobre o estudo, como `PEDIDO` e `VAZIAS`; nenhuma é de disciplina.
+VOCABULARIO_DE_ESTUDO = set("""
+seguir sigo siga segue seguindo ordem conceito conceitos tudo todo toda inteiro inteira
+completo completa disso nisso isso dele dela deles delas aquilo aulao aula aulas resumo
+resumao resumir trazendo trazer traga traz tivesse lendo leitura ler pdf apostila livro
+material materiais conteudo explicacao historia sequencia parte partes detalhe detalhes
+detalhado edital topico item ponto comeco inicio pausa pausas pergunta perguntas
+""".split())
+
+
+def traz_assunto_proprio(fala: str | None) -> bool:
+    """A fala nomeia assunto, além de pedir e de falar do estudo? "me explica
+    peculato" sim; "certo, queria aprender todo o conceito disso" não."""
+    return any(_sem_acento(p) not in PEDIDO and _sem_acento(p) not in VOCABULARIO_DE_ESTUDO
+               for p in palavras_de_conteudo(fala or ""))
+
+
+def disciplina_em_foco(fala: str | None, historico: list[dict] | None,
+                       disciplinas: list[str] | None) -> str | None:
+    """A disciplina de que a conversa trata AGORA, se alguém a nomeou.
+
+    A fala atual primeiro. Sem nome nela, as falas recentes do ALUNO — mas só
+    quando a atual não traz assunto próprio: "certo, queria aprender todo o
+    conceito disso" continua a matéria de antes; "o que é peculato?" não, e
+    herdar a disciplina anterior faria a pergunta nova ser respondida como se
+    fosse da matéria errada. Falas do tutor ficam fora: ele cita várias
+    disciplinas no mesmo turno ("Ciências Forenses, Constitucional ou…")."""
+    if not disciplinas:
+        return None
+    propria = _disciplina_aproximada(fala, disciplinas)
+    if propria or traz_assunto_proprio(fala):
+        return propria
+    for t in reversed((historico or [])[-12:]):
+        if t.get("autor") == "aluno" and (d := _disciplina_aproximada(t.get("texto"), disciplinas)):
+            return d
+    return None
 
 
 RE_TROCA_DISCIPLINA = re.compile(r"(?i)^\s*(?:e\s+)?(?:no|na|em)\b")

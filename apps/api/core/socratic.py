@@ -18,7 +18,7 @@ from datetime import datetime
 from . import assunto, db, diario, leitura, llm, mesa as mesa_mod, pedido as pedido_mod, retrieval
 from .retrieval import referencia
 
-VERSAO = "socratic-v77"
+VERSAO = "socratic-v78"
 
 ESQUEMA_RESPOSTA_TUTOR = {
     "type": "OBJECT",
@@ -1040,6 +1040,26 @@ def _com_folga(gerar):
         return gerar(MAX_TOKENS_FOLGA)
 
 
+def _bloco_sem_material(disciplina: str, mesa_: dict | None) -> str:
+    """O fato de não haver material da matéria pedida, e o que fazer com ele."""
+    topicos = []
+    if mesa_ and mesa_.get("id"):
+        topicos = [r["texto"] for r in db.query(
+            """SELECT t.texto FROM topico t JOIN edital e ON e.id = t.edital_id
+                WHERE e.mesa_id = %(m)s AND t.disciplina = %(d)s
+                ORDER BY t.ordem LIMIT 6""", {"m": mesa_["id"], "d": disciplina})]
+    programa = ("\nO que o edital cobra nela:\n" + "\n".join(f"- {t[:220]}" for t in topicos)
+                if topicos else "")
+    return (f"### Cobertura do material\n"
+            f"O aluno está tratando de {disciplina}, e NÃO há material dessa disciplina: nem na "
+            f"biblioteca dele, nem no acervo. Nenhum trecho recuperado é dela.{programa}\n"
+            f"Diga isso na PRIMEIRA frase, sem rodeio. NÃO ensine {disciplina} de memória — "
+            f"estrutura de órgão, competência, prazo, número, nada que dependa da lei. Mostre o "
+            f"que o edital cobra, diga que ele pode subir o material (a lei ou a apostila desses "
+            f"itens) em Meus materiais para vocês lerem juntos, e ofereça seguir por uma "
+            f"disciplina que ele já tem em \"### Material que o aluno subiu\".")
+
+
 def _bloco_de_leitura(plano: dict) -> str:
     """A seção do prompt que traz a janela do material, em ordem, e o que vem
     depois dela — para o tutor anunciar o próximo passo sem inventá-lo."""
@@ -1140,10 +1160,19 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     # na ordem dele, a partir de onde a leitura parou; pergunta vai à busca por
     # sentido, como sempre. `leitura_atual` é o marcador, lido de `mensagem.fontes`
     # por quem tem a conversa (`conversa.ultima_leitura`).
-    plano = leitura.planejar(pergunta, consulta or assunto.em_foco(historico, pergunta, disciplinas),
-                             leitura_atual, usuario_id, mesa_id, historico=historico,
-                             material_recente=material_recente, disciplinas=disciplinas,
-                             mapa=(mesa_ or {}).get("mapa"))
+    #
+    # A MATÉRIA EM FOCO decide antes das duas coisas. Sem material dela na
+    # biblioteca, não há o que ler — e a leitura não pode abrir a apostila de
+    # outra matéria (ver `leitura.escolher_material`).
+    mapa_mesa = (mesa_ or {}).get("mapa")
+    foco = assunto.disciplina_em_foco(pergunta, historico, disciplinas)
+    tem_material_do_foco = bool(foco and usuario_id and
+                                leitura.primeiro_material_da_disciplina(foco, mapa_mesa, usuario_id))
+    plano = (None if foco and not tem_material_do_foco else
+             leitura.planejar(pergunta, consulta or assunto.em_foco(historico, pergunta, disciplinas),
+                              leitura_atual, usuario_id, mesa_id, historico=historico,
+                              material_recente=material_recente, disciplinas=disciplinas,
+                              mapa=mapa_mesa, foco=foco))
     if plano:
         chunks = plano["trechos"]
         contexto_material = None
@@ -1155,6 +1184,21 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         contexto_material = ("\n\n".join(
             f"ID da fonte: {c['id']}\n{retrieval.formatar_contexto([c])}"
             for c in chunks) if chunks else None)
+    # SEM MATERIAL DA MATÉRIA PEDIDA, O TUTOR DIZ ISSO — e não ensina de memória.
+    # Medido em 24/09/2026: o aluno pediu Legislação Estadual e Institucional,
+    # que ele não tinha em material nenhum; os seis trechos recuperados eram de
+    # Constitucional, a resposta não citou nenhum, e o tutor descreveu por cinco
+    # turnos uma "estrutura da Polícia Civil" que não estava em lugar algum. Os
+    # trechos de outra matéria saem do prompt (só convidavam a misturar) e entra
+    # o fato, calculado aqui: não há material disso. Só quando houve busca —
+    # pergunta sobre ele mesmo ou sobre o app não é pedido de conteúdo.
+    contexto_cobertura = None
+    if (foco and not tem_material_do_foco and not plano and (consulta or chunks)
+            and not any(c.get("disciplina") in leitura.nomes_da_disciplina(foco, mapa_mesa)
+                        or mesa_mod._mesmo_nome(foco, c.get("disciplina") or "")
+                        for c in chunks)):
+        chunks, contexto_material = [], None
+        contexto_cobertura = _bloco_sem_material(foco, mesa_)
     # NOMEAR e FILTRAR são papéis diferentes (`mesa.contexto`): `disciplinas`
     # segue nomeando para `em_foco` e o programa; o que ele JÁ FEZ sai do
     # recorte, senão "quais matérias eu já estudei?" omitia a matéria cujo
@@ -1184,8 +1228,8 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     # e recebia resposta enlatada, quando é exatamente a pergunta que o
     # concurso-alvo e o perfil declarado respondem sem precisar de artigo nenhum.
     # Regressão pega por `test_perfil.py`, não em uso.
-    if not (contexto_material or contexto_leitura or contexto_desempenho or contexto_mesa
-            or contexto_perfil or contexto_programa or contexto_teoria):
+    if not (contexto_material or contexto_leitura or contexto_cobertura or contexto_desempenho
+            or contexto_mesa or contexto_perfil or contexto_programa or contexto_teoria):
         return {"resposta": ("Não encontrei isso no material, e ainda não tenho nenhum "
                              "desempenho seu registrado.") if consulta else
                             ("Me diga de que matéria ou assunto você quer tratar — ainda não "
@@ -1231,6 +1275,8 @@ def explicar(pergunta: str, usuario_id: int | None = None,
             f"### Trechos de lei recuperados\nNenhum — {motivo} NÃO afirme conteúdo de lei "
             "sem trecho acima: use o contexto do aluno e os números dele, e pergunte de "
             "que assunto ele quer tratar.")
+    if contexto_cobertura:
+        partes.append(contexto_cobertura)
     if contexto_teoria:
         partes.append(f"### Teoria que vocês já conversaram (sessões anteriores)\n"
                       f"{contexto_teoria}")

@@ -193,6 +193,9 @@ export default function PaginaTutor() {
   // respondendo uma pergunta que não é dele — a mesma razão de a mesa padrão ser
   // resolvida no servidor e nunca recalculada aqui.
   const alunoJaFalou = mensagens.some((m) => m.autor === "usuario");
+  const ultimaResposta = [...mensagens].reverse().find((m) => m.autor === "tutor");
+  const ultimaRespostaTemFonte =
+    ultimaResposta?.autor === "tutor" && (ultimaResposta.citadas.length > 0 || ultimaResposta.leitura);
 
   // Mesma guarda de toda outra tela autenticada (/fila, /stats, /questao/[id]
   // etc.) — o /tutor tinha ficado de fora dela, sozinho, antes desta rota
@@ -773,7 +776,13 @@ export default function PaginaTutor() {
               (`core/assunto.py`). Antes, pedir questão no chat recebia "meu
               acervo não traz itens prontos": verdade sobre a tabela `questao`, e
               mentira sobre o que o sistema consegue fazer com a lei que já tem. */}
-          {alunoJaFalou && !pensando && (
+          {/* "ISTO" PRECISA EXISTIR. O botão aparecia sob qualquer resposta —
+              inclusive a que não se apoiou em trecho nenhum, como a aula
+              inventada sobre a estrutura da PC-PR (24/09/2026), sem material da
+              matéria. Aí o gerador caía no recorte da mesa e as questões vinham
+              de outro assunto. Só com fonte citada (ou leitura do material) na
+              última resposta há de onde tirar questão com proveniência. */}
+          {alunoJaFalou && !pensando && ultimaRespostaTemFonte && (
             <div className="mt-2 pl-[42px]">
               <GerarQuestoes
                 quantidade={2}
