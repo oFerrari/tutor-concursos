@@ -25,7 +25,7 @@ from .config import (GEMINI_API_KEY, GEMINI_MODEL, GEMINI_RESERVAS, LLM_CLASSIFI
 # 120s nao bastava no plano gratuito. Configuravel via LLM_TIMEOUT no .env.
 TIMEOUT = httpx.Timeout(float(os.getenv("LLM_TIMEOUT", "240")))
 DEBUG_FILE = Path(".llm_debug.txt")
-VERSAO = "llm-v21"
+VERSAO = "llm-v22"
 
 # Temperatura padrão de TODA chamada do produto. Era um literal repetido nos dois
 # adaptadores; virou constante quando o `temperatura=` apareceu, porque dois
@@ -95,8 +95,16 @@ def _post(url, params, corpo, tentativas=3):
 
     Timeout e 5xx são transitórios: vale reprocessar. 4xx é erro nosso e
     não melhora com repetição.
+
+    429 E 5xx VOLTAM COMO RESPOSTA depois das tentativas, não como exceção:
+    quem chama precisa do código para contar a cota esgotada. Levantando aqui,
+    o laço do Gemini gravava status 0 ("sem resposta") — 119 linhas assim em
+    24/09/2026, a maior parte cota, e o painel que existe para medir cota
+    (030) não enxergava nenhuma. Exceção fica só para quando não houve
+    resposta HTTP nenhuma.
     """
     ultimo = ""
+    resposta = None
     for i in range(tentativas):
         try:
             r = httpx.post(url, params=params, json=corpo, timeout=TIMEOUT)
@@ -105,11 +113,14 @@ def _post(url, params, corpo, tentativas=3):
         else:
             if r.status_code < 500 and r.status_code != 429:
                 return r
+            resposta = r
             ultimo = f"HTTP {r.status_code}"
         if i + 1 < tentativas:
             espera = ESPERA[min(i, len(ESPERA) - 1)]
             print(f"    rede instavel ({ultimo}); nova tentativa em {espera}s")
             time.sleep(espera)
+    if resposta is not None:
+        return resposta
     raise ErroLLM(f"falhou depois de {tentativas} tentativas — {ultimo}")
 
 

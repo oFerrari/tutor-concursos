@@ -36,3 +36,23 @@ def test_classificar_vai_ao_local_so_quando_configurado(monkeypatch):
     assert isinstance(real(), modulo.Gemini)
     monkeypatch.setattr(modulo, "LLM_CLASSIFICADOR", "")
     assert isinstance(real("classificar"), modulo.Gemini)
+
+
+def test_cota_esgotada_e_contada_como_429_e_nao_como_sem_resposta(monkeypatch):
+    """Em 24/09/2026 a telemetria gravou 119 "status 0" — a maior parte era cota."""
+    import httpx
+    import core.llm as modulo
+    gravados = []
+    monkeypatch.setattr(modulo, "GEMINI_API_KEY", "chave-falsa")
+    monkeypatch.setattr(modulo, "GEMINI_MODEL", "modelo-a")
+    monkeypatch.setattr(modulo, "GEMINI_RESERVAS", ["modelo-b"])
+    monkeypatch.setattr(modulo.httpx, "post",
+                        lambda *a, **k: httpx.Response(429, request=httpx.Request("POST", "http://x")))
+    monkeypatch.setattr(modulo.telemetria, "registrar",
+                        lambda provedor, modelo, status, **k: gravados.append((modelo, status)))
+
+    import pytest
+    with pytest.raises(llm.ErroLLM):
+        modulo.Gemini().gerar("oi")
+
+    assert gravados == [("modelo-a", 429), ("modelo-b", 429)]
