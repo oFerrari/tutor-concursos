@@ -166,7 +166,9 @@ código 1 se houver falha.
 ## Bateria de descoberta (antes de funcionalidade nova)
 
 ```bash
-./testar.sh --descobrir                      # falas reais + 5 conversas simuladas + contradições
+python bateria_decisoes.py                  # PASSO 1, cota zero: falas reais pela lógica de decisão -> .logs/decisoes.md
+python roteiro_modelo.py                    # PASSO 2, ~17 chamadas: falas fixas, sem juiz, LEIA .logs/roteiro.md
+./testar.sh --descobrir                      # caro (centenas de chamadas): falas reais + 5 conversas simuladas + contradições
 ./testar.sh --descobrir --so contradicoes    # só prompt e decisões (poucas chamadas)
 ./testar.sh --descobrir --so reais           # só as falas reais
 ./testar.sh --descobrir --episodios 10 --turnos 8

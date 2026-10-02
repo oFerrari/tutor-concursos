@@ -109,7 +109,7 @@ import unicodedata
 from . import pedido
 from .retrieval import RE_CITACAO
 
-VERSAO = "assunto-v19"
+VERSAO = "assunto-v21"
 
 # Teto da consulta. Embedding é MÉDIA do que entra: parede de texto dilui o
 # assunto exatamente como o art. 37 (13.059 caracteres) já se dilui no próprio
@@ -260,6 +260,10 @@ def palavras_de_conteudo(texto: str) -> list[str]:
             and not RE_RISADA.match(p)]
 
 
+SIGLAS_QUE_SAO_PALAVRA = {"da", "de", "do", "di", "du", "na", "no", "em", "ou", "se", "te", "me", "eu",
+                          "tu", "ai", "ah", "oi", "ok", "um", "as", "os", "ao", "ja", "la", "lo", "so", "ta"}
+
+
 def disciplina_citada(texto: str, disciplinas: list[str] | None) -> str | None:
     """Qual disciplina do EDITAL esta fala nomeia, se alguma.
 
@@ -316,6 +320,20 @@ def disciplina_citada(texto: str, disciplinas: list[str] | None) -> str | None:
                   and any(_sem_acento(x)[:7] == segunda[:7] for x in palavras_de_conteudo(d))]
         if not outras:
             return candidatas[0]
+    # A SIGLA, pelas iniciais das palavras do nome: "rlm" é Raciocínio
+    # Lógico-Matemático, "lp" é Língua Portuguesa (conversa real, 01/10/2026: "rlm"
+    # não casava). Só sigla única no edital, e de duas letras só quando ela não é
+    # uma palavra ("da", "do", "de" são preposição, não Direito Administrativo).
+    tokens = {_sem_acento(p) for p in RE_PALAVRA.findall(texto.lower())}
+    siglas: dict[str, list[str]] = {}
+    for d in disciplinas:
+        partes = [x for x in re.split(r"[\s\-–,]+", _sem_acento(d.lower()))
+                  if x and x not in {"e", "de", "da", "do", "das", "dos"}]
+        if len(partes) >= 2:
+            siglas.setdefault("".join(x[0] for x in partes), []).append(d)
+    for sigla, ds in siglas.items():
+        if len(ds) == 1 and sigla in tokens and (len(sigla) >= 3 or sigla not in SIGLAS_QUE_SAO_PALAVRA):
+            return ds[0]
     return None
 
 
@@ -397,7 +415,12 @@ def disciplina_da_conversa(historico: list[dict] | None,
             # perícia, como o tutor nomeando "Direito Administrativo" — e a
             # leitura de Ciências Forenses pulava para Administrativo (medido na
             # bateria de 24/09/2026).
-            normal = " ".join(_sem_acento(p) for p in RE_PALAVRA.findall(texto.lower()))
+            # E só das frases que PERGUNTAM: a proposta é uma pergunta ("Quer
+            # seguir por Direito Administrativo?"). Um texto de LEITURA que cita
+            # "a equipe de Raciocínio Lógico e Estatística" pôs Estatística em foco
+            # no "certo.." seguinte (conversa real, 01/10/2026).
+            perguntas = " ".join(f for f in re.split(r"(?<=[.!?])\s+", texto) if f.rstrip().endswith("?"))
+            normal = " ".join(_sem_acento(p) for p in RE_PALAVRA.findall(perguntas.lower()))
             citadas = [d for d in disciplinas or []
                        if " ".join(_sem_acento(p) for p in RE_PALAVRA.findall(d.lower())) in normal]
             if len(citadas) == 1:

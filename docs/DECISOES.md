@@ -3723,3 +3723,34 @@ Simulado na apostila real de Proposições, só leitura:
 - "continua" e "certo.." seguem a sequência;
 - "me explica proposições compostas" vai à p. 34;
 - "é só isso?" segue dali.
+
+## O simulado contaminava as outras matérias (01/10/2026, conversa real)
+
+Na conversa de Raciocínio Lógico:
+- "vamos pros cálculos" citou "Interpretação de texto, p. 16" numa questão de
+  juros;
+- a resposta seguinte virou "Raciocínio Lógico-Matemático e Estatística", com a
+  mediana do simulado;
+- "e da questão anterior?" trouxe 2 cartões de Língua Portuguesa.
+
+**Causas e consertos:**
+- **O índice de assuntos (036) não lê simulado.** Ele é de apostila, que tem
+  seções; num simulado de 12 disciplinas achou 3 "assuntos" e rotulou mal (o
+  cartão "Parônimos" era uma questão de pontuação). O assunto da questão de prova
+  é a disciplina da seção dela, e a citação de um trecho de simulado diz "questão
+  28 · Raciocínio Lógico-Matemático" (`prova.rotulos_dos_trechos`).
+- **Com matéria em foco, trecho de simulado de outra matéria sai da resposta**
+  (`socratic._sem_prova_de_outra_materia`). Apostila e simulado sem questão
+  extraída não são tocados.
+- **"e da questão anterior?", "sim já com a resolução" e "resolve a anterior"**
+  são resolução, não pedido de questões novas (`pedido.RE_RESOLUCAO`).
+- **Sigla de disciplina** ("rlm", "lp") casa pelas iniciais do nome, quando é
+  única no edital e não é palavra comum ("da", "do").
+- **Só o nome da matéria** ("rlm", "português") retoma a leitura dela de onde
+  parou (`leitura.so_escolhe_materia`). Antes pulava para "o próximo ponto do
+  edital".
+- **Asterisco solto na tela:** o itálico exigia a palavra colada (`*assim*`) mas
+  aceitava "`* *`", isto é, o marcador da lista com o começo do negrito. Asterisco
+  sem par sai da tela.
+
+A saudação "Boa noite" respondendo a "bom dia" estava CERTA: eram 23h44 locais.

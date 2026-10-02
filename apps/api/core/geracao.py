@@ -42,7 +42,7 @@ import re
 
 from . import assunto, db, llm, mesa, retrieval, socratic
 
-VERSAO = "geracao-v12"
+VERSAO = "geracao-v13"
 
 MIN_TEXTO = 140          # abaixo disso é stub, revogado ou remissão
 MAX_POR_VEZ = 5          # teto por chamada: cota de LLM é o recurso escasso
@@ -97,6 +97,26 @@ def _chunk_do_trecho(q: dict, lote: list[dict]) -> dict | None:
 
 
 def _casar(q: dict, lote: list[dict]) -> tuple[dict | None, str]:
+    """`_achar` + a disciplina que a questão vai gravar.
+
+    Documento sem disciplina (simulado de várias matérias, resumo solto) não
+    pode virar `questao.disciplina` NULL — a coluna é NOT NULL e a mesa recorta
+    a fila por ela. Trecho de simulado herda a matéria da questão de prova que
+    está nele; sem matéria única, é descarte, nunca um rótulo inventado.
+    Medido em 02/10/2026: "quero questões de juros simples" numa conta com
+    simulado derrubou a rota com NotNullViolation.
+    """
+    chunk, motivo = _achar(q, lote)
+    if chunk is None or chunk.get("disciplina"):
+        return chunk, motivo
+    from . import prova
+    materias = prova.materias_dos_trechos([chunk["id"]]).get(chunk["id"], set())
+    if len(materias) != 1:
+        return None, f"trecho {chunk['id']} não tem disciplina"
+    return {**chunk, "disciplina": next(iter(materias))}, ""
+
+
+def _achar(q: dict, lote: list[dict]) -> tuple[dict | None, str]:
     """
     Acha o chunk de onde a questão saiu, ou diz por que ela é descarte.
 
@@ -801,12 +821,22 @@ def sob_demanda(disciplinas: list[str] | None = None, tema: str | None = None,
 
 
 def _da_materia(ids: list[int], materias: list[str] | None) -> list[int]:
-    """Só os trechos cuja disciplina é a da matéria em foco (nome do edital ou do material)."""
-    if not materias or not ids:
+    """Só os trechos cuja disciplina é a da matéria em foco (nome do edital ou do material).
+
+    E NUNCA trecho de simulado: ele já É questão (037), e entra pelo banco
+    (`prova.da_conversa`) antes do gerador. Gerar dele reescrevia a questão da
+    banca — e o trecho mistura matérias, então a nova ficava sem disciplina."""
+    if not ids:
         return ids
+    if not materias:
+        fora = {r["id"] for r in db.query(
+            """SELECT c.id FROM chunk c JOIN documento d ON d.id = c.documento_id
+                WHERE c.id = ANY(%(i)s) AND d.tipo = 'simulado'""", {"i": ids})}
+        return [i for i in ids if i not in fora]
     dela = {r["id"] for r in db.query(
         """SELECT c.id FROM chunk c JOIN documento d ON d.id = c.documento_id
-            WHERE c.id = ANY(%(i)s) AND d.disciplina = ANY(%(m)s)""", {"i": ids, "m": materias})}
+            WHERE c.id = ANY(%(i)s) AND d.disciplina = ANY(%(m)s)
+              AND d.tipo <> 'simulado'""", {"i": ids, "m": materias})}
     return [i for i in ids if i in dela]
 
 

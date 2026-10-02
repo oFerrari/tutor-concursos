@@ -931,6 +931,10 @@ def _turno_do_chat(body: PerguntaBody, uid: int, m: dict, ao_gerar=None) -> dict
         except geracao.SemMaterial:
             if not treino_ctx.get("da_prova"):
                 p = {**p, "sem_material": pedido.sem_o_pedido(tema or body.pergunta) or "esse assunto"}
+            else:
+                # Nada a completar: o que aparece é só o do simulado. Sem isto o
+                # tutor anunciava "duas questões" e saía uma (02/10/2026).
+                p = {**p, "quantidade": len(treino_ctx["da_prova"])}
     conversa.gravar(conv["id"], "aluno", body.pergunta)
     try:
         r = socratic.explicar(body.pergunta, uid, m["disciplinas"], m, historico,

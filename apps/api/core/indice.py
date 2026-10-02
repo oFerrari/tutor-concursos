@@ -40,7 +40,7 @@ import unicodedata
 
 from . import assunto, db, llm
 
-VERSAO = "indice-v1"
+VERSAO = "indice-v2"
 
 LOTE = 30                 # trechos por chamada: 60 estourou o limite de tokens/min (medido)
 PAUSA_S = float(os.getenv("INDICE_PAUSA_S", "8"))
@@ -336,7 +336,12 @@ def indexar_assuntos(documento_id: int, com_modelo: bool = True) -> str:
     documento (trava no banco), e erro nunca sobe: quem chama é a fila de indexação."""
     doc = db.exec1("""SELECT id, usuario_id, titulo, assunto, disciplina, tipo FROM documento
                        WHERE id = %(i)s""", {"i": documento_id})
-    if not doc or not doc["usuario_id"] or doc["tipo"] == "edital":
+    # SIMULADO fica de fora (01/10/2026): o índice é de APOSTILA, que tem seções.
+    # Num simulado de 12 disciplinas ele achou 3 "assuntos", e os rótulos errados
+    # viraram citação ("Interpretação de texto" numa questão de juros) e nome de
+    # cartão ("Parônimos" numa de pontuação). O assunto da questão de prova é a
+    # disciplina da seção dela (`core/prova.py`).
+    if not doc or not doc["usuario_id"] or doc["tipo"] in ("edital", "simulado"):
         return "ignorado"
     with db.conexao_isolada() as c, c.cursor() as cur:
         cur.execute("SELECT pg_try_advisory_lock(%s, %s) AS meu", (TRAVA_INDICE, documento_id))
@@ -369,7 +374,7 @@ def indexar_assuntos(documento_id: int, com_modelo: bool = True) -> str:
 def pendentes() -> list[int]:
     """Materiais de aluno sem índice do modelo (pendente, reserva ou falha), os mais novos antes."""
     return [r["id"] for r in db.query(
-        """SELECT id FROM documento WHERE usuario_id IS NOT NULL AND coalesce(tipo, '') <> 'edital'
+        """SELECT id FROM documento WHERE usuario_id IS NOT NULL AND coalesce(tipo, '') NOT IN ('edital', 'simulado')
               AND status = 'pronto' AND assuntos_status IN ('pendente', 'reserva', 'falha')
             ORDER BY id DESC""")]
 

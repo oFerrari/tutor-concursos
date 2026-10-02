@@ -18,7 +18,7 @@ from datetime import datetime
 from . import assunto, cobertura, db, diario, leitura, llm, mesa as mesa_mod, pedido as pedido_mod, retrieval
 from .retrieval import referencia
 
-VERSAO = "socratic-v89"
+VERSAO = "socratic-v92"
 
 ESQUEMA_RESPOSTA_TUTOR = {
     "type": "OBJECT",
@@ -719,6 +719,11 @@ def _resumo_biblioteca(usuario_id: int | None, mesa_: dict | None,
 # porque é dele que o modelo copia: colchete, norma, vírgula, "art. N".
 RE_CITADA = re.compile(r"\[([^\[\]\n]{1,160})\]")
 
+# COLCHETE DE CONTA NÃO É CITAÇÃO. "C(5, 2) = 5! / [2! × 3!] = 10" perdia o
+# denominador como "citação sem fonte" e saía "5! / = 10" (medido em 02/10/2026,
+# duas respostas seguidas). Citação tem palavra; conta tem operador.
+RE_COLCHETE_DE_CONTA = re.compile(r"[=×÷+−^!\\*·<>≤≥]|\A(?!.*[A-Za-zÀ-ÿ]{2})")
+
 # Conectores que ficariam pendurados se a citação saísse sozinha do meio da
 # frase ("conforme [Lei X, art. 5º], o vínculo..." viraria "conforme , o
 # vínculo"). Saem junto com ela. Lista curta e fechada: nas seis citações medidas
@@ -950,7 +955,7 @@ def limpar_citacoes(resposta: str, chunks: list[dict]) -> str:
     saida, fim, apagou = [], 0, False
     for m in RE_CITADA.finditer(texto):
         antes = texto[fim:m.start()]
-        if com_fonte(m.group(1), chunks):
+        if RE_COLCHETE_DE_CONTA.search(m.group(1)) or com_fonte(m.group(1), chunks):
             saida.append(antes + m.group(0))
         else:
             saida.append(RE_CONECTOR.sub("", antes))
@@ -1324,9 +1329,39 @@ def _com_assunto_do_trecho(chunks: list[dict]) -> list[dict]:
     "Vozes verbais, p. 64", e não "Verbos" — o rótulo do arquivo inteiro. Vale
     no prompt (`retrieval.referencia`) e na tela (`mensagem.fontes`). Sem índice,
     fica como estava."""
-    from . import indice
-    rotulos = indice.assuntos_dos_trechos([c["id"] for c in chunks])   # só material de aluno tem índice
-    return [{**c, "assunto": rotulos[c["id"]][0]} if c["id"] in rotulos else c for c in chunks]
+    from . import indice, prova
+    ids = [c["id"] for c in chunks]
+    rotulos = indice.assuntos_dos_trechos(ids)   # só material de aluno tem índice
+    de_prova = prova.rotulos_dos_trechos([c["id"] for c in chunks if c.get("tipo") == "simulado"])
+    return [{**c, "assunto": de_prova[c["id"]]} if c["id"] in de_prova
+            else {**c, "assunto": rotulos[c["id"]][0]} if c["id"] in rotulos else c for c in chunks]
+
+
+def _sem_prova_de_outra_materia(chunks: list[dict], materias: list[str] | None) -> list[dict]:
+    """Tira os trechos de SIMULADO cujas questões são todas de outra matéria.
+
+    Medido na conversa real (01/10/2026): em Raciocínio Lógico, "vamos pros
+    cálculos" trouxe a questão de mediana (Estatística) do simulado, e a resposta
+    seguinte virou "Raciocínio Lógico-Matemático e Estatística". Trecho de apostila
+    não é tocado; simulado sem questão extraída também não."""
+    if not materias:
+        return chunks
+    from . import prova
+    alvo = {assunto._sem_acento(m).lower() for m in materias if m}
+    das = prova.materias_dos_trechos([c["id"] for c in chunks if c.get("tipo") == "simulado"])
+
+    # Também aula e resumo de outra disciplina (01/10/2026, `bateria_decisoes.py`):
+    # com a matéria em foco SEM material (Legislação Institucional, Paraná), a
+    # busca enchia o prompt com Constitucional, Administrativo e Português — 11
+    # falas reais. Matéria sem material é para o tutor dizer isso e ensinar pelo
+    # conceito. Lei e jurisprudência (consulta) e trecho sem matéria ficam.
+    def fica(c):
+        if c["id"] in das:
+            return any(assunto._sem_acento(d or "").lower() in alvo for d in das[c["id"]])
+        if c.get("tipo") in ("aula", "resumo") and c.get("disciplina"):
+            return assunto._sem_acento(c["disciplina"]).lower() in alvo
+        return True
+    return [c for c in chunks if fica(c)]
 
 
 def _fontes_da_tela(fontes: list[dict]) -> list[dict]:
@@ -1423,6 +1458,7 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     # outra matéria (ver `leitura.escolher_material`).
     mapa_mesa = (mesa_ or {}).get("mapa")
     foco = assunto.disciplina_em_foco(pergunta, historico, disciplinas)
+    foco_da_conversa = foco
     # CONTINUAR UMA LEITURA é continuar o MATERIAL que está sendo lido: a matéria
     # dele manda, não a que aparece no texto. Medido na conversa real
     # (01/10/2026): a leitura de Raciocínio Lógico estava na página da equipe
@@ -1446,8 +1482,9 @@ def explicar(pergunta: str, usuario_id: int | None = None,
         contexto_material = None
         contexto_leitura = _bloco_de_leitura(plano)
     else:
-        chunks = _com_assunto_do_trecho(retrieval.buscar(consulta, n=6, usuario_id=usuario_id, mesa_id=mesa_id,
-                                                         fala=pergunta)
+        chunks = _com_assunto_do_trecho(_sem_prova_de_outra_materia(
+                     retrieval.buscar(consulta, n=6, usuario_id=usuario_id, mesa_id=mesa_id, fala=pergunta),
+                     [foco_da_conversa, *(mapa_mesa or {}).get(foco_da_conversa, [])] if foco_da_conversa else None)
                   if consulta else [])
         contexto_leitura = None
         contexto_material = ("\n\n".join(
@@ -1599,13 +1636,21 @@ def explicar(pergunta: str, usuario_id: int | None = None,
             "com fonte. Diga isso em uma frase, com palavras suas e sem repetir a frase de um turno "
             "anterior, e ofereça o que dá: explicar o assunto pelo conceito (seção 4) ou montar "
             "questões de um assunto que ele tem material. Nunca diga que há questões abaixo.")
+    # O NÚMERO só é dito quando já é certo: as do simulado estão escolhidas antes
+    # desta resposta; as geradas saem DEPOIS dela, e o gerador pode render menos.
+    elif treino and not treino.get("formal") and treino.get("da_prova") \
+            and treino["da_prova"] >= treino["quantidade"]:
+        partes.append(f"### Questões deste turno\n{treino['da_prova']} questão(ões) do SIMULADO que ele "
+                      "subiu (questão real de banca, com gabarito e comentário) aparecem logo abaixo da sua "
+                      "resposta. Diga isso em uma frase, sem resolver nenhuma.")
     elif treino and not treino.get("formal") and treino.get("da_prova"):
-        partes.append(f"### Questões deste turno\n{treino['quantidade']} questão(ões) aparecem logo abaixo "
-                      f"da sua resposta; {treino['da_prova']} delas vêm do SIMULADO que ele subiu (questão "
-                      "real de banca, com gabarito e comentário). Diga isso em uma frase, sem resolver nenhuma.")
+        partes.append("### Questões deste turno\nAparecem logo abaixo da sua resposta: questão do SIMULADO "
+                      "que ele subiu (real de banca, com gabarito e comentário) e o app completa com outras "
+                      "do material. Diga isso em uma frase, sem resolver nenhuma e SEM dizer quantas — a "
+                      "tela mostra.")
     elif treino and not treino.get("formal"):
-        partes.append(f"### Questões deste turno\nO app está montando {treino['quantidade']} "
-                      "questão(ões) agora; elas aparecem logo abaixo da sua resposta.")
+        partes.append("### Questões deste turno\nO app está montando as questões agora; elas aparecem "
+                      "logo abaixo da sua resposta. Não diga quantas — a tela mostra.")
     else:
         partes.append("### Questões deste turno\nNenhuma. Não diga que há questões abaixo.")
     # Junto da pergunta, como o tom: a leitura e a falta de material da matéria do

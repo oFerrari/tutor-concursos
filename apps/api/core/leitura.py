@@ -28,7 +28,7 @@ import re
 
 from . import assunto, db, retrieval
 
-VERSAO = "leitura-v11"
+VERSAO = "leitura-v12"
 
 # Quanto texto do material entra por turno. Um trecho tem ~1100 caracteres
 # (`chunking.chunk_paginado`); três a quatro dão uma seção de apostila — o
@@ -268,6 +268,21 @@ def intencao(fala: str | None, ultima_foi_leitura: bool, ha_leitura: bool) -> st
     return None
 
 
+def so_escolhe_materia(fala: str | None, disciplinas: list[str] | None) -> bool:
+    """A fala é SÓ o nome (ou a sigla) de uma disciplina? "rlm", "português",
+    "vamos de constitucional" sim; "rlm, conectivos" não. PURO."""
+    d = assunto.disciplina_citada(fala or "", disciplinas)
+    if not d:
+        return False
+    nome = {assunto._sem_acento(p) for p in assunto.palavras_de_conteudo(d)}
+    sigla = "".join(x[0] for x in re.split(r"[\s\-–,]+", assunto._sem_acento(d.lower()))
+                    if x and x not in {"e", "de", "da", "do", "das", "dos"})
+    resto = [p for p in assunto.palavras_de_conteudo(fala or "")
+             if assunto._sem_acento(p) not in nome | {sigla} | VOCABULARIO_DE_LEITURA
+             and not any(assunto._sem_acento(p)[:6] == n[:6] for n in nome)]
+    return not resto
+
+
 def nomeia_outro_assunto(fala: str | None) -> bool:
     """A fala de "começar a ler" traz assunto próprio, além do pedido de leitura?
     Sem assunto próprio ("já falei, como apostila, sem pausas"), é a leitura em
@@ -386,7 +401,12 @@ def emendar(trechos: list[dict], anterior: str | None, seguinte: dict | None) ->
     for c in trechos:
         texto = sem_sobreposicao(antes, c["texto"])
         if antes is not None and not RE_FIM_DE_FRASE.search(antes.rstrip()):
-            _, texto = _resto_da_frase(texto)
+            cabeca, texto = _resto_da_frase(texto)
+            # Dentro da MESMA janela, o resto da frase vai para o trecho de
+            # cima, não some: sem isto a aula saía "plataforma continent" e
+            # pulava o resto do inciso (medido em 02/10/2026).
+            if prontos and cabeca:
+                prontos[-1] = {**prontos[-1], "texto": f"{prontos[-1]['texto'].rstrip()} {cabeca}"}
         prontos.append({**c, "texto": texto})
         antes = c["texto"]
     if prontos and seguinte and not RE_FIM_DE_FRASE.search(prontos[-1]["texto"].rstrip()):
@@ -577,6 +597,11 @@ def planejar(fala: str | None, consulta: str | None, ultima: dict | None,
     # "Continua o conteúdo de Administrativo" sem leitura nesta conversa: é
     # pedido para ler a matéria nomeada, retomando de onde parou nela.
     if not qual and foco and RE_AVANCO.search(fala or "") and not RE_PLANEJAMENTO.search(fala or ""):
+        qual = "inicio"
+    # SÓ O NOME DA MATÉRIA ("rlm", "português"), escolhendo onde estudar: retoma a
+    # leitura dela de onde parou (marcador por material). Medido em 01/10/2026:
+    # "rlm" pulava para "o próximo ponto do edital, proposições compostas".
+    if not qual and foco and len((fala or "").split()) <= 4 and so_escolhe_materia(fala, disciplinas):
         qual = "inicio"
     if not qual:
         return None

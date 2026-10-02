@@ -84,8 +84,8 @@ def montar_conta(uid: int, conta: dict) -> int:
         texto = ((AQUI / mat["texto"]).read_text(encoding="utf-8") if mat.get("texto") else
                  _apostila(mat["titulo"], _recorte_do_corpus(mat["corpus"], mat["de"], mat["ate"])))
         dados = texto.encode()
-        doc = material.registrar(uid, mat["arquivo"], dados, disciplina=mat["disciplina"],
-                                 tipo="aula", titulo=mat["titulo"], assunto=mat.get("assunto"))
+        doc = material.registrar(uid, mat["arquivo"], dados, disciplina=mat.get("disciplina"),
+                                 tipo=mat.get("tipo", "aula"), titulo=mat["titulo"], assunto=mat.get("assunto"))
         material.indexar(doc["id"], mat["arquivo"], dados)
         n = db.exec1("SELECT count(*) AS n FROM chunk WHERE documento_id = %(d)s", {"d": doc["id"]})["n"]
         print(f"  material: {mat['titulo']} ({mat['disciplina']}) — {n} trechos")

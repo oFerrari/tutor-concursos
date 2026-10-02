@@ -146,3 +146,21 @@ def test_apagar_o_simulado_leva_as_questoes_dele(client, usuario, llm_falso):
     assert client.delete(f"/materiais/{doc}", headers=usuario["headers"]).status_code in (200, 204)
     assert db.exec1("SELECT count(*) AS n FROM questao WHERE origem='prova' AND usuario_id=%(u)s",
                     {"u": usuario["id"]})["n"] == 0, "questão de prova sem o arquivo não fica para trás"
+
+
+def test_trecho_de_simulado_de_outra_materia_sai_da_resposta(monkeypatch):
+    from core import socratic
+    trechos = [{"id": 1, "tipo": "simulado"}, {"id": 2, "tipo": "simulado"},
+               {"id": 3, "tipo": "aula"}, {"id": 4, "tipo": "simulado"}]
+    monkeypatch.setattr(prova, "materias_dos_trechos", lambda ids: {
+        1: {"Raciocínio Lógico-Matemático"}, 2: {"Estatística"}})
+    ficou = [t["id"] for t in socratic._sem_prova_de_outra_materia(trechos, ["Raciocínio Lógico-Matemático"])]
+    assert ficou == [1, 3, 4], "sai só o trecho de simulado de OUTRA matéria; apostila e simulado sem questão ficam"
+    assert [t["id"] for t in socratic._sem_prova_de_outra_materia(trechos, None)] == [1, 2, 3, 4]
+
+
+def test_trecho_de_simulado_cita_a_questao(client, usuario, llm_falso):
+    doc = _subir(client, usuario, "comentada")
+    cid = db.exec1("SELECT fonte_chunks[1] AS c FROM questao WHERE documento_id=%(d)s AND numero_na_prova=2",
+                   {"d": doc})["c"]
+    assert prova.rotulos_dos_trechos([cid])[cid].startswith("quest")

@@ -622,3 +622,12 @@ def test_pedir_explicacao_com_exercicio_na_reclamacao_nao_e_treino():
     assert pedido.treino("mas eu pedi pra seguir a apostila e tu ja pulou exercicio, explica direito essa parte de contagem ai") is None
     for fala in ("explica isso e me dá 2 questões", "me explica e manda uma questão", "me dá exercícios de contagem"):
         assert pedido.treino(fala), fala
+
+
+def test_questao_anterior_e_com_resolucao_sao_resolucao_nao_questoes_novas():
+    """Conversa real (01/10/2026): "e da questão anterior?" trouxe 2 cartões de
+    Língua Portuguesa no meio de Raciocínio Lógico."""
+    for fala in ["e da questão anterior?", "sim ja com a resolução", "resolve a anterior também"]:
+        assert pedido.resolucao(fala), fala
+        assert pedido.treino(fala) is None, fala
+    assert pedido.treino("me manda 2 questões de juros")

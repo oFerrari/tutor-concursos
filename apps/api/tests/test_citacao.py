@@ -183,3 +183,27 @@ def test_formato_da_referencia_tem_um_dono_so():
         rotulo = retrieval.referencia(c)
         assert f"[{rotulo}]" in retrieval.formatar_contexto([{**c, "texto": "x"}])
         assert socratic.com_fonte(rotulo, ACERVO), rotulo
+
+
+def test_colchete_de_conta_nao_e_citacao():
+    from core.socratic import limpar_citacoes
+    for t in ("C(5, 2) = 5! / [2! × 3!] = 10.", "A − B = [x − y], com [n − p] termos.",
+              "o fator é [1 − 0,15] = 0,85"):
+        assert limpar_citacoes(t, []) == t
+    assert limpar_citacoes("A pena aumenta [CP, art. 129].", []) == "A pena aumenta."
+
+
+@pytest.mark.parametrize("treino,dito,proibido", [
+    ({"quantidade": 1, "tipo": None, "da_prova": 1}, "1 questão(ões) do SIMULADO", "SEM dizer quantas"),
+    ({"quantidade": 3, "tipo": None, "da_prova": 1}, "SEM dizer quantas", "3 questão"),
+    ({"quantidade": 3, "tipo": None}, "Não diga quantas", "3 questão"),
+])
+def test_numero_de_questoes_so_quando_e_certo(monkeypatch, llm_falso, treino, dito, proibido):
+    """Medido em 02/10/2026: "duas questões" anunciadas, uma saiu. As geradas saem
+    DEPOIS da resposta; o número que o tutor diz é só o já escolhido."""
+    monkeypatch.setattr(retrieval, "buscar", lambda *a, **kw: [
+        {"id": 13, "titulo": "Apostila", "pagina": 1, "texto": "Juros simples."}])
+    llm_falso.retorno = json.dumps({"resposta": "Vamos treinar.", "fontes_usadas": []})
+    socratic.explicar("quero questões de juros", treino=treino)
+    prompt = llm_falso.chamadas[0]["prompt"]
+    assert dito in prompt and proibido not in prompt

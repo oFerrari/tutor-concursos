@@ -31,7 +31,7 @@ import re
 
 from . import assunto, db, llm
 
-VERSAO = "prova-v4"
+VERSAO = "prova-v6"
 
 LETRAS = "ABCDEF"
 MIN_QUESTOES = 3          # menos que isso não é prova (e um arquivo de gabarito tem 0)
@@ -407,13 +407,23 @@ def _texto_do_documento(documento_id: int) -> str:
 
 
 def _mesa_do(doc: dict) -> tuple[list[str], dict]:
-    """(disciplinas do edital, mapa edital → nomes de material) da mesa do simulado."""
-    if not doc.get("mesa_id"):
-        return [], {}
+    """(disciplinas do edital, mapa edital → nomes de material) da mesa do simulado.
+
+    Simulado SEM mesa (o pool comum da biblioteca) usa as mesas do aluno, a mais
+    recente primeiro: sem isso as seções da prova não casavam com nada e todas as
+    questões saíam com a disciplina "Geral" (medido na bateria de 02/10/2026)."""
     try:
         from . import mesa
-        ctx = mesa.contexto(doc["usuario_id"], doc["mesa_id"])
-        return ctx.get("disciplinas") or [], ctx.get("mapa") or {}
+        mesas = ([doc["mesa_id"]] if doc.get("mesa_id") else
+                 [r["id"] for r in db.query("SELECT id FROM mesa WHERE usuario_id = %(u)s ORDER BY id DESC",
+                                            {"u": doc["usuario_id"]})])
+        disciplinas, mapa = [], {}
+        for mid in mesas:
+            ctx = mesa.contexto(doc["usuario_id"], mid)
+            disciplinas += [d for d in ctx.get("disciplinas") or [] if d not in disciplinas]
+            for k, v in (ctx.get("mapa") or {}).items():
+                mapa.setdefault(k, v)
+        return disciplinas, mapa
     except Exception:  # noqa: BLE001 — sem mesa, a disciplina sai do título ou do documento
         return [], {}
 
@@ -434,9 +444,38 @@ def _chunk_da_questao(chunks: list[dict], q: dict) -> int | None:
 
 
 def _tema(chunk_id: int, q: dict, disciplina: str | None) -> str:
-    from . import indice
-    nomes = indice.assuntos_dos_trechos([chunk_id]).get(chunk_id) or []
-    return (nomes[0] if nomes else None) or disciplina or f"Questão {q['numero']}"
+    """A disciplina da seção da questão. O índice de assuntos não lê simulado
+    (rotulava mal; ver `indice.indexar_assuntos`)."""
+    return disciplina or f"Questão {q['numero']}"
+
+
+def materias_dos_trechos(ids: list[int]) -> dict[int, set[str]]:
+    """{trecho: disciplinas das questões de prova que estão nele}. Trecho que não é
+    de simulado não aparece."""
+    if not ids:
+        return {}
+    saida: dict[int, set[str]] = {}
+    for r in db.query("""SELECT c AS id, q.disciplina FROM questao q, unnest(q.fonte_chunks) AS c
+                          WHERE q.origem = 'prova' AND c = ANY(%(i)s)""", {"i": ids}):
+        saida.setdefault(r["id"], set()).add(r["disciplina"])
+    return saida
+
+
+def rotulos_dos_trechos(ids: list[int]) -> dict[int, str]:
+    """{trecho: "questão 28 · Raciocínio Lógico-Matemático"} — a citação de um trecho
+    de simulado diz QUAL questão ele é, e de que matéria."""
+    if not ids:
+        return {}
+    por: dict[int, list] = {}
+    for r in db.query("""SELECT c AS id, q.numero_na_prova AS n, q.disciplina FROM questao q,
+                                unnest(q.fonte_chunks) AS c
+                          WHERE q.origem = 'prova' AND c = ANY(%(i)s) ORDER BY q.numero_na_prova""", {"i": ids}):
+        por.setdefault(r["id"], []).append(r)
+    rot = {}
+    for cid, qs in por.items():
+        nums = ", ".join(str(q["n"]) for q in qs[:3])
+        rot[cid] = f"questão {nums} · {qs[0]['disciplina']}" if len(qs) == 1 else f"questões {nums} · {qs[0]['disciplina']}"
+    return rot
 
 
 def _resolver(pendentes: list[dict]) -> dict[int, str]:

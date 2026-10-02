@@ -183,6 +183,13 @@ OBJETIVOS = [
     "começar em {d}, trocar para outra matéria do seu edital no meio e depois pedir para voltar de onde parou",
     "perguntar o que você já estudou, o que falta do edital e quais apostilas você tem",
     "chegar cansado e desanimado, desabafar um pouco, e só depois pedir algo leve de {d}",
+    # Defeitos da conversa real de 01/10/2026:
+    "estudar {d} e dizer 'vamos pros cálculos'; aceitar a questão que o tutor oferecer pedindo "
+    "'sim, já com a resolução'; depois perguntar 'e da questão anterior?'",
+    "quando o tutor perguntar por onde começar, responder só com a SIGLA da matéria (ex.: 'rlm'); depois "
+    "pedir 'traga todo conceito', dizer 'certo..' e perguntar 'é só isso que tem no material?'",
+    "pedir 'me explica' um assunto da sua apostila de {d}; depois fazer uma pergunta pontual curta "
+    "('o que é ...?') e conferir se a resposta é curta e direta",
 ]
 
 ALUNO_SISTEMA = """Você é um aluno brasileiro estudando para concurso público, conversando pelo \
@@ -595,7 +602,7 @@ def main() -> int:
     incompleta: str | None = None
     if args.so != "contradicoes":
         dados = json.loads(CENARIO.read_text(encoding="utf-8"))["conta"]
-        com_material = {m["disciplina"] for m in dados["materiais"]}
+        com_material = {m["disciplina"] for m in dados["materiais"] if m.get("disciplina")}
         disciplinas = list(dados["edital"])
         sem_material = [d for d in disciplinas if d not in com_material] or disciplinas
         contexto = ("Seu concurso tem estas disciplinas no edital: " + ", ".join(disciplinas) +

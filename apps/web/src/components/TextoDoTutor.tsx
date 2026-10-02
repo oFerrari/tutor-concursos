@@ -40,7 +40,7 @@ import { Formula } from "@/components/Formula";
 // espaço, e o de fechamento não pode vir depois de espaço — é o que separa
 // `$x + 1$` de "multa de R$ 1.000 a R$ 5.000", que o material de lei traz toda hora.
 const PEDACOS =
-  /(\$\$[^$]+?\$\$|(?<![A-Za-z0-9\\])\$(?!\s)[^$\n]+?(?<!\s)\$|`[^`\n]+`|\*\*[^*\n]+\*\*|\*[^*\n]+\*|\[[^\]\n]{1,160}\])/g;
+  /(\$\$[^$]+?\$\$|(?<![A-Za-z0-9\\])\$(?!\s)[^$\n]+?(?<!\s)\$|`[^`\n]+`|\*\*[^*\n]+\*\*|\*(?!\s)[^*\n]+?(?<!\s)\*|\[[^\]\n]{1,160}\])/g;
 
 /**
  * O que dentro de `[...]` é de fato uma CITAÇÃO.
@@ -102,7 +102,10 @@ function formatar(linha: string, chave: string) {
         </span>
       );
     }
-    return <span key={k}>{p}</span>;
+    // ASTERISCO SEM PAR não é texto: é Markdown que o modelo fechou errado
+    // ("pergunta?"* Não é proposição…*") e aparecia cru na tela (conversa real,
+    // 01/10/2026). Entre letras/números ("2*3") ele fica.
+    return <span key={k}>{p.replace(/(?<![\p{L}\p{N}])\*+|\*+(?![\p{L}\p{N}])/gu, "")}</span>;
   });
 }
 

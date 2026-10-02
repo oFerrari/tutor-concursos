@@ -33,7 +33,7 @@ Aqui só se responde "ele quer treinar, e quantas".
 """
 import re
 
-VERSAO = "pedido-v15"
+VERSAO = "pedido-v16"
 
 # Pedido de TREINO. `quest(?:[ãa]o|[õo]es)` e não `quest[õo]es?`: o singular
 # leva "ã" e o plural "õ", e quem tem pressa digita sem acento — a primeira
@@ -282,6 +282,13 @@ RE_RESOLUCAO = re.compile(
     r"|\bcomo\s+(?:eu\s+)?(?:se\s+)?(?:resolv[eo]|calcul[ao]|fa[çz]o\s+(?:a|essa)\s+conta)\b"
     r"|\b(?:quest[õo]es|quest[ãa]o|exerc[íi]cios?|exemplos?)\s+(?:resolvid[ao]s?|comentad[ao]s?)\b"
     r"|\bcad[êe]\s+(?:o|a)\s+(?:c[áa]lculo|conta|f[óo]rmula|resolu[çc][ãa]o)\b"
+    # A QUESTÃO QUE JÁ ESTÁ NA CONVERSA (01/10/2026): "e da questão anterior?" foi
+    # lido como pedido de 2 questões NOVAS e trouxe cartões de Língua Portuguesa
+    # no meio de Raciocínio Lógico; "sim já com a resolução" (aceitando a questão
+    # oferecida) não virou resolução.
+    r"|\bquest[ãa]o\s+(?:anterior|de\s+cima|passada|acima|de\s+antes)\b"
+    r"|\bresolv[ae]\s+(?:a\s+|tamb[ée]m\s+a\s+)?(?:anterior|de\s+cima|outra|primeira|segunda)\b"
+    r"|\bcom\s+(?:a\s+)?resolu[çc][ãa]o\b|\bj[áa]\s+resolvid[ao]s?\b"
     r"|\b(?:mostr[ae]|fa[çz]a|faz)\s+(?:a|essa)\s+(?:conta|resolu[çc][ãa]o)\b"
     r"|\bcalcul[ae]\s+(?:pra\s+mim|a|o|quant)"
     r"|\bqual\s+(?:[ée]\s+)?(?:o\s+)?gabarito\b"

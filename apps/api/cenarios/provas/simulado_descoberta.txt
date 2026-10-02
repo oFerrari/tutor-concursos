@@ -1,0 +1,65 @@
+SIMULADO SINTÉTICO DA DESCOBERTA
+CONHECIMENTOS GERAIS
+Raciocínio Lógico-Matemático
+1. Uma mercadoria sintética custa R$ 450,00. Foi paga com entrada de R$ 250,00 e uma parcela única de R$ 245,00 um mês depois. A taxa mensal de juros simples foi de:
+A) 10%
+B) 12,5%
+C) 15%
+D) 20%
+E) 22,5%
+Gabarito: E
+COMENTÁRIO DO PROFESSOR:
+O capital financiado é 450 - 250 = 200. Os juros são 245 - 200 = 45. Pela fórmula J = C · i · t, 45 = 200 · i · 1, logo i = 0,225 = 22,5%.
+Portanto, gabarito letra E.
+2. Considere verdadeiras: "Ana estuda ou Bia trabalha" e "Bia não trabalha". É correto concluir que:
+A) Ana não estuda.
+B) Ana estuda.
+C) Bia trabalha.
+D) Ana estuda e Bia trabalha.
+E) Nada se conclui.
+Gabarito: B
+COMENTÁRIO DO PROFESSOR:
+Na disjunção, ao menos uma parte é verdadeira; como "Bia trabalha" é falsa, "Ana estuda" é verdadeira.
+Portanto, gabarito letra B.
+3. Quantos elementos tem a união de A = {1, 2, 3} com B = {3, 4}?
+A) 2
+B) 3
+C) 4
+D) 5
+E) 7
+Gabarito: C
+COMENTÁRIO DO PROFESSOR:
+A união reúne os elementos sem repetir: {1, 2, 3, 4}, com 4 elementos.
+Portanto, gabarito letra C.
+Direito Constitucional
+4. Segundo a Constituição, a casa é asilo inviolável do indivíduo. Por determinação judicial, o ingresso é permitido:
+A) a qualquer hora.
+B) somente durante o dia.
+C) somente à noite.
+D) nunca.
+E) somente com flagrante.
+Gabarito: B
+COMENTÁRIO DO PROFESSOR:
+O art. 5º, XI, da CF permite o ingresso por determinação judicial durante o dia.
+Portanto, gabarito letra B.
+5. É fundamento da República Federativa do Brasil:
+A) garantir o desenvolvimento nacional.
+B) a dignidade da pessoa humana.
+C) a solução pacífica dos conflitos.
+D) erradicar a pobreza.
+E) a prevalência dos direitos humanos.
+Gabarito: B
+COMENTÁRIO DO PROFESSOR:
+A dignidade da pessoa humana está no art. 1º, III; as demais são objetivos ou princípios das relações internacionais.
+Portanto, gabarito letra B.
+Direito Administrativo
+6. Segundo a Lei 8.112/1990, o servidor habilitado em concurso e empossado em cargo de provimento efetivo adquire estabilidade após:
+A) um ano de efetivo exercício.
+B) dois anos de efetivo exercício.
+C) três anos de efetivo exercício.
+D) cinco anos de efetivo exercício.
+E) a posse.
+Gabarito: C
+COMENTÁRIO DO PROFESSOR:
+A estabilidade vem após três anos de efetivo exercício, conforme a Constituição.
+Portanto, gabarito letra C.

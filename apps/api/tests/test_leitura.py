@@ -271,3 +271,23 @@ def test_pedido_de_explicacao_abre_a_leitura_e_pergunta_pontual_nao():
     for fala in ["é só isso que tem no material?", "de tudo", "certo.."]:
         assert leitura.intencao(fala, True, True) == "continua", fala
     assert leitura.intencao("explica melhor aquela parada que eu não entendi", True, True) == "aprofunda"
+
+
+def test_so_o_nome_ou_a_sigla_da_materia_escolhe_e_retoma():
+    from core import assunto
+    disc = ["Raciocínio Lógico-Matemático", "Língua Portuguesa", "Direito Administrativo"]
+    assert assunto.disciplina_citada("rlm", disc) == "Raciocínio Lógico-Matemático"
+    assert assunto.disciplina_citada("coesão de lp", disc) == "Língua Portuguesa"
+    assert assunto.disciplina_citada("da onde vem isso", disc) is None, "'da' é preposição, não sigla"
+    assert leitura.so_escolhe_materia("rlm", disc)
+    assert leitura.so_escolhe_materia("vamos de português", disc)
+    assert not leitura.so_escolhe_materia("rlm, conectivos", disc)
+
+
+def test_frase_cortada_dentro_da_janela_vai_inteira_pro_trecho_de_cima():
+    from core.leitura import emendar
+    a = "São bens da União: os recursos naturais da plataforma"
+    b = a[-30:] + "\n\ncontinental e da zona econômica exclusiva. É assegurada a participação."
+    saida = emendar([{"id": 1, "texto": a}, {"id": 2, "texto": b}], None, None)
+    assert saida[0]["texto"].endswith("plataforma continental e da zona econômica exclusiva.")
+    assert saida[1]["texto"] == "É assegurada a participação."
