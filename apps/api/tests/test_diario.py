@@ -4,7 +4,7 @@ import json
 
 from core import diario, retrieval, socratic
 
-VERSAO = "test-diario-v2"
+VERSAO = "test-diario-v3"
 
 
 def _turno(monkeypatch, llm_falso, fontes_usadas, resposta="Explicação do assunto."):
@@ -88,3 +88,14 @@ def test_humor_da_fala_vira_sinal_local_sem_contaminar_outros_turnos():
         assert sinal and "NESTA fala" in sinal
         assert "Não dê saudação" in sinal
     assert socratic._tom_da_fala("me explica desconcentração") is None
+
+
+def test_rubrica_que_so_numera_cede_ao_assunto_do_material():
+    """Bateria de 29/09/2026: apostila com "Tópico 5" antes de cada artigo virou
+    "os assuntos foram os tópicos 1, 5, 18, 21" na pergunta do que já estudei."""
+    cs = [{"rubrica": f"Tópico {n}", "assunto": "Regime dos servidores",
+           "disciplina": "Direito Administrativo"} for n in (1, 5, 18)]
+    assert diario.rotulo(cs) == ("Regime dos servidores", "Direito Administrativo")
+    # Rubrica de verdade continua vencendo; numeração sem assunto não some.
+    assert diario.rotulo([{"rubrica": "Da Posse", "assunto": "Regime"}])[0] == "Da Posse"
+    assert diario.rotulo([{"rubrica": "Súmula 7", "assunto": None}])[0] == "Súmula 7"

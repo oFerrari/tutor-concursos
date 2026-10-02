@@ -83,6 +83,9 @@ core/geracao.py       gera questão do acervo E da apostila do aluno, com proven
 core/conversa.py      conversa persistida, janela de histórico, desfazer turno
 core/assunto.py       assunto em foco da conversa -> consulta que vai à busca (puro)
 core/leitura.py       ler o material do aluno NA ORDEM ("continua"), marcador em mensagem.fontes
+core/cobertura.py     edital ligado ao material por SUBITEM: onde está, o que falta (035)
+core/indice.py        assuntos de cada material e de cada TRECHO, lidos pelo modelo no upload (036)
+core/prova.py         simulado do aluno -> questões do banco (literal, múltipla escolha, gabarito à parte) (037)
 core/pedido.py        o aluno pediu treino/simulado? (puro)
 core/scheduler*.py    fila, registro, caderno de erros, meta — por usuario_id; regras puras à parte
 core/simulado.py      prova sob condição de exame, corrige no fim
@@ -96,7 +99,8 @@ migrar.py             aplica as migrações de db/ que faltam — ÚNICO mecanis
 ingest.py reingest.py gerar.py edital.py       ingestão e geração em lote
 diagnostico.py avaliar_retrieval.py simular.py aferição sem LLM (e sem banco, os dois últimos)
 avaliar_chat.py       aluno SINTÉTICO conversa com o tutor (via ./testar.sh)
-bateria_conversa.py   cenários contra o material de uma conta REAL, modelo real, sem gravar nada
+bateria_conversa.py   cenários com o modelo real numa conta DESCARTÁVEL (material e edital sintéticos)
+descobrir.py          DESCOBERTA: falas reais + aluno simulado, pela rota, juiz independente, tela e contradições
 sincronizar.py        exporta/importa o estado de um usuário entre máquinas
 semear_demo.py        conta descartável com dado plausível, pra olhar a TELA
 ```
@@ -124,6 +128,9 @@ Scripts da raiz: `setup.sh` (sobe tudo), `testar.sh` (qualidade da resposta),
   `questoes.do_aluno()`, num lugar só, e TODA consulta que escolhe questão de um
   pool passa por ele. `tests/test_questao_da_apostila.py` enumera as rotas.
 - O dono da questão sai do CHUNK, nunca de parâmetro (`geracao.salvar`).
+- `multipla_escolha` tem `gabarito_letra`; os outros tipos não (CHECK 037). Questão
+  de prova (`origem='prova'`) é LITERAL do arquivo e diz de onde veio o gabarito
+  (`gabarito_fonte`: `arquivo` ou `tutor`).
 - `assunto` é rótulo de AULA. Material de REFERÊNCIA (jurisprudência, corpus
   fatiado por artigo) não recebe assunto nem disciplina em `chunk.rotulo`
   (`material.e_referencia`, 027): o rótulo entra no tsvector (025) e um assunto
@@ -150,7 +157,7 @@ Scripts da raiz: `setup.sh` (sobe tudo), `testar.sh` (qualidade da resposta),
   (o CASCADE da 009 limpa o resto).
 - Migração: `python migrar.py` aplica; **commitar não aplica**. Nunca por
   `psql -f` — fora do runner ela não entra no livro-razão (023), e o banco fica
-  com o efeito sem registro. A PRÓXIMA é a **035**; confira com
+  com o efeito sem registro. A PRÓXIMA é a **038**; confira com
   `migrar.py --listar` (há dois pares 018/019 repetidos, não crie um terceiro).
 - `.env` e `acervo/` fora do git; `corpus/` e `dados/progresso.json` no git.
   SQL só em migração numerada.
@@ -161,6 +168,7 @@ Scripts da raiz: `setup.sh` (sobe tudo), `testar.sh` (qualidade da resposta),
 ./setup.sh --subir            # confere o schema e sobe API + front (--parar derruba)
 ./testar.sh                   # qualidade da resposta do tutor · --pytest roda a suíte
 ./testar.sh --reprocessar     # re-checa as conversas gravadas, sem gastar LLM
+./testar.sh --descobrir       # ANTES de funcionalidade nova: acha o defeito que ninguém previu
 ./melhorias.sh                # fila de /erro e /feedback -> .logs/melhorias.md
 ./sincronizar.sh --sair       # na máquina que você deixa · sem argumento na que você senta
 source ativar.sh              # venv + apps/api · ./tutor <cmd> roda um só

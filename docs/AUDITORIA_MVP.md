@@ -327,3 +327,24 @@ grudadas no fim da conversa. Cada turno foi conferido contra `mensagem.fontes`.
   citar a apostila;
 - "resumão de tudo que vimos" sai curto (40–80 palavras).
 
+## 13. "Domina o seu edital": o edital ligado ao material por subitem (28/09/2026)
+
+A promessa da tela de entrada ("domina o seu edital") só existia no nível da
+disciplina: nenhuma tabela ligava um ponto do programa aos trechos do material.
+
+| | Entrega | Estado |
+|---|---|---|
+| 13.1 | Mapa por subitem (migração 035, `core/cobertura.py`): cada ponto do edital com estado (no material, só citado, sem material, conferindo) e onde está (apostila e páginas) | ✅ |
+| 13.2 | Como decide, medido num edital real com 17 apostilas: busca por sentido sozinha não separa (notas do e5 de 0,82 a 0,87 para tudo); por expressão acerta ~85% com cobertura falsa; candidatos da região mais densa da apostila certa, sem sumário, trecho-índice nem questão comentada, e o modelo julga cada par subitem–trecho | ✅ Constitucional: nacionalidade, direitos políticos, Poderes, remédios, controle e Polícia Civil na aula certa, com páginas |
+| 13.3 | Custo: uma chamada por item do edital (36 no edital da PC-PR), ao confirmar o edital; material novo só marca a disciplina e a verificação roda depois, uma vez; sem cota fica o resultado por texto, reverificado no máximo a cada 6 h | ✅ |
+| 13.4 | Tela Meu edital: por disciplina, quanto do programa está no material, abrindo para cada ponto com o selo e a apostila/páginas; confere sozinha enquanto houver disciplina pendente | ✅ conferido no navegador |
+| 13.5 | Tutor: "onde está X?" responde com apostila e páginas; "o que me falta?" responde pelo mapa; ponto sem material é dito, não ensinado de memória | ✅ validado com o modelo real |
+| 13.6 | "Na ordem do edital" lê ponto por ponto: abre a apostila onde o próximo ponto não lido começa e anuncia o ponto; "próximo item" avança; no fim, lista o que não tem material | ✅ em teste; com o modelo real depende da leitura gravada |
+| 13.7 | "Próximo item do edital" gerava questões ("item" lido como item Certo/Errado) | ✅ `pedido`: item do programa não é pedido de treino |
+
+**Limites conhecidos** (em `docs/LIMITACOES.md`): o modelo atual oscila em parte
+dos subitens entre rodadas ("Poder Legislativo" 1 ou 4 trechos; "ação popular"
+citado ou sem material); ainda não há como o aluno corrigir um ponto na tela (o
+banco já prevê `metodo = 'aluno'`); o mapa usa só o material do aluno, não a lei
+seca do acervo.
+

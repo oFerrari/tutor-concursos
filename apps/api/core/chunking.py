@@ -32,7 +32,7 @@ import math
 import re
 from collections import Counter
 
-VERSAO = "chunking-v14"
+VERSAO = "chunking-v15"
 
 RE_ARTIGO = re.compile(r"(?im)^\s*Art\.?\s*(\d+[\-\wºo]*)")
 RE_PARAGRAFO = re.compile(r"(?im)^\s*(?:§\s*(\d+[\wºo]*)|Par[áa]grafo\s+[úu]nico)")
@@ -349,6 +349,23 @@ def _na_borda(pagina: str) -> list[tuple[str, bool]]:
     cheias = [i for i, l in enumerate(linhas) if l.strip()]
     borda = set(cheias[:LINHAS_DE_BORDA_MOLDURA] + cheias[-LINHAS_DE_BORDA_MOLDURA:])
     return [(l, i in borda) for i, l in enumerate(linhas)]
+
+
+# PDF JUSTIFICADO SAI UMA PALAVRA POR LINHA. O `pypdf` separa cada palavra
+# posicionada à parte com uma linha que só tem um espaço ("em\n \ntodos\n \nos").
+# Medido em 29/09/2026 nas apostilas da conta real: 2.098 de 4.032 trechos (52%)
+# assim — metade de cada trecho era quebra de linha, o que dividia pela metade o
+# conteúdo de cada um e apagava a estrutura (títulos, tópicos). Juntando essas
+# linhas: 0 trechos quebrados e o dobro de palavras por trecho (Verbos 169 → 244,
+# Poder Judiciário 158 → 327). O modo `layout` do pypdf não serve: nessas
+# apostilas ele perde o corpo e fica só com cabeçalho e rodapé.
+RE_SEPARADOR_DE_PALAVRA = re.compile(r"\n \n")
+RE_ESPACOS = re.compile(r"[ \t]{2,}")
+
+
+def desquebrar(texto: str) -> str:
+    """Remonta o texto que o PDF entregou uma palavra por linha. PURO."""
+    return RE_ESPACOS.sub(" ", RE_SEPARADOR_DE_PALAVRA.sub(" ", texto or ""))
 
 
 def sem_moldura(paginas: list[str]) -> list[str]:

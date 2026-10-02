@@ -137,3 +137,16 @@ troca de modelo e a escala para que virem configuração.
 Ordem sugerida quando for mexer: 3.1 + 3.2 + 3.4 juntos (é a mesma tabela), depois
 3.3 e 3.5 (abre outros provedores), depois 3.7. 3.6 e 3.8 só quando a escala pedir.
 
+
+## Índice de assuntos com modelo mais forte (036)
+
+Hoje a marcação de assunto por trecho usa o modelo leve gratuito
+(`LLM_INDICE=gemini-3.1-flash-lite`) e acerta 72–77%, medido à mão. O erro é entre
+assuntos vizinhos da mesma apostila. Com plano pago:
+
+- trocar `LLM_INDICE` por um modelo mais forte é só configuração;
+- subir `INDICE_ORCAMENTO_DIA`;
+- reindexar todos os materiais com `python -m core.indice`, depois de marcá-los como
+  `pendente`.
+
+Nenhum código muda.

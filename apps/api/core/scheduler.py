@@ -30,7 +30,7 @@ from . import db, mesa, questoes
 from .scheduler_regras import (INTERVALOS, conta_como_erro, dias_ate_revisao,
                                orcamento_novas, proxima_caixa)
 
-VERSAO = "scheduler-v28"
+VERSAO = "scheduler-v29"
 
 # TETO_DIARIO: quantas questões por dia. NOVAS_POR_DIA=None significa "todo o
 # orçamento que sobrar depois das revisões" — cota fixa perdeu em todos os
@@ -58,7 +58,7 @@ NOVAS_POR_DIA = None
 # associado" não é respondível.
 CAMPOS_Q = ("q.id, q.disciplina, q.tema, q.enunciado, q.gabarito, q.dicas, "
             "q.tipo, q.gabarito_ce, q.contexto_id, q.ordem_no_contexto, "
-            "x.texto AS contexto")
+            "x.texto AS contexto, " + questoes.campos_de_prova("q"))
 JOIN_CTX = "LEFT JOIN contexto x ON x.id = q.contexto_id"
 
 

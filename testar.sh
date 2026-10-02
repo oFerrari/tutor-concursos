@@ -20,6 +20,12 @@
 #   ./testar.sh --reprocessar      re-checa TODAS as conversas já gravadas (grátis)
 #   ./testar.sh --placar           histórico de notas, sem gastar LLM
 #   ./testar.sh --limpar           apaga a conta descartável e sai
+#   ./testar.sh --descobrir        a bateria de DESCOBERTA (descobrir.py): falas
+#                                  reais + aluno simulado por objetivo, pela rota,
+#                                  julgadas por um revisor que não conhece as regras;
+#                                  tela desenhada e contradições. Rode ANTES de
+#                                  funcionalidade nova. Resto das flags vai junto:
+#                                  ./testar.sh --descobrir --so contradicoes
 #
 # Havendo defeito, sai um `.logs/defeitos.md` de nome FIXO com só o que falhou —
 # turno, consulta, trechos, resposta e onde a causa costuma estar. É o arquivo
@@ -83,7 +89,8 @@ while [ $# -gt 0 ]; do
     # atalho do --placar.
     --cenario)    [ "${2:-}" = "listar" ] && SO_PLACAR=2
                   ARGS+=("--cenario" "${2:-}"); shift 2 ;;
-    -h|--help)    sed -n '2,34p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --descobrir)  DESCOBRIR=1; shift ;;
+    -h|--help)    sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)            ARGS+=("$1"); shift ;;
   esac
 done
@@ -148,4 +155,22 @@ fi
 # banco na URL de fábrica. O sintoma seria "LLM indisponível" no primeiro turno,
 # com a chave lá, certa, no arquivo. Mesmo motivo do `cd` do ./tutor.
 cd "$RAIZ/apps/api"
+if [ "${DESCOBRIR:-0}" = 1 ]; then
+  # A bateria desenha cada resposta com `node` (apps/web/scripts/texto-na-tela.cjs).
+  # Chamado por agendador ou cron, o shell é NÃO interativo:
+  # o `~/.bashrc`, que põe o node no PATH, não roda. Em 29/09/2026 isso fez TODOS os
+  # 81 turnos virarem "[[não deu para desenhar]]" e o juiz julgar a mensagem de erro
+  # — 188 de 195 defeitos falsos e 152 chamadas de cota gastas à toa.
+  if ! command -v node >/dev/null 2>&1; then
+    for d in "$HOME/.local/node/bin" "$HOME"/.nvm/versions/node/*/bin /usr/local/bin; do
+      [ -x "$d/node" ] && { PATH="$d:$PATH"; export PATH; break; }
+    done
+  fi
+  if ! command -v node >/dev/null 2>&1; then
+    echo "não achei o node — a bateria desenha a resposta como a TELA mostra, e sem ele" >&2
+    echo "o juiz julgaria a mensagem de erro. Ponha o node no PATH e rode de novo." >&2
+    exit 1
+  fi
+  exec "$PY" descobrir.py "${ARGS[@]+"${ARGS[@]}"}"
+fi
 exec "$PY" avaliar_chat.py ${MODO_JUIZ:+$MODO_JUIZ} "${ARGS[@]+"${ARGS[@]}"}"

@@ -1,0 +1,17 @@
+{
+ "_comentario": "Conta sintética da bateria de DESCOBERTA (descobrir.py). Material público (CF, Lei 8.112) vestido de aula e uma apostila de cálculo escrita para o teste. Informática fica no edital SEM material, de propósito; probabilidade fica fora da apostila de lógica, também de propósito.",
+ "conta": {
+  "edital": {
+   "Direito Constitucional": ["1.1 Princípios fundamentais: fundamentos e objetivos da República.", "1.2 Direitos e garantias fundamentais: direitos individuais e coletivos.", "1.3 Organização do Estado: União, Estados, Distrito Federal e Municípios."],
+   "Direito Administrativo": ["2.1 Regime jurídico dos servidores públicos: provimento, posse e exercício.", "2.2 Estágio probatório e estabilidade."],
+   "Raciocínio Lógico-Matemático": ["3.1 Proposições: conceito e valor lógico; conectivos; tabela-verdade.", "3.2 Equivalências e negações.", "3.3 Conjuntos: união, interseção e diagramas.", "3.4 Princípios de contagem.", "3.5 Probabilidade.", "3.6 Porcentagem."],
+   "Noções de Informática": ["4.1 Conceitos de internet e intranet.", "4.2 Segurança da informação: vírus, backup e firewall."]
+  },
+  "materiais": [
+   {"arquivo": "aula-00-constitucional.txt", "titulo": "Aula 00 — Princípios e direitos fundamentais", "disciplina": "Direito Constitucional", "assunto": "Princípios e direitos fundamentais", "corpus": "corpus/cf.txt", "de": "1", "ate": "18"},
+   {"arquivo": "aula-01-constitucional.txt", "titulo": "Aula 01 — Organização do Estado", "disciplina": "Direito Constitucional", "assunto": "Organização do Estado", "corpus": "corpus/cf.txt", "de": "18", "ate": "44"},
+   {"arquivo": "aula-00-administrativo.txt", "titulo": "Aula 00 — Regime jurídico dos servidores", "disciplina": "Direito Administrativo", "assunto": "Provimento, posse e exercício", "corpus": "corpus/lei8112.txt", "de": "1", "ate": "41"},
+   {"arquivo": "aula-00-raciocinio-logico.txt", "titulo": "Aula 00 — Raciocínio Lógico-Matemático", "disciplina": "Raciocínio Lógico-Matemático", "assunto": "Lógica, conjuntos, contagem e porcentagem", "texto": "cenarios/materiais/raciocinio-logico-sintetico.txt"}
+  ]
+ }
+}

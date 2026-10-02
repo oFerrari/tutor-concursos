@@ -43,14 +43,32 @@ from starlette.concurrency import run_in_threadpool
 
 from pydantic import BaseModel
 
-from core import (assunto, auth, conversa, desafio, edital, geracao, material, melhoria, mesa, pedido,
+from core import (assunto, auth, cobertura, conversa, desafio, edital, geracao, material, melhoria, mesa, pedido,
                   questoes, rascunho, ritmo, scheduler, simulado, socratic, telemetria)
+from core import db, prova, questoes as questoes_mod   # `questoes` é nome de variável na rota do chat
 from core.config import CORS_ORIGINS
 from core.llm import ErroLLM
 
-VERSAO = "api-v15"
+VERSAO = "api-v21"
 
 app = FastAPI(title="Tutor de concursos — API", version=VERSAO)
+
+
+@app.on_event("startup")
+def retomar_questoes_de_prova() -> None:
+    """Simulado `pronto` que nunca teve as questões extraídas (037): um restart no
+    meio da indexação o deixava assim pra sempre — medido no primeiro simulado
+    real do aluno. Sem modelo, numa thread: o boot não espera."""
+    import threading
+
+    def trabalhar():
+        try:
+            for d in db.query("""SELECT id FROM documento WHERE tipo = 'simulado' AND status = 'pronto'
+                                    AND questoes_extraidas IS NULL"""):
+                print(f"[tutor] questões do simulado {d['id']}: {prova.importar(d['id'], com_modelo=False)}")
+        except Exception as e:  # noqa: BLE001 — nunca impede a API de subir
+            print(f"[tutor] retomar questões de prova falhou: {e}")
+    threading.Thread(target=trabalhar, daemon=True).start()
 
 
 @app.on_event("startup")
@@ -236,6 +254,7 @@ def rota_edital_manual(body: EditalManualBody, fundo: BackgroundTasks,
     except Exception:
         pass
     fundo.add_task(material.reclassificar_e_reindexar, uid, m["id"])
+    fundo.add_task(cobertura.verificar_pendentes, m["id"], uid)
     return {**novo, "cobertura": edital.cobertura(novo["id"], uid)}
 
 
@@ -438,6 +457,10 @@ def rota_questao(qid: int, uid: int = Depends(usuario_atual)):
     if not q:
         raise HTTPException(404, "questão não encontrada")
     return q
+
+
+class _ProvaBasta(Exception):
+    """As questões de prova do aluno já cobrem o pedido: nada a gerar."""
 
 
 class AvaliarBody(BaseModel):
@@ -840,12 +863,83 @@ def _turno_do_chat(body: PerguntaBody, uid: int, m: dict, ao_gerar=None) -> dict
     leitura_atual = conversa.ultima_leitura(conv["id"])
     material_recente = conversa.material_recente(conv["id"])
     marcadores = conversa.marcadores_de_leitura(uid)
+    # O PEDIDO DE TREINO é decidido ANTES de o tutor escrever, e vai a ele como
+    # fato: sem isso o modelo adivinhava se haveria cartão, e prometia ou não.
+    # `apos_treino` deixa a forma ELÍPTICA valer ("agora só uma"); o aceite de uma
+    # oferta explícita do tutor ("quer que eu monte três?" → "sim") também é pedido.
+    ultima_do_tutor = next((h["texto"] for h in reversed(historico) if h.get("autor") == "tutor"), None)
+    p = (pedido.treino(body.pergunta, apos_treino=pedido.veio_de_treino(historico))
+         or pedido.aceitou_oferta_de_questoes(body.pergunta, ultima_do_tutor))
+    # DE ONDE SAIRÃO AS QUESTÕES também se decide antes (`geracao.escolher`, só
+    # busca): sem trecho do assunto, o tutor diz isso com as palavras dele e oferece
+    # o que dá. Antes, a resposta prometia as questões e era trocada depois por uma
+    # frase fixa, que se repetia igual a cada novo pedido (bateria de 29/09/2026).
+    escolha = treino_ctx = None
+    if p and not p["formal"]:
+        tema = assunto.em_foco(historico, pergunta=body.pergunta, disciplinas=m["disciplinas"])
+        disciplina_pedida = assunto.disciplina_citada(body.pergunta, m["disciplinas"])
+        # A disciplina citada é nome do EDITAL; o material que a cobre pode ter outro
+        # nome — sem o mapa, o gerador procurava trecho com o nome do edital.
+        disciplinas_geracao = ([disciplina_pedida, *m["mapa"].get(disciplina_pedida, [])]
+                               if disciplina_pedida else m["recorte"])
+        # Pedido vago ("me testa nisso") cobra o que acabou de ser explicado; pedido
+        # que nomeia assunto ou disciplina segue pela busca.
+        vago = not (disciplina_pedida or assunto.pedido_de_treino_nomeia_assunto(
+            body.pergunta, m["disciplinas"]))
+        citados = conversa.trechos_citados_recentes(conv["id"])
+        treino_ctx = {"tema": tema, "vago": vago, "disciplinas": disciplinas_geracao}
+        try:
+            # COM ASSUNTO NA CONVERSA (nomeado agora ou antes), nunca sorteia na mesa:
+            # "inventa uma aí" no meio de Informática sem material dava questão de
+            # Tocantins. Sorteio só quando a conversa ainda não tem assunto nenhum.
+            # PEDIDO VAGO cobra o que acabou de ser EXPLICADO: o assunto sai da última
+            # resposta do tutor, não das palavras soltas da fala. Medido em 29/09/2026:
+            # "é a RAM que é volátil, bota uma questão disso" — a fala tem palavras
+            # próprias, a busca foi por elas, e saiu "Crimes assimilados ao de moeda
+            # falsa". O tutor explicou RAM de cabeça (Informática sem material): nenhum
+            # trecho traz os termos da explicação, e não sai cartão.
+            # Rede de segurança: explicação sem termo nenhum do acervo ("Você lembra a
+            # diferença?") fica com o assunto da conversa, como antes.
+            if vago and ultima_do_tutor and geracao.termos_raros(ultima_do_tutor, uid):
+                tema = ultima_do_tutor
+                treino_ctx["tema"] = tema
+            # QUESTÕES DE PROVA PRIMEIRO (037): o que ele subiu de simulado e ainda
+            # não respondeu, sobre o assunto pedido. O gerador só completa o que
+            # faltar — questão de banca real vale mais que uma escrita agora.
+            da_prova = prova.da_conversa(uid, body.pergunta if not vago else (tema or body.pergunta),
+                                         p["quantidade"],
+                                         disciplinas=([disciplina_pedida] if disciplina_pedida else None))
+            treino_ctx["da_prova"] = da_prova
+            p = {**p, "da_prova": len(da_prova)}
+            if len(da_prova) >= p["quantidade"]:
+                raise _ProvaBasta()
+            escolha = geracao.escolher(disciplinas_geracao, tema, p["quantidade"] - len(da_prova), uid,
+                                       trechos=citados if vago else None,
+                                       materias_da_conversa=geracao.disciplinas_dos_trechos(citados),
+                                       assunto_nomeado=bool(tema),
+                                       # A MATÉRIA EM FOCO da conversa (nomeada agora ou
+                                       # antes) restringe os trechos a ela; sem material
+                                       # dela, não sai cartão de outra.
+                                       materia_em_foco=([foco, *m["mapa"].get(foco, [])] if (
+                                           foco := assunto.disciplina_em_foco(
+                                               body.pergunta, historico, m["disciplinas"])) else None),
+                                       materia_da_conversa=([dc, *m["mapa"].get(dc, [])] if (
+                                           dc := assunto.disciplina_da_conversa(
+                                               historico, m["disciplinas"], body.pergunta)) else None))
+        except _ProvaBasta:
+            pass
+        except geracao.SemMaterial:
+            if not treino_ctx.get("da_prova"):
+                p = {**p, "sem_material": pedido.sem_o_pedido(tema or body.pergunta) or "esse assunto"}
     conversa.gravar(conv["id"], "aluno", body.pergunta)
     try:
         r = socratic.explicar(body.pergunta, uid, m["disciplinas"], m, historico,
                               auth.perfil(uid), leitura_atual=leitura_atual,
                               material_recente=material_recente, ao_gerar=ao_gerar,
-                              marcadores=marcadores)
+                              marcadores=marcadores,
+                              origem_anterior=conversa.origem_da_ultima_resposta(conv["id"])
+                              if pedido.pede_fonte(body.pergunta) else None,
+                              treino=p)
     except ErroLLM as e:
         # A tela desenha este `detail` como balão do tutor. "LLM indisponível:
         # resposta truncada em 1500 tokens. Aumente max_tokens…" foi exatamente o
@@ -870,7 +964,7 @@ def _turno_do_chat(body: PerguntaBody, uid: int, m: dict, ao_gerar=None) -> dict
                                      [f for f in r["fontes"] if f.get("citada")])
     if novo_titulo:
         conv = {**conv, "titulo": novo_titulo}
-    conversa.gravar(conv["id"], "tutor", r["resposta"], fontes)
+    msg_tutor = conversa.gravar(conv["id"], "tutor", r["resposta"], fontes)
 
     # ---- TREINO PEDIDO NA CONVERSA: o app monta as questões, sem botão.
     #
@@ -890,49 +984,36 @@ def _turno_do_chat(body: PerguntaBody, uid: int, m: dict, ao_gerar=None) -> dict
     # mostra o texto — que é o comportamento de hoje.
     questoes: list[dict] = []
     trocou = False
-    # `apos_treino` deixa a forma ELÍPTICA valer: depois de "me da 4 questoes",
-    # "agora só uma" e "manda cinco" são pedido, e sem o contexto não seriam
-    # reconhecidos como nada. Quem sabe se o turno anterior era treino é
-    # `pedido.veio_de_treino`, sobre o histórico de ANTES desta fala.
-    p = pedido.treino(body.pergunta, apos_treino=pedido.veio_de_treino(historico))
-    if p and not p["formal"]:
-        # O histórico continua sendo capturado ANTES de gravar esta fala, mas a
-        # fala atual também entra separada. Isso preserva "me dê questões disso"
-        # (herda o foco anterior) e corrige "quero questões de Ciências
-        # Forenses" (o tema explícito atual vence Direito Constitucional antigo).
-        # Quem decide a diferença é `assunto.pedido_de_treino_nomeia_assunto`.
-        tema = assunto.em_foco(historico, pergunta=body.pergunta,
-                               disciplinas=m["disciplinas"])
-        # Se a busca do tema não achar trecho útil, o fallback aleatório também
-        # fica dentro da disciplina que o aluno acabou de nomear. Antes ele
-        # sorteava em toda a mesa e podia repetir exatamente a troca indevida.
-        disciplina_pedida = assunto.disciplina_citada(body.pergunta,
-                                                       m["disciplinas"])
-        # A disciplina citada é nome do EDITAL ("Ciências Forenses"); o material
-        # que a cobre pode ter outro nome ("Criminalística"). Sem o mapa, o
-        # gerador procurava trecho com o nome do edital e não achava nenhum.
-        disciplinas_geracao = ([disciplina_pedida, *m["mapa"].get(disciplina_pedida, [])]
-                               if disciplina_pedida else m["recorte"])
+    if treino_ctx and treino_ctx.get("da_prova"):
+        achadas = questoes_mod.obter_varias(treino_ctx["da_prova"], uid)
+        questoes = [achadas[i] for i in treino_ctx["da_prova"] if i in achadas]
+    if escolha:
         try:
             tipo = p["tipo"] or geracao.tipo_da_banca(m.get("banca"))
-            # Pedido vago ("me testa nisso") cobra o que acabou de ser explicado;
-            # pedido que nomeia assunto ou disciplina segue pela busca.
-            vago = not (disciplina_pedida or assunto.pedido_de_treino_nomeia_assunto(
-                body.pergunta, m["disciplinas"]))
-            g = geracao.sob_demanda(disciplinas_geracao, tema,
-                                    p["quantidade"], tipo,
+            tema = treino_ctx["tema"]
+            g = geracao.sob_demanda(treino_ctx["disciplinas"], tema, p["quantidade"] - len(questoes), tipo,
                                     usuario_id=uid,
-                                    trechos=conversa.trechos_citados_recentes(conv["id"])
-                                    if vago else None)
-            questoes = g["questoes"]
-            # A TROCA DE ASSUNTO VIAJA ATÉ A TELA. O acervo não tinha trecho do
-            # que a conversa tratava, o gerador caiu pro recorte da mesa (certo)
-            # e ninguém avisava (errado): o tutor abria com "vamos treinar isso"
-            # e vinham questões de outra matéria. O texto do tutor é escrito
-            # ANTES de gerar, então ele não pode saber — quem diz é a tela.
+                                    # Vago ("uma questão desse tema"): o assunto é o da
+                                    # conversa, que o trecho lido mistura com outros.
+                                    pedido_do_aluno=(f"{body.pergunta} (assunto da conversa: {tema})"
+                                                     if treino_ctx["vago"] else body.pergunta),
+                                    escolhidos=escolha)
+            questoes = questoes + g["questoes"]
+            # A TROCA DE ASSUNTO VIAJA ATÉ A TELA (só no sorteio sem assunto, agora).
             trocou = bool(g.get("trocou_de_assunto"))
         except (geracao.SemMaterial, ErroLLM):
-            questoes = []
+            pass
+        # O TUTOR JÁ ESCREVEU que as questões vinham (a escolha achou trechos); se o
+        # MODELO falhou ao gerar, essa frase é falsa, e a resposta vira o que
+        # aconteceu — na tela e no histórico.
+        if not questoes:
+            r = {**r, "resposta": "Não consegui montar as questões agora. Peça de novo em instantes — "
+                                  "o que vocês estavam estudando continua aqui."}
+            conversa.reescrever(msg_tutor["id"], r["resposta"])
+        elif len(questoes) < p["quantidade"]:
+            r = {**r, "resposta": r["resposta"] + f"\n\n(Saíram {len(questoes)} de {p['quantidade']}: "
+                                  "o trecho não rendeu mais sem repetir o ponto.)"}
+            conversa.reescrever(msg_tutor["id"], r["resposta"])
         if questoes:
             temas = ", ".join(q["tema"] for q in questoes)
             conversa.registrar_evento(
@@ -1103,6 +1184,7 @@ def rota_ingerir_edital(fundo: BackgroundTasks,
     finally:
         caminho.unlink(missing_ok=True)
     fundo.add_task(material.reclassificar_e_reindexar, uid, m["id"])
+    fundo.add_task(cobertura.verificar_pendentes, m["id"], uid)
     return r
 
 
@@ -1182,7 +1264,33 @@ def rota_confirmar_rascunho(rid: int, body: ConfirmarRascunhoBody, fundo: Backgr
         raise HTTPException(400, str(e))
     # O edital traz o vocabulário que faltava ao classificador (ver a função).
     fundo.add_task(material.reclassificar_e_reindexar, uid, m["id"])
+    fundo.add_task(cobertura.verificar_pendentes, m["id"], uid)
     return r
+
+
+@app.get("/edital/mapa")
+def rota_mapa_do_edital(fundo: BackgroundTasks, uid: int = Depends(usuario_atual),
+                        m: dict = Depends(mesa_atual)):
+    """O edital ligado ao material por subitem (035): estado, apostila e páginas.
+
+    Disciplina pendente (material novo, edital novo, verificação sem cota) é
+    verificada em segundo plano, e a resposta diz `verificando` para a tela
+    avisar e pedir de novo depois. Uma verificação por mesa de cada vez
+    (`cobertura.TRAVA_COBERTURA`)."""
+    faltam = cobertura.pendentes(m["id"])
+    if faltam:
+        fundo.add_task(cobertura.verificar_pendentes, m["id"], uid)
+    return {"itens": cobertura.mapa_do_edital(m["id"], uid),
+            "resumo": cobertura.resumo_por_disciplina(m["id"]),
+            "verificando": faltam}
+
+
+@app.post("/edital/mapa/verificar", status_code=202)
+def rota_verificar_mapa(fundo: BackgroundTasks, uid: int = Depends(usuario_atual),
+                        m: dict = Depends(mesa_atual)):
+    """Refaz o mapa inteiro da mesa (gasta uma chamada ao modelo por item)."""
+    fundo.add_task(cobertura.verificar_pendentes, m["id"], uid, True)
+    return {"verificando": True}
 
 
 @app.get("/edital")
@@ -1488,10 +1596,18 @@ def rota_baixar_material(documento_id: int, baixar: bool = False,
     # O nome vai nos dois casos: no `inline` ele nomeia a aba e o arquivo se a
     # pessoa mandar salvar de dentro do leitor.
     como = "attachment" if baixar else "inline"
+    # CABEÇALHO HTTP SÓ LEVA LATIN-1. Nome com acento composto ("3Âº", com o
+    # acento combinante U+0302) derrubava o download com UnicodeEncodeError
+    # (01/10/2026). O nome vai em `filename*` (RFC 5987, UTF-8), que todo navegador
+    # atual usa, e `filename` leva a versão ASCII para quem não entende o outro.
+    import unicodedata
+    from urllib.parse import quote
+    nome = unicodedata.normalize("NFC", material.sem_mojibake(nome))
+    ascii_ = (unicodedata.normalize("NFKD", nome).encode("ascii", "ignore").decode() or "material")
     return Response(
         content=bytes(a["arquivo"]),
         media_type=a["arquivo_tipo"] or "application/octet-stream",
-        headers={"Content-Disposition": f'{como}; filename="{nome}"',
+        headers={"Content-Disposition": f"{como}; filename=\"{ascii_}\"; filename*=UTF-8''{quote(nome)}",
                  "Content-Length": str(a["arquivo_bytes"] or len(a["arquivo"]))})
 
 

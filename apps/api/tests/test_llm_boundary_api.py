@@ -120,7 +120,10 @@ def test_perguntar_usa_o_acervo_real_e_o_llm_dublado(client, usuario, llm_falso)
     assert r.status_code == 200
     corpo = r.json()
     assert corpo["resposta"] == "resposta de teste sobre o material"
-    assert len(corpo["fontes"]) > 0
+    # A busca levou trechos ao PROMPT; a tela só mostra os que a resposta citou
+    # (`socratic._fontes_da_tela`), e o dublê não cita nenhum.
+    assert "ID da fonte:" in llm_falso.chamadas[0]["prompt"]
+    assert corpo["fontes"] == []
     assert len(llm_falso.chamadas) == 1
 
 

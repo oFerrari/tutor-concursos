@@ -15,6 +15,7 @@ import {
   getToken,
 } from "@/lib/api";
 import { TabelaPorDisciplina } from "@/components/TabelaPorDisciplina";
+import { MapaDoEdital } from "@/components/MapaDoEdital";
 import { sair } from "@/lib/cache";
 
 export default function PaginaMeta() {
@@ -279,6 +280,8 @@ export default function PaginaMeta() {
           )}
         </div>
       )}
+
+      {edital && <MapaDoEdital />}
 
       {/* Ingerir edital mora no /onboarding, não aqui. Esta tela é de
           LEITURA — quanto falta, quanto está coberto — e enfiar um upload

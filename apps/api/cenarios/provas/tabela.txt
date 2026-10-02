@@ -1,0 +1,26 @@
+PROVA SINTÉTICA SEM COMENTÁRIO
+GABARITO
+1 2 3 4
+B D A C
+1. Qual é a capital sintética de Paralândia?
+A) Norte
+B) Centro
+C) Sul
+D) Oeste
+2. Quanto é dois mais dois sintéticos?
+A) 3
+B) 5
+C) 6
+D) 4
+Leia o texto para responder à questão seguinte.
+O rio sintético nasce na serra e deságua no mar depois de atravessar três planícies e dois vales profundos.
+3. Onde nasce o rio sintético?
+A) Na serra
+B) No mar
+C) Na planície
+D) No vale
+4. Qual cor resulta de azul com amarelo sintético?
+A) Roxo
+B) Laranja
+C) Verde
+D) Cinza

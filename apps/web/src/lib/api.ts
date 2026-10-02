@@ -267,7 +267,7 @@ export function apagarMesa(id: number): Promise<{ ok: boolean }> {
 }
 
 // ----------------------------------------------------------------------- fila
-export type TipoQuestao = "resposta_livre" | "certo_errado";
+export type TipoQuestao = "resposta_livre" | "certo_errado" | "multipla_escolha";
 
 export type Questao = {
   id: number;
@@ -292,6 +292,15 @@ export type Questao = {
   /** Posição dentro da série ("item 2"). A ordem importa: itens do Cebraspe
    *  encadeiam raciocínio sobre o mesmo caso. */
   ordem_no_contexto: number | null;
+  /** Múltipla escolha (037): a letra certa e as alternativas, literais da
+   *  prova. `null`/vazio nos outros tipos. */
+  gabarito_letra?: string | null;
+  alternativas?: { letra: string; texto: string }[];
+  /** `prova` = veio do simulado que o aluno subiu; `gerada` = o tutor escreveu. */
+  origem?: "gerada" | "prova";
+  numero_na_prova?: number | null;
+  /** `tutor` = o arquivo não trazia gabarito e o modelo resolveu. */
+  gabarito_fonte?: "arquivo" | "tutor" | null;
   caixa: number;
   prox_revisao: string;
 };
@@ -390,6 +399,9 @@ export type QuestaoSimulado = {
   contexto: string | null;
   contexto_id: number | null;
   ordem_no_contexto: number | null;
+  /** Múltipla escolha (037). */
+  gabarito_letra?: string | null;
+  alternativas?: { letra: string; texto: string }[];
 };
 
 export function iniciarSimulado(
@@ -893,7 +905,13 @@ export type Material = {
   classificado_por: "aluno" | "modelo" | "acervo" | null;
   /** `edital` quem marca é o servidor (033, `material.parece_edital`): o aluno
    *  subiu um edital como aula. Fica listado, fora da busca do tutor. */
-  tipo: "aula" | "resumo" | "jurisprudencia" | "edital";
+  tipo: "aula" | "resumo" | "jurisprudencia" | "edital" | "simulado";
+  /** Simulado (037): questões que viraram questão do banco, e as que ficaram
+   *  esperando gabarito (suba o gabarito à parte, ou o tutor resolve com cota). */
+  questoes_extraidas?: number | null;
+  questoes_sem_gabarito?: number | null;
+  /** Arquivo só de respostas: o simulado que ele responde. */
+  gabarito_de?: number | null;
   status: "processando" | "pronto" | "falha";
   /** Razão da falha, em texto — "PDF protegido", "precisa de OCR". null quando
    *  não falhou. Sem ela o aluno vê "falha" e não sabe o que fazer. */
@@ -971,6 +989,9 @@ export type SugestoesMaterial = {
    *  Nunca vem chapado: 1015 tópicos numa lista só não é sugestão, é documento;
    *  recortado pela disciplina do material, é a lista certa. */
   topicos_por_disciplina: Record<string, string[]>;
+  /** Resumo, jurisprudência e simulado se organizam por DESCRIÇÃO, sugerida
+   *  dos materiais do mesmo tipo (não do edital). */
+  descricoes_por_tipo?: Record<string, string[]>;
 };
 
 export function getSugestoesMaterial(): Promise<SugestoesMaterial> {
@@ -1125,6 +1146,43 @@ export async function baixarMaterial(id: number, nomeSugerido: string): Promise<
 /** `null` quando a mesa não tem edital — estado normal, não erro. */
 export function getEdital(): Promise<EditalAtual | null> {
   return chamar<EditalAtual | null>("/edital");
+}
+
+// ------------------------------------------------- edital: mapa por subitem
+/** Cada subitem do edital ligado ao material do aluno (035, `core/cobertura.py`).
+ *  `pendente` é "ainda não conferido", distinto de `sem_material` (conferido e
+ *  vazio). `citado` é menção de passagem, não aula. */
+export type SubitemDoEdital = {
+  id: number;
+  ordem: number;
+  texto: string;
+  estado: "pendente" | "coberto" | "citado" | "sem_material";
+  metodo: "texto" | "modelo" | "aluno" | null;
+  materiais: { documento_id: number; assunto: string; paginas: string }[];
+};
+export type ItemDoEdital = {
+  topico_id: number;
+  disciplina: string;
+  texto: string;
+  item: string;
+  subitens: SubitemDoEdital[];
+};
+export type MapaDoEdital = {
+  itens: ItemDoEdital[];
+  resumo: {
+    disciplina: string;
+    subitens: number;
+    cobertos: number;
+    citados: number;
+    sem_material: number;
+    pendentes: number;
+  }[];
+  /** Disciplinas sendo conferidas agora, em segundo plano. */
+  verificando: string[];
+};
+
+export function getMapaDoEdital(): Promise<MapaDoEdital> {
+  return chamar<MapaDoEdital>("/edital/mapa");
 }
 
 // ------------------------------------------------- edital: curadoria

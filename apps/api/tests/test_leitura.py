@@ -9,7 +9,7 @@ import json
 
 from core import conversa, db, leitura, material
 
-VERSAO = "test-leitura-v1"
+VERSAO = "test-leitura-v2"
 
 
 def test_frases_reais_de_quem_quer_ler_comecam_a_leitura():
@@ -69,7 +69,13 @@ def _aula(client, usuario):
     return doc["id"]
 
 
-def _turno(client, usuario, llm_falso, fala, cid=None, retorno="Aula sobre o trecho."):
+# A aula do dublê ENSINA o trecho: desde 29/09/2026 (`leitura.ensinados`) só conta
+# como lido o que a resposta cobriu, e "Aula sobre o trecho." não cobre nada.
+AULA = ("### Instituto\nCada seção mostra que o instituto sintético tem regra própria, "
+        "requisito próprio e efeito próprio no caso concreto.")
+
+
+def _turno(client, usuario, llm_falso, fala, cid=None, retorno=AULA):
     llm_falso.retorno = retorno
     corpo = {"pergunta": fala, **({"conversa_id": cid} if cid else {})}
     r = client.post("/perguntar", json=corpo, headers=usuario["headers"])
@@ -161,11 +167,11 @@ def _eventos(client, usuario, corpo):
 
 def test_fluxo_transmite_a_leitura_e_termina_com_a_resposta_de_sempre(client, usuario, llm_falso):
     _aula(client, usuario)
-    llm_falso.retorno = "### Instituto\nAula sobre o trecho."
+    llm_falso.retorno = AULA
 
     ev = _eventos(client, usuario, {"pergunta": "quero ler o instituto sintético na ordem do material"})
 
-    assert [e for e in ev if "pedaco" in e] == [{"pedaco": "### Instituto\nAula sobre o trecho."}]
+    assert [e for e in ev if "pedaco" in e] == [{"pedaco": AULA}]
     fim = ev[-1]["fim"]
     assert fim["resposta"].startswith("### Instituto") and fim["conversa_id"]
     assert any(f.get("sequencial") for f in fim["fontes"])
@@ -230,3 +236,38 @@ def test_fala_informal_da_bateria_de_24_09():
     assert leitura.intencao("volta pro direito administrativo, continua de onde parou",
                             False, True) == "inicio"
     assert leitura.intencao("tá muito resumido, quero mais completo", True, True) == "aprofunda"
+
+
+def test_lido_e_o_que_a_resposta_ensinou_e_nao_a_janela():
+    """Bateria de 29/09/2026: a janela levou a apostila inteira, a resposta
+    ensinou só a primeira seção, e o marcador foi para o fim — os turnos
+    seguintes "continuaram" de memória, sem fonte."""
+    trechos = [
+        {"id": 1, "texto": "Proposição é oração declarativa que admite valor lógico verdadeiro ou falso."},
+        {"id": 2, "texto": "Proposição composta junta proposições simples por conectivos lógicos."},
+        {"id": 3, "texto": "Tautologia sempre verdadeira; contradição sempre falsa; contingência varia."},
+        {"id": 4, "texto": "Conjunto reúne elementos; união, interseção e diferença entre conjuntos."},
+    ]
+    resposta = ("Proposição é toda oração declarativa que admite um valor lógico, verdadeiro ou "
+                "falso. A composta junta proposições simples por meio de conectivos. A seguir: tautologia.")
+    assert [c["id"] for c in leitura.ensinados(trechos, resposta)] == [1, 2]
+    # Trecho do meio fraco não interrompe; resposta que não ensina nada não avança.
+    assert [c["id"] for c in leitura.ensinados(trechos, resposta + " União e interseção de "
+                                                "conjuntos reúnem elementos.")] == [1, 2, 3, 4]
+    assert leitura.ensinados(trechos, "Boa noite! Quer seguir?") == []
+
+
+def test_pedido_de_explicacao_abre_a_leitura_e_pergunta_pontual_nao():
+    """Conversa real (01/10/2026): explicar, trazer o conteúdo, entender, do zero e
+    na ordem são pedido de aula; "o que é", "qual a diferença" respondem pontual."""
+    for fala in ["me explica proposições compostas", "traga a explicação do assunto",
+                 "certo traga todo conceito", "cade o conteudo de Proposições Simples.?",
+                 "quero entender conectivos lógicos",
+                 "vamos começar a materio do zero mesmo e seguir na ordem o que acha?"]:
+        assert leitura.intencao(fala, False, False) == "inicio", fala
+    for fala in ["o que é uma proposição?", "qual a diferença entre conjunção e disjunção?",
+                 "você pode me explicar como funciona o sistema?", "na ordem social, o que diz a CF?"]:
+        assert leitura.intencao(fala, False, False) is None, fala
+    for fala in ["é só isso que tem no material?", "de tudo", "certo.."]:
+        assert leitura.intencao(fala, True, True) == "continua", fala
+    assert leitura.intencao("explica melhor aquela parada que eu não entendi", True, True) == "aprofunda"

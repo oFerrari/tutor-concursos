@@ -2,6 +2,7 @@
 
 import { DialogoQuestao, ResultadoQuestao } from "@/components/DialogoQuestao";
 import { ItemCertoErrado } from "@/components/ItemCertoErrado";
+import { ItemMultiplaEscolha } from "@/components/ItemMultiplaEscolha";
 import { Questao } from "@/lib/api";
 
 /**
@@ -13,9 +14,7 @@ import { Questao } from "@/lib/api";
  * Cebraspe com caixa de texto e três dicas — formato errado, correção
  * errada. Um lugar decide, quatro consomem.
  *
- * Múltipla escolha não está aqui porque não está no banco (migração 012
- * aceita dois tipos): não há tabela de alternativas. Quando houver, é este
- * arquivo que ganha o terceiro ramo.
+ * Múltipla escolha entrou com a migração 037 (questões de prova).
  */
 export function QuestaoInterativa(props: {
   questao: Questao;
@@ -27,6 +26,9 @@ export function QuestaoInterativa(props: {
 }) {
   if (props.questao.tipo === "certo_errado") {
     return <ItemCertoErrado {...props} />;
+  }
+  if (props.questao.tipo === "multipla_escolha") {
+    return <ItemMultiplaEscolha {...props} />;
   }
   return <DialogoQuestao {...props} />;
 }

@@ -3109,3 +3109,617 @@ Evidência final: **132 testes direcionados**, ESLint direcionado e
 papiloscopia, meta-pergunta, retomada de Penal, troca curta de disciplina e
 colisão CP/CPP. Não foi rodada a suíte completa nem declarada bateria 1 inteira
 como concluída.
+
+## Resolução pedida, pergunta sobre o tutor e cards que ninguém pediu (28/09/2026)
+
+Conversa real, relatada pelo dono como "erros grotescos", e em seguida uma
+bateria pela ROTA com o modelo real numa conta descartável (13 turnos). As
+causas, uma por defeito:
+
+1. **Card sem pedido depois de uma questão colada.** O enunciado começava com
+   "Um levantamento interno…", logo depois de um turno de treino, e o "Um" casou
+   com `RE_CONTINUA` como "manda uma". A forma elíptica agora tem no máximo
+   seis palavras (`pedido._eliptica`).
+2. **"Resolva pra mim questões de probabilidade" virou treino.** Pela palavra
+   "questões". `pedido.resolucao` (imperativo dirigido ao tutor, ou enunciado
+   colado com alternativas ou moldura de prova) tira o turno do treino e
+   acrescenta `SISTEMA_RESOLUCAO` ao prompt: questão escrita, passo a passo com
+   a conta, `\boxed{}`, gabarito, macete. "Quero questões PARA resolver"
+   continua sendo treino. Nesse turno `limpar_questoes` não roda: a questão é
+   dele, e o gabarito cita a alternativa.
+3. **"Do que você é capaz?" e "quais apostilas eu tenho?" buscaram material.**
+   Entraram em `RE_SISTEMA` e em `RE_BIBLIOTECA` ("sobre" fica de fora: "o que
+   tem no acervo sobre peculato" é matéria). Bateria: fontes = 0 nas quatro.
+4. **"Conta não é número de lei".** A regra 0 do prompt ("nunca afirme número
+   sem trecho") era lida como proibição de fazer conta. A seção 4 agora separa
+   as duas coisas.
+5. **Fórmula, mapa mental e tabela.** `SISTEMA_FORMATO`, só em turno de
+   resolução ou de pedido visual (`pedido.formato_visual`), ensina a notação que
+   `TextoDoTutor.tsx` + `Formula.tsx` desenham: LaTeX entre cifrões (subconjunto
+   fechado), árvore em bloco de código, tabela Markdown. Sem biblioteca: a
+   decisão de não transformar texto de modelo em HTML continua de pé.
+6. **Duas perdas no caminho, achadas só lendo a bateria.**
+   - `llm._parse_json` apagava TODA crase, e a árvore chegava sem o bloco.
+     Agora só sai a cerca de fora.
+   - Dentro do JSON, `\text`, `\frac` e `\boxed` sem a barra dobrada viram TAB,
+     form feed e backspace: "105<TAB>ext{ Agentes}". `socratic.latex_de_volta`
+     devolve a barra quando o caractere de controle vem colado a uma letra.
+7. **"2 questões de conjuntos" → "Conceito de Proposição" e "Furto Noturno".**
+   A busca é k-vizinhos sem piso, e `_misturar` reservou a vaga da lei para o
+   artigo mais bem colocado (CF 57, CP 155), que não tinha nada de conjuntos.
+   `geracao._no_assunto`: fora o 1º colocado, só entra candidato que tenha
+   palavra de conteúdo do tema (na rubrica, se é lei; no texto, se é apostila).
+   O gerador também passou a pular apresentação ou estrutura do curso.
+
+## Bateria de descoberta: o juiz não pode ter o defeito do código (28/09/2026)
+
+O dono achou numa conversa real o que as baterias não pegavam, e cobrou: "seus
+testes são rasos e não simulam um usuário real". A causa foi de desenho:
+
+- `avaliar_chat.py` conferia "card sem pedido" com o próprio `pedido.treino`. Com
+  a regra errada, o teste errava junto e aprovava.
+- Os roteiros eram só de Direito, numa conta sem apostila.
+- Ninguém olhava a tela. As crases apagadas e o `\text` comido aconteciam
+  depois do modelo, e a resposta continuava "válida".
+- A bateria escrita depois do defeito confirma o conserto, não acha o próximo.
+
+`descobrir.py` (`./testar.sh --descobrir`) muda os quatro pontos:
+
+1. **Oráculo independente.** Um revisor lê a conversa como o aluno a viu: o texto
+   desenhado, os cartões e o consultado. Ele não conhece regra do tutor. O código
+   compara o veredito com o que o sistema fez.
+2. **Falas reais.** As mensagens da conta real são repetidas numa conta
+   descartável, e um aluno simulado persegue OBJETIVOS, não matérias.
+3. **Tela.** Toda resposta passa pelo `TextoDoTutor` de verdade
+   (`apps/web/scripts/texto-na-tela.cjs`).
+4. **Contradição.** Cada bloco condicional do prompt é lido contra o base, e cada
+   decisão nova desta página contra as antigas mais parecidas.
+
+**Medido na montagem.**
+- O revisor precisa ser mais forte que o tutor. Com o modelo do tutor, a leitura
+  de contradição respondeu "nenhuma" com um choque injetado.
+- Mesmo o revisor oscila a temperatura 0: acha numa rodada e não acha na
+  seguinte, e aponta exceção que o texto declara. Por isso são duas leituras
+  (união) e uma conferência por suspeita ("o texto já resolve isso?").
+- Pega choque direto (colchete proibido × colchete pedido). Não pegou um sutil
+  (oferecer questões "mesmo que ele já tenha recusado" × "não ofereça duas vezes
+  seguidas"). É rede, não garantia.
+
+**Primeira rodada (falas reais).** A cota acabou no meio: 22 dos 42 achados eram
+503, e a bateria agora para no primeiro 503 e marca a rodada INCOMPLETA. Do resto:
+
+- **"Consultado" com sorteio da busca** (CPP 15 e 744 debaixo de conjuntos e de
+  português). `socratic._fontes_da_tela`: fica o citado, o lido e o não citado
+  da matéria em foco ou com palavra da consulta.
+- **Recusa de assunto fora do edital** ("isso não está no seu edital", quatro
+  turnos seguidos, para coesão e parônimos). Regra nova na seção 4: ensina e avisa
+  uma vez.
+- **Promessa sem cartão.** O gerador falhou (cota) depois de o tutor escrever
+  "estão logo abaixo". A resposta passa a dizer o que aconteceu, na tela e no
+  histórico (`conversa.reescrever`).
+- **"Qual aula e página sustentam isso?"** foi à busca e voltou sem página.
+  `pedido.pede_fonte` + `conversa.origem_da_ultima_resposta`.
+- **Resolução não reconhecida.** Problema colado sem alternativas e "quero que vc
+  resolva" (verbo no fim).
+
+### Segunda rodada completa (7 conversas reais + 5 simuladas, 28/09/2026)
+
+Juiz leve (a cota diária do forte acabou), então cada achado foi conferido na
+conversa. Três eram engano do juiz:
+
+- "boa noite" para quem disse "bom dia": a fala foi repetida às 23h, e o tutor
+  segue o relógio;
+- frações "25" no lugar de 2/5: defeito da MINHA extração de texto. O `Formula`
+  ganhou separador `sr-only`;
+- "cartão sem pedido" num turno em que o aluno exigia a questão certa.
+
+Os reais:
+
+- **Cartão de outra matéria.** Na conversa de lógica, o aluno pediu tabela-verdade
+  e recebeu conjuntos, depois 8.112 art. 86. A fala de reclamação é ruído para a
+  busca. `geracao._na_materia_da_conversa`: fica na matéria dos trechos citados
+  quando o pedido está nela. O pedido vago leva o assunto da conversa ao gerador,
+  e o último recurso sorteia dentro dessa matéria.
+- **Aceitar a oferta não gerava nada** ("quer que eu monte?" → "sim").
+  `pedido.aceitou_oferta_de_questoes`. O treino passou a ser decidido ANTES de o
+  tutor escrever e vai ao prompt como fato ("### Questões deste turno"); a seção 9
+  deixou de mandar o modelo adivinhar.
+- **"Volta pro controle de constitucionalidade" virou leitura** da apostila (três
+  telas de direito sindical). `leitura.retoma_um_assunto`: sobrando assunto além
+  do nome da matéria, não é retomar leitura.
+- **"Volta pro constitucional DEPOIS, foca nisso agora"** trocava de matéria na
+  hora. `assunto.sem_o_adiado` tira a oração adiada (com verbo de rumo; "depois da
+  posse" fica).
+- **Troca de assunto por palavra igual** ("controle interno" no lugar de controle
+  de constitucionalidade). Regra na seção 4: assunto sem trecho se ensina pelo
+  conceito, sem substituir.
+- **Recusa de assunto fora do edital**, mesmo com a regra da seção 4. Subiu para a
+  precedência 1.
+- **"Consultado":** filtrar por matéria ou por palavra ainda deixava passar (a
+  questão colada tem palavra para qualquer artigo). A lista mostra só o que
+  sustentou a resposta: citado ou lido.
+- **Fórmula quebrada por `limpar_citacoes`**, que apagava `[...]` dentro de
+  `$$...$$`: `socratic.fora_da_formula`. Símbolo solto (`\cap` em prosa) passou a
+  ser desenhado.
+
+Na bateria: diante de 503, espera um minuto, desfaz o turno sem resposta e repete
+(o limite é por minuto; medido). O revisor nunca cai no modelo do tutor
+(`llm.Gemini(evitar=...)`), e o relatório diz qual modelo julgou.
+
+### A cota é por DIA e por modelo, e as baterias a gastaram (28/09/2026)
+
+Lido no corpo de cada 429 (`GenerateRequestsPerDayPerProjectPerModel-FreeTier`):
+
+- 500 chamadas por dia no `gemini-3.5-flash-lite`, o modelo do tutor;
+- 20 por dia no `gemini-3.5-flash`;
+- `gemini-flash-lite-latest` é APELIDO do `3.5-flash-lite` e divide a cota com ele.
+
+Quatro rodadas de bateria no mesmo dia esgotaram o modelo do tutor. As reservas
+padrão (`3.5-flash`, `flash-lite-latest`, `3.5-flash-lite`) caíram juntas, e o
+app parou para o dono, com o `3.1-flash-lite` respondendo normalmente. O que
+mudou:
+
+- **Reservas padrão:** `3.1-flash-lite`, `3.5-flash-lite`, `3.5-flash`. Cada
+  reserva tem cota própria, e a de 20 por dia fica por último.
+- **`llm.CotaDiaria`:** quando todos os modelos respondem 429 "PerDay", o erro diz
+  que é a cota do dia, não "instabilidade que passa em minutos".
+- **A bateria tem orçamento** (150 chamadas por padrão), contado pela telemetria.
+  Com cota do dia esgotada ela para na hora, e o revisor evita o principal e o
+  apelido dele.
+
+## Manutenção noturna de 29/09/2026: a bateria estava cega, e a leitura pulava trecho
+
+**O que a bateria achou.** 195 defeitos grave/médio em 7 conversas reais (a rodada
+parou no orçamento antes das simuladas). 188 eram o mesmo: todo turno "com erro
+técnico de sistema" e "marcação crua `[[não deu para desenhar`".
+
+**A causa desses 188 era a bateria.** Quem chama de madrugada (`manutencao.sh`,
+pelo Agendador) roda shell não interativo; o `node` só entra no PATH pelo
+`~/.bashrc`. `descobrir.na_tela` caiu no `FileNotFoundError`, devolveu a mensagem
+de erro no lugar de cada resposta, e o juiz julgou a mensagem — com razão. As
+respostas de verdade estavam boas na maioria dos turnos. Conserto: `testar.sh
+--descobrir` procura o node em `~/.local/node/bin` e no nvm, e recusa rodar sem
+ele; `descobrir.main` desenha uma resposta de prova ANTES de montar conta e de
+chamar modelo, e sai com 2 se a tela não desenha (nada de cota gasta). O juiz e as
+divergências não mudaram.
+
+**Lendo as conversas eu mesmo, três defeitos reais do tutor:**
+
+- **A leitura marcava como lido o que só foi ENVIADO.** "Quero seguir a ordem do
+  edital" mandou a apostila de lógica inteira (7 trechos); a resposta ensinou só
+  "1. Proposições" e anunciou "A seguir: conectivos", mas o marcador foi para o
+  fim. Nos quatro turnos seguintes o material "tinha acabado" e o tutor seguiu de
+  memória, sem fonte. O mesmo na Lei 8.112 (arts. 18–20 enviados, resposta sobre
+  LIMPE, a leitura seguinte abriu no 21) e na CF (trechos 7, 18–19 e 24–27).
+  MEDIDO nas 20 respostas de leitura da noite: cobertura (fração das raízes de
+  6 letras das palavras de conteúdo do trecho presentes na resposta) do último
+  trecho ensinado de cada turno entre 0,40 e 0,94; trecho enviado e pulado entre
+  0,00 e 0,25. `leitura.ensinados` marca do primeiro ao ÚLTIMO trecho com
+  cobertura ≥ 0,35; nenhum coberto, nenhum lido. Errar para menos repete um
+  trecho, errar para mais o pulava para sempre. Os dublês de três testes
+  respondiam "Aula sobre o trecho." — agora a aula falsa ensina o material falso.
+- **"Os assuntos foram os tópicos 1, 5, 18, 21".** Apostila com "Tópico N" na
+  linha acima de cada artigo: `chunking._eh_rubrica` aceita a linha como rubrica,
+  e o diário usa a rubrica como nome do assunto. `diario.rotulo` troca a rubrica
+  que só numera (uma palavra + número) pelo assunto do material; sem assunto, a
+  numeração fica. O fatiador não mudou (a rubrica entra na busca, e ele tem
+  medição própria).
+- **Pergunta sobre a biblioteca com o verbo antes do nome** ("quais a gente tem
+  material?", "saber sobre o que você tem material") ia à busca e mostrava a Lei
+  8.112 art. 5º como CONSULTADO. `pedido.RE_BIBLIOTECA` aceita a ordem falada, e
+  "sobre o que"/"sobre quais" deixou de ser assunto.
+
+**Não corrigido:** ver `LIMITACOES.md`, "Manutenção de 29/09/2026".
+
+### Segunda passada (bateria 2, depois dos consertos da primeira)
+
+**O que a bateria achou.** A rodada ficou incompleta (orçamento), com 4 das 12
+conversas: 5 achados grave/médio e 5 leves. A tela desenhou em todos os turnos, então
+o conserto da bateria segurou. Nenhuma regressão das correções da primeira passada.
+
+**Real: recusa de assunto fora do edital, pela terceira vez.** "você sabe algo sobre
+formas de coesão de lp?" recebeu "isso não cai na sua prova" em quatro turnos
+seguidos. Reproduzido com o prompt EXATO do turno: conta descartável montada como a
+da bateria, turnos anteriores com a resposta gravada num dublê, e o modelo real só
+no turno em questão. As hipóteses da primeira passada caíram, uma chamada cada:
+
+- com a frase da seção 8 ("responda pelo que já foi tratado e siga dela")
+  restrita a quem continua no assunto: recusou;
+- SEM os seis trechos de lógica que a busca mandou: recusou;
+- com a mesma regra num bloco "### Assunto desta fala" logo antes da pergunta:
+  ensinou coesão referencial e sequencial e avisou uma vez. Também ensinou no turno
+  seguinte (homônimos e parônimos), com as recusas gravadas no histórico. Numa
+  pergunta do edital sem o nome da disciplina ("o que é estágio probatório?") não
+  disse "não cai".
+
+É o mesmo caminho do `_tom_da_fala`: regra geral no sistema perde para o que está
+colado à fala. `socratic._assunto_da_fala` aparece quando a fala tem palavra de
+conteúdo (5+ letras, fora do vocabulário de estudo e das palavras do nome das
+disciplinas) e não nomeia disciplina do edital. Fica fora da leitura e da falta de
+material da matéria do edital. Quem decide se o assunto está fora do edital é o
+modelo, que já acertava isso: código não sabe que "peculato" é de Direito Penal. A
+frase da seção 8 ficou restrita, porque mandava voltar ao assunto anterior.
+Teste: `tests/test_fora_do_edital.py`.
+
+**Engano do juiz:** "bom dia" para "boa noite" (a bateria rodou às 5h); "resolveu
+em vez de propor exercício" para quem escreveu "quero que vc resolva".
+
+**Não corrigido:** mapa e trilha do edital inteiro saem rasos, e CONSULTADO fica
+vazio quando o modelo não lista o trecho que usou (`LIMITACOES.md`).
+
+## Depois da madrugada: revisão do que ela fez e as pendências dela (29/09/2026)
+
+**Revisão.** Li as mudanças da noite comparando com o estado de antes dela
+(`antes.patch` sobre o HEAD). Estão certas. Um acerto: na leitura, o CITADO ainda
+era a janela inteira, e só o marcador usava `leitura.ensinados`. Por isso o
+consultado e o diário diziam "estudou conectivos" de uma aula que parou em
+proposições. Agora citado e diário também contam só o que a aula ensinou.
+
+**As três decisões que a noite deixou:**
+
+1. **Trilha ou mapa do edital inteiro.** Pedido de visão geral
+   (`socratic.RE_VISAO_GERAL`) sem disciplina nomeada leva o ÍNDICE do edital: os
+   cabeçalhos dos itens de cada disciplina, com teto de 80 itens. Não vai a lista
+   de subitens. A razão de `_resumo_mesa` (1015 tópicos na Dataprev) continua de pé.
+2. **CONSULTADO vazio com trecho usado: medido, e não mexi.** Nas conversas reais,
+   fora da leitura:
+   - 34 de 47 respostas com trechos não citaram nenhum;
+   - trecho citado tem cobertura mediana de 0,17 (10% abaixo de 0,04);
+   - trecho não citado tem mediana de 0,03 (só 3 de 225 acima de 0,20).
+   Fora da leitura, a cobertura não separa usado de não usado, e uma reserva por
+   ela trocaria uma omissão rara por citação errada.
+3. **Tabela só a pedido.** Tabela espontânea para "três ou mais coisas" enfileirava
+   as espécies que a seção 2 manda ensinar uma por vez.
+
+**Os menores:**
+- **Conversa fiada com risada** ("se ta descolado em chat kkk") não busca
+  (`pedido.conversa_fiada`).
+- **Plano com o tempo do aluno** é da SEMANA e usa o tempo todo.
+- **Cifrão desparelhado** (`$$…$`, `$$…$|`) é consertado na tela, só em linha
+  desbalanceada.
+- **Nota SEM MATERIAL do programa mapeado** contradizia a seção 4 (proibia
+  explicar o ponto). Alinhada: o que depende de lei não se afirma de memória;
+  conceito, sim.
+
+### Validação de dia (5 conversas simuladas, 29/09/2026)
+
+**A questão de outra matéria voltou em 4 das 5 conversas.** Informática saía de
+Direito Administrativo; controle de constitucionalidade e contagem saíam de
+"competência municipal". Três causas no gerador, nenhuma no prompt:
+
+1. **A consulta levava o pedido inteiro.** "me manda questões de…" puxava o CPP 482
+   ("Do Questionário e sua Votação"). `pedido.sem_o_pedido` tira o vocabulário de
+   pedido antes da busca.
+2. **"O 1º colocado entra sempre"** é regra de citação precisa. Com assunto nomeado
+   e sem trecho dele, o 1º era ruído. Agora todo candidato precisa trazer o TERMO
+   RARO do pedido (`geracao.termo_raro`), por palavra exata e tolerando falta de
+   acento. Com o radical do `portuguese`, "constitucionalidade" vira
+   "constitucional", e o termo raro saía "controle".
+3. **O sorteio na mesa quando não há trecho** continua só para pedido VAGO. Assunto
+   nomeado sem trecho levanta `SemMaterial`, e a resposta diz que não há material
+   dele.
+
+Medido no acervo público: peculato vai ao CP 312; internet e Informática ficam sem
+trecho (mensagem honesta); controle de constitucionalidade também fica sem trecho,
+porque o art. 102 da CF tem alíneas revogadas e o filtro antigo não o aceita.
+
+**Os outros três:**
+- **"Tu já pulou exercício, explica direito"** gerava cartão. Com pedido de
+  explicação, só conta como treino o pedido direto (verbo ou quantidade colados à
+  palavra de treino).
+- **"A tabela exige visualização detalhada"** a quem pediu a tabela. Novo bloco
+  "### Formato pedido nesta fala" colado à pergunta, como o do assunto.
+- **Tabela com `|---|---|>`** aparecia crua. A tela tolera o lixo no fim da linha.
+
+### Sorteio na mesa só sem assunto; e o tutor sabe antes se há questões (29/09/2026)
+
+**Substitui** a regra "cair pro recorte, declarando a troca, é melhor que devolver
+vazio" (a do "trocou_de_assunto"). Ela foi medida contra a troca SILENCIOSA, e
+estava certa contra aquilo. Mas a bateria de hoje mostrou a troca declarada
+falhando igual: o aluno pede Informática, recebe Tocantins e corrupção ativa, e
+reclama turno após turno. O aviso na tela não conserta uma questão errada.
+
+- **Sorteio só sem assunto.** Com assunto na conversa, nomeado agora ou antes, a
+  escolha usa a trava dos termos raros. Sem trecho, levanta `SemMaterial`. O
+  sorteio na mesa fica para a conversa que ainda não tem assunto nenhum ("me dá
+  umas questões" de cara).
+- **Dois termos raros, e não um.** "consegue" (gíria que a lei não usa) foi o
+  termo "mais raro" de um pedido de controle de constitucionalidade e trouxe o
+  CP 177. O trecho precisa trazer os DOIS termos mais raros do pedido.
+- **A escolha vem antes de o tutor escrever** (`geracao.escolher`, sem modelo). Sem
+  trecho, o prompt diz "NENHUMA vai aparecer", e o tutor responde com as palavras
+  dele e oferece o que dá. A frase fixa, que substituía a resposta depois, se
+  repetia igual e foi apontada como defeito. Ela só sobra para quando o MODELO
+  falha na geração.
+- **"Saíram 2 de 3"** é dito quando o gerador entrega menos do que foi pedido.
+
+**Pendência de produto (do dono):** o aluno pede "inventa uma questão de
+Informática, não precisa de material". Hoje não há questão sem fonte, pela
+invariante de `fonte_chunks`. Uma "questão de treino no chat", sem cartão e sem
+fila, só de conceito e marcada como não vinda do material dele, seria uma decisão
+nova.
+
+### Validação sem cota e o que ela pegou (29/09/2026, noite)
+
+**O jeito de validar mudou.** A bateria completa (aluno simulado + tutor + juiz)
+custa de 3 a 4 chamadas por turno e esbarra no limite por minuto do plano
+gratuito. Os defeitos de CARTÃO estão todos no código de escolha, que não usa
+modelo. `.logs/validacao/offline.py` repete as conversas gravadas pela rota, com o
+tutor dublado pela resposta gravada, e mostra de onde sairia cada questão: sem
+nenhuma chamada, em poucos minutos. A bateria completa fica para depois de uma
+leva grande de mudanças.
+
+**Ela pegou o que eu achava resolvido:**
+- A matéria em foco não valia no pedido com palavra própria ("é a RAM que é
+  volátil, bota uma questão disso"). Agora o pedido VAGO tira o assunto da última
+  explicação do tutor (`api`, com rede de segurança: sem termo do acervo, fica o
+  assunto da conversa).
+- "disso", "fácil", "mano" viravam termo raro. Entraram no vocabulário de conversa
+  de `pedido.sem_o_pedido`.
+- "resolver direito" (advérbio) casava com Direito Constitucional. O pedido SEM
+  TERMO FORTE (`geracao.tem_termo_forte`: 6 letras ou mais, em até 150 trechos)
+  fica na matéria da conversa. Com termo forte ("peculato"), é troca de assunto e
+  fica livre.
+- Dois assuntos num pedido ("conjunto e porcentagem") vão cada um por si
+  (`geracao._partes`), intercalados.
+
+Resultado da repetição: as 8 falas de pedido de questão das conversas gravadas não
+tiram mais cartão de outra matéria. Antes, 3 tiravam.
+
+**Leitura:** o ÚLTIMO trecho só conta como lido se foi coberto de verdade
+(`leitura.LIMIAR_COMPLETO` = 0,6). Coberto em parte, o "continua" pulava os tópicos
+que ele trazia.
+
+**Limite (não corrigido):** a reclamação que mistura assuntos ("pedi direitos
+fundamentais… meu concurso é pra administrativo… procurador") fica sem cartão.
+Não sai errado, mas também não sai o certo.
+
+## Conversa real de Português: IDs na prosa, "português" sem disciplina, resumão curto, PDF quebrado (29/09/2026)
+
+- **"(ID 67553)" no meio da explicação.** O prompt identifica cada trecho por "ID
+  da fonte: N" para o modelo preencher `fontes_usadas`; o modelo passou a
+  escrevê-los na prosa. `socratic.sem_ids` tira em código, fora das fórmulas.
+- **"português" não era "Língua Portuguesa".** `assunto.disciplina_citada` exigia
+  todas as palavras distintivas. Daí quatro erros seguidos: o tópico 1.1 de
+  Constitucional para quem pedia Português, "isso não cai na sua prova", "não
+  tenho a numeração" e o programa só na sétima pergunta. Nome de duas palavras
+  casa pela SEGUNDA quando ela tem 8 letras ou mais e é única no edital
+  ("forenses" também; "geral" e "penal", não).
+- **"Resumão completo do assunto"** saía em duas linhas e uma pergunta. "Resumão",
+  "resumo completo" ou "geral", "assunto completo", "textão" e "tudo sobre" abrem a
+  leitura completa. Com assunto nomeado ("resumão de voz passiva"), a leitura
+  começa no trecho do material que trata dele (`leitura._ordem_do_assunto`); "na
+  ordem do material" continua do começo.
+- **Reclamação de pedido ignorado** era respondida com "o que você precisa que eu
+  faça?". Regra na seção 3: faça agora o pedido anterior.
+- **Tabela do PDF (separada por tabulação)** aparecia crua. A tela desenha.
+- **PDF justificado, uma palavra por linha: 52% dos trechos das apostilas da conta
+  real** (2.098 de 4.032; Poder Judiciário 80%, Direitos sociais 90%). O `pypdf`
+  separa cada palavra com uma linha de um espaço. `chunking.desquebrar` remonta: 0
+  trechos quebrados e o dobro de palavras por trecho. Vale para o que for subido
+  daqui em diante; o que já está indexado precisa ser reprocessado.
+
+## O índice de assuntos por trecho (036, `core/indice.py`, 30/09/2026)
+
+**O problema.** O material era uma sequência de trechos soltos, com um rótulo para
+o arquivo inteiro. "Resumão de voz passiva", "questões de habeas corpus" e "onde
+está X" dependiam de a busca acertar um trecho solto. Assunto retomado mais
+adiante, ou cobrado nas questões comentadas do fim, não era juntado.
+
+**Medido antes de construir** (bateria nas 18 apostilas da conta real; precisão
+julgada à mão, numa amostra):
+
+| Caminho | Precisão | Lugares espalhados | Assuntos vizinhos |
+|---|---|---|---|
+| Sumário, títulos e agrupamento por vetor (sem modelo) | 60–75%, instável | perdia as questões | habeas corpus e mandado de segurança num grupo de 82 trechos |
+| Modelo leve lendo a apostila | 72–77% | voz passiva em 18 de 24; mandado de segurança em 36 de 44 | 3 trechos com os dois |
+
+O e5 não serve para limiar fixo: as similaridades ficam todas entre 0,82 e 0,87, e
+o limiar de 0,88 marcou até 21 assuntos por trecho.
+
+**Como ficou:**
+- **Estrutura:** 1 chamada por material, com o começo (capa e sumário) e os títulos
+  do corpo. Sai a lista de assuntos com páginas e papel (ensino, questões, outro).
+- **Marcação:** lotes de 30 trechos (60 estouraram o limite de tokens por minuto),
+  com a SEÇÃO pela página como pista. Papel "outro" fica sem assunto; trecho de
+  ensino sem assunto dentro de uma seção fica com o da seção.
+- **Reserva sem modelo:** sumário ou títulos, marcados por seção e por expressão.
+  O documento fica `reserva` e é refeito com cota (`python -m core.indice`).
+- **Cota:** `config.LLM_INDICE` (`3.1-flash-lite`), nunca o modelo do tutor, e
+  orçamento diário `INDICE_ORCAMENTO_DIA` (150), contado pela telemetria.
+- **Uso:** questões de X saem dos trechos marcados com X (`geracao._pelo_indice`);
+  "resumão de X" começa no primeiro trecho de ensino de X; o rótulo da fonte, na
+  tela e no prompt, é o assunto do TRECHO ("Vozes verbais, p. 64").
+
+**O que sobra:** o erro do modelo leve é entre assuntos vizinhos da mesma
+apostila (impessoalidade marcada como princípio implícito; sanção e veto como
+reforma constitucional). Trocar `LLM_INDICE` por um modelo mais forte é a
+melhoria direta (`docs/PLANOS.md`).
+
+## Questões de prova: o simulado do aluno vira banco de questões (037, `core/prova.py`, 30/09/2026)
+
+**O pedido.** O aluno sobe simulados comentados de banca (100 questões de
+múltipla escolha, gabarito e comentário do professor) e quer que virem questões:
+que sirvam para treinar e que, ao pedir questões de um assunto, venham elas.
+
+**Como ficou:**
+- **Tipo de material "Simulado / questões".** É indexado como os outros (busca e
+  índice de assuntos), e além disso cada questão é extraída para `questao`, com
+  `origem='prova'`. Ela é **literal**: o modelo não reescreve nada.
+- **Extração pela estrutura, sem modelo.** São três formas de gabarito: junto da
+  questão ("Gabarito: C" mais o comentário), em tabela ("1 2 3 … / C E D …", também
+  em blocos, todas as linhas de número antes das de letra, como sai do PDF) e
+  em arquivo só de respostas, subido à parte, que se liga ao simulado pelo número
+  da questão (`documento.gabarito_de`). Não é preciso mesclar arquivos.
+- **Número sequencial.** Um "N." só abre questão se for o número seguinte. Em
+  prova comentada vale o último "N." antes do gabarito, porque comentário com lista
+  numerada ("2. reler o trecho") abriria a questão errada.
+- **Texto-base, disciplina e assunto.** O texto antes do número vira o texto-base
+  da questão (tabela `contexto`). Os títulos do simulado, casados com o edital da
+  mesa, dão a disciplina. O índice (036) do trecho em que a questão está dá o
+  assunto.
+- **Sem gabarito nenhum, o modelo resolve** (`LLM_INDICE`, dentro do orçamento do
+  índice), e fica `gabarito_fonte='tutor'`, que a tela mostra. Gabarito oficial
+  que chegue depois substitui. Sem cota, a questão espera
+  (`documento.questoes_sem_gabarito`) e `python -m core.prova` refaz.
+- **Múltipla escolha existe de verdade**: `gabarito_letra` e `questao_alternativa`,
+  corrigida em código (`socratic.avaliar_multipla_escolha`), sem dica e sem
+  segunda tentativa, pelo mesmo motivo do item certo/errado. O comentário do
+  professor é a explicação.
+- **Na conversa**, "questões de X" traz primeiro as questões de prova ainda não
+  respondidas que tratam de X (mesma trava de termos raros do gerador), e o
+  gerador só completa o que faltar.
+
+**O que fica para depois (o desenho já comporta):** servir a mesma questão em
+outro formato (C/E por alternativa, por extenso, híbrido) é um modo de
+apresentar, não outra questão. Sai da linha mais as alternativas, sem duplicar o
+banco. Por isso a alternativa guarda o texto literal e o gabarito guarda a letra.
+
+## Busca: braço lexical vivo, peso do tipo pela intenção, índice como terceira lista, resposta que escolhe (30/09/2026)
+
+**Medido antes de mexer**, nas 73 falas reais com busca (`.logs/busca/medir.py`,
+sem modelo) e no gabarito (`avaliar_retrieval.py`, 34 casos).
+
+**1. O braço lexical estava morto: vazio em 70 de 73 falas (95%).** O
+`websearch_to_tsquery` exige TODAS as palavras, e a consulta da conversa tem em
+média 13. O peso 1.5 do lexical, medido no gabarito de frases curtas, não
+valia na conversa. **Conserto:** quando o E acha menos de 3 trechos, valem
+PARES, isto é, duas palavras da consulta no mesmo trecho
+(`retrieval._termos_da_consulta`). O OU puro derrubava o gabarito de 32 para
+29/34 (top-6). Os pares o levaram a **34/34**, com o top-1 igual (23/34). Vazio
+nas conversas: 95% → 7%.
+
+**2. Peso do tipo pela intenção da fala** (`retrieval.PESO_TIPO`, `intencao`).
+Desempata, não exclui, e vale para todo tipo:
+- **lei** (artigo, "o que diz a lei"): lei seca, depois jurisprudência;
+- **jurisprudência** (STF, súmula, "como os tribunais decidem"): jurisprudência,
+  depois lei;
+- **conceito** (explica, o que é, cálculo, resumo): aula e resumo.
+
+A intenção sai da FALA, não da consulta, que pode ter herdado o turno anterior.
+A intenção "questões" foi tirada depois de medir: pegava "sem questões por
+enquanto", e pedido de questões já vai ao banco do simulado. No gabarito, o
+efeito foi nenhum (nem ganho nem perda). Nas conversas, saíram artigos de CF e
+CP que entravam em pedidos de explicação.
+
+**3. Índice de assuntos (036) como terceira lista do RRF.** A fala nomeia um
+assunto do material, e os trechos marcados com ele entram, de qualquer parte
+da apostila.
+
+**4. A resposta que escolhe manda na consulta** (`assunto.em_foco`, ramo do eco).
+O tutor ofereceu um cardápio de disciplinas e o aluno escolheu "ciências
+forense?": a busca foi pelo cardápio inteiro e trouxe Direitos políticos. Agora:
+- com disciplina citada, a fala é a escolha;
+- com assunto próprio, a fala atual vai depois do assunto do tutor, que continua
+  primeiro, como pede a decisão do caso Maria da Penha;
+- "sim" ou "não" segue herdando.
+
+Resultado: "ciências forense?" passou a trazer Perícias e Provas; "1.1
+Interpretação e compreensão de texto" trocou a Lei 8.112 pelo simulado de
+Interpretação.
+
+**Julgado à mão** nas 57 falas que mudaram de trecho: 12 melhores, 4 piores
+(duas eram a intenção "questões", já tirada), o resto empate entre páginas
+vizinhas da mesma apostila.
+
+**Ficou como está, de propósito:**
+- pergunta "você tem material de X?" continua buscando: é o que deixa o tutor
+  dizer onde está;
+- 47% dos top-6 têm trechos vizinhos do mesmo material, por sobreposição de 150
+  caracteres. Não é repetição: cada vizinho traz texto novo.
+
+## Resumo, jurisprudência e simulado se organizam por DESCRIÇÃO (01/10/2026)
+
+**Pedido do dono.** Só a aula se organiza pelo edital, com disciplina e assunto.
+Resumo, jurisprudência e simulado ganham UMA descrição que agrupa ("Código de
+Processo Penal", "Informativos do STF", "Simulados PCPR"), sugerida dos
+materiais do mesmo tipo e não do edital.
+
+**Como ficou:**
+- A descrição mora em `documento.assunto`, sem migração (`TIPOS_POR_DESCRICAO`).
+- A tela de envio mostra só "Descrição", com o indicador fixo "sugestões dos seus
+  [tipo]". A biblioteca agrupa essas abas por descrição, e o lápis, o arrasto e o
+  renomear de grupo mudam a descrição.
+- **De onde sai o nome, em ordem:**
+  1. o que o aluno digitou;
+  2. o modelo, que lê o conteúdo e recebe o nome do arquivo ou o `<title>` da
+     página como pista, além das descrições existentes do tipo para reusar
+     igual;
+  3. sem modelo, o nome do arquivo quando ele diz algo (`material.nome_util`):
+     "del3689compilado", "aula_04" e "curso-392635-…-374d" não dizem.
+- **Simulado entrou em `TIPOS_DE_REFERENCIA`.** Cem questões de doze
+  disciplinas não têm um assunto, e a descrição no rótulo de busca de cada trecho
+  seria o ruído medido na 027. Ela fica só na tela. O assunto de cada questão
+  vem do índice (036).
+- **Nome corrompido por codificação** ("3Âº Simulado") é consertado ao registrar
+  (`material.sem_mojibake`), inclusive na forma decomposta (NFD) em que o
+  arquivo real chegou.
+- **Link de lei que o app já tem** (o CPP do Planalto) continua recusado: a
+  segunda cópia competiria na busca. A mensagem passou a citar a própria lei.
+
+## Simulado real: o texto remontado escondia as questões (`prova.ressegmentar`)
+
+O primeiro simulado real (100 questões comentadas) deu **0 questões**. O
+`chunking.desquebrar`, que conserta o PDF justificado com uma palavra por linha,
+também juntou as linhas da prova ("…boa ou má. 1. Levando…", "Gabarito: C
+COMENTÁRIO DO PROFESSOR: …").
+
+O extrator agora põe cada marca no começo de uma linha: o número da questão
+primeiro, depois gabarito, comentário e alternativas. Medido no arquivo:
+- número solto antes do gabarito ("A = 5. Gabarito: E") deixava de ser
+  reconhecido; resolvido pela ordem das marcas;
+- título de seção colado ao fim do comentário anterior, em duas linhas;
+- alternativa de mais de 4 linhas;
+- "4 – 1 – 3 – 2" de um comentário lido como lista de gabarito, que trocava a
+  questão 20;
+- "À" fora da classe de maiúsculas, que parava a extração na 88.
+
+Resultado: **100 de 100**, todas com 5 alternativas. O gabarito ao lado de cada
+questão bate com a tabela da página 2 nas 100, e a disciplina sai certa nas doze
+seções.
+
+O simulado tinha ficado "pronto" sem questões porque a API reiniciou no meio da
+indexação. A API agora importa no arranque todo simulado sem extração.
+
+**Apagar simulado (01/10/2026).** As questões de prova saem junto (`material.apagar`).
+O FK de `questao.documento_id` é SET NULL, pensado para a questão GERADA, e
+deixou 99 questões sem trecho na fila de quem apagou o simulado. Elas foram
+removidas, com zero tentativas. A tela recarrega as sugestões depois de apagar:
+descrição ou assunto do último material apagado não é mais oferecido.
+
+## Pedido de explicação abre a leitura; pergunta pontual responde pontual (01/10/2026)
+
+**Pedido do dono:** "quando eu fizer pergunta pontual ele responde pontual,
+quando eu pedir me explica tal coisa ou traga a explicação do assunto eu quero
+trazer o pdf pro chat", e é preciso "insistir pra ele trazer igual na foto".
+
+**Medido na conversa real.** Das 12 falas da conversa, só "continua" e "traga
+todo o conceito" abriam a leitura. "traga todo conceito" (sem o "o"), "cadê o
+conteúdo de Proposições Simples?", "me explica proposições compostas", "quero
+entender…", "vamos começar do zero e seguir na ordem" e "é só isso que tem no
+material?" respondiam em duas frases e uma pergunta.
+
+**Como ficou** (`leitura.intencao`):
+- **`RE_EXPLICACAO` abre a leitura:** explicar, ensinar, trazer ou mostrar o
+  conteúdo, o conceito ou a matéria, querer entender ou aprender, "do zero",
+  "seguir a ordem".
+- **`RE_PONTUAL` fica fora:** "o que é…?", "qual…", "quando…", "diferença
+  entre…". Pergunta sobre o próprio tutor também (`pedido.RE_SISTEMA` ganhou
+  "como funciona o sistema/app").
+- **`RE_MAIS` continua a leitura:** "é só isso?", "tem mais?", "de tudo".
+- **Explicação de assunto nomeado vai ao COMEÇO DA SEÇÃO dele, pela página do
+  índice (036),** e não ao primeiro trecho marcado. A introdução cita "proposições
+  compostas" de passagem e é marcada com elas, e a leitura começava 30 páginas
+  antes.
+- **A leitura pula as seções `outro` do índice:** capa, aviso, apresentação. O
+  "continua" lia a página da equipe de professores.
+- **Continuar a leitura mantém a matéria do MATERIAL lido** (`socratic.explicar`).
+  A página da equipe "de Raciocínio Lógico e Estatística" pôs Estatística em
+  foco, não havia material dela, e o "certo.." virou "não temos material de
+  Estatística".
+
+Simulado na apostila real de Proposições, só leitura:
+- "traga todo o conceito" começa na p. 5, depois de capa e apresentação;
+- "continua" e "certo.." seguem a sequência;
+- "me explica proposições compostas" vai à p. 34;
+- "é só isso?" segue dali.

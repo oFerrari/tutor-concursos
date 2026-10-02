@@ -23,8 +23,16 @@ GEMINI_MODEL    = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
 # Ordem: o principal primeiro, depois os irmãos mais próximos em capacidade. É
 # uma LISTA e não uma regra esperta de propósito — quando o Google aposentar um
 # nome, dá pra consertar no .env sem tocar em código.
+#
+# RESERVA TEM DE TER COTA PRÓPRIA. Medido em 28/09/2026, lendo o 429 de cada um:
+# a cota gratuita é POR DIA e POR MODELO (`GenerateRequestsPerDayPerProjectPerModel`),
+# e `gemini-flash-lite-latest` é APELIDO do `gemini-3.5-flash-lite` — o 429 dele
+# aponta a cota do 3.5-flash-lite (500/dia). A reserva antiga repetia o principal
+# duas vezes; esgotado o dia, as três caíam juntas e o app parava, enquanto o
+# `gemini-3.1-flash-lite` respondia. `gemini-3.5-flash` fica por último: são 20
+# chamadas por dia.
 GEMINI_RESERVAS = [m.strip() for m in os.getenv(
-    "GEMINI_RESERVAS", "gemini-3.5-flash,gemini-flash-lite-latest,gemini-3.5-flash-lite"
+    "GEMINI_RESERVAS", "gemini-3.1-flash-lite,gemini-3.5-flash-lite,gemini-3.5-flash"
 ).split(",") if m.strip()]
 OLLAMA_URL      = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL", "qwen3:8b")
@@ -34,6 +42,12 @@ OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL", "qwen3:8b")
 # chamada da cota do Gemini; vazio mantém tudo no LLM_PROVIDER. O Gemini fica de
 # reserva: Ollama fora do ar não deixa material sem rótulo.
 LLM_CLASSIFICADOR = os.getenv("LLM_CLASSIFICADOR", "").strip()
+# O MODELO QUE LÊ O MATERIAL e marca o assunto de cada trecho (036, `core/indice.py`).
+# Separado do tutor de propósito: a marcação de uma apostila são dezenas de
+# chamadas, e na cota gratuita elas não podem sair da cota que o tutor usa de dia.
+# Num plano pago, trocar por um modelo mais forte é esta linha (medido: o leve
+# acerta 72–77% das marcas; o erro é entre assuntos vizinhos).
+LLM_INDICE = os.getenv("LLM_INDICE", "gemini-3.1-flash-lite").strip()
 OLLAMA_MODEL_CLASSIFICADOR = os.getenv("OLLAMA_MODEL_CLASSIFICADOR", OLLAMA_MODEL)
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "intfloat/multilingual-e5-base")
 

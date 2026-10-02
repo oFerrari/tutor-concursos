@@ -19,7 +19,7 @@ import pytest
 
 from core import db, pedido, socratic
 
-VERSAO = "test-pedido-v4"
+VERSAO = "test-pedido-v5"
 
 
 @pytest.mark.parametrize("fala, quantidade", [
@@ -110,7 +110,10 @@ def test_pedir_treino_no_chat_gera_questao_com_proveniencia_e_sem_botao(
         # ({resposta, fontes_usadas}). Sem este ramo o duplê devolvia a lista
         # de questões para ela, e o código recusava — com razão — o formato.
         if schema is socratic.ESQUEMA_RESPOSTA_TUTOR:
-            return json.dumps({"resposta": "Vamos treinar isso; as questões estão logo abaixo.",
+            # A explicação ENSINA peculato: o pedido vago ("questões disso") cobra o
+            # que foi explicado, e o assunto sai daqui (api, 29/09/2026).
+            return json.dumps({"resposta": "O peculato é a apropriação, pelo funcionário "
+                                           "público, de dinheiro de que tem a posse em razão do cargo.",
                                "fontes_usadas": []})
         arts = list(dict.fromkeys(
             a.strip() for a in re.findall(r"\[[^\]]*?art\. ([^\]—]+)", prompt)))
@@ -485,3 +488,137 @@ def test_desabafo_nao_busca_material():
                  "a vítima estava cansada no momento do crime?",
                  "quero estudar peculato"]:
         assert not pedido.desabafo(fala), fala
+
+
+def test_item_do_edital_nao_e_pedido_de_itens_certo_errado():
+    """"Próximo item do edital" gerava duas questões (28/09/2026)."""
+    for fala in ("próximo item do edital", "vamos item por item", "me explica o item 2.1",
+                 "qual o próximo item?"):
+        assert pedido.treino(fala) is None, fala
+    assert pedido.treino("me dá 3 itens certo ou errado")["quantidade"] == 3
+
+
+ENUNCIADO_COLADO = """Um levantamento interno numa guarda municipal fictícia identificou que dos 120 agentes: 75 possuem categoria B, 60 possuem categoria A. Todos possuem pelo menos uma das duas. Quantos possuem somente uma categoria?
+Alternativas
+A
+15 Agentes
+B
+45 Agentes
+C
+105 Agentes"""
+
+
+def test_pedir_resolucao_nao_gera_card_de_treino():
+    """28/09/2026: "resolva pra mim questões de probabilidade" gerou dois cards
+    para o ALUNO responder, e o enunciado colado — que começa com "Um" — casou
+    com a forma elíptica "manda uma" logo depois de um treino."""
+    for fala in ("resolva pra mim questões de probabilidade", "resolve essa questão",
+                 "ta mais cade o calculo cade a formula?", "me mostra como resolve",
+                 "questões resolvidas de juros simples", ENUNCIADO_COLADO):
+        assert pedido.resolucao(fala), fala
+        assert pedido.treino(fala, apos_treino=True) is None, fala
+    for fala in ("quero questões para resolver", "me dá 3 questões de probabilidade",
+                 "como o STF resolve o conflito de competência?"):
+        assert not pedido.resolucao(fala), fala
+    assert pedido.treino("quero questões para resolver")
+    # a forma elíptica continua valendo quando é curta
+    assert pedido.treino("agora só uma", apos_treino=True)["quantidade"] == 1
+    assert pedido.treino("mais duas por favor", apos_treino=True)["quantidade"] == 2
+
+
+def test_pergunta_sobre_o_tutor_ou_a_biblioteca_nao_busca():
+    for fala in ("hoje você consegue falar do que vc é capaz de fazer? como tutor",
+                 "o que falta pra vc se transforma num tutor completo?",
+                 "o que você sabe fazer?", "quais apostilas eu tenho?",
+                 "o que você tem de material de constitucional?",
+                 # falas reais da bateria de 29/09/2026: verbo antes do nome
+                 "quais a gente tem material?",
+                 "bom eu preciso saber sobre o que você tem material então né? antes de pedir"):
+        assert pedido.dispensa_busca(fala), fala
+    for fala in ("o que tem no acervo sobre peculato?", "que material tem sobre conjuntos?", "o que falta para configurar o peculato?",
+                 "do que é capaz o habeas corpus?"):
+        assert not pedido.dispensa_busca(fala), fala
+
+
+def test_mapa_mental_e_tabela_pedem_formato_visual():
+    for fala in ("faz um mapa mental de conjuntos", "me dá uma tabela de bizus",
+                 "cadê a fórmula?", "monta um esquema de atos administrativos"):
+        assert pedido.formato_visual(fala), fala
+    assert not pedido.formato_visual("me explica o peculato")
+
+
+def test_turno_de_resolucao_resolve_na_resposta_e_nao_gera_questao(client, usuario, llm_falso):
+    """A questão colada vem resolvida na resposta — com o gabarito citando a
+    alternativa, que `limpar_questoes` apagaria — e nenhum card sai do turno,
+    mesmo logo depois de um pedido de treino."""
+    llm_falso.retorno = "Aula."
+    r = client.post("/perguntar", json={"pergunta": "me dá uma questão de conjuntos"},
+                    headers=usuario["headers"]).json()
+    resolvida = ("### Passo a passo\n$$135 - 120 = 15$$\n\n✅ Gabarito: C) 105 agentes; "
+                 "a) 15 é a interseção, b) 45 é só A, c) 105 é a resposta.")
+    llm_falso.retorno = resolvida
+
+    r = client.post("/perguntar", json={"pergunta": ENUNCIADO_COLADO, "conversa_id": r["conversa_id"]},
+                    headers=usuario["headers"]).json()
+
+    assert r["questoes"] == []
+    assert "Gabarito: C) 105" in r["resposta"] and "a) 15" in r["resposta"]
+    sistema = llm_falso.chamadas[-1]["sistema"]
+    assert "## Resolução pedida pelo aluno" in sistema and "## Fórmula, mapa mental" in sistema
+
+
+def test_resolucao_com_verbo_no_fim_e_problema_sem_alternativas():
+    """Falas reais da bateria de descoberta (28/09/2026)."""
+    problema = ("Um levantamento interno realizado numa guarda municipal fictícia identificou que "
+                "dos 120 agentes: 75 guardas possuem CNH categoria B (carros), 60 possuem CNH "
+                "categoria A (motos). Sabendo que todos possuem pelo menos uma das duas, qual o "
+                "número de agentes que possuem somente uma categoria?")
+    for fala in ("quero que vc resolva", "resolve aí", "resolve pra mim?", problema):
+        assert pedido.resolucao(fala), fala
+    for fala in ("o juiz resolve", "como resolver conflitos de competência é cobrado?",
+                 "Se um servidor toma posse e não entra em exercício, o que acontece com ele? "
+                 "Isso cai muito em prova e eu sempre confundo os efeitos, pode me explicar com calma?"):
+        assert not pedido.resolucao(fala), fala
+
+
+def test_aceitar_a_oferta_do_tutor_e_pedir_questoes():
+    """Bateria de descoberta (28/09/2026): "quer ver questões?" → "sim" → nada."""
+    oferta = "Isso cai muito. Quer que eu monte três questões certo ou errado sobre posse?"
+    for fala in ("sim", "manda ai", "bora", "pode ser sim"):
+        assert pedido.aceitou_oferta_de_questoes(fala, oferta) == {
+            "quantidade": 3, "tipo": "certo_errado", "formal": False}, fala
+    assert pedido.aceitou_oferta_de_questoes("sim, mas antes explica o art. 13", oferta) is None
+    assert pedido.aceitou_oferta_de_questoes("sim", "Quer que eu continue a leitura?") is None
+
+
+def test_o_que_fica_pra_depois_nao_e_o_assunto_de_agora():
+    from core import assunto
+    d = ["Direito Constitucional", "Raciocínio Lógico-Matemático"]
+    fala = "lembro sim... mas volta la praquele assunto de constitucional dps, vamo focar nisso aq agora"
+    assert assunto.disciplina_em_foco(fala, [], d) is None
+    assert assunto.sem_o_adiado("o que acontece depois da posse?") == "o que acontece depois da posse?"
+
+
+def test_voltar_pro_assunto_nao_e_retomar_a_leitura():
+    from core import leitura
+    d = ["Direito Constitucional", "Direito Administrativo"]
+    assert leitura.retoma_um_assunto("mas eu pedi pra voltar pro controle de constitucionalidade", d)
+    for fala in ("volta pro constitucional", "volta pra onde paramos",
+                 "retoma de onde parou em direito administrativo"):
+        assert not leitura.retoma_um_assunto(fala, d), fala
+
+
+def test_conversa_fiada_com_risada_nao_busca_material():
+    """Bateria de 29/09/2026: "se ta descolado em chat kkk" puxou tabela-verdade."""
+    for fala in ("se ta descolado em chat kkk", "rsrs verdade", "hahaha boa", "kkkkk mano"):
+        assert pedido.dispensa_busca(fala), fala
+    for fala in ("kkk mas me explica peculato", "rs qual a pena do furto?",
+                 "a banca cobra isso haha? o que é concussão", "risco de perícia"):
+        assert not pedido.conversa_fiada(fala), fala
+
+
+def test_pedir_explicacao_com_exercicio_na_reclamacao_nao_e_treino():
+    """Bateria de 29/09/2026: "tu ja pulou exercicio, explica direito" gerou cartão."""
+    assert pedido.treino("mas eu pedi pra seguir a apostila e tu ja pulou exercicio, explica direito essa parte de contagem ai") is None
+    for fala in ("explica isso e me dá 2 questões", "me explica e manda uma questão", "me dá exercícios de contagem"):
+        assert pedido.treino(fala), fala

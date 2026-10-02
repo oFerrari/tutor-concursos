@@ -18,13 +18,24 @@ meta-pergunta não têm chunk (`pedido.dispensa_busca` corta a busca antes), ent
 não têm rótulo e não viram estudo — "bom dia" não é aula, e contá-lo encheria o
 diário de linhas que enganam a leitura do dia seguinte.
 """
+import re
+
 from . import db
 
-VERSAO = "diario-v3"
+VERSAO = "diario-v4"
 
 MAX_ASSUNTO = 120       # casa com o CHECK da 031
 DIAS_PADRAO = 7         # janela do bloco que vai ao prompt
 LIMITE_LINHAS = 6       # o prompt não é relatório
+
+# RUBRICA QUE SÓ NUMERA não é assunto. Apostila que põe "Tópico 5" (ou "Aula 2",
+# "Módulo II", "Item 3.1") na linha de cima de cada artigo tem essa linha aceita
+# como rubrica pelo `chunking._eh_rubrica` — ela é curta, maiúscula e sem ponto.
+# Na bateria de 29/09/2026, perguntado "quais matérias eu já estudei? separe
+# matérias de assuntos", o tutor respondeu "os assuntos foram os tópicos 1, 5,
+# 18, 21": o número do título, não o conteúdo. Uma palavra e um número não dizem
+# de que se tratou; aí vale o assunto classificado do material.
+RE_SO_NUMERACAO = re.compile(r"^\w+\.?\s*(?:\d+(?:[.\-–]\d+)*|[IVXLCDM]+)[º°o]?$", re.IGNORECASE)
 
 
 def rotulo(chunks: list[dict] | None) -> tuple[str, str | None] | None:
@@ -41,7 +52,11 @@ def rotulo(chunks: list[dict] | None) -> tuple[str, str | None] | None:
     for c in chunks or []:
         # Lei: a rubrica ("Peculato") é o nome que o aluno reconhece. Material do
         # aluno: o assunto que o classificador (020) já escreveu.
-        nome = (c.get("rubrica") or c.get("assunto") or "").strip()
+        rubrica = (c.get("rubrica") or "").strip()
+        assunto = (c.get("assunto") or "").strip()
+        # Sem assunto (material de referência, 027), a numeração fica: "Súmula 7"
+        # ainda é melhor que turno nenhum no diário.
+        nome = assunto if RE_SO_NUMERACAO.match(rubrica) and assunto else (rubrica or assunto)
         if not nome:
             continue
         chave = (nome[:MAX_ASSUNTO], (c.get("disciplina") or "").strip() or None)

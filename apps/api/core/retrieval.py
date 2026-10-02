@@ -23,7 +23,7 @@ import re
 from . import db
 from .embeddings import embed_consulta
 
-VERSAO = "retrieval-v10"
+VERSAO = "retrieval-v11"
 RRF_K = 60  # constante de amortecimento padrão do RRF
 
 # Material `historico` (livro de emendas: "Redação Anterior", múltiplas
@@ -67,6 +67,64 @@ PESO_HISTORICO = 0.5
 # o resultado sem reingestão, e o gabarito agora tem os casos que
 # denunciariam uma regressão.
 PESO_LEXICAL = 1.5
+
+# BRAÇO LEXICAL QUE NÃO SE CALA. O E liga as palavras: o trecho precisa ter
+# TODAS. Medido nas conversas reais (30/09/2026): a consulta média tem 13
+# palavras, e o braço lexical voltou VAZIO em 70 de 73 falas (95%) — a busca
+# inteira era decidida só pelo vetor, e o peso 1.5 acima, medido no gabarito de
+# frases curtas, não valia para nada na conversa. Com menos de LEXICAL_MIN_E
+# trechos no E, valem PARES (duas palavras da consulta no mesmo trecho). Gabarito:
+# top-6 de 32/34 para 34/34, top-1 igual (23/34); o OU puro derrubava para 29/34.
+LEXICAL_MIN_E = 3
+LEXICAL_MIN_PALAVRAS_OU = 3      # com 2 palavras, o E basta (pares = o próprio E)
+PESO_LEXICAL_OU = 1.0            # pares pesam como o vetor; 1.5 perdia 1 caso no gabarito
+
+# O TIPO DO MATERIAL PESA CONFORME A INTENÇÃO DA FALA (30/09/2026). Não exclui
+# nada: só desempata. Pergunta sobre o que a lei diz prefere a lei seca, depois a
+# jurisprudência; pergunta sobre como os tribunais decidem prefere a
+# jurisprudência; pedido de explicação prefere aula e resumo. Vale para
+# qualquer material de qualquer aluno — o tipo é o que ele escolheu no envio.
+# Sem intenção reconhecida, todos pesam 1 (como antes).
+PESO_TIPO = {
+    "lei":            {"lei": 1.3, "jurisprudencia": 1.15, "aula": 1.0, "resumo": 1.0, "simulado": 0.85},
+    "jurisprudencia": {"jurisprudencia": 1.35, "lei": 1.1, "aula": 1.0, "resumo": 1.0, "simulado": 0.85},
+    "conceito":       {"aula": 1.2, "resumo": 1.2, "simulado": 0.95, "lei": 1.0, "jurisprudencia": 0.9},
+}
+# Sem "questões": pedido de questões vai ao banco do simulado (`prova.da_conversa`),
+# não a esta busca — e o peso aqui pegava "sem questões por enquanto" (medido).
+RE_INTENCAO = {
+    "jurisprudencia": re.compile(
+        r"(?i)\b(?:stf|stj|tst|tse|súmula|sumula|jurisprud[eê]ncia|informativo|precedente|ac[oó]rd[aã]o|"
+        r"tema\s+\d+|tribuna(?:l|is)\s+(?:superior|decid)|entendimento\s+d[oa]s?\s+(?:tribuna|stf|stj|supremo)|"
+        r"como\s+(?:o\s+)?(?:stf|stj|supremo|tribunais?)\s+(?:decide|entende|julga))"),
+    "lei": re.compile(
+        r"(?i)\b(?:art(?:igo)?s?\.?\s*\d|inciso|par[aá]grafo|caput|letra\s+(?:da|de)\s+lei|lei\s+seca|"
+        r"o\s+que\s+(?:diz|fala|prev[eê]|estabelece)\s+(?:a|o)\s+(?:lei|c[oó]digo|constitui|cf|cp|cpp)|"
+        r"(?:diz|prev[eê])\s+a\s+lei|texto\s+(?:da|de)\s+lei|reda[cç][aã]o\s+(?:da|do)\s+(?:lei|artigo))"),
+    "conceito": re.compile(
+        r"(?i)\b(?:explica|explique|me\s+ensina|o\s+que\s+(?:é|e|são|sao|significa)|como\s+(?:funciona|calcula|"
+        r"resolve|se\s+faz)|diferen[cç]a|conceito|exemplo|resum[ãa]o|resumo|calcul|f[oó]rmula|entender)\b"),
+}
+
+
+def intencao(pergunta: str | None) -> str | None:
+    """De que tipo de material esta fala quer a resposta, se diz. PURO.
+
+    A ordem é a da especificidade: tribunal antes de lei (pergunta sobre
+    jurisprudência costuma citar o artigo), lei antes de conceito."""
+    for nome in ("jurisprudencia", "lei", "conceito"):
+        if RE_INTENCAO[nome].search(pergunta or ""):
+            return nome
+    return None
+
+
+def _sql_peso_tipo(intencao_: str | None) -> str:
+    pesos = PESO_TIPO.get(intencao_ or "", {})
+    if not pesos:
+        return "1"
+    casos = " ".join(f"WHEN '{t}' THEN {float(p)}" for t, p in pesos.items())
+    return f"CASE d.tipo {casos} ELSE 1 END"
+
 
 RE_CITACAO = re.compile(r"(?i)\bart(?:igo)?s?\.?\s*(\d+[\-\wºo]*)")
 GENERICOS = {"art", "arts", "artigo", "artigos", "paragrafo", "parágrafo",
@@ -129,23 +187,38 @@ lex AS (
     SELECT c.id, ROW_NUMBER() OVER (ORDER BY ts_rank_cd(c.busca, q) DESC) AS pos
     FROM chunk c
     JOIN documento d ON d.id = c.documento_id,
-         websearch_to_tsquery('portuguese', %(termos)s) q
+         to_tsquery('portuguese', %(termos)s) q
     WHERE c.busca @@ q AND {DONO} AND {MESA}
     ORDER BY ts_rank_cd(c.busca, q) DESC
+    LIMIT %(k)s
+),
+-- ÍNDICE DE ASSUNTOS (036): a fala nomeia um assunto do material do aluno, e os
+-- trechos MARCADOS com ele — de qualquer parte da apostila, questões incluídas —
+-- entram como terceira lista, pela proximidade de sentido. Lista vazia quando a
+-- fala não nomeia assunto do índice.
+ass AS (
+    SELECT c.id, ROW_NUMBER() OVER (ORDER BY c.embedding <=> %(emb)s::vector) AS pos
+    FROM chunk c JOIN documento d ON d.id = c.documento_id
+    WHERE c.id = ANY(%(do_assunto)s::bigint[]) AND c.embedding IS NOT NULL AND {DONO} AND {MESA}
+    ORDER BY c.embedding <=> %(emb)s::vector
     LIMIT %(k)s
 )
 SELECT {CAMPOS},
        (COALESCE(1.0 / (%(rrf)s + sem.pos), 0) +
-        COALESCE(%(peso_lexical)s / (%(rrf)s + lex.pos), 0))
-       * CASE WHEN d.tipo = 'historico' THEN %(peso_historico)s ELSE 1 END AS score
+        COALESCE(%(peso_lexical)s / (%(rrf)s + lex.pos), 0) +
+        COALESCE(%(peso_assunto)s / (%(rrf)s + ass.pos), 0))
+       * CASE WHEN d.tipo = 'historico' THEN %(peso_historico)s ELSE 1 END
+       * {{peso_tipo}} AS score
 FROM chunk c
 JOIN documento d ON d.id = c.documento_id
 LEFT JOIN sem ON sem.id = c.id
 LEFT JOIN lex ON lex.id = c.id
-WHERE sem.id IS NOT NULL OR lex.id IS NOT NULL
+LEFT JOIN ass ON ass.id = c.id
+WHERE sem.id IS NOT NULL OR lex.id IS NOT NULL OR ass.id IS NOT NULL
 ORDER BY score DESC
 LIMIT %(n)s
 """
+PESO_ASSUNTO = 1.0
 
 
 def _termos_lexicais(pergunta: str) -> str:
@@ -281,23 +354,77 @@ def por_rubrica(pergunta: str, n: int = 4, usuario_id: int | None = None,
     )
 
 
+MAX_PALAVRAS_PARES = 12
+
+
+def _palavras_tsquery(termos: str) -> list[str]:
+    """As palavras como tokens seguros para `to_tsquery` (só letras e dígitos)."""
+    vistas, saida = set(), []
+    for p in re.findall(r"[\wÀ-ÿ]+", termos or ""):
+        if p.lower() not in vistas and not p.isdigit():
+            vistas.add(p.lower())
+            saida.append(p)
+    return saida
+
+
+def _termos_da_consulta(termos: str, usuario_id: int | None, mesa_id: int | None) -> str:
+    """A tsquery do braço lexical (sintaxe de `to_tsquery`).
+
+    E quando o E acha trechos. Quando não acha (`LEXICAL_MIN_E`), PARES: o trecho
+    precisa de pelo menos duas palavras da consulta — "(a & b) | (a & c) | …". O OU
+    puro trazia ruído e derrubava 3 casos do gabarito de frases curtas; os pares
+    não (medido em 30/09/2026)."""
+    palavras = _palavras_tsquery(termos)
+    if not palavras:
+        return ""
+    e = " & ".join(palavras)
+    if len(palavras) < LEXICAL_MIN_PALAVRAS_OU:
+        return e
+    r = db.exec1(
+        f"""SELECT count(*) AS n FROM (
+              SELECT 1 FROM chunk c JOIN documento d ON d.id = c.documento_id,
+                     to_tsquery('portuguese', %(t)s) q
+               WHERE c.busca @@ q AND {DONO} AND {MESA} LIMIT %(lim)s) x""",
+        {"t": e, "uid": usuario_id, "mid": mesa_id, "lim": LEXICAL_MIN_E})
+    if r and r["n"] >= LEXICAL_MIN_E:
+        return e
+    base = sorted(palavras, key=len, reverse=True)[:MAX_PALAVRAS_PARES]
+    return " | ".join(f"({a} & {b})" for i, a in enumerate(base) for b in base[i + 1:])
+
+
+def _do_assunto(pergunta: str, usuario_id: int | None) -> list[int]:
+    if not usuario_id:
+        return []
+    try:
+        from . import indice
+        alvo = indice.assunto_citado(usuario_id, pergunta)
+        return indice.trechos_do_assunto(alvo["id"]) if alvo else []
+    except Exception:  # noqa: BLE001 — índice ausente nunca derruba a busca
+        return []
+
+
 def hibrida(pergunta: str, n: int = 6, k: int = 40,
-            usuario_id: int | None = None, mesa_id: int | None = None) -> list[dict]:
-    return db.query(SQL_HIBRIDA, {
+            usuario_id: int | None = None, mesa_id: int | None = None,
+            intencao_: str | None = None) -> list[dict]:
+    termos = _termos_lexicais(pergunta)
+    consulta_lexica = _termos_da_consulta(termos, usuario_id, mesa_id)
+    return db.query(SQL_HIBRIDA.replace("{peso_tipo}", _sql_peso_tipo(intencao_)), {
         "emb": embed_consulta(pergunta),
-        "termos": _termos_lexicais(pergunta),
+        "termos": consulta_lexica,
+        "do_assunto": _do_assunto(pergunta, usuario_id),
         "uid": usuario_id,
         "mid": mesa_id,
         "k": k,
         "n": n,
         "rrf": RRF_K,
         "peso_historico": PESO_HISTORICO,
-        "peso_lexical": PESO_LEXICAL,
+        "peso_lexical": PESO_LEXICAL_OU if "|" in consulta_lexica else PESO_LEXICAL,
+        "peso_assunto": PESO_ASSUNTO,
     })
 
 
 def buscar(pergunta: str, n: int = 6, usuario_id: int | None = None,
-           mesa_id: int | None = None) -> list[dict]:
+           mesa_id: int | None = None, fala: str | None = None) -> list[dict]:
     """
     Ponto de entrada. Precisão vence recall: quando há acerto exato de
     dispositivo, devolve só ele. Contexto extra não ajuda o modelo a
@@ -319,10 +446,14 @@ def buscar(pergunta: str, n: int = 6, usuario_id: int | None = None,
         # Acerto de rubrica é forte: só 2 vagas de complemento, para permitir
         # comparação entre tipos sem afogar a resposta em artigo parecido.
         vistos = {c["id"] for c in rubricas}
-        extra = [c for c in hibrida(pergunta, n=4, usuario_id=usuario_id, mesa_id=mesa_id)
+        extra = [c for c in hibrida(pergunta, n=4, usuario_id=usuario_id, mesa_id=mesa_id,
+                                    intencao_=intencao(fala or pergunta))
                  if c["id"] not in vistos][:2]
         return rubricas + extra
-    return hibrida(pergunta, n=n, usuario_id=usuario_id, mesa_id=mesa_id)
+    # A INTENÇÃO sai da FALA do aluno, não da consulta: a consulta pode ter
+    # herdado o turno anterior, e a intenção é desta pergunta.
+    return hibrida(pergunta, n=n, usuario_id=usuario_id, mesa_id=mesa_id,
+                   intencao_=intencao(fala or pergunta))
 
 
 def formatar_contexto(chunks: list[dict]) -> str:

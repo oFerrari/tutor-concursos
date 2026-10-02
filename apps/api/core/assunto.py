@@ -109,7 +109,7 @@ import unicodedata
 from . import pedido
 from .retrieval import RE_CITACAO
 
-VERSAO = "assunto-v16"
+VERSAO = "assunto-v19"
 
 # Teto da consulta. Embedding é MÉDIA do que entra: parede de texto dilui o
 # assunto exatamente como o art. 37 (13.059 caracteres) já se dilui no próprio
@@ -296,7 +296,27 @@ def disciplina_citada(texto: str, disciplinas: list[str] | None) -> str | None:
         distintivas = alvo - {"direito"} if len(alvo) > 1 else alvo
         if distintivas and all(equivale(x) for x in distintivas):
             achadas.append(d)
-    return max(achadas, key=len) if achadas else None
+    if achadas:
+        return max(achadas, key=len)
+    # NOME DE DUAS PALAVRAS DITO PELA SEGUNDA: "português" é "Língua Portuguesa".
+    # Medido em 29/09/2026 (conversa real): "você já tem material de portugues?" e
+    # "de portugues .." não casavam, e o tutor respondeu o tópico 1.1 de Direito
+    # Constitucional e disse que Português "não cai na sua prova" — com a
+    # disciplina no edital. Vale quando a segunda palavra é LONGA (8 letras ou mais:
+    # "portuguesa", "forenses") e só UMA disciplina do edital a tem; "geral" não
+    # escolhe "Contabilidade Geral" e "penal" não escolhe entre duas.
+    candidatas = []
+    for d in disciplinas:
+        nomes = [_sem_acento(x) for x in palavras_de_conteudo(d)]
+        if len(nomes) == 2 and len(nomes[1]) >= 8 and equivale(nomes[1]):
+            candidatas.append(d)
+    if len(candidatas) == 1:
+        segunda = _sem_acento(palavras_de_conteudo(candidatas[0])[1])
+        outras = [d for d in disciplinas if d != candidatas[0]
+                  and any(_sem_acento(x)[:7] == segunda[:7] for x in palavras_de_conteudo(d))]
+        if not outras:
+            return candidatas[0]
+    return None
 
 
 def _disciplina_aproximada(texto: str | None, disciplinas: list[str] | None) -> str | None:
@@ -390,6 +410,26 @@ def disciplina_da_conversa(historico: list[dict] | None,
     return None
 
 
+# O QUE FICA PRA DEPOIS NÃO É O ASSUNTO DE AGORA. Medido em 28/09/2026 (bateria de
+# descoberta, aluno simulado): "mas volta la praquele assunto de constitucional
+# dps, vamo focar nisso aq agora" fez o tutor sair da tabela-verdade e ir para o
+# art. 30 da CF na hora. A oração adiada sai antes de decidir matéria e busca.
+# Precisa do verbo de voltar/estudar junto: "o que acontece depois da posse?" é
+# matéria, e o "depois" dela fica.
+RE_ORACAO = re.compile(r"(?i)[,.;!?]+|\bmas\b")
+RE_ADIAMENTO = re.compile(r"(?i)\b(?:dps|depois|mais\s+tarde|outra\s+hora|amanh[ãa]|futuramente|no\s+fim)\b")
+RE_VERBO_DE_RUMO = re.compile(
+    r"(?i)\b(?:volt\w*|retom\w*|ver|vemos|estud\w*|fica\s+pra|deix\w*|bora|vamos|vamo|a\s+gente|fa[zç]\w*)\b")
+
+
+def sem_o_adiado(fala: str | None) -> str | None:
+    if not fala or not RE_ADIAMENTO.search(fala):
+        return fala
+    oracoes = RE_ORACAO.split(fala)
+    ficam = [o for o in oracoes if not (RE_ADIAMENTO.search(o) and RE_VERBO_DE_RUMO.search(o))]
+    return " ".join(o.strip() for o in ficam if o.strip()) if len(ficam) < len(oracoes) else fala
+
+
 def disciplina_em_foco(fala: str | None, historico: list[dict] | None,
                        disciplinas: list[str] | None) -> str | None:
     """A disciplina de que a conversa trata AGORA, se alguém a nomeou.
@@ -402,6 +442,7 @@ def disciplina_em_foco(fala: str | None, historico: list[dict] | None,
     disciplinas no mesmo turno ("Ciências Forenses, Constitucional ou…")."""
     if not disciplinas:
         return None
+    fala = sem_o_adiado(fala)
     propria = _disciplina_aproximada(fala, disciplinas)
     if propria or traz_assunto_proprio(fala, disciplinas):
         return propria
@@ -743,15 +784,37 @@ def em_foco(turnos: list[dict] | None = None, pergunta: str | None = None,
     def falas_de(autor: str) -> list[str]:
         return [t.get("texto") or "" for t in (turnos or []) if t.get("autor") == autor]
 
+    pergunta = sem_o_adiado(pergunta)
     # ECO: quem detém a iniciativa é o tutor, e a fala do aluno é resposta. O
     # assunto é o que o TUTOR está perguntando — costurar as últimas respostas do
     # aluno é o que fez uma conversa INTEIRA sobre Lei Maria da Penha gerar
     # questão de ajuda de custo (L8112 art. 55) e mandato eletivo (art. 94).
     if e_eco(pergunta, turnos, disciplinas):
+        # A RESPOSTA QUE ESCOLHE manda na busca. Medido nas conversas reais
+        # (30/09/2026): o tutor ofereceu um cardápio ("… Direito Administrativo, ou
+        # prefere Direito Constitucional ou …") e o aluno escolheu "ciências
+        # forense?"; o tutor listou os itens do edital e ele escolheu "1.1
+        # Interpretação e compreensão de texto". Nos dois a busca foi pelo texto
+        # INTEIRO do tutor — o cardápio — e trouxe Direitos políticos e a Lei 8.112.
+        # Disciplina citada: a fala é a escolha, e basta. Palavras de conteúdo
+        # próprias: a FALA ATUAL (só ela, nunca as anteriores — ver acima) vai na
+        # frente do assunto herdado, que continua junto.
+        proprias = [p for p in palavras_de_conteudo(pergunta or "")
+                    if len(p) >= 4 and _sem_acento(p.lower()) not in VAZIAS]
+        fala = " ".join((pergunta or "").split())
+        if fala and disciplina_citada(fala, disciplinas):
+            # Nome de disciplina sozinho não é assunto de busca (`_com_assunto`):
+            # sem mais nada, quem chama cai no recorte da disciplina.
+            return _truncar(fala) if traz_assunto_proprio(fala, disciplinas) else None
         candidatas = _com_assunto(falas_de("tutor"), disciplinas)[:1]
+        propria = len(proprias) >= 2 and traz_assunto_proprio(fala, disciplinas)
         if not candidatas:
-            return None
+            return (_truncar(fala) or None) if propria else None
         herdado = _sem_citacao(candidatas[0])
+        if propria:
+            # O assunto do tutor PRIMEIRO, cortado para caber a fala inteira depois.
+            espaco = max(0, MAX_CHARS - len(fala) - 1)
+            return (_truncar(herdado[:espaco]) + " " + fala).strip() or None
         return _truncar(herdado) or None
 
     # Uma troca explícita já contém o novo foco inteiro. Somar falas antigas

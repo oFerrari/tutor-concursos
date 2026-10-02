@@ -134,7 +134,7 @@ export function SimuladoRunner({ estado, onFinalizado, onSair, rotuloContinuar =
   }
 
   /** `escolha` só vem no item C/E, onde o clique JÁ é a resposta. */
-  async function proxima(pular: boolean, escolha?: "C" | "E") {
+  async function proxima(pular: boolean, escolha?: string) {
     if (salvando) return;
     setSalvando(true);
     setErro(null);
@@ -261,7 +261,35 @@ export function SimuladoRunner({ estado, onFinalizado, onSair, rotuloContinuar =
           cliques sem decidir nada — a escolha já é a resposta inteira. A
           correção continua no fim, como em qualquer simulado: o que muda é
           o formato de responder, não a regra de não corrigir durante. */}
-      {q.tipo === "certo_errado" ? (
+      {q.tipo === "multipla_escolha" ? (
+        <>
+          {/* Múltipla escolha: marcar JÁ AVANÇA, pela mesma razão do item C/E —
+              a escolha é a resposta inteira. Correção só no fim. */}
+          <div className="mt-4 space-y-2">
+            {(q.alternativas ?? []).map((a) => (
+              <button
+                key={a.letra}
+                onClick={() => proxima(false, a.letra)}
+                disabled={salvando || pausado}
+                className={`flex w-full items-start gap-3 rounded-xl border px-3.5 py-3 text-left text-[15px] transition-colors disabled:opacity-50 ${
+                  resposta === a.letra
+                    ? "border-accent bg-surface-hover"
+                    : "border-line-strong bg-surface hover:border-accent hover:bg-surface-hover"
+                }`}
+              >
+                <span className="shrink-0 font-semibold">{a.letra})</span>
+                <span className="leading-relaxed">{a.texto}</span>
+              </button>
+            ))}
+          </div>
+          {erro && <p className="mt-2 text-sm text-danger">{erro}</p>}
+          <div className="mt-3">
+            <button onClick={() => proxima(true)} disabled={salvando || pausado} className="link">
+              pular
+            </button>
+          </div>
+        </>
+      ) : q.tipo === "certo_errado" ? (
         <>
           <div className="mt-4 grid grid-cols-2 gap-3">
             <button

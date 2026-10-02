@@ -44,7 +44,7 @@ import re
 
 from . import chunking, db, embeddings
 
-VERSAO = "material-v29"
+VERSAO = "material-v35"
 
 LOTE = 32
 MIN_CHARS = 200
@@ -52,7 +52,9 @@ MIN_CHARS = 200
 # Sem 'lei' e sem 'historico', e a ausência é a decisão acima: os dois
 # prometem coisa que material privado não pode cumprir (citação exata de
 # dispositivo). Sobra o que a tela realmente oferece.
-TIPOS = ("aula", "resumo", "jurisprudencia")
+# `simulado` (037): prova ou caderno de questões. Indexado como os outros, e
+# além disso cada questão vira questão do banco (`core/prova.py`).
+TIPOS = ("aula", "resumo", "jurisprudencia", "simulado")
 
 # MATERIAL DE REFERÊNCIA × MATERIAL DE ESTUDO, e a diferença tem consequência.
 #
@@ -87,7 +89,51 @@ TIPOS = ("aula", "resumo", "jurisprudencia")
 # Material de lei seca não perde nada sem o assunto: cada trecho já tem
 # `artigo` e `rubrica`, que são rótulos PRECISOS por trecho — melhores que um
 # assunto único, não piores.
-TIPOS_DE_REFERENCIA = ("jurisprudencia",)
+# `simulado` (037) também: cem questões de doze disciplinas não têm UM assunto, e
+# a descrição dele ("Simulados PCPR") num rótulo de busca de cada trecho seria o
+# ruído de assunto único em corpus grande que a 027 já mediu. A descrição fica no
+# documento, para a tela agrupar; o assunto de cada QUESTÃO vem do índice (036).
+TIPOS_DE_REFERENCIA = ("jurisprudencia", "simulado")
+
+# DESCRIÇÃO EM VEZ DE DISCIPLINA + ASSUNTO (30/09/2026). Resumo, jurisprudência e
+# simulado não se organizam pelo edital: o aluno dá (ou o tutor descobre) UMA
+# descrição que agrupa — "Código de Processo Penal", "Informativos do STF",
+# "Simulados PCPR". Mora em `documento.assunto`; só a aula usa o par
+# disciplina + assunto do edital.
+TIPOS_POR_DESCRICAO = ("resumo", "jurisprudencia", "simulado")
+
+RE_NOME_CODIGO = re.compile(r"\d{6,}|\b(?=\w*\d)(?=\w*[A-Za-z])\w{3,}\b|(?i:^(?:scan|img|doc|arquivo|download|file)\b)")
+
+
+RE_MOJIBAKE = re.compile(r"[ÃÂ][\x80-\xbfº-ÿ]")
+
+
+def sem_mojibake(t: str | None) -> str:
+    """Desfaz o UTF-8 lido como Latin-1 ("3Âº Simulado" → "3º Simulado"). PURO.
+    Só quando o texto tem a marca disso e a volta dá certo; senão, devolve igual."""
+    # NFC antes: o nome pode chegar DECOMPOSTO ("A" + acento combinante, como
+    # salva o macOS), e aí o "Â" da marca nem aparece (medido no simulado real).
+    t = unicodedata.normalize("NFC", t or "")
+    if not RE_MOJIBAKE.search(t):
+        return t
+    try:
+        return t.encode("latin-1").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return t
+
+
+def nome_util(nome: str | None) -> str | None:
+    """O nome do arquivo (ou o título da página) quando ele DIZ alguma coisa. PURO.
+
+    "(Comentado) 3º Simulado PCPR - Projeto Caveira" diz; "del3689compilado",
+    "curso-392635-aula-04-374d-simplificado" e "scan_001" não — têm código no
+    lugar de nome, e aí quem dá o nome é o conteúdo (o classificador)."""
+    base = re.sub(r"\.[A-Za-z0-9]{1,5}$", "", sem_mojibake(str(nome or ""))).strip()
+    base = re.sub(r"[_]+", " ", base)
+    palavras = re.findall(r"[^\W\d_]{3,}", base)
+    if len(palavras) < 2 or RE_NOME_CODIGO.search(base):
+        return None
+    return re.sub(r"\s+", " ", base)[:120]
 
 
 # ------------------------------------------------------ classificar sozinho
@@ -165,7 +211,8 @@ def e_referencia(tipo: str | None, chunks: list[dict] | None = None) -> bool:
 
 
 def classificar(texto: str, disciplinas_conhecidas: list[str] | None = None,
-                com_assunto: bool = True, nome_arquivo: str | None = None) -> dict:
+                com_assunto: bool = True, nome_arquivo: str | None = None,
+                descricoes: list[str] | None = None, tipo: str | None = None) -> dict:
     """
     Descobre disciplina e assunto lendo o começo do material.
 
@@ -254,6 +301,19 @@ def classificar(texto: str, disciplinas_conhecidas: list[str] | None = None,
     )
     # O nome vai ROTULADO e antes do trecho: sem o rótulo o modelo lê o nome
     # como primeira linha do conteúdo, que é exatamente o que ele não é.
+    if descricoes is not None:
+        # MODO DESCRIÇÃO (resumo, jurisprudência, simulado): o "assunto" é a
+        # DESCRIÇÃO que agrupa o material na biblioteca, não o recorte do edital.
+        rotulo_tipo = {"resumo": "resumo ou anotação", "jurisprudencia": "jurisprudência ou norma",
+                       "simulado": "simulado ou caderno de questões"}.get(tipo or "", "material")
+        existentes = "; ".join(descricoes) or "(nenhuma ainda)"
+        sistema += (
+            f"\n\nESTE MATERIAL É {rotulo_tipo.upper()}. Aqui o campo ASSUNTO é a DESCRIÇÃO que o "
+            "agrupa na biblioteca do aluno: curta, como o nome de uma pasta — \"Código de Processo "
+            "Penal\", \"Informativos do STF\", \"Simulados PCPR\", \"Resumos de Direito "
+            f"Constitucional\". Descrições que o aluno já usa neste tipo: {existentes}. Se uma delas "
+            "servir para este material, devolva-a ESCRITA IGUAL; senão, crie uma no mesmo estilo. "
+            "Nome do arquivo descritivo vale como descrição quando o texto concorda.")
     corpo = texto[:MAX_CHARS_CLASSE]
     if nome:
         corpo = f"NOME DO ARQUIVO: {nome}\n\nTRECHO DO CONTEÚDO:\n{corpo}"
@@ -310,7 +370,10 @@ def _extrair_paginas(nome: str, dados: bytes) -> list[str] | None:
         # diz ao aluno o que fazer.
         if getattr(reader, "is_encrypted", False):
             raise ErroMaterial("PDF protegido por senha — remova a proteção e suba de novo")
-        return chunking.sem_moldura([_limpar(p.extract_text() or "") for p in reader.pages])
+        # A moldura sai ANTES (ela compara as linhas das bordas); depois, o texto
+        # justificado que veio uma palavra por linha é remontado.
+        return [chunking.desquebrar(p) for p in
+                chunking.sem_moldura([_limpar(p.extract_text() or "") for p in reader.pages])]
     except ErroMaterial:
         raise
     except Exception as e:
@@ -444,8 +507,15 @@ def baixar(url: str) -> tuple[str, bytes]:
                 #
                 # Mesma ordem de `_extrair`, e por isso mesmo: utf-8 primeiro
                 # (é o que a web moderna usa), cp1252 como reserva.
-                return _nome_da_url(atual, ".txt"), _html_para_texto(
-                    _decodificar(r.content)).encode()
+                html = _decodificar(r.content)
+                # O NOME vem do <title> da página quando ele diz algo ("Código de
+                # Processo Penal"); senão, do endereço. É a primeira pista do
+                # nome do material — o conteúdo decide quando os dois são código.
+                titulo = re.search(r"(?is)<title[^>]*>(.*?)</title>", html)
+                titulo = nome_util(re.sub(r"\s+", " ", titulo.group(1)).strip()) if titulo else None
+                nome = (re.sub(r'[\\/:*?"<>|]+', " ", titulo).strip()[:80] + ".txt") if titulo \
+                    else _nome_da_url(atual, ".txt")
+                return nome, _html_para_texto(html).encode()
             raise ErroMaterial(f"não sei ler este conteúdo ({tipo_http or 'sem tipo'})")
     raise ErroMaterial("redirecionamentos demais")
 
@@ -666,7 +736,13 @@ def _dividir(texto: str, nome: str, paginas: list[str] | None = None) -> list[di
         if chunks:
             return chunks
     # PDF sabe a página de cada trecho; texto puro, HTML e link não têm página.
-    return chunking.chunk_paginado(paginas) if paginas else chunking.chunk_generico(texto)
+    chunks = chunking.chunk_paginado(paginas) if paginas else chunking.chunk_generico(texto)
+    # Texto curto de verdade (o gabarito à parte, 037) vira UM trecho: o corte por
+    # janela descarta trecho de até 80 caracteres, e "01 - B / 02 - A" sumiria.
+    if not chunks and texto.strip():
+        chunks = [{"texto": texto.strip(), "norma": None, "artigo": None, "paragrafo": None,
+                   "inciso": None, "rubrica": None, "secao": None, "pagina": 1 if paginas else None}]
+    return chunks
 
 
 def registrar(usuario_id: int, nome: str, dados: bytes,
@@ -763,7 +839,12 @@ def registrar(usuario_id: int, nome: str, dados: bytes,
 
     paginas = _extrair_paginas(nome, dados)
     texto = "\n\n".join(paginas) if paginas is not None else _extrair(nome, dados)
-    if len(texto.strip()) < MIN_CHARS:
+    # Gabarito à parte (037) é curto de verdade: "01 - B 02 - A …" não é PDF escaneado.
+    gabarito_curto = False
+    if tipo == "simulado":
+        from . import prova
+        gabarito_curto = len(prova.tabela_de_gabarito(texto)) >= prova.MIN_QUESTOES
+    if len(texto.strip()) < MIN_CHARS and not gabarito_curto:
         raise ErroMaterial(
             "quase nenhum texto foi extraído — este PDF provavelmente é imagem "
             "escaneada. Rode OCR (ocrmypdf) e suba de novo.")
@@ -788,8 +869,9 @@ def registrar(usuario_id: int, nome: str, dados: bytes,
             f"({descricao_da_norma_publica(ja_tem)}), e o tutor a usa direto — não há arquivo "
             f"seu envolvido nem nada pra apagar. Uma segunda cópia não acrescentaria nada e "
             f"pioraria a sua busca, porque as duas versões passariam a competir; então nada "
-            f"foi gravado e a sua biblioteca continua como estava. Pergunte \"art. 37\" ao "
-            f"tutor pra ver. O que vale subir é o que o app NÃO tem: aula, resumo e apostila.")
+            f"foi gravado e a sua biblioteca continua como estava. Pergunte \"art. 1º do {ja_tem}\" "
+            f"ao tutor pra ver. O que vale subir é o que o app NÃO tem: aula, resumo, apostila, "
+            f"simulado e jurisprudência.")
 
     # O ARQUIVO VAI PARA O BANCO (024). Antes daqui o `dados` era usado pra
     # extrair texto e descartado, e o PDF ficava só no computador de quem subiu
@@ -809,7 +891,7 @@ def registrar(usuario_id: int, nome: str, dados: bytes,
                    %(url)s)
            RETURNING id, titulo, disciplina, assunto, tipo, status, chunks_total,
                      classificado_por, mesa_id, criado_em, url""",
-        {"t": (titulo or re.sub(r"\.[A-Za-z0-9]{1,5}$", "", nome)).strip()[:200],
+        {"t": sem_mojibake(titulo or re.sub(r"\.[A-Za-z0-9]{1,5}$", "", nome)).strip()[:200],
          "d": (disciplina or "").strip() or None,
          "as": (assunto or "").strip() or None,
          "tp": tipo, "o": nome, "h": digest, "u": usuario_id, "n": len(chunks),
@@ -1058,6 +1140,10 @@ def indexar(documento_id: int, nome: str, dados: bytes) -> None:
                 citados = cur.fetchall()
             novos: list[tuple[int, str]] = []
             with c.cursor() as cur:
+                cur.execute("SELECT id, ordem, pagina FROM chunk WHERE documento_id = %s ORDER BY ordem",
+                            (documento_id,))
+                antigos = cur.fetchall()
+            with c.cursor() as cur:
                 cur.execute("DELETE FROM chunk WHERE documento_id = %s", (documento_id,))
                 cur.execute("UPDATE documento SET status='processando', erro=NULL WHERE id=%s",
                             (documento_id,))
@@ -1080,6 +1166,10 @@ def indexar(documento_id: int, nome: str, dados: bytes) -> None:
                         novos.append((cur.fetchone()["id"], x["texto"]))
             if citados:
                 _remapear_fontes(c, citados, novos)
+            if antigos:
+                _remapear_marcadores(c, documento_id, antigos,
+                                     [{"id": i, "ordem": k, "pagina": x.get("pagina")}
+                                      for k, ((i, _), x) in enumerate(zip(novos, chunks))])
             with c.cursor() as cur:
                 # `chunks_total` é reescrito, não só o status: ele foi gravado
                 # em `registrar` com a contagem daquele momento, e a contagem
@@ -1136,6 +1226,67 @@ def indexar(documento_id: int, nome: str, dados: bytes) -> None:
     # a linha ainda vai mudar na tela.
     with db.conexao_isolada() as c, c.cursor() as cur:
         cur.execute("UPDATE documento SET status='pronto' WHERE id=%s", (documento_id,))
+    # O MAPA DO EDITAL daquela disciplina fica desatualizado (035): marca para a
+    # próxima verificação. Sem modelo aqui — ver `core/cobertura.py`.
+    try:
+        from . import cobertura
+        d = db.exec1("SELECT usuario_id, disciplina FROM documento WHERE id = %(i)s", {"i": documento_id})
+        if d and d["usuario_id"]:
+            cobertura.marcar_pendente(d["usuario_id"], d["disciplina"])
+    except Exception:
+        pass
+    # OS ASSUNTOS DE CADA TRECHO (036, `core/indice.py`): ainda aqui, em segundo
+    # plano, depois do `pronto` — o material já serve à busca enquanto o índice é
+    # montado, e sem cota o índice sai pela reserva (sem modelo), para refazer depois.
+    try:
+        from . import indice
+        indice.indexar_assuntos(documento_id)
+    except Exception as e:  # noqa: BLE001 — índice nunca derruba a indexação
+        print(f"[tutor] índice de assuntos de {documento_id} falhou: {e}")
+    # AS QUESTÕES DO SIMULADO (037), depois do índice: o assunto de cada questão
+    # sai do trecho em que ela está.
+    try:
+        if (db.exec1("SELECT tipo FROM documento WHERE id = %(i)s", {"i": documento_id}) or {}).get("tipo") == "simulado":
+            from . import prova
+            prova.importar(documento_id)
+    except Exception as e:  # noqa: BLE001 — extração nunca derruba a indexação
+        print(f"[tutor] questões do simulado {documento_id} falharam: {e}")
+
+
+def _remapear_marcadores(c, documento_id: int, antigos: list[dict], novos: list[dict]) -> None:
+    """As fontes das CONVERSAS (e o marcador da leitura, que mora nelas) seguem o
+    material reindexado: cada referência antiga vai para o primeiro trecho novo da
+    MESMA PÁGINA — a posição muda (Verbos: 158 trechos → 106, com o texto do PDF
+    remontado em 29/09/2026), a página não. Sem página (`.txt`), a posição
+    proporcional. Antes disto, reindexar deixava o marcador de leitura apontando
+    para outra parte do material, e o "continua" pulava ou repetia."""
+    import json
+    if not novos:
+        return
+    por_id = {a["id"]: a for a in antigos}
+
+    def novo_para(pagina, ordem):
+        if pagina is not None:
+            for n in novos:
+                if n["pagina"] is not None and n["pagina"] >= pagina:
+                    return n
+            return novos[-1]
+        k = int((ordem or 0) * len(novos) / max(1, len(antigos)))
+        return novos[min(max(k, 0), len(novos) - 1)]
+
+    with c.cursor() as cur:
+        cur.execute("""SELECT id, fontes FROM mensagem
+                        WHERE fontes @> %s::jsonb""", (json.dumps([{"documento_id": documento_id}]),))
+        linhas = cur.fetchall()
+        for m in linhas:
+            fontes = []
+            for f in m["fontes"] or []:
+                if f.get("documento_id") == documento_id:
+                    a = por_id.get(f.get("id")) or {}
+                    n = novo_para(a.get("pagina", f.get("pagina")), a.get("ordem", f.get("ordem")))
+                    f = {**f, "id": n["id"], "ordem": n["ordem"], "pagina": n["pagina"]}
+                fontes.append(f)
+            cur.execute("UPDATE mensagem SET fontes = %s WHERE id = %s", (json.dumps(fontes), m["id"]))
 
 
 def _remapear_fontes(c, citados: list[dict], novos: list[tuple[int, str]]) -> None:
@@ -1267,11 +1418,20 @@ def _classificar_se_faltar(documento_id: int, texto: str,
         referencia = e_referencia(atual["tipo"], chunks)
         # Referência precisa só da disciplina; pedir o assunto de novo a cada
         # reindexação gastaria cota pra descartar a resposta.
-        if atual["disciplina"] and (atual["assunto"] or referencia):
+        por_descricao = atual["tipo"] in TIPOS_POR_DESCRICAO
+        if atual["disciplina"] and (atual["assunto"] or (referencia and not por_descricao)):
             return
         conhecidas = vocabulario_do_aluno(atual["usuario_id"])
-        palpite = classificar(texto, conhecidas, com_assunto=not referencia,
-                              nome_arquivo=atual.get("origem"))
+        palpite = classificar(texto, conhecidas, com_assunto=por_descricao or not referencia,
+                              nome_arquivo=atual.get("origem"),
+                              descricoes=(descricoes_do_tipo(atual["usuario_id"], atual["tipo"])
+                                          if por_descricao else None),
+                              tipo=atual["tipo"])
+        if por_descricao and not palpite.get("assunto"):
+            # Sem modelo, o nome do arquivo (ou o título da página) quando ele diz algo.
+            util = nome_util(atual.get("origem"))
+            if util:
+                palpite = {**palpite, "assunto": util}
         if not palpite:
             return
         disc = atual["disciplina"] or palpite.get("disciplina")
@@ -1279,7 +1439,11 @@ def _classificar_se_faltar(documento_id: int, texto: str,
         # gravou um (era o comportamento até aqui, e é ele que poluiu a busca),
         # reindexar tem de limpar. Preservar seria carregar o defeito pra
         # frente justamente na hora que existe pra consertá-lo.
-        assu = None if referencia else (atual["assunto"] or palpite.get("assunto"))
+        # A DESCRIÇÃO de quem se organiza por descrição (jurisprudência, simulado)
+        # é a exceção: ela não vai à busca — `indexar` e `reindexar_rotulo` tiram
+        # o rótulo dos trechos de referência —, só agrupa a tela.
+        assu = ((atual["assunto"] or palpite.get("assunto")) if (por_descricao or not referencia)
+                else None)
         # 'aluno' se ELE informou a disciplina e o modelo só completou o assunto:
         # a parte que decide o recorte da mesa continua sendo a dele.
         #
@@ -1624,6 +1788,7 @@ def listar(usuario_id: int) -> list[dict]:
                   d.criado_em,
                   d.arquivo_bytes, (d.arquivo IS NOT NULL) AS tem_arquivo,
                   d.mesa_id, m.nome AS mesa_nome,
+                  d.questoes_extraidas, d.questoes_sem_gabarito, d.gabarito_de,
                   count(c.id) AS chunks,
                   -- É MATERIAL DE REFERÊNCIA? A regra é a de `e_referencia()`,
                   -- em SQL porque a tela precisa dela por linha e não vale
@@ -1658,6 +1823,14 @@ def listar(usuario_id: int) -> list[dict]:
         {"u": usuario_id, "ref": list(TIPOS_DE_REFERENCIA)})
 
 
+def descricoes_do_tipo(usuario_id: int, tipo: str) -> list[str]:
+    """As descrições que este aluno já usa neste tipo de material."""
+    return [r["assunto"] for r in db.query(
+        """SELECT DISTINCT assunto FROM documento
+            WHERE usuario_id = %(u)s AND tipo = %(t)s AND assunto IS NOT NULL ORDER BY assunto""",
+        {"u": usuario_id, "t": tipo})]
+
+
 def sugestoes(usuario_id: int, mesa_id: int | None = None) -> dict:
     """O que ESTE aluno já usou de rótulo, pra tela oferecer em vez de exigir
     que ele lembre.
@@ -1685,8 +1858,11 @@ def sugestoes(usuario_id: int, mesa_id: int | None = None) -> dict:
         """SELECT DISTINCT disciplina, assunto
              FROM documento
             WHERE usuario_id = %(u)s
-              AND (disciplina IS NOT NULL OR assunto IS NOT NULL)""",
-        {"u": usuario_id})
+              AND (disciplina IS NOT NULL OR assunto IS NOT NULL)
+              -- Os por DESCRIÇÃO têm lista própria (`descricoes_por_tipo`): a
+              -- descrição de um simulado não é assunto de aula.
+              AND tipo <> ALL(%(desc)s)""",
+        {"u": usuario_id, "desc": list(TIPOS_POR_DESCRICAO)})
     disciplinas, assuntos, por_disc = set(), set(), {}
     for l in linhas:
         d, a = l["disciplina"], l["assunto"]
@@ -1715,6 +1891,9 @@ def sugestoes(usuario_id: int, mesa_id: int | None = None) -> dict:
         "assuntos": sorted(assuntos),
         "assuntos_por_disciplina": {k: sorted(v) for k, v in sorted(por_disc.items())},
         "topicos_por_disciplina": topicos,
+        # Resumo, jurisprudência e simulado se organizam por DESCRIÇÃO, e a
+        # sugestão vem dos materiais do MESMO tipo — não do edital.
+        "descricoes_por_tipo": {t: descricoes_do_tipo(usuario_id, t) for t in TIPOS_POR_DESCRICAO},
     }
 
 
@@ -1724,6 +1903,18 @@ def apagar(usuario_id: int, documento_id: int) -> bool:
     acervo, que não tem dono). Devolve False pra "não é seu ou não existe":
     mesma escolha de `mesa.obter`, que dá 404 e não 403 pra não confirmar a
     quem chuta um id que ele existe. Os chunks vão pelo CASCADE."""
-    r = db.query("DELETE FROM documento WHERE id = %(d)s AND usuario_id = %(u)s RETURNING id",
-                 {"d": documento_id, "u": usuario_id})
+    # AS QUESTÕES DE PROVA DO SIMULADO SAEM JUNTO (037). Elas são o próprio
+    # arquivo, literal, e apontam para os trechos dele; o FK de `questao` é
+    # SET NULL (a questão GERADA sobrevive ao material por causa do histórico), e
+    # deixou 99 questões órfãs, sem trecho, na fila do aluno que apagou o
+    # simulado (01/10/2026).
+    db.query("""DELETE FROM questao WHERE origem = 'prova' AND documento_id = %(d)s
+                  AND usuario_id = %(u)s""", {"d": documento_id, "u": usuario_id})
+    r = db.query("DELETE FROM documento WHERE id = %(d)s AND usuario_id = %(u)s "
+                 "RETURNING id, disciplina", {"d": documento_id, "u": usuario_id})
+    if r:
+        # Os trechos saem do mapa pelo CASCADE; o ESTADO do subitem ("coberto")
+        # ficaria mentindo sem esta marca.
+        from . import cobertura
+        cobertura.marcar_pendente(usuario_id, r[0]["disciplina"])
     return bool(r)

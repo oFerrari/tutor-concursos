@@ -380,7 +380,7 @@ def _subir(client, headers, nome, disciplina=None, assunto=None):
     """Como `_material`, mas com rótulo à escolha e conteúdo único por nome —
     `registrar` barra o MESMO arquivo duas vezes (hash), e um lote de teste
     precisa de linhas distintas."""
-    dados = {"tipo": "resumo"}
+    dados = {"tipo": "aula"}
     if disciplina is not None:
         dados["disciplina"] = disciplina
     if assunto is not None:
@@ -1297,3 +1297,16 @@ def test_edital_novo_reclassifica_o_palpite_do_modelo_e_nao_o_do_aluno(client, u
     assert disc == {palpite_fora: "Ciências Sintéticas", digitado_fora: "Processo Sintético"}
     # E uma segunda passada não faz nada: o material já está no edital.
     assert material.reclassificar_pelo_edital(usuario["id"], m["id"]) == []
+
+
+def test_baixar_material_com_nome_acentuado_decomposto(client, usuario):
+    """'3Âº' com acento combinante (U+0302) não cabe em Latin-1 e derrubava o download."""
+    import unicodedata
+    nome = unicodedata.normalize("NFD", "(Comentado) 3Âº Simulado Sintético.txt")
+    r = client.post("/materiais", files={"arquivo": (nome, ("Texto sintético de prova. " * 60).encode(), "text/plain")},
+                    data={"tipo": "aula"}, headers=usuario["headers"])
+    assert r.status_code == 201, r.text
+    material.esperar_fila(30)
+    b = client.get(f"/materiais/{r.json()['id']}/arquivo?baixar=1", headers=usuario["headers"])
+    assert b.status_code == 200
+    assert "filename*=UTF-8''" in b.headers["content-disposition"]

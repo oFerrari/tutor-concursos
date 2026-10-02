@@ -33,7 +33,7 @@ Aqui só se responde "ele quer treinar, e quantas".
 """
 import re
 
-VERSAO = "pedido-v10"
+VERSAO = "pedido-v15"
 
 # Pedido de TREINO. `quest(?:[ãa]o|[õo]es)` e não `quest[õo]es?`: o singular
 # leva "ã" e o plural "õ", e quem tem pressa digita sem acento — a primeira
@@ -81,6 +81,13 @@ RE_FORMAL = re.compile(
     r"\b(?:fazer|faz|quero|queria|bora|vamos|simular|aplicar|marcar)\s+"
     r"(?:uma\s+|a\s+|um\s+)?prova\b|"
     r"\bprova\s+(?:cronometrada|simulada|completa|inteira|de\s+verdade)\b)")
+
+# "ITEM" DO PROGRAMA NÃO É ITEM CERTO/ERRADO. "Próximo item do edital", "item por
+# item", "item 2.1" falam do edital; com a leitura na ordem do edital (035) elas
+# viraram fala comum, e "item" bastava para gerar duas questões (28/09/2026).
+RE_ITEM_DO_PROGRAMA = re.compile(
+    r"(?i)\bit(?:em|ens)\s+(?:do|da|de|deste|desse)\s+(?:edital|programa|conte[uú]do|mat[eé]ria)\b"
+    r"|\bitem\s+(?:por|a)\s+item\b|\bpr[oó]xim[oa]s?\s+it(?:em|ens)\b|\bitem\s+\d")
 
 # Formato explícito. Item CERTO/ERRADO é o estilo Cebraspe (012) e o aluno pede
 # pelo nome; quando ele não pede, quem decide é a banca da mesa
@@ -176,6 +183,16 @@ RE_CONTINUA = re.compile(
     r"(?i)^\s*(?:e\s+|agora\s+|entao\s+|então\s+|ok,?\s+)?"
     r"(?:mais|manda|mande|quero|vai|va|vá|s[óo]|apenas|de novo|denovo|outra|outras)?"
     r"[\s,]*(?:\d{1,2}|" + "|".join(NUMERO) + r"|outra|outras|mais)\b")
+# A forma elíptica é CURTA. Medido em 28/09/2026: o aluno colou um enunciado que
+# começava com "Um levantamento interno realizado na Guarda Municipal...", logo
+# depois de um turno de treino, e o "Um" casou com `RE_CONTINUA` como se fosse
+# "manda uma". Saiu um card de Proposições debaixo da questão de conjuntos dele.
+MAX_PALAVRAS_ELIPTICA = 6
+
+
+def _eliptica(fala: str) -> bool:
+    fala = (fala or "").strip()
+    return bool(RE_CONTINUA.match(fala)) and len(fala.split()) <= MAX_PALAVRAS_ELIPTICA
 
 
 # O adiamento, e o que ele governa. Curta e fechada como as outras listas deste
@@ -240,6 +257,135 @@ def _negado(fala: str) -> bool:
     return False
 
 
+# PEDIDO DE RESOLUÇÃO — o aluno quer VER a questão resolvida, não receber outra.
+#
+# Medido em 28/09/2026: "resolva pra mim questões de probabilidade" casou com
+# `RE_TREINO` pela palavra "questões" e gerou dois cards para ELE responder; um
+# deles saiu da apresentação do curso. E um enunciado colado inteiro, com
+# alternativas, é o mesmo pedido sem o verbo: "resolve isto".
+#
+# O verbo é IMPERATIVO dirigido ao tutor ("resolva", "resolve essa", "me mostra
+# como resolve"). "quero questões PARA RESOLVER" continua sendo treino: ali quem
+# resolve é ele.
+RE_RESOLUCAO = re.compile(
+    r"(?i)("
+    # O objeto precisa ser QUESTÃO (ou "isso", "pra mim"): "como o STF resolve o
+    # conflito?" é pergunta de matéria, não pedido de resolução.
+    r"\bresolv[ae]\s+(?:pra\s+mim|para\s+mim|p/\s*mim|a[íi]\b|isso|isto|"
+    r"(?:(?:ess[ae]s?|est[ae]s?|as?|os?|umas?|duas|dois|tr[êe]s|\d+)\s+)?(?:\w+\s+)?"
+    r"(?:quest|exerc|problema|conta|equa|item|itens))"
+    # "quero que vc resolva", "resolve aí", "resolve pra mim?": o verbo no FIM da
+    # fala é o pedido inteiro (medido: fala real de 28/09/2026 que não casava).
+    r"|^\s*(?:agora\s+|ent[ãa]o\s+|pode\s+|por\s+favor\s+|s[óo]\s+)?resolv[ae]\s*(?:a[íi]|vc|voc[êe]|tu)?\s*[?.!]*\s*$"
+    r"|\bque\s+(?:vc|voc[êe]|tu)\s+(?:resolva|calcule|fa[çc]a\s+a\s+conta)\b"
+    r"|\bme\s+(?:mostr[ae]|ensin[ae]|explic[ae])\s+(?:como\s+)?(?:se\s+)?(?:resolv|calcul|faz\s+(?:a|essa)\s+conta)"
+    r"|\bcomo\s+(?:eu\s+)?(?:se\s+)?(?:resolv[eo]|calcul[ao]|fa[çz]o\s+(?:a|essa)\s+conta)\b"
+    r"|\b(?:quest[õo]es|quest[ãa]o|exerc[íi]cios?|exemplos?)\s+(?:resolvid[ao]s?|comentad[ao]s?)\b"
+    r"|\bcad[êe]\s+(?:o|a)\s+(?:c[áa]lculo|conta|f[óo]rmula|resolu[çc][ãa]o)\b"
+    r"|\b(?:mostr[ae]|fa[çz]a|faz)\s+(?:a|essa)\s+(?:conta|resolu[çc][ãa]o)\b"
+    r"|\bcalcul[ae]\s+(?:pra\s+mim|a|o|quant)"
+    r"|\bqual\s+(?:[ée]\s+)?(?:o\s+)?gabarito\b"
+    r")")
+
+# ENUNCIADO COLADO: texto longo com alternativas em sequência (uma letra por
+# linha, "A)", "(B)") ou com a moldura de prova ("Alternativas", "julgue o
+# item", "assinale"). Um aluno não escreve isso para conversar.
+RE_ALTERNATIVA_NA_LINHA = re.compile(r"(?m)^\s*\(?[A-Ea-e]\s*[).\-–:]?\s*(?:$|\S)")
+RE_MOLDURA_DE_PROVA = re.compile(
+    r"(?i)\b(?:alternativas|julgue\s+o\s+item|assinale\s+a|marque\s+a\s+(?:op|alt)|"
+    r"certo\s+ou\s+errado)\b")
+MIN_CHARS_ENUNCIADO = 120
+
+
+# PROBLEMA COLADO SEM ALTERNATIVAS: enunciado comprido, com dados numéricos, que
+# termina em pergunta. Medido: a mesma questão da guarda municipal, colada sem as
+# alternativas, virou um parágrafo corrido que terminava perguntando outra coisa.
+MIN_CHARS_PROBLEMA = 200
+RE_NUMERO = re.compile(r"\b\d+(?:[.,]\d+)?\b")
+
+
+def questao_colada(fala: str) -> bool:
+    fala = fala or ""
+    if len(fala) < MIN_CHARS_ENUNCIADO:
+        return False
+    if (len(fala) >= MIN_CHARS_PROBLEMA and "?" in fala[-200:]
+            and len(RE_NUMERO.findall(fala)) >= 2):
+        return True
+    letras = [m.group(0).strip()[:2] for m in RE_ALTERNATIVA_NA_LINHA.finditer(fala)
+              if re.match(r"\(?[A-Ea-e](?:\W|$)", m.group(0).strip())]
+    return len(letras) >= 3 or bool(RE_MOLDURA_DE_PROVA.search(fala))
+
+
+def resolucao(fala: str) -> bool:
+    """O aluno pediu para o TUTOR resolver (ou mostrar a conta de) uma questão?
+
+    Não gera nada: decide que o turno é de resolução — passo a passo, com a
+    conta, o gabarito e o macete — e que nenhum card de treino sai dele."""
+    return bool(RE_RESOLUCAO.search(fala or "")) or questao_colada(fala)
+
+
+# PEDIDO DE FORMA VISUAL — mapa mental, esquema, tabela, quadro. Não muda o que
+# buscar, muda como escrever: `socratic` acrescenta a notação que a tela desenha.
+RE_FORMATO_VISUAL = re.compile(
+    r"(?i)\b(?:mapas?\s+ment(?:al|ais)|esquemas?|esquematiz|tabelas?|quadros?\s+"
+    r"(?:comparativos?|resumos?|sin[óo]ticos?)|diagramas?|fluxogramas?|organogramas?|bizus?|"
+    r"f[óo]rmulas?)\b")
+
+
+def formato_visual(fala: str) -> bool:
+    return bool(RE_FORMATO_VISUAL.search(fala or ""))
+
+
+# ACEITAR A OFERTA É PEDIR. Medido em 28/09/2026 (bateria de descoberta, fala
+# real): o tutor perguntou se o aluno queria ver questões, ele disse que sim, e
+# nenhum cartão veio — o prompt mandava o tutor OFERECER e esperar o pedido
+# "com todas as letras", e a resposta à oferta não contava como pedido. A oferta
+# é reconhecida na fala do TUTOR (a última), e o aceite é curto: "sim", "manda".
+RE_OFERTA_DE_QUESTOES = re.compile(
+    r"(?i)\b(?:quer(?:\s+que\s+eu)?|posso|topa\s+que\s+eu|vamos|bora)\s+"
+    r"(?:te\s+)?(?:monte|montar|prepare|preparar|mande|mandar|traga|trazer|gere|gerar|passe|passar|"
+    r"fa[çc]a|fazer|separe|separar|d[êe]|dar|resolver|treinar|praticar)\b[^?]{0,80}?"
+    r"\b(?:quest(?:[ãa]o|[õo]es)|exerc[íi]cios?|itens|treino|treinar|praticar)")
+RE_ACEITE = re.compile(
+    r"(?i)^\s*(?:sim|s|ss|claro|pode|pode\s+ser|bora|vamos|manda|mande|quero|ok|okay|beleza|blz|"
+    r"isso|com\s+certeza|por\s+favor|fechou|demorou|aham|uhum|opa|show|partiu|vai)\b"
+    r"[\s,!.]*(?:(?:sim|pode|manda|por\s+favor|bora|quero|claro|mesmo|ai|a[íi])\b[\s,!.]*){0,3}$")
+
+
+def aceitou_oferta_de_questoes(fala: str, ultima_do_tutor: str | None) -> dict | None:
+    """O pedido de treino que o aceite de uma oferta representa, ou None.
+    A quantidade e o formato são os que o TUTOR ofereceu ("três itens C/E")."""
+    oferta = RE_OFERTA_DE_QUESTOES.search(ultima_do_tutor or "")
+    if not oferta or not RE_ACEITE.match(fala or ""):
+        return None
+    trecho = (ultima_do_tutor or "")[oferta.start():oferta.end() + 60]
+    return {"quantidade": quantas(trecho),
+            "tipo": "certo_errado" if RE_CERTO_ERRADO.search(trecho) else None,
+            "formal": False}
+
+
+# O ASSUNTO DO PEDIDO, sem o pedido. "me manda questões de controle de
+# constitucionalidade" ia à busca inteira, e "manda"/"questões" traziam o CPP 482
+# ("Do Questionário e sua Votação") — medido na bateria de 29/09/2026.
+RE_VOCABULARIO_DE_PEDIDO = re.compile(
+    rf"(?i)\b(?:{PALAVRA_TREINO}|exerc[íi]cios?|me|mim|pra|para|eu|vc|voc[êe]|tu|pfv|pf|por\s+favor|"
+    r"logo|a[íi]|agora|mais|outra|outras|umas?|duas|dois|tr[êe]s|quatro|cinco|\d+|"
+    r"d[áa]|dar|manda|mande|mandar|traz|traga|passa|passe|gera|gere|faz|fa[çc]a|cria|crie|"
+    r"quero|queria|preciso|bota|coloca|treinar|treino|praticar|resolver|responder|dif[íi]ceis?|"
+    r"f[áa]ceis?|certo\s+ou\s+errado|alternativas?|"
+    # A CONVERSA em volta do pedido: referência ("disso"), avaliação ("fácil",
+    # "errada"), vocativo ("mano") e verbo de tentar. Medido em 29/09/2026: "é a RAM
+    # que é volátil, bota uma questão disso" teve "disso" e "fácil" como termos
+    # raros, e a questão saiu do CP.
+    r"disso|disto|nisso|nisto|daquilo|naquilo|isso|isto|essa|esse|esta|este|"
+    r"f[áa]cil|dif[íi]cil|errad[ao]s?|cert[ao]s?|nada|mano|cara|v[ée]i|p[ôo]|testar|tentar|"
+    r"ver|saber|sei|entender|entendi|aprender|aprendi|n[íi]vel|m[ée]di[ao]|banca)\b")
+
+
+def sem_o_pedido(fala: str | None) -> str:
+    return " ".join(RE_VOCABULARIO_DE_PEDIDO.sub(" ", fala or "").split())
+
+
 def veio_de_treino(historico: list[dict] | None) -> bool:
     """A última fala do ALUNO já era pedido de treino?
 
@@ -265,9 +411,16 @@ def veio_de_treino(historico: list[dict] | None) -> bool:
         fala = m.get("texto") or ""
         if treino(fala) is not None:
             return True
-        if not RE_CONTINUA.match(fala.strip()):
+        if not _eliptica(fala):
             return False
     return False
+
+
+RE_PEDE_EXPLICACAO = re.compile(r"(?i)\b(?:explic\w*|me\s+ensin\w*|detalh\w*|aprofund\w*)\b")
+RE_PEDIDO_DIRETO = re.compile(
+    rf"(?i)\b(?:(?:me\s+)?(?:d[áa]|dar|manda|mande|traz|traga|passa|passe|gera|gere|quero|queria|"
+    rf"fa[çz]a|bota|coloca|solta)\b[^.!?]{{0,25}}|(?:\d+|uma|um|duas|dois|tr[êe]s|algumas|umas)\s+)"
+    rf"(?:{PALAVRA_TREINO})\b")
 
 
 def treino(fala: str, apos_treino: bool = False) -> dict | None:
@@ -288,9 +441,10 @@ def treino(fala: str, apos_treino: bool = False) -> dict | None:
     # "questão", que era o que a regex procurava.
     if not fala:
         return None
+    fala = RE_ITEM_DO_PROGRAMA.sub(" ", fala)
     if not (RE_TREINO.search(fala) or RE_FORMAL.search(fala)):
         # Só a forma elíptica, e só logo depois de um turno de treino.
-        if not (apos_treino and RE_CONTINUA.match(fala.strip())):
+        if not (apos_treino and _eliptica(fala)):
             return None
     # PEDIDO ADIADO NÃO É PEDIDO. Relatado com log: "me introduza ao assunto,
     # depois trazendo exemplos pra depois TALVEZ questões" gerou duas questões
@@ -304,6 +458,15 @@ def treino(fala: str, apos_treino: bool = False) -> dict | None:
     if _adiado(fala) or _negado(fala):
         return None
     if RE_ESCOLHA_ASSUNTO.search(fala):
+        return None
+    # PEDIR RESOLUÇÃO NÃO É PEDIR TREINO: quem resolve é o tutor, na resposta.
+    if resolucao(fala):
+        return None
+    # PEDIU EXPLICAÇÃO, e "exercício" só aparece na reclamação: "tu ja pulou
+    # exercicio, explica direito essa parte de contagem" gerou cartão (bateria de
+    # 29/09/2026). Com pedido de explicação, só é treino o pedido DIRETO — verbo de
+    # pedir ou quantidade colados à palavra de treino.
+    if RE_PEDE_EXPLICACAO.search(fala) and not RE_PEDIDO_DIRETO.search(fala):
         return None
     return {"quantidade": quantas(fala),
             "tipo": "certo_errado" if RE_CERTO_ERRADO.search(fala) else None,
@@ -448,13 +611,56 @@ def desabafo(fala: str) -> bool:
 RE_SISTEMA = re.compile(
     r"(?i)("
     r"\bcomo\s+(?:voc[êe]|tu)\s+(?:funciona|trabalha|faz|pensa|responde|foi\s+feit[oa])\b"
+    # "me explica como funciona o sistema/o app/o tutor" (01/10/2026): sem isto,
+    # o pedido de explicação abria a leitura de uma apostila.
+    r"|\bcomo\s+funciona\s+(?:o\s+|esse\s+|este\s+)?(?:sistema|app|aplicativo|tutor|site|chat|plataforma)\b"
     r"|\bde\s+onde\s+(?:voc[êe]|tu)\s+(?:tira|tirou|pega|puxa|busca|saca)\b"
     r"|\bvoc[êe]\s+[ée]\s+(?:uma\s+)?(?:ia|i\.a|intelig[êe]ncia\s+artificial|rob[ôo]|"
     r"m[áa]quina|chatgpt|gpt|gemini|modelo|chatbot|bot)\b"
     r"|\b(?:quem|o\s+que)\s+(?:te|lhe)\s+(?:criou|fez|treinou|programou)\b"
     r"|\bvoc[êe]\s+(?:[ée]\s+)?(?:humano|pessoa|professor\s+de\s+verdade|gente)\b"
     r"|\bque\s+(?:ia|modelo|intelig[êe]ncia)\s+(?:voc[êe]\s+)?(?:usa|[ée])\b"
+    # O QUE VOCÊ SABE FAZER / O QUE TE FALTA. Medido em 28/09/2026: "do que vc
+    # é capaz de fazer? como tutor" e "o que falta pra vc se transforma num
+    # tutor completo?" foram à busca e voltaram seis trechos de Poder
+    # Judiciário e Proposições como CONSULTADO — e a segunda virou uma pergunta
+    # de Constitucional que ninguém fez.
+    r"|\b(?:do\s+)?que\s+(?:voc[êe]|vc|tu)\s+(?:[ée]|es)\s+capaz\b"
+    r"|\bo\s+que\s+(?:voc[êe]|vc|tu)\s+(?:sabe|consegue|pode)\s+(?:fazer|me\s+ajudar)\b"
+    r"|\bcomo\s+(?:voc[êe]|vc|tu)\s+(?:pode|consegue)\s+me\s+ajudar\b"
+    r"|\b(?:suas|tuas)\s+(?:fun[çc][õo]es|funcionalidades|capacidades|limita[çc][õo]es)\b"
+    r"|\bfalta\s+(?:pra|para)\s+(?:voc[êe]|vc|tu)\s+(?:ser|se\s+tornar|virar|se\s+transforma(?:r)?|"
+    r"ficar)\b"
     r")")
+
+# PERGUNTA SOBRE A BIBLIOTECA também não busca: "quais apostilas eu tenho?" se
+# responde com `### Material que o aluno subiu`, que já vai no prompt inteiro.
+# Buscando, seis trechos sorteados apareciam como CONSULTADO debaixo de uma
+# lista de arquivos. "o que tem no acervo SOBRE peculato" é pergunta de
+# matéria, e por isso "sobre" fica de fora.
+RE_BIBLIOTECA = re.compile(
+    r"(?i)\b(?:quais?|que|quantos|quantas|o\s+que)\b[^?.!]{0,25}"
+    r"\b(?:materia(?:l|is)|apostilas?|pdfs?|arquivos?|acervo|biblioteca)\b[^?.!]{0,25}"
+    r"\b(?:tenho|eu\s+tenho|tem|h[áa]|subi|existe|existem|voc[êe]\s+tem)\b"
+    r"|\b(?:o\s+que|que)\s+(?:voc[êe]|vc)\s+tem\s+de\s+(?:materia(?:l|is)|apostilas?)\b"
+    r"|\b(?:o\s+que|que)\s+(?:tem|h[áa]|existe)\s+(?:no|na)\s+(?:meu\s+|minha\s+|seu\s+|sua\s+)?"
+    r"(?:acervo|biblioteca|material)\s*[?.!]*$"
+    # O verbo ANTES do nome, como se fala no celular: "quais a gente tem material?",
+    # "saber sobre o que você tem material" (bateria de 29/09/2026, falas reais; a
+    # segunda foi à busca e pôs a Lei 8.112 art. 5º como CONSULTADO da lista de
+    # apostilas).
+    r"|\b(?:quais?|que)\b[^?.!]{0,20}\b(?:tenho|tem|temos|h[áa])\s+(?:de\s+)?"
+    r"(?:materia(?:l|is)|apostilas?|pdfs?|arquivos?)\b")
+
+
+def sobre_a_biblioteca(fala: str) -> bool:
+    """A pergunta é sobre QUAIS materiais ele tem, e não sobre o que eles dizem?
+
+    "sobre" só tira da biblioteca quando introduz ASSUNTO ("o que tem no acervo
+    sobre peculato"); "saber sobre o que você tem" é a própria pergunta."""
+    fala = fala or ""
+    return bool(RE_BIBLIOTECA.search(fala)) and not re.search(
+        r"(?i)\bsobre\b(?!\s+(?:o\s+que|quais?)\b)", fala)
 
 
 def sobre_o_sistema(fala: str) -> bool:
@@ -466,6 +672,41 @@ def sobre_o_sistema(fala: str) -> bool:
     return bool(RE_SISTEMA.search(fala or ""))
 
 
+# "DE ONDE VEIO ISSO?" — a fonte da resposta ANTERIOR, não um assunto novo.
+# Medido em 28/09/2026 (bateria de descoberta, fala real): "qual aula e página do
+# meu material sustentam o que você explicou?" foi à busca, voltou com seis
+# artigos do CPP, e a resposta disse "a aula 00 aborda isso nos primeiros
+# tópicos" — sem página. A página estava gravada nas fontes do turno anterior.
+# Exige a REFERÊNCIA ao que foi dito ("isso", "o que você explicou"): "onde está
+# nacionalidade no meu material?" é pergunta de localização, e fica com a busca.
+RE_FONTE_DA_RESPOSTA = re.compile(
+    r"(?i)\b(?:p[áa]ginas?|aulas?|apostilas?|materia(?:l|is)|fontes?|trechos?)\b[^?]{0,60}"
+    r"\b(?:sustent\w*|embas\w*|fundament\w*|isso|isto|explicou|disse|falou|"
+    r"(?:sua|essa|esta)\s+(?:resposta|explica[çc][ãa]o))\b"
+    r"|\bde\s+onde\s+(?:voc[êe]\s+|vc\s+)?(?:tirou|veio|saiu)\s+(?:isso|isto|ess[ae]|est[ae])\b")
+
+
+def pede_fonte(fala: str) -> bool:
+    return bool(RE_FONTE_DA_RESPOSTA.search(fala or ""))
+
+
+# CONVERSA FIADA COM RISADA não é consulta. Medido na bateria de 29/09/2026: "se ta
+# descolado em chat kkk" foi à busca — "descolado" e "chat" passam por palavra de
+# conteúdo — e a resposta puxou tabela-verdade. Riso + fala curta + nenhum pedido
+# de conteúdo; "kkk mas me explica peculato" continua sendo consulta.
+RE_RISO = re.compile(r"(?i)(?:^|\s)(?:k{3,}|rs(?:rs)*|ha(?:ha)+|he(?:he)+|hua(?:hua)*)(?=\W|$)")
+RE_PEDE_CONTEUDO = re.compile(
+    r"(?i)\b(?:explic\w*|me\s+(?:fala|diz|ensina|d[áa]|manda|mostra)|o\s+que\s+[ée]|como\s+(?:funciona|faz|se|[ée])|"
+    r"qual|quais|quero|queria|resolv\w*|estud\w*|aula|quest(?:[ãa]o|[õo]es)|artigo|art\.|lei\b)")
+MAX_PALAVRAS_FIADA = 15
+
+
+def conversa_fiada(fala: str) -> bool:
+    fala = fala or ""
+    return (bool(RE_RISO.search(fala)) and not RE_PEDE_CONTEUDO.search(fala)
+            and len(fala.split()) <= MAX_PALAVRAS_FIADA)
+
+
 def dispensa_busca(fala: str) -> bool:
     """Pergunta que não tem o que fazer com material recuperado.
 
@@ -473,4 +714,5 @@ def dispensa_busca(fala: str) -> bool:
     terceiro caso amanhã não exige mexer em `socratic.explicar` de novo.
     """
     return (sobre_desempenho(fala) or sobre_memoria(fala) or desabafo(fala)
-            or sobre_o_sistema(fala))
+            or sobre_o_sistema(fala) or sobre_a_biblioteca(fala) or pede_fonte(fala)
+            or conversa_fiada(fala))

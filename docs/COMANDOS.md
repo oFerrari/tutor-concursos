@@ -162,3 +162,36 @@ com o modelo real sobre a biblioteca e o edital da conta, e marca ✗ o que falh
 Não grava conversa, mensagem nem diário. Uma chamada ao modelo por turno. Sai com
 código 1 se houver falha.
 
+
+## Bateria de descoberta (antes de funcionalidade nova)
+
+```bash
+./testar.sh --descobrir                      # falas reais + 5 conversas simuladas + contradições
+./testar.sh --descobrir --so contradicoes    # só prompt e decisões (poucas chamadas)
+./testar.sh --descobrir --so reais           # só as falas reais
+./testar.sh --descobrir --episodios 10 --turnos 8
+```
+
+Conta descartável (`cenarios/descoberta.json`), apagada no fim junto com toda
+questão pública que a rodada gerar. Relatório em `.logs/descoberta.md` (a ausência
+dele é o limpo) e as conversas inteiras em `.logs/descoberta-conversas.md`, para
+LER. Diante de 503 ela espera um minuto e repete; cota DO DIA esgotada interrompe na hora, e a rodada sai marcada INCOMPLETA. Orçamento de 150 chamadas por rodada (`DESCOBERTA_ORCAMENTO`): a cota gratuita do modelo do tutor é 500 por dia, e o app precisa do resto. O revisor é
+`LLM_REVISOR` (padrão `gemini-3.5-flash`). Com mais de uma conta real no banco,
+`--conta-id` diz de quem são as falas.
+
+## Índice de assuntos (036)
+
+```bash
+python -m core.indice            # indexa com o modelo os materiais pendentes ou em reserva, no orçamento do dia
+```
+
+Roda sozinho ao fim de cada indexação de material. `LLM_INDICE` escolhe o modelo,
+que nunca é o do tutor, e `INDICE_ORCAMENTO_DIA` (150) limita as chamadas por dia.
+
+## Questões de prova (037)
+
+```bash
+python -m core.prova             # reimporta os simulados com questão sem gabarito (gabarito chegou, ou há cota para o tutor resolver)
+```
+
+Roda sozinho ao fim da indexação de todo material do tipo "Simulado / questões".

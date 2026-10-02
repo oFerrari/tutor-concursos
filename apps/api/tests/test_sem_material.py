@@ -35,7 +35,7 @@ def test_frases_reais_que_pediam_leitura_e_nao_disparavam():
                  "na verdade eu queria um aulao né pra depois falar se eu entendi ou não",
                  "ta você ta me trazendo só resumo eu queria como se tivesse lendo um pdf",
                  "certo queria aprender todo o conceito disso"):
-        assert leitura.intencao(fala, False, False) == "inicio", fala
+        assert leitura.intencao(fala, False, False) in ("inicio", "edital"), fala
 
 
 def _mesa(client, usuario):

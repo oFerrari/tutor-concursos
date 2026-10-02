@@ -13,10 +13,20 @@ turno), e nenhum módulo existente já tinha essa consulta simples pronta.
 """
 from . import db
 
-VERSAO = "questoes-v4"
+VERSAO = "questoes-v5"
 
 CAMPOS = ("id, disciplina, tema, enunciado, gabarito, dicas, tipo, gabarito_ce, "
           "contexto_id, ordem_no_contexto")
+
+# MÚLTIPLA ESCOLHA E QUESTÃO DE PROVA (037): a letra do gabarito, de onde ela
+# veio, e as alternativas — juntas da questão, como o texto-base, pelo mesmo
+# motivo: questão de múltipla escolha sem as alternativas é ilegível.
+# `alias` é o da tabela `questao` na consulta.
+def campos_de_prova(alias: str = "q") -> str:
+    return (f"{alias}.gabarito_letra, {alias}.gabarito_fonte, {alias}.origem, {alias}.numero_na_prova, "
+            f"(SELECT coalesce(json_agg(json_build_object('letra', a.letra, 'texto', a.texto) "
+            f"ORDER BY a.letra), '[]'::json) FROM questao_alternativa a "
+            f"WHERE a.questao_id = {alias}.id) AS alternativas")
 
 # O texto-base vem JUNTO da questão, por LEFT JOIN, e não numa segunda
 # chamada: item C/E de série é ilegível sem ele ("com base no argumento
@@ -25,7 +35,7 @@ CAMPOS = ("id, disciplina, tema, enunciado, gabarito, dicas, tipo, gabarito_ce, 
 # esquecer de chamar.
 CAMPOS_COM_CONTEXTO = ("q.id, q.disciplina, q.tema, q.enunciado, q.gabarito, q.dicas, "
                        "q.tipo, q.gabarito_ce, q.contexto_id, q.ordem_no_contexto, "
-                       "x.texto AS contexto")
+                       "x.texto AS contexto, " + campos_de_prova("q"))
 JOIN_CONTEXTO = "LEFT JOIN contexto x ON x.id = q.contexto_id"
 
 

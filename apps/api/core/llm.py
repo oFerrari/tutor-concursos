@@ -11,6 +11,7 @@ declarar schema é garantia. Modelos menores (flash-lite) erram muito o JSON
 livre, então todo lugar que precisa de JSON aqui passa schema.
 """
 import json
+import re
 import os
 import time
 from pathlib import Path
@@ -19,13 +20,13 @@ import httpx
 
 from . import telemetria
 from .config import (GEMINI_API_KEY, GEMINI_MODEL, GEMINI_RESERVAS, LLM_CLASSIFICADOR,
-                     OLLAMA_MODEL_CLASSIFICADOR, LLM_PROVIDER,
+                     OLLAMA_MODEL_CLASSIFICADOR, LLM_PROVIDER, LLM_INDICE,
                      OLLAMA_MODEL, OLLAMA_URL)
 
 # 120s nao bastava no plano gratuito. Configuravel via LLM_TIMEOUT no .env.
 TIMEOUT = httpx.Timeout(float(os.getenv("LLM_TIMEOUT", "240")))
 DEBUG_FILE = Path(".llm_debug.txt")
-VERSAO = "llm-v22"
+VERSAO = "llm-v25"
 
 # Temperatura padrão de TODA chamada do produto. Era um literal repetido nos dois
 # adaptadores; virou constante quando o `temperatura=` apareceu, porque dois
@@ -42,6 +43,12 @@ ESPERA = (3, 10, 25)   # backoff entre tentativas, em segundos
 
 class ErroLLM(RuntimeError):
     pass
+
+
+class CotaDiaria(ErroLLM):
+    """A cota DO DIA acabou em todos os modelos tentados — esperar minutos não
+    resolve. Lida do corpo do 429 (`GenerateRequestsPerDay…`), e não do código:
+    o limite por MINUTO também é 429, e esse passa sozinho."""
 
 
 class ErroTruncado(ErroLLM):
@@ -134,6 +141,20 @@ def _modelos_gemini() -> list[str]:
 class Gemini(LLM):
     BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 
+    def __init__(self, modelo: str | None = None, evitar: tuple[str, ...] = ()):
+        # PREFERIDO: quem pede um modelo cai nas reservas se ele falhar.
+        # EVITAR: reservas que não servem a quem chama — o revisor da bateria de
+        # descoberta não pode cair no modelo do TUTOR, porque gastaria a cota que o
+        # tutor usa na mesma rodada. Sem argumento, é a ordem de sempre.
+        self.preferido = modelo
+        self.evitar = set(evitar)
+        self.ultimo_modelo: str | None = None
+
+    def _modelos(self) -> list[str]:
+        ordem = list(dict.fromkeys([self.preferido, *_modelos_gemini()])) if self.preferido \
+            else _modelos_gemini()
+        return [m for m in ordem if m not in self.evitar] or ordem
+
     def gerar_em_fluxo(self, prompt, sistema, max_tokens, ao_pedaco, temperatura=None):
         if not GEMINI_API_KEY:
             raise ErroLLM("GEMINI_API_KEY ausente no .env")
@@ -178,7 +199,8 @@ class Gemini(LLM):
         r = None
         ultimo_erro = ""
         modelo_usado = None
-        for modelo in _modelos_gemini():
+        diarias = 0
+        for modelo in self._modelos():
             try:
                 r = _post(f"{self.BASE}/{modelo}:generateContent",
                           {"key": GEMINI_API_KEY}, corpo, tentativas=1)
@@ -189,13 +211,18 @@ class Gemini(LLM):
                 telemetria.registrar("gemini", modelo, 0, origem_chamada=de_onde)
                 continue
             if r.status_code < 500 and r.status_code != 429:
-                if modelo != GEMINI_MODEL:
-                    print(f"    {GEMINI_MODEL} indisponível; respondeu com {modelo}")
-                modelo_usado = modelo
+                if modelo != self._modelos()[0]:
+                    print(f"    {self._modelos()[0]} indisponível; respondeu com {modelo}")
+                modelo_usado = self.ultimo_modelo = modelo
                 break
             ultimo_erro = f"HTTP {r.status_code}"
+            diarias += r.status_code == 429 and "PerDay" in r.text
             telemetria.registrar("gemini", modelo, r.status_code, origem_chamada=de_onde)
             r = None
+        if r is None and diarias == len(self._modelos()):
+            raise CotaDiaria(
+                f"a cota DIÁRIA do plano gratuito acabou nos {diarias} modelos "
+                f"({', '.join(self._modelos())}); volta quando o dia vira no Pacífico.")
         if r is None:
             raise ErroLLM(
                 f"o Gemini não respondeu em nenhum dos {len(_modelos_gemini())} modelos "
@@ -359,6 +386,9 @@ def obter(tarefa: str | None = None) -> LLM:
     principal = {"gemini": Gemini, "ollama": Ollama}[provedor]()
     if tarefa == "classificar" and LLM_CLASSIFICADOR == "ollama" and provedor != "ollama":
         return _ComReserva(Ollama(OLLAMA_MODEL_CLASSIFICADOR), principal)
+    if tarefa == "indice" and provedor == "gemini" and LLM_INDICE:
+        # Nunca o principal do tutor (nem o apelido dele): ver `config.LLM_INDICE`.
+        return Gemini(LLM_INDICE, evitar=(GEMINI_MODEL, "gemini-flash-lite-latest"))
     return principal
 
 
@@ -370,8 +400,15 @@ def _registrar_debug(bruto: str) -> None:
         pass
 
 
+# Só a CERCA DE FORA sai. A versão anterior apagava toda crase do texto, e o mapa
+# mental do tutor — uma árvore dentro de bloco de código, DENTRO do campo
+# `resposta` — chegava à tela como "text" solto seguido da árvore (28/09/2026).
+RE_CERCA_DE_FORA = re.compile(r"^\s*```(?:json)?\s*\n?(.*?)\n?\s*```\s*$", re.DOTALL)
+
+
 def _parse_json(bruto: str):
-    limpo = bruto.replace("```json", "").replace("```", "").strip()
+    cercado = RE_CERCA_DE_FORA.match(bruto)
+    limpo = (cercado.group(1) if cercado else bruto).strip()
     try:
         return json.loads(limpo)
     except json.JSONDecodeError:

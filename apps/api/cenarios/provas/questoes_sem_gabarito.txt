@@ -1,0 +1,16 @@
+PROVA SINTÉTICA B
+1. Qual animal sintético mia?
+A) Cão
+B) Gato
+C) Peixe
+D) Ave
+2. Qual animal sintético late?
+A) Cão
+B) Gato
+C) Peixe
+D) Ave
+3. Qual animal sintético nada?
+A) Cão
+B) Gato
+C) Peixe
+D) Ave

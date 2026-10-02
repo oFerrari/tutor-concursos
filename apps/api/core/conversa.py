@@ -35,7 +35,7 @@ import re
 
 from . import db, diario
 
-VERSAO = "conversa-v6"
+VERSAO = "conversa-v7"
 
 JANELA = 8          # turnos (aluno+tutor) devolvidos como histórico
 MAX_TITULO = 60
@@ -105,6 +105,18 @@ def ultima_leitura(conversa_id: int) -> dict | None:
     return None
 
 
+def trechos_lidos(usuario_id: int, dias: int = 90) -> set[int]:
+    """Todos os trechos que o aluno já leu em sequência, em qualquer conversa —
+    é o que diz à leitura "na ordem do edital" qual ponto já foi visto."""
+    return {r["id"] for r in db.query(
+        """SELECT DISTINCT (f->>'id')::bigint AS id
+             FROM mensagem m JOIN conversa c ON c.id = m.conversa_id,
+                  jsonb_array_elements(m.fontes) f
+            WHERE c.usuario_id = %(u)s AND m.autor = 'tutor'
+              AND m.criada_em > now() - make_interval(days => %(d)s)
+              AND (f->>'sequencial')::boolean""", {"u": usuario_id, "d": dias})}
+
+
 def marcadores_de_leitura(usuario_id: int, dias: int = 90) -> dict[int, dict]:
     """Onde o aluno parou em CADA material, em todas as conversas dele.
 
@@ -142,6 +154,30 @@ def trechos_citados_recentes(conversa_id: int, respostas: int = 3) -> list[int]:
         if citados:
             return citados
     return []
+
+
+def origem_da_ultima_resposta(conversa_id: int, respostas: int = 3) -> str | None:
+    """De onde veio a última resposta do tutor que citou fonte: material e páginas,
+    ou norma e artigo. É o que responde "qual aula e página sustentam isso?" —
+    a busca, nessa pergunta, só traria trecho sorteado."""
+    from .cobertura import paginas
+    for r in db.query(
+            """SELECT fontes FROM mensagem
+                WHERE conversa_id = %(c)s AND autor = 'tutor'
+                ORDER BY id DESC LIMIT %(l)s""", {"c": conversa_id, "l": respostas}):
+        usadas = [f for f in (r["fontes"] or []) if f.get("citada") or f.get("sequencial")]
+        if not usadas:
+            continue
+        grupos: dict[str, list | None] = {}
+        for f in usadas:
+            if f.get("artigo") and not f.get("material"):
+                grupos[f"{f.get('norma') or f.get('titulo')}, art. {f['artigo']}"] = None
+            else:
+                grupos.setdefault(f.get("assunto") or f.get("titulo") or "material", []).append(f.get("pagina"))
+        return "\n".join(f"- {nome}" + ("" if ps is None else
+                                         f", p. {paginas(ps)}" if any(ps) else " (sem número de página)")
+                         for nome, ps in grupos.items())
+    return None
 
 
 def material_recente(conversa_id: int, respostas: int = 6) -> int | None:
@@ -244,6 +280,12 @@ def com_rotulo_das_fontes(msgs: list[dict]) -> list[dict]:
                        if f.get("id") in rotulos and "assunto" not in f else f
                        for f in (m.get("fontes") or [])]
     return msgs
+
+
+def reescrever(mensagem_id: int, texto: str) -> None:
+    """Troca o texto de uma mensagem já gravada. Só para o caso em que ela ficou
+    FALSA depois de gravada: o tutor anunciou as questões e o gerador falhou."""
+    db.query("UPDATE mensagem SET texto = %(t)s WHERE id = %(i)s", {"t": texto, "i": mensagem_id})
 
 
 def gravar(conversa_id: int, autor: str, texto: str, fontes: list | None = None) -> dict:

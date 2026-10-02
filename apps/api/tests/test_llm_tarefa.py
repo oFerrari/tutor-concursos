@@ -56,3 +56,24 @@ def test_cota_esgotada_e_contada_como_429_e_nao_como_sem_resposta(monkeypatch):
         modulo.Gemini().gerar("oi")
 
     assert gravados == [("modelo-a", 429), ("modelo-b", 429)]
+
+
+def test_cota_do_dia_esgotada_e_erro_proprio(monkeypatch):
+    """O 429 por minuto passa sozinho; o do DIA não. Quem chama precisa saber a
+    diferença — a bateria de descoberta esperava minutos por uma cota que só
+    voltava no dia seguinte (28/09/2026)."""
+    import pytest
+    from core import llm
+
+    class Resposta:
+        def __init__(self, texto):
+            self.status_code, self.text = 429, texto
+
+    monkeypatch.setattr(llm, "GEMINI_API_KEY", "x")
+    monkeypatch.setattr(llm, "_post", lambda *a, **k: Resposta('{"quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier"}'))
+    with pytest.raises(llm.CotaDiaria):
+        llm.Gemini().gerar("oi")
+    monkeypatch.setattr(llm, "_post", lambda *a, **k: Resposta('{"quotaId": "GenerateRequestsPerMinute"}'))
+    with pytest.raises(llm.ErroLLM) as e:
+        llm.Gemini().gerar("oi")
+    assert not isinstance(e.value, llm.CotaDiaria)

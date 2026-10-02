@@ -41,7 +41,10 @@ db/031_estudo_teoria.sql diário por usuário/dia/assunto para teoria conversada
 db/032_desempenho_sem_questao_alheia.sql o denominador do desempenho deixa de contar questão privada de outro aluno
 db/033_documento_tipo_edital.sql          `documento.tipo` aceita 'edital': edital subido como material fica listado e fora da busca
 db/034_telemetria_pensamento_e_cache.sql  telemetria grava tokens de raciocínio (thoughtsTokenCount) e de cache do provedor
+db/035_cobertura_do_edital.sql            edital ligado ao material por subitem: `edital_subitem` (estado) e `edital_subitem_trecho`
+db/036_assuntos_do_material.sql           assuntos de cada material (`material_assunto`) e de cada trecho (`chunk_assunto`); `documento.assuntos_status`
+db/037_questoes_de_prova.sql              material `simulado`; questão `multipla_escolha` + `questao_alternativa`; `questao.origem`/`numero_na_prova`/`gabarito_fonte`; `documento.gabarito_de`
 ```
 
-Próximo número livre: **035**. Confirme no diretório e com
+Próximo número livre: **038**. Confirme no diretório e com
 `python migrar.py --listar` antes de criar.

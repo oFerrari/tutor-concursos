@@ -88,7 +88,7 @@ from pathlib import Path
 from core import auth, db
 from core.config import CLI_USUARIO_EMAIL
 
-VERSAO = "sincronizar-v5"
+VERSAO = "sincronizar-v6"
 ARQUIVO = Path("dados/progresso.json")
 
 # OS ARQUIVOS ORIGINAIS VIAJAM COMO BLOBS, FORA DO JSON.
@@ -246,15 +246,23 @@ def exportar(com_material: bool = True, com_senha: bool = True) -> int:
     q_rows = db.query(
         """SELECT id, documento_id, disciplina, tema, enunciado, gabarito, dicas,
                   fonte_chunks, criada_em, tipo, gabarito_ce, contexto_id,
-                  ordem_no_contexto, usuario_id
+                  ordem_no_contexto, usuario_id,
+                  gabarito_letra, gabarito_fonte, origem, numero_na_prova
            FROM questao ORDER BY id"""
     )
+    # Múltipla escolha (037): as alternativas viajam com a questão.
+    alternativas: dict[int, list] = {}
+    for a in db.query("SELECT questao_id, letra, texto FROM questao_alternativa ORDER BY questao_id, letra"):
+        alternativas.setdefault(a["questao_id"], []).append([a["letra"], a["texto"]])
     q_chave = {q["id"]: chave(q["enunciado"]) for q in q_rows}
     questoes = [
         {"chave": q_chave[q["id"]], "disciplina": q["disciplina"], "tema": q["tema"],
          "enunciado": q["enunciado"], "gabarito": q["gabarito"], "dicas": q["dicas"],
          "criada_em": q["criada_em"], "doc_titulo": doc_titulo.get(q["documento_id"]),
          "tipo": q["tipo"], "gabarito_ce": q["gabarito_ce"],
+         "gabarito_letra": q["gabarito_letra"], "gabarito_fonte": q["gabarito_fonte"],
+         "origem": q["origem"], "numero_na_prova": q["numero_na_prova"],
+         "alternativas": alternativas.get(q["id"], []),
          "usuario": emails.get(q["usuario_id"]),
          "contexto": ctx_chave.get(q["contexto_id"]),
          "ordem_no_contexto": q["ordem_no_contexto"],
@@ -778,10 +786,12 @@ def _importar_tudo(pacote, indexar_material: bool = True) -> dict:
         r = db.exec1(
             """INSERT INTO questao (documento_id, disciplina, tema, enunciado, gabarito,
                                     dicas, fonte_chunks, criada_em, tipo, gabarito_ce,
-                                    contexto_id, ordem_no_contexto, usuario_id)
+                                    contexto_id, ordem_no_contexto, usuario_id,
+                                    gabarito_letra, gabarito_fonte, origem, numero_na_prova)
                VALUES (%(d)s, %(disc)s, %(t)s, %(e)s, %(g)s, %(dic)s, %(f)s,
                        COALESCE(%(cr)s, now()), COALESCE(%(tp)s, 'resposta_livre'),
-                       %(ce)s, %(ctx)s, %(ord)s, %(dono)s)
+                       %(ce)s, %(ctx)s, %(ord)s, %(dono)s,
+                       %(letra)s, %(gfonte)s, COALESCE(%(orig)s, 'gerada'), %(num)s)
                RETURNING id""",
             # `dono` só é preenchido pra questão que JÁ era privada e cujo dono
             # existe neste banco. Pacote da era anterior à 026 não tem o campo:
@@ -794,8 +804,14 @@ def _importar_tudo(pacote, indexar_material: bool = True) -> dict:
              "f": chunks, "cr": q.get("criada_em"), "tp": q.get("tipo"),
              "ce": q.get("gabarito_ce"),
              "ctx": ctx_id.get(q.get("contexto")),
-             "ord": q.get("ordem_no_contexto")},
+             "ord": q.get("ordem_no_contexto"),
+             "letra": q.get("gabarito_letra"), "gfonte": q.get("gabarito_fonte"),
+             "orig": q.get("origem"), "num": q.get("numero_na_prova")},
         )
+        for letra, texto in q.get("alternativas") or []:
+            db.query("""INSERT INTO questao_alternativa (questao_id, letra, texto)
+                        VALUES (%(q)s, %(l)s, %(t)s) ON CONFLICT DO NOTHING""",
+                     {"q": r["id"], "l": letra, "t": texto})
         id_por_chave[q["chave"]] = r["id"]
         novas += 1
 

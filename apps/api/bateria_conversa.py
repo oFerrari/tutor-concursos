@@ -32,7 +32,7 @@ from pathlib import Path
 
 from core import auth, db, diario, material, mesa, socratic
 
-VERSAO = "bateria-conversa-v2"
+VERSAO = "bateria-conversa-v3"
 
 AQUI = Path(__file__).parent
 RE_DIZ_QUE_NAO_HA = re.compile(
@@ -79,7 +79,10 @@ def montar_conta(uid: int, conta: dict) -> int:
                      {"e": eid, "d": disciplina, "o": ordem, "t": t})
             ordem += 1
     for mat in conta["materiais"]:
-        texto = _apostila(mat["titulo"], _recorte_do_corpus(mat["corpus"], mat["de"], mat["ate"]))
+        # "texto": apostila escrita para o teste (a de cálculo, que o corpus não tem);
+        # "corpus": recorte da lei pública, vestido de aula.
+        texto = ((AQUI / mat["texto"]).read_text(encoding="utf-8") if mat.get("texto") else
+                 _apostila(mat["titulo"], _recorte_do_corpus(mat["corpus"], mat["de"], mat["ate"])))
         dados = texto.encode()
         doc = material.registrar(uid, mat["arquivo"], dados, disciplina=mat["disciplina"],
                                  tipo="aula", titulo=mat["titulo"], assunto=mat.get("assunto"))

@@ -42,7 +42,7 @@ import re
 
 from . import assunto, db, llm, mesa, retrieval, socratic
 
-VERSAO = "geracao-v7"
+VERSAO = "geracao-v12"
 
 MIN_TEXTO = 140          # abaixo disso é stub, revogado ou remissão
 MAX_POR_VEZ = 5          # teto por chamada: cota de LLM é o recurso escasso
@@ -296,7 +296,7 @@ def _uteis(achados: list[dict], dono: int | None) -> list[dict]:
     if not achados:
         return []
     linhas = db.query(
-        f"""SELECT c.id, c.artigo IS NOT NULL AS e_lei,
+        f"""SELECT c.id, c.artigo IS NOT NULL AS e_lei, d.disciplina,
                    EXISTS (SELECT 1 FROM questao q WHERE c.id = ANY(q.fonte_chunks)) AS ja_tem
               FROM chunk c JOIN documento d ON d.id = c.documento_id
              WHERE c.id = ANY(%(ids)s) AND {FILTRO_UTIL}""",
@@ -330,7 +330,129 @@ def _dos_trechos(ids: list[int], limite: int, dono: int | None) -> list[int]:
     return [ordem[int(k * passo)] for k in range(limite)]
 
 
-def _por_tema(tema: str, limite: int, dono: int | None = None) -> list[int]:
+def disciplinas_dos_trechos(ids: list[int]) -> list[str]:
+    """A matéria dos trechos que a conversa acabou de citar, a mais citada primeiro."""
+    if not ids:
+        return []
+    return [r["disciplina"] for r in db.query(
+        """SELECT d.disciplina, count(*) AS n FROM chunk c JOIN documento d ON d.id = c.documento_id
+            WHERE c.id = ANY(%(i)s) AND d.disciplina IS NOT NULL
+            GROUP BY d.disciplina ORDER BY n DESC""", {"i": ids})]
+
+
+def _na_materia_da_conversa(uteis: list[dict], tema: str, materias: list[str] | None) -> list[dict]:
+    """Fica na matéria da conversa quando o assunto pedido está NELA.
+
+    Medido em 28/09/2026 (bateria de descoberta, aluno simulado): numa conversa de
+    Raciocínio Lógico, "tira isso e bota de tabela verdade logo" foi à busca como
+    frase inteira, o 1º colocado foi a 8.112 art. 86 e saiu um cartão de "Licença
+    para atividade política". A fala de reclamação é ruído para a busca; a matéria
+    da conversa não é. Mas pedir "questão de peculato" no meio de lógica é trocar
+    de assunto — por isso só restringe quando algum trecho da matéria da conversa
+    tem palavra de conteúdo do pedido."""
+    if not materias or not uteis:
+        return uteis
+    do_tema = {assunto._sem_acento(p) for p in assunto.palavras_de_conteudo(tema or "")}
+    dela = [u for u in uteis if u.get("disciplina") in materias]
+    if not dela or not do_tema:
+        return uteis
+    textos = {r["id"]: r["texto"] for r in db.query(
+        "SELECT id, texto FROM chunk WHERE id = ANY(%(i)s)", {"i": [u["id"] for u in dela]})}
+    if any(_palavras_em_comum(textos.get(u["id"]), do_tema) for u in dela):
+        return dela
+    return uteis
+
+
+def termos_raros(tema: str, dono: int | None, k: int = 2) -> list[str]:
+    """Os `k` termos do pedido que MENOS trechos do acervo dele trazem — o que diz de
+    que assunto se trata. "controle de constitucionalidade": "controle" está em
+    centenas de artigos, "constitucionalidade" em poucos. Termo que nenhum trecho
+    traz não conta; lista vazia = o acervo não tem o assunto.
+
+    DOIS, e não um: medido em 29/09/2026, "consegue me mandar umas questões de
+    controle de constitucionalidade?" teve como termo mais raro "consegue" — lei não
+    fala gíria — e o trecho escolhido foi o CP 177 (sociedade por ações). Um termo
+    de ruído raro só passa se vier junto do termo do assunto."""
+    from . import pedido
+    termos = {assunto._sem_acento(p).lower() for p in assunto.palavras_de_conteudo(pedido.sem_o_pedido(tema))
+              if len(p) >= 4}
+    # Tema longo (a explicação do tutor, no pedido vago): os 12 termos mais longos
+    # bastam — são os específicos — e cada contagem custa ~0,2 s.
+    termos = set(sorted(termos, key=lambda t: (-len(t), t))[:12])
+    return [t for _, t in contagens(tema, dono, termos)[:k]]
+
+
+# TERMO FORTE: específico (6 letras ou mais) e em poucos trechos. É o que separa
+# "questão de peculato" (troca de assunto legítima, vai aonde o termo estiver) de
+# "bota a questão pra eu resolver direito" — "direito" aqui é advérbio, e sem
+# termo forte o pedido não nomeia assunto: vale a matéria da conversa.
+TERMO_FORTE_MIN_LETRAS = 6
+TERMO_FORTE_MAX_TRECHOS = 150
+
+
+def contagens(tema: str, dono: int | None, termos: set[str] | None = None) -> list[tuple[int, str]]:
+    """(trechos que trazem o termo, termo) do pedido, do mais raro ao mais comum."""
+    from . import pedido
+    if termos is None:
+        termos = {assunto._sem_acento(p).lower() for p in assunto.palavras_de_conteudo(pedido.sem_o_pedido(tema))
+                  if len(p) >= 4}
+        termos = set(sorted(termos, key=lambda t: (-len(t), t))[:12])
+    contagem = []
+    for t in termos:
+        n = db.exec1("""SELECT count(*) AS n FROM chunk c JOIN documento d ON d.id = c.documento_id
+                         WHERE (d.usuario_id IS NULL OR d.usuario_id = %(u)s)
+                           AND lower(c.texto) ~ %(r)s""", {"u": dono, "r": _palavra_exata(t)})["n"]
+        if n:
+            contagem.append((n, t))
+    return sorted(contagem)
+
+
+def tem_termo_forte(tema: str, dono: int | None) -> bool:
+    return any(len(t) >= TERMO_FORTE_MIN_LETRAS and n <= TERMO_FORTE_MAX_TRECHOS
+               for n, t in contagens(tema, dono))
+
+
+def termo_raro(tema: str, dono: int | None) -> str | None:
+    raros = termos_raros(tema, dono, k=1)
+    return raros[0] if raros else None
+
+
+# PALAVRA EXATA, e não o índice com radical: o `portuguese` reduz
+# "constitucionalidade" a "constitucional" — que está em centenas de trechos, e o
+# termo "raro" virava "controle". O acento pode faltar na fala ("informatica",
+# "licenca"): cada vogal e o "c" aceitam as formas acentuadas. ~0,2 s por termo.
+_ACENTOS = {"a": "[aáàâã]", "e": "[eéê]", "i": "[ií]", "o": "[oóôõ]", "u": "[uúü]", "c": "[cç]"}
+
+
+def _palavra_exata(termo: str) -> str:
+    return r"\m" + "".join(_ACENTOS.get(ch, re.escape(ch)) for ch in termo) + r"\M"
+
+
+def _todos(termos: list[str]) -> str:
+    return " AND ".join(f"lower(c.texto) ~ %(r{i})s" for i in range(len(termos)))
+
+
+def _pelo_termo(termos: list[str], dono: int | None, limite: int = 12) -> list[dict]:
+    """Os trechos que trazem TODOS os termos, os que mais repetem o primeiro antes."""
+    params = {"u": dono, "l": limite, **{f"r{i}": _palavra_exata(t) for i, t in enumerate(termos)}}
+    return db.query(
+        f"""SELECT c.id FROM chunk c JOIN documento d ON d.id = c.documento_id
+             WHERE (d.usuario_id IS NULL OR d.usuario_id = %(u)s) AND {_todos(termos)}
+             ORDER BY (length(lower(c.texto)) - length(regexp_replace(lower(c.texto), %(r0)s, '', 'g'))) DESC
+             LIMIT %(l)s""", params)
+
+
+def _com_o_termo(uteis: list[dict], termos: list[str]) -> list[dict]:
+    if not uteis:
+        return uteis
+    params = {"i": [u["id"] for u in uteis], **{f"r{i}": _palavra_exata(t) for i, t in enumerate(termos)}}
+    tem = {r["id"] for r in db.query(
+        f"SELECT c.id FROM chunk c WHERE c.id = ANY(%(i)s) AND {_todos(termos)}", params)}
+    return [u for u in uteis if u["id"] in tem]
+
+
+def _por_tema(tema: str, limite: int, dono: int | None = None,
+              materias: list[str] | None = None, assunto_nomeado: bool = False) -> list[int]:
     """
     Usa a MESMA busca do tutor (`retrieval.buscar`), não uma consulta
     própria: o trecho que fundamenta a resposta na conversa tem que ser o
@@ -357,10 +479,29 @@ def _por_tema(tema: str, limite: int, dono: int | None = None) -> list[int]:
     # `salvar` o tira do próprio chunk. O que era vazamento agora é questão
     # privada, e o predicado que a esconde dos outros mora em
     # `questoes.do_aluno()`, num lugar só.
-    achados = retrieval.buscar(tema, n=12, usuario_id=dono)
+    # ASSUNTO NOMEADO: a busca vai pelo assunto, sem as palavras do pedido, e todo
+    # candidato — o 1º colocado inclusive — tem de trazer o termo raro dele. Medido na
+    # bateria de 29/09/2026: questões de Informática (sem material) saíam de Direito
+    # Administrativo, e as de controle de constitucionalidade, de competência
+    # municipal. A regra "o 1º entra sempre" é da citação precisa ("art. 312",
+    # "concussão"), que o termo raro também cumpre.
+    from . import pedido
+    raros = termos_raros(tema, dono) if assunto_nomeado else []
+    if assunto_nomeado and not raros:
+        return []
+    consulta = (pedido.sem_o_pedido(tema) or tema) if assunto_nomeado else tema
+    achados = retrieval.buscar(consulta, n=12, usuario_id=dono)
     if not achados:
         return []
     uteis = _uteis(achados, dono)
+    if raros:
+        # A busca por sentido não trouxe nenhum trecho com os termos, mas o acervo tem:
+        # vão os que os trazem. "controle de constitucionalidade" não traz o art. 102 da
+        # CF entre os 12 primeiros.
+        uteis = _com_o_termo(uteis, raros) or _uteis(_pelo_termo(raros, dono), dono)
+    uteis = _no_assunto(_na_materia_da_conversa(uteis, tema, materias), tema)
+    if not uteis:
+        return []
     # RELEVÂNCIA DEFINE O QUE ESTÁ NO ASSUNTO; novidade só escolhe DENTRO
     # disso. A primeira versão ordenava por `(ja_tem, ranking)`, o que punha
     # todo chunk inédito à frente de todo chunk já cobrado — e o efeito
@@ -415,6 +556,33 @@ def _por_tema(tema: str, limite: int, dono: int | None = None) -> list[int]:
         candidatos += [r for r in _lei_do_assunto(tema) if r["id"] not in vistos]
 
     return _misturar([r["id"] for r in candidatos], candidatos, limite)
+
+
+def _no_assunto(uteis: list[dict], tema: str) -> list[dict]:
+    """O líder da busca e, depois dele, só quem é DO ASSUNTO.
+
+    Medido em 28/09/2026: "me dá 2 questões de conjuntos", com uma apostila de
+    Raciocínio Lógico que ensina conjuntos, gerou "Conceito de Proposição" e
+    "Furto Noturno". A busca é k-vizinhos sem piso: para "conjuntos" ela devolve
+    a apostila E artigos da CF e do CP, e `_misturar`, que reserva uma vaga para
+    a lei, pegou o artigo mais bem colocado — que não tinha nada de conjuntos.
+
+    A trava é a de `_lei_do_assunto`, estendida à apostila: fora o 1º colocado
+    (que entra sempre, pela razão de "concussão"), cada candidato precisa
+    compartilhar palavra de conteúdo com o tema — na rubrica, se é lei; no
+    texto, se é material do aluno. Tema sem palavra de conteúdo não filtra."""
+    do_tema = {assunto._sem_acento(p) for p in assunto.palavras_de_conteudo(tema or "")}
+    if not do_tema or len(uteis) < 2:
+        return uteis
+    textos = {r["id"]: r for r in db.query(
+        "SELECT id, rubrica, texto FROM chunk WHERE id = ANY(%(i)s)", {"i": [u["id"] for u in uteis]})}
+    fica = [uteis[0]]
+    for u in uteis[1:]:
+        c = textos.get(u["id"]) or {}
+        base = c.get("rubrica") if u["e_lei"] else c.get("texto")
+        if _palavras_em_comum(base, do_tema):
+            fica.append(u)
+    return fica
 
 
 def _lei_do_assunto(tema: str) -> list[dict]:
@@ -598,9 +766,16 @@ def sob_demanda(disciplinas: list[str] | None = None, tema: str | None = None,
                 quantidade: int = 3, tipo: str = "resposta_livre",
                 com_contexto: bool | None = None,
                 usuario_id: int | None = None,
-                trechos: list[int] | None = None) -> dict:
+                trechos: list[int] | None = None,
+                pedido_do_aluno: str | None = None,
+                materias_da_conversa: list[str] | None = None,
+                assunto_nomeado: bool = False,
+                escolhidos: tuple[list[int], bool] | None = None) -> dict:
     """
     Gera até `quantidade` questões e grava as que têm proveniência.
+
+    `escolhidos` é o que `escolher` já devolveu (a rota do chat escolhe antes de o
+    tutor escrever); sem ele, escolhe aqui.
 
     `tema` (a conversa, ou o que o aluno pediu) manda quando vem; sem ele,
     sorteia trecho ainda descoberto dentro do recorte da mesa — que é o caso
@@ -616,10 +791,99 @@ def sob_demanda(disciplinas: list[str] | None = None, tema: str | None = None,
     seguinte — contexto pago duas vezes sem ganho de cobertura.
     """
     quantidade = max(1, min(quantidade, MAX_POR_VEZ))
-    ids = _dos_trechos(trechos, quantidade, usuario_id) if trechos else []
-    if not ids:
-        ids = (_por_tema(tema, quantidade, usuario_id) if tema
-               else _por_disciplina(disciplinas, quantidade, usuario_id))
+    if escolhidos:
+        ids, trocou_de_assunto = escolhidos
+    else:
+        ids, trocou_de_assunto = escolher(disciplinas, tema, quantidade, usuario_id, trechos,
+                                          materias_da_conversa, assunto_nomeado)
+    lote = _lote_por_ids(ids)
+    return _gerar_do_lote(lote, quantidade, tipo, com_contexto, trocou_de_assunto, pedido_do_aluno)
+
+
+def _da_materia(ids: list[int], materias: list[str] | None) -> list[int]:
+    """Só os trechos cuja disciplina é a da matéria em foco (nome do edital ou do material)."""
+    if not materias or not ids:
+        return ids
+    dela = {r["id"] for r in db.query(
+        """SELECT c.id FROM chunk c JOIN documento d ON d.id = c.documento_id
+            WHERE c.id = ANY(%(i)s) AND d.disciplina = ANY(%(m)s)""", {"i": ids, "m": materias})}
+    return [i for i in ids if i in dela]
+
+
+# DOIS ASSUNTOS NUM PEDIDO: "questão de conjunto e porcentagem". Exigir os dois
+# termos no mesmo trecho achou só a APRESENTAÇÃO do curso, que cita tudo — e a
+# questão saiu de proposições (bateria de 29/09/2026). Cada parte vai por si.
+RE_SEPARA_ASSUNTOS = re.compile(r"(?i)\s+e\s+|\s+ou\s+|[,;]")
+
+
+def _partes(tema: str) -> list[str]:
+    from . import pedido
+    partes = [p.strip() for p in RE_SEPARA_ASSUNTOS.split(pedido.sem_o_pedido(tema)) if p.strip()]
+    com_conteudo = [p for p in partes if any(len(w) >= 4 for w in assunto.palavras_de_conteudo(p))]
+    return com_conteudo if len(com_conteudo) >= 2 else [tema]
+
+
+def _pelo_indice(tema: str, usuario_id: int, quantidade: int) -> list[int]:
+    """Trechos do assunto que o pedido nomeia, pelo índice: os de ENSINO,
+    espalhados pelo material (um de cada parte); sem ensino, os de questão."""
+    from . import indice, pedido
+    alvo = indice.assunto_citado(usuario_id, pedido.sem_o_pedido(tema))
+    if not alvo:
+        return []
+    ids = indice.trechos_do_assunto(alvo["id"], "ensino") or indice.trechos_do_assunto(alvo["id"])
+    if len(ids) <= quantidade:
+        return ids
+    passo = len(ids) / quantidade
+    return [ids[int(k * passo)] for k in range(quantidade)]
+
+
+def escolher(disciplinas: list[str] | None, tema: str | None, quantidade: int,
+             usuario_id: int | None, trechos: list[int] | None = None,
+             materias_da_conversa: list[str] | None = None,
+             assunto_nomeado: bool = False,
+             materia_em_foco: list[str] | None = None,
+             materia_da_conversa: list[str] | None = None) -> tuple[list[int], bool]:
+    """De que trechos sairão as questões — sem modelo nenhum, só busca. (ids, trocou).
+
+    Separado de `sob_demanda` para a rota decidir ANTES de o tutor escrever: sem
+    trecho do assunto pedido, o tutor diz isso com as palavras dele. Medido em
+    29/09/2026: a resposta escrita antes ("as questões estão abaixo") era trocada
+    depois por uma frase fixa, que se repetia igual a cada novo pedido.
+
+    Levanta `SemMaterial` quando não há de onde tirar."""
+    quantidade = max(1, min(quantidade, MAX_POR_VEZ))
+    # `materia_em_foco`: a disciplina que a conversa nomeou (e os nomes de material
+    # dela). Havendo, todo trecho tem de ser DELA — medido em 29/09/2026: numa
+    # conversa sobre memória RAM (Informática, sem material), "bota a questão com
+    # A B C D" deu "Abolição violenta do Estado Democrático de Direito", porque
+    # "tentar" e "direito" da fala casaram com o CP. A matéria barra isso sem
+    # depender de palavra.
+    # Sem matéria nomeada NESTA fala e sem termo forte, o pedido não nomeia assunto
+    # de verdade: vale a matéria da CONVERSA (a de antes). "ROM não apaga nada, bota a
+    # questão pra eu resolver direito" numa conversa de Informática deu Direitos
+    # Fundamentais — "direito" era advérbio.
+    if not materia_em_foco and materia_da_conversa and tema and not tem_termo_forte(tema, usuario_id):
+        materia_em_foco = materia_da_conversa
+    ids = _da_materia(_dos_trechos(trechos, quantidade, usuario_id), materia_em_foco) if trechos else []
+    # O ÍNDICE DE ASSUNTOS (036) primeiro: o pedido que nomeia um assunto do
+    # material dele sai dos trechos MARCADOS com o assunto — de qualquer parte da
+    # apostila —, e não do que a busca por palavra achar. Fala curta só: o tema
+    # longo (a explicação do tutor, no pedido vago) casaria com qualquer assunto.
+    if not ids and tema and usuario_id and assunto_nomeado and len(tema) <= 300:
+        ids = _da_materia(_pelo_indice(tema, usuario_id, quantidade), materia_em_foco)
+    if not ids and tema:
+        partes = _partes(tema) if assunto_nomeado else [tema]
+        por_parte = [_da_materia(_por_tema(pt, quantidade, usuario_id, materias_da_conversa, assunto_nomeado),
+                                 materia_em_foco) for pt in partes]
+        # Intercala: o 1º de cada parte, depois o 2º de cada uma…
+        vistos: set[int] = set()
+        for rodada in range(quantidade):
+            for lista in por_parte:
+                if rodada < len(lista) and lista[rodada] not in vistos and len(ids) < quantidade:
+                    vistos.add(lista[rodada])
+                    ids.append(lista[rodada])
+    elif not ids:
+        ids = _por_disciplina(disciplinas, quantidade, usuario_id)
     # TROCA DE ASSUNTO DECLARADA. O fallback já existia e estava certo — cair
     # pro recorte é melhor que devolver vazio a quem pediu questão —, mas era
     # SILENCIOSO, e isso o transformava em mentira: relatado com transcrição, o
@@ -632,15 +896,27 @@ def sob_demanda(disciplinas: list[str] | None = None, tema: str | None = None,
     # isso"): silêncio sobre o que o sistema não tem é o defeito, não o
     # fallback.
     trocou_de_assunto = False
+    # Assunto NOMEADO sem trecho dele: não há o que cobrar, e sortear na mesa daria
+    # questão de outra matéria para quem pediu esta — a tela avisava a troca, e o
+    # aluno reclamava do mesmo jeito. Só o pedido vago ("me testa") cai no sorteio.
+    if not ids and tema and assunto_nomeado:
+        raise SemMaterial("não há trecho desse assunto no acervo do aluno")
     if not ids and tema:
-        ids = _por_disciplina(disciplinas, quantidade, usuario_id)
+        # Na matéria da conversa, se houver: sortear na mesa inteira trazia
+        # Direito Administrativo para quem pedia tabela-verdade.
+        ids = (materia_em_foco and _por_disciplina(materia_em_foco, quantidade, usuario_id)) \
+            or (materias_da_conversa and _por_disciplina(materias_da_conversa, quantidade, usuario_id)) \
+            or _por_disciplina(disciplinas, quantidade, usuario_id)
         trocou_de_assunto = bool(ids)
     if not ids:
         raise SemMaterial(
             "o acervo ainda não tem trecho dessas disciplinas pra gerar questão"
         )
+    return ids, trocou_de_assunto
 
-    lote = _lote_por_ids(ids)
+
+def _gerar_do_lote(lote: list[dict], quantidade: int, tipo: str, com_contexto: bool | None,
+                   trocou_de_assunto: bool, pedido_do_aluno: str | None) -> dict:
 
     # SÉRIE (texto-base + itens) é o padrão do item C/E quando se pede mais
     # de um: é a forma real da prova. Item avulso continua existindo — o
@@ -659,7 +935,7 @@ def sob_demanda(disciplinas: list[str] | None = None, tema: str | None = None,
         # Série não saiu: cai pro item avulso em vez de devolver vazio. O
         # aluno pediu questão, não pediu formato.
 
-    questoes = socratic.gerar_questoes(lote, len(lote), tipo)
+    questoes = socratic.gerar_questoes(lote, len(lote), tipo, pedido_do_aluno=pedido_do_aluno)
     salvas, descartes = salvar(questoes, lote)
     return {
         "trocou_de_assunto": trocou_de_assunto,

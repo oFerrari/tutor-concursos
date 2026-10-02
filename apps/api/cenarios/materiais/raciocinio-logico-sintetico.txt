@@ -1,0 +1,105 @@
+Curso Sintético de Raciocínio Lógico-Matemático — Aula 00
+
+Apresentação do curso
+
+Olá, pessoal! Sejam bem-vindos ao nosso curso de Raciocínio Lógico-Matemático. Estrutura do
+curso: nesta Aula 00 veremos proposições, conectivos, tabela-verdade, equivalências e negações;
+depois, conjuntos; por fim, princípios de contagem e porcentagem. Cada tópico traz teoria,
+exemplos e questões comentadas no estilo das bancas. Metodologia: leia a teoria com calma, refaça
+os exemplos sem olhar a resolução e revise os bizus antes da prova. Bons estudos!
+
+1. Proposições
+
+Proposição é toda oração declarativa que admite um, e somente um, dos valores lógicos: verdadeiro
+(V) ou falso (F). "Brasília é a capital do Brasil" é uma proposição verdadeira; "2 + 2 = 5" é uma
+proposição falsa. Não são proposições as sentenças interrogativas ("que horas são?"), as
+exclamativas ("que dia lindo!"), as imperativas ("feche a porta") e as sentenças abertas, como
+"x + 1 = 7", cujo valor lógico depende do valor de x. Também não é proposição o paradoxo, como
+"esta frase é falsa", que não admite valor lógico sem contradição.
+
+Proposição simples é a que não contém outra proposição como parte integrante; proposição composta
+é a formada por duas ou mais proposições simples ligadas por conectivos.
+
+2. Conectivos lógicos
+
+A conjunção "p e q" (p ∧ q) só é verdadeira quando p e q são ambas verdadeiras. A disjunção
+inclusiva "p ou q" (p ∨ q) só é falsa quando ambas são falsas. A disjunção exclusiva "ou p ou q"
+é verdadeira quando exatamente uma delas é verdadeira. A condicional "se p, então q" (p → q) só é
+falsa quando p é verdadeira e q é falsa — o bizu da Vera Fischer: V com F dá F. A bicondicional
+"p se e somente se q" (p ↔ q) é verdadeira quando p e q têm o mesmo valor lógico.
+
+Na condicional, p é o antecedente e q é o consequente. Dizemos que p é condição suficiente para q,
+e q é condição necessária para p.
+
+3. Tabela-verdade
+
+O número de linhas da tabela-verdade de uma proposição composta por n proposições simples é 2
+elevado a n. Com duas proposições simples, são 4 linhas; com três, 8 linhas; com quatro, 16
+linhas. Tautologia é a proposição composta que é sempre verdadeira, qualquer que seja o valor das
+simples; contradição é a que é sempre falsa; contingência é a que pode ser verdadeira ou falsa.
+
+Exemplo: "p ou não p" é uma tautologia, porque em toda linha uma das duas partes é verdadeira.
+"p e não p" é uma contradição.
+
+4. Equivalências e negações
+
+A condicional p → q é equivalente à sua contrapositiva, ~q → ~p, e também a ~p ∨ q. Assim, "se
+chove, então a rua fica molhada" equivale a "se a rua não está molhada, então não choveu" e a
+"não chove ou a rua fica molhada".
+
+Leis de De Morgan: a negação de "p e q" é "não p ou não q"; a negação de "p ou q" é "não p e não
+q". A negação da condicional "se p, então q" é "p e não q" — mantém o antecedente e nega o
+consequente. A negação de "todo A é B" é "algum A não é B"; a negação de "nenhum A é B" é "algum A
+é B".
+
+Questão comentada
+
+(Banca sintética) A negação de "se estudo, então passo" é: a) se não estudo, então não passo; b)
+estudo e não passo; c) não estudo ou passo; d) não estudo e não passo. Comentário: a negação da
+condicional mantém o antecedente e nega o consequente: "estudo e não passo". Gabarito: B.
+
+5. Conjuntos
+
+Conjunto é uma coleção de elementos. A união de A e B (A ∪ B) reúne os elementos que estão em A,
+em B ou em ambos. A interseção (A ∩ B) reúne só os elementos que estão nos dois. A diferença A − B
+reúne os elementos de A que não estão em B.
+
+O número de elementos da união de dois conjuntos é n(A ∪ B) = n(A) + n(B) − n(A ∩ B): somar n(A)
+e n(B) conta duas vezes quem está na interseção, e por isso ela é subtraída uma vez. Exemplo: numa
+turma, 30 estudam inglês, 20 estudam espanhol e 8 estudam os dois; logo, 30 + 20 − 8 = 42 estudam
+pelo menos um dos idiomas, e 42 − 8 = 34 estudam somente um deles.
+
+Para três conjuntos: n(A ∪ B ∪ C) = n(A) + n(B) + n(C) − n(A ∩ B) − n(A ∩ C) − n(B ∩ C) + n(A ∩ B
+∩ C). No diagrama de Venn, preencha sempre de dentro para fora: primeiro a interseção dos três,
+depois as interseções de dois a dois, e só então as regiões exclusivas.
+
+Questão comentada
+
+(Banca sintética) Numa empresa, 50 funcionários usam ônibus, 30 usam metrô e 10 usam os dois.
+Quantos usam ao menos um desses transportes? Comentário: 50 + 30 − 10 = 70. Gabarito: 70.
+
+6. Princípios de contagem
+
+Princípio multiplicativo: se uma decisão pode ser tomada de m maneiras e outra, independente, de n
+maneiras, as duas juntas podem ser tomadas de m × n maneiras. Exemplo: com 3 camisas e 4 calças,
+há 3 × 4 = 12 combinações de roupa.
+
+Permutação simples de n elementos distintos é n! (n fatorial): 3! = 3 × 2 × 1 = 6. Arranjo de n
+elementos tomados p a p, quando a ordem importa: A(n, p) = n! / (n − p)!. Combinação de n
+elementos tomados p a p, quando a ordem não importa: C(n, p) = n! / [p! (n − p)!]. Exemplo: para
+formar uma comissão de 2 pessoas entre 5, a ordem não importa: C(5, 2) = 10.
+
+Bizu: pergunte-se "se eu trocar a ordem, muda o resultado?". Se muda, é arranjo; se não muda, é
+combinação.
+
+7. Porcentagem
+
+Porcentagem é uma razão de denominador 100: 25% = 25/100 = 0,25. Aumentar um valor em 20% é
+multiplicá-lo por 1,20; reduzir em 20% é multiplicá-lo por 0,80. Aumentos sucessivos se
+multiplicam: um aumento de 10% seguido de outro de 10% dá 1,10 × 1,10 = 1,21, ou seja, 21% no
+total, e não 20%.
+
+Questão comentada
+
+(Banca sintética) Um produto de R$ 200,00 sofreu desconto de 15%. Qual o novo preço? Comentário:
+200 × 0,85 = 170. Gabarito: R$ 170,00.

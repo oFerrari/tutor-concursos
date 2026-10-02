@@ -62,11 +62,24 @@ const TIPOS = [
   { valor: "aula", rotulo: "Aula / apostila" },
   { valor: "resumo", rotulo: "Resumo / anotação" },
   { valor: "jurisprudencia", rotulo: "Jurisprudência" },
+  // 037: prova ou caderno de questões. Cada questão vira questão do banco; um
+  // arquivo só de gabarito, subido aqui também, completa o simulado.
+  { valor: "simulado", rotulo: "Simulado / questões" },
 ];
 
 /** Chave do grupo "ainda sem disciplina". Começa com espaço pra nunca colidir
  *  com nome real de matéria. */
 const SEM_DISCIPLINA = " nao-classificado";
+
+/** Tipos que se organizam por DESCRIÇÃO (`documento.assunto`), não por
+ *  disciplina + assunto do edital: um resumo, uma jurisprudência ou um simulado
+ *  não pertencem a um item do edital. Espelha `material.TIPOS_POR_DESCRICAO`. */
+const POR_DESCRICAO = new Set(["resumo", "jurisprudencia", "simulado"]);
+
+/** Por quanto tempo o palpite do modelo pede conferência depois do envio. É um
+ *  convite, não um estado: a pessoa que não corrigiu em três dias aceitou o nome,
+ *  e um aviso permanente vira ruído que ninguém mais lê. */
+const DIAS_PEDINDO_CONFERENCIA = 3;
 
 /** O host de uma URL, pra caber na linha estreita do material. Devolve a
  *  string crua se não parsear — endereço estranho é melhor mostrado do que
@@ -88,6 +101,15 @@ function detalhe(m: Material, jaNaAbaDeConsulta = false): string {
   // aparece na aba de Jurisprudência, onde o cabeçalho já explica isso — dizer
   // duas vezes é ruído.
   const marca = m.referencia && !jaNaAbaDeConsulta ? " · consulta" : "";
+  // Simulado (037): o que interessa é quantas questões viraram questão, e
+  // quantas esperam gabarito — é a deixa para subir o gabarito à parte.
+  if (m.tipo === "simulado") {
+    if (m.gabarito_de != null) return "gabarito de outro simulado";
+    if (m.questoes_extraidas != null) {
+      const falta = m.questoes_sem_gabarito ? ` · ${m.questoes_sem_gabarito} sem gabarito` : "";
+      return `${m.questoes_extraidas} questões${falta}`;
+    }
+  }
   return `${m.chunks} trechos${marca}`;
 }
 
@@ -304,6 +326,13 @@ export default function PaginaMateriais() {
   /** Linha em edição de rótulo. Inline porque corrigir o palpite é um ajuste de
    *  duas palavras — abrir modal pra isso é mais clique que conteúdo. */
   const [editando, setEditando] = useState<number | null>(null);
+  // Lido UMA vez, na montagem: o relógio não pode ser lido durante o render.
+  const [agora] = useState(() => Date.now());
+  // A ABA vem antes dos gestos (mover, renomear) porque eles dependem dela: nas
+  // abas por DESCRIÇÃO o grupo é a descrição, não a disciplina.
+  const [abaPedida, setAba] = useState<string>("aula");
+  const aba = abaPedida;
+  const porDescricao = POR_DESCRICAO.has(aba);
   const [editAssu, setEditAssu] = useState("");
 
   const carregar = useCallback(async () => {
@@ -451,10 +480,13 @@ export default function PaginaMateriais() {
    *  sugestão, é um documento). Dentro da biblioteca, prefere os assuntos DA
    *  disciplina escolhida: oferecer "Remédios constitucionais" a quem está
    *  subindo Contabilidade é ruído. */
+  const porDescricaoNoEnvio = POR_DESCRICAO.has(tipo);
   const opcoesAssunto = useMemo(() => {
-    if (usandoAlvo || !sugestoes) return [];
+    if (!sugestoes) return [];
+    if (porDescricaoNoEnvio) return sugestoes.descricoes_por_tipo?.[tipo] ?? [];
+    if (usandoAlvo) return [];
     return sugestoes.assuntos_por_disciplina[disciplina.trim()] ?? sugestoes.assuntos;
-  }, [usandoAlvo, sugestoes, disciplina]);
+  }, [usandoAlvo, sugestoes, disciplina, porDescricaoNoEnvio, tipo]);
 
   /** O interruptor FILTRA — uma fonte por vez, a que ele diz.
    *
@@ -493,6 +525,7 @@ export default function PaginaMateriais() {
   const assuntosPara = useCallback(
     (m: Material) => {
       if (!sugestoes) return [];
+      if (POR_DESCRICAO.has(m.tipo)) return sugestoes.descricoes_por_tipo?.[m.tipo] ?? [];
       const disc = (m.disciplina ?? "").trim();
       if (usandoAlvo) {
         const tops = sugestoes.topicos_por_disciplina ?? {};
@@ -536,7 +569,8 @@ export default function PaginaMateriais() {
     let anexados = 0;
     for (let i = 0; i < arquivos.length; i++) {
       try {
-        const r = await subirMaterial(arquivos[i], { disciplina, assunto, tipo });
+        const r = await subirMaterial(arquivos[i], {
+          disciplina: porDescricaoNoEnvio ? "" : disciplina, assunto, tipo });
         if (r.arquivo_anexado) anexados += 1;
         else if (r.retomado) retomados += 1;
       } catch (e) {
@@ -592,7 +626,7 @@ export default function PaginaMateriais() {
     setErro(null);
     setEnviando(true);
     try {
-      await indexarLink({ url: url.trim(), disciplina, assunto, tipo });
+      await indexarLink({ url: url.trim(), disciplina: porDescricaoNoEnvio ? "" : disciplina, assunto, tipo });
       setUrl("");
       await carregar();
       await carregarSugestoes();
@@ -644,18 +678,20 @@ export default function PaginaMateriais() {
    * Erro devolve a lista do servidor, que é a verdade.
    */
   async function mover(id: number, destino: string) {
-    const disciplina = destino === SEM_DISCIPLINA ? "" : destino;
+    const valor = destino === SEM_DISCIPLINA ? "" : destino;
+    // Nas abas por DESCRIÇÃO o grupo é a descrição: arrastar a troca.
+    const campo = porDescricao ? "assunto" : "disciplina";
     setArrastando(null);
     setSobre(null);
     setMateriais(
       (atual) =>
         atual?.map((m) =>
-          m.id === id ? { ...m, disciplina: disciplina || null, classificado_por: "aluno" } : m
+          m.id === id ? { ...m, [campo]: valor || null, classificado_por: "aluno" } : m
         ) ?? null
     );
     setErro(null);
     try {
-      await classificarMaterial(id, { disciplina });
+      await classificarMaterial(id, { [campo]: valor });
       await carregarSugestoes();
     } catch (e) {
       setErro(e instanceof ErroApi ? e.message : "Não deu pra mover este material");
@@ -672,7 +708,15 @@ export default function PaginaMateriais() {
     if (!para || para === de) return;
     setErro(null);
     try {
-      await renomearDisciplina(de, para);
+      if (porDescricao) {
+        // Descrição não tem rota de renomear em lote: é o mesmo PATCH do lápis,
+        // um por material do grupo.
+        for (const m of (materiais ?? []).filter((x) => x.tipo === aba && (x.assunto ?? SEM_DISCIPLINA) === de)) {
+          await classificarMaterial(m.id, { assunto: para });
+        }
+      } else {
+        await renomearDisciplina(de, para);
+      }
       // Recarrega tudo: a renomeação mexe em VÁRIAS linhas e reenfileira a
       // indexação de cada uma, então o estado local não dá pra remendar — os
       // materiais voltam a `processando` e a lista tem de refletir isso.
@@ -717,6 +761,9 @@ export default function PaginaMateriais() {
     try {
       await apagarMaterial(m.id);
       setMateriais((atual) => atual?.filter((x) => x.id !== m.id) ?? null);
+      // As SUGESTÕES saem dos materiais que existem: apagado o último de uma
+      // descrição (ou de um assunto), ela não pode continuar sendo oferecida.
+      await carregarSugestoes();
     } catch (e) {
       setErro(e instanceof ErroApi ? e.message : "Não deu pra remover");
     }
@@ -763,25 +810,23 @@ export default function PaginaMateriais() {
    *  informa isso; aba ausente esconde. */
   const abas = TIPOS;
 
-  const [abaPedida, setAba] = useState<string>("aula");
-  const aba = abaPedida;
   const daAba = useMemo(() => porTipo.get(aba) ?? [], [porTipo, aba]);
 
-  /** Jurisprudência não se agrupa por matéria — é o pedido, e é coerente com o
-   *  resto: material de referência não tem assunto porque trata de assunto
-   *  demais, e subdividir a lista dele repetiria o mesmo erro na tela. */
-  const semGrupo = aba === "jurisprudencia";
+  // Aula agrupa por DISCIPLINA (o edital); resumo, jurisprudência e simulado,
+  // pela DESCRIÇÃO. Todas as abas têm grupo agora — antes a jurisprudência era
+  // uma lista solta, sem assunto nenhum.
+  const semGrupo = false;
 
   const grupos = useMemo(() => {
     const mapa = new Map<string, Material[]>();
     for (const m of daAba) {
-      const k = m.disciplina ?? SEM_DISCIPLINA;
+      const k = (porDescricao ? m.assunto : m.disciplina) ?? SEM_DISCIPLINA;
       mapa.set(k, [...(mapa.get(k) ?? []), m]);
     }
     return [...mapa.entries()].sort(([a], [b]) =>
       a === SEM_DISCIPLINA ? 1 : b === SEM_DISCIPLINA ? -1 : a.localeCompare(b)
     );
-  }, [daAba]);
+  }, [daAba, porDescricao]);
 
   // A LINHA DE UM MATERIAL, extraída porque agora ela aparece em DUAS listas:
   // os grupos por matéria (material de estudo) e a seção de consulta
@@ -867,7 +912,7 @@ export default function PaginaMateriais() {
                     )}
                     <p className="mt-0.5 truncate font-mono text-[11px] text-label">
                       {m.assunto ? `${m.titulo} · ` : ""}
-                      {detalhe(m, semGrupo)}
+                      {detalhe(m, aba === "jurisprudencia")}
                       {/* DE ONDE VEIO, quando veio de um link (028). O nome do
                           arquivo não diz: "constituicao.txt" pode ser um
                           download manual ou o Planalto. Pedido nestas palavras
@@ -893,7 +938,8 @@ export default function PaginaMateriais() {
                       )}
                       {/* Só o PALPITE pede conferência. O que o aluno digitou
                           não precisa de aviso — ele sabe o que escreveu. */}
-                      {m.classificado_por === "modelo" && (
+                      {m.classificado_por === "modelo" &&
+                        agora - new Date(m.criado_em).getTime() < DIAS_PEDINDO_CONFERENCIA * 86_400_000 && (
                         <span className="text-warning"> · eu deduzi, confira</span>
                       )}
                     </p>
@@ -1051,6 +1097,9 @@ export default function PaginaMateriais() {
 
             O campo não perde acessibilidade: o `Seletor` recebe `aria`, que é
             o nome acessível dele — o <label> aqui era decoração de layout. */}
+        {/* Resumo, jurisprudência e simulado não têm disciplina do edital: o
+            campo some, e o de baixo vira DESCRIÇÃO. */}
+        {!porDescricaoNoEnvio && (
         <div className="min-w-[210px] flex-1">
           <span className="mb-1.5 flex items-baseline justify-between gap-2 text-[12.5px] text-muted">
             <span>Disciplina (opcional)</span>
@@ -1095,6 +1144,32 @@ export default function PaginaMateriais() {
             aria="disciplina do material"
           />
         </div>
+        )}
+        {porDescricaoNoEnvio ? (
+          <div className="min-w-[210px] flex-[2]">
+            <span className="mb-1.5 flex items-baseline justify-between gap-2 text-[12.5px] text-muted">
+              <span>Descrição (opcional)</span>
+              {/* Fixo, sem clique: a sugestão aqui só pode vir dos materiais do
+                  MESMO tipo — o edital não organiza resumo, jurisprudência nem
+                  simulado. É o mesmo verde de "usar sugestões daqui". */}
+              <span className="flex items-center gap-1.5 text-[12px]" aria-label="sugestões deste tipo">
+                <span className="switch switch-daqui">
+                  <span className="switch-bolinha left-[2px]" />
+                </span>
+                <span className="text-success">
+                  sugestões dos seus {TIPOS.find((x) => x.valor === tipo)?.rotulo.toLowerCase()}
+                </span>
+              </span>
+            </span>
+            <Seletor
+              valor={assunto}
+              aoMudar={setAssunto}
+              opcoes={opcoesAssunto}
+              placeholder="deixe vazio e eu nomeio pelo título e pelo conteúdo"
+              aria="descrição do material"
+            />
+          </div>
+        ) : (
         <label className="min-w-[210px] flex-1">
           <span className="mb-1.5 block text-[12.5px] text-muted">
             Assunto (opcional)
@@ -1108,6 +1183,7 @@ export default function PaginaMateriais() {
             aria="assunto do material"
           />
         </label>
+        )}
         {/* `<div>` e não `<label>`: o gatilho agora é um `<button>`, e label
             envolvendo botão promete um clique-pra-focar que não existe. */}
         <div className="min-w-[170px]">
@@ -1267,7 +1343,9 @@ export default function PaginaMateriais() {
             para onde mover — e nunca onde não há grupo (jurisprudência). */}
         {!semGrupo && grupos.length > 1 && (
           <p className="text-[12px] text-subtle">
-            errou a matéria? arraste para outro grupo — ou solte fora deles pra tirar
+            {porDescricao
+              ? "errou a descrição? arraste para outro grupo — ou solte fora deles pra tirar"
+              : "errou a matéria? arraste para outro grupo — ou solte fora deles pra tirar"}
           </p>
         )}
       </div>
@@ -1439,7 +1517,8 @@ export default function PaginaMateriais() {
                             // lista inteira.
                             setNomeNovo("");
                           }}
-                          title="Renomear esta matéria em todos os materiais dela"
+                          title={porDescricao ? "Renomear esta descrição em todos os materiais dela"
+                                              : "Renomear esta matéria em todos os materiais dela"}
                           aria-label={`renomear ${disc}`}
                           className="flex h-5 w-5 items-center justify-center rounded-[6px] text-label opacity-0 transition-all hover:bg-surface-hover hover:text-accent-text focus-visible:opacity-100 group-hover/gr:opacity-100"
                         >
@@ -1447,9 +1526,11 @@ export default function PaginaMateriais() {
                         </button>
                       </>
                     ) : itens.some((m) => m.status === "processando") ? (
-                      <span className="text-muted">Identificando a matéria...</span>
+                      <span className="text-muted">
+                        {porDescricao ? "Identificando a descrição..." : "Identificando a matéria..."}
+                      </span>
                     ) : (
-                      <span className="text-muted">Outros</span>
+                      <span className="text-muted">{porDescricao ? "Sem descrição" : "Outros"}</span>
                     )}
                   </p>
                 )}
@@ -1525,6 +1606,9 @@ export default function PaginaMateriais() {
           <>
             Os {aApagar?.chunks_total ?? 0} trechos saem da busca, e o tutor deixa de
             citar este material nas respostas.
+            {aApagar?.tipo === "simulado" && aApagar.questoes_extraidas
+              ? ` As ${aApagar.questoes_extraidas} questões dele saem do banco junto.`
+              : ""}
           </>
         }
         detalhe={

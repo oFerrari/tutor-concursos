@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowRight, ArrowUp, Check, ClipboardList, Eye, EyeOff, Pencil, Square } from "lucide-react";
+import { ArrowRight, ArrowUp, Check, ChevronDown, ChevronRight, ClipboardList, Eye, EyeOff, Pencil, Square } from "lucide-react";
 import { MarcaGlifo } from "@/components/Marca";
 import { BalaoQuestao } from "@/components/BalaoQuestao";
 import { GerarQuestoes } from "@/components/GerarQuestoes";
@@ -110,8 +110,9 @@ export default function PaginaTutor() {
   // conteúdo de Administrativo" — aparecia ACIMA delas, com a resposta nova
   // espremida entre questões de outro assunto.
   const [geradas, setGeradas] = useState<{ q: Questao; ancora: number }[]>([]);
-  // Questões de falas anteriores ficam recolhidas; o aluno abre as que quiser.
-  const [abertas, setAbertas] = useState<Set<number>>(new Set());
+  // Toda questão abre e fecha. Sem escolha do aluno, a do turno mais recente vem
+  // aberta e as de falas anteriores recolhidas; clicando, vale o que ele escolheu.
+  const [escolha, setEscolha] = useState<Map<number, boolean>>(new Map());
   const falasDoAluno = useRef(0);
   /** O acervo não tinha trecho do assunto da conversa e o gerador caiu pro
    *  recorte da mesa. As questões valem e têm proveniência — só não são do que
@@ -214,27 +215,32 @@ export default function PaginaTutor() {
   }, [falasDoAlunoNaTela]);
 
   /** As questões nascidas no turno `ancora`, no ponto da conversa em que
-   *  nasceram. Depois que o aluno fala de novo, recolhem numa linha — mas
-   *  continuam montadas (só escondidas): desmontar perderia a resposta em
+   *  nasceram. Toda questão abre e fecha pela linha de título; depois que o
+   *  aluno fala de novo, recolhem sozinhas — mas continuam montadas (só
+   *  escondidas): desmontar perderia a resposta em
    *  curso e dispararia o registro de abandono do `DialogoQuestao`. */
   function questoesDa(ancora: number) {
     return geradas
       .filter((g) => g.ancora === ancora)
       .map(({ q }) => {
-        const recolhida = ancora < falasDoAlunoNaTela && !abertas.has(q.id);
+        const recolhida = !(escolha.get(q.id) ?? ancora >= falasDoAlunoNaTela);
         return (
           <div key={q.id} className="mt-3">
-            {recolhida && (
-              <button
-                type="button"
-                onClick={() => setAbertas((a) => new Set(a).add(q.id))}
-                className="btn-ghost inline-flex max-w-full items-center gap-1.5 text-[12.5px]"
-              >
-                <ClipboardList className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">Questão · {q.tema}</span>
-                <span className="shrink-0 text-subtle">— abrir</span>
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => setEscolha((e) => new Map(e).set(q.id, recolhida))}
+              className="btn-ghost mb-1 inline-flex max-w-full items-center gap-1.5 text-[12.5px]"
+              aria-expanded={!recolhida}
+            >
+              {recolhida ? (
+                <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+              )}
+              <ClipboardList className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">Questão · {q.tema}</span>
+              <span className="shrink-0 text-subtle">— {recolhida ? "abrir" : "fechar"}</span>
+            </button>
             <div className={recolhida ? "hidden" : ""}>
               <BalaoQuestao
                 tipo={q.tipo}

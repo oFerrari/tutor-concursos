@@ -227,6 +227,23 @@ levou 23 s por material (Gemini: ~1 s). Modelo de 7B não cabe com folga em 7 GB
 de RAM. Ligar só numa máquina com memória para um modelo maior, e depois de
 repetir a mesma medição (régua = rótulos atuais que o aluno não corrigiu).
 
+## Mapa do edital por subitem — o que ele ainda erra (28/09/2026)
+
+`core/cobertura.py` liga cada ponto do edital aos trechos do material, com o
+modelo julgando cada par subitem–trecho. Medido no edital da PC-PR:
+
+- **O modelo atual oscila** em parte dos subitens entre rodadas, mesmo com
+  temperatura zero ("Poder Legislativo": 1 ou 4 trechos; "ação popular": citado ou
+  sem material). Modelo melhor está no radar de `docs/PLANOS.md`.
+- **O aluno ainda não corrige** um ponto na tela ("isto está na Aula 03"); o banco
+  já tem `metodo = 'aluno'` para quando existir.
+- **Só o material do aluno conta.** A lei seca do acervo (CF, CP…) não entra no
+  mapa, então um ponto coberto pela lei, mas não por apostila, aparece "sem
+  material".
+- **"Na ordem do edital" abre o ponto onde ele começa na apostila** e segue a
+  leitura dali; ponto espalhado em várias partes da apostila é lido a partir da
+  primeira.
+
 ## Aberto
 
 ### Débito de retrieval: a busca afoga a lei, e a consulta faz eco (16/09/2026)
@@ -456,3 +473,64 @@ fala anterior, não do texto dela — hoje é `_truncar` de prosa.
   diário. Mesmo método do harness original (scheduler-v19), só com acervo
   maior — nada de novo quebrou ao crescer o corpus, que é exatamente o que
   essa validação existia pra confirmar.
+
+## Fórmula, mapa mental e tabela (28/09/2026)
+
+- A tela desenha um SUBCONJUNTO de LaTeX (`apps/web/src/components/Formula.tsx`):
+  fração, potência, índice, raiz, `\boxed`, `\text` e símbolos. Ambiente
+  (`\begin{...}`), matriz e alinhamento não são desenhados: o comando aparece pelo
+  nome, sem barra. Sem biblioteca de propósito (ver `TextoDoTutor.tsx`).
+- O modelo às vezes fecha mal a fórmula (`$$...$|`): a tela mostra o texto cru
+  daquela linha. Não há correção automática disso.
+- A conta é do modelo, conferida só pela leitura. Em cálculo, o tutor pode
+  resolver sem trecho do material; errar uma conta é possível, e nada no código
+  refaz a aritmética.
+
+## Bateria de descoberta (28/09/2026)
+
+- O juiz é um modelo. Ele oscila e pode errar nos dois sentidos, e o relatório
+  pede leitura, não obediência.
+- A leitura de contradição pega choque direto e perde choque sutil (medido).
+- Gasta cota de verdade, perto de 200 chamadas na rodada padrão. Com a cota
+  gratuita, uma rodada completa por dia é o realista.
+
+## Manutenção de 29/09/2026 — visto e não corrigido
+
+- **Recusa de assunto fora do edital** — tratada na segunda passada (ver
+  `DECISOES.md`, "Segunda passada"): não era a busca nem o bloco "Nenhum", e sim a
+  regra longe da pergunta. Vale conferir na próxima bateria: com o conserto medido
+  em quatro chamadas, não em conversa inteira.
+- **Material que terminou, e o tutor seguiu de memória.** A regra existe no
+  `SISTEMA_LEITURA`; o modelo a ignorou. Com o marcador certo (`leitura.ensinados`)
+  o falso "fim" some, mas o fim de verdade ainda depende do modelo obedecer.
+- **Um turno de 119,6 s** (resolver de novo a questão de conjuntos). Sem telemetria
+  da conta descartável, que a bateria apaga, não deu para saber se foi espera de cota.
+- **CONSULTADO vazio com trecho usado.** Às vezes o modelo ensina a partir de um
+  trecho e não o lista em `fontes_usadas`, e a tela não mostra fonte. Medido: fora
+  da leitura, a cobertura de texto não separa usado de não usado (ver DECISOES,
+  "Depois da madrugada"). Fica como omissão do modelo.
+- **Símbolo trocado pelo modelo:** "n(A ∠ B)" no lugar de ∪. Não vem de
+  `latex_de_volta`. O cifrão desparelhado ("$$30 + 15 = 45$") a tela passou a
+  consertar.
+- **Outro turno lento:** 139,8 s para resolver a questão colada de conjuntos.
+
+## Índice de assuntos por trecho (036)
+
+- **Precisão de 72–77% com o modelo leve**, julgada à mão numa amostra. O erro é
+  entre assuntos vizinhos da mesma apostila. Um modelo mais forte em `LLM_INDICE`
+  é a melhoria direta.
+- **Material sem cota no dia sai pela reserva** (sumário, títulos, expressão), que
+  fica entre 60% e 75% e às vezes acha só 1 assunto. Ele é refeito com o modelo pelo
+  `python -m core.indice`, dentro do orçamento do dia.
+- **PDF escaneado** (imagem) não tem texto, logo não tem índice.
+- **O rótulo de um trecho com dois assuntos** é o primeiro na ordem da apostila.
+
+## Questões de prova (037)
+
+- **PDF escaneado** não tem texto, então não tem questões.
+- **Questão com imagem** (gráfico, figura) entra só com o texto: a figura não vem.
+- **Questão discursiva da prova** fica de fora por ora. Só entram múltipla escolha
+  e certo/errado.
+- **Formatos fora do padrão** (número sem ponto, alternativa sem letra) não são
+  reconhecidos. Não há extração por modelo como reserva.
+- **Gabarito do tutor** pode errar e fica marcado como tal na tela.

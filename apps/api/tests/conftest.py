@@ -179,6 +179,17 @@ def llm_falso(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _indice_sem_modelo(monkeypatch):
+    """Nos TESTES, o índice de assuntos (036) sai pela RESERVA, sem chamar o modelo:
+    orçamento zero. Indexar material agora monta o índice no fim, e com o dublê ele
+    gastaria chamadas que os testes de conversa contam. Os testes do próprio índice
+    (`test_indice.py`) ligam o orçamento."""
+    from core import indice
+    monkeypatch.setattr(indice, "ORCAMENTO_DIA", 0)
+    monkeypatch.setattr(indice, "PAUSA_S", 0)
+
+
+@pytest.fixture(autouse=True)
 def _indexar_sincrono(monkeypatch):
     """Nos TESTES, indexar material é síncrono.
 

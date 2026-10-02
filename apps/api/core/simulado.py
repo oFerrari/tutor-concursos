@@ -29,7 +29,7 @@ o que importa (caixa, prox_revisao) já viaja pela tentativa comum.
 """
 from . import db, mesa, questoes as questoes_mod, scheduler, socratic
 
-VERSAO = "simulado-v9"
+VERSAO = "simulado-v10"
 
 N_PADRAO = 20
 
@@ -50,7 +50,8 @@ def selecionar(n: int = N_PADRAO, disciplina: str | None = None,
     """
     return db.query(
         f"""SELECT q.id, q.disciplina, q.tema, q.enunciado, q.gabarito, q.tipo,
-                   q.gabarito_ce, q.contexto_id, q.ordem_no_contexto, x.texto AS contexto
+                   q.gabarito_ce, q.contexto_id, q.ordem_no_contexto, x.texto AS contexto,
+                   {questoes_mod.campos_de_prova('q')}
            FROM questao q
            LEFT JOIN contexto x ON x.id = q.contexto_id
            WHERE (%(d)s::text IS NULL OR q.disciplina = %(d)s)
@@ -162,7 +163,7 @@ def responder_uma(simulado_id: int, usuario_id: int, questao_id: int,
         {"s": simulado_id, "q": questao_id},
     )
     q = db.exec1(
-        "SELECT id, tema, enunciado, gabarito, tipo, gabarito_ce FROM questao WHERE id = %(id)s",
+        "SELECT id, tema, enunciado, gabarito, tipo, gabarito_ce, gabarito_letra FROM questao WHERE id = %(id)s",
         {"id": questao_id},
     )
     if not q:
@@ -230,8 +231,9 @@ def estado(simulado_id: int, usuario_id: int) -> dict | None:
     qmap = {
         q["id"]: q
         for q in db.query(
-            """SELECT q.id, q.disciplina, q.tema, q.enunciado, q.gabarito, q.tipo,
-                      q.gabarito_ce, q.contexto_id, q.ordem_no_contexto, x.texto AS contexto
+            f"""SELECT q.id, q.disciplina, q.tema, q.enunciado, q.gabarito, q.tipo,
+                      q.gabarito_ce, q.contexto_id, q.ordem_no_contexto, x.texto AS contexto,
+                      {questoes_mod.campos_de_prova('q')}
                FROM questao q LEFT JOIN contexto x ON x.id = q.contexto_id
                WHERE q.id = ANY(%(ids)s)""",
             {"ids": s["questao_ids"]},
