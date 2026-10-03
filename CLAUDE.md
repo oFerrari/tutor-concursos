@@ -86,6 +86,7 @@ core/leitura.py       ler o material do aluno NA ORDEM ("continua"), marcador em
 core/cobertura.py     edital ligado ao material por SUBITEM: onde está, o que falta (035)
 core/indice.py        assuntos de cada material e de cada TRECHO, lidos pelo modelo no upload (036)
 core/prova.py         simulado do aluno -> questões do banco (literal, múltipla escolha, gabarito à parte) (037)
+core/dominio.py       mapa de domínio: edital assunto por assunto (estudado, ciclo, atenção); liga índice e enunciado -> edital (038, 039)
 core/pedido.py        o aluno pediu treino/simulado? (puro)
 core/scheduler*.py    fila, registro, caderno de erros, meta — por usuario_id; regras puras à parte
 core/simulado.py      prova sob condição de exame, corrige no fim
@@ -103,6 +104,7 @@ bateria_conversa.py   cenários com o modelo real numa conta DESCARTÁVEL (mater
 descobrir.py          DESCOBERTA: falas reais + aluno simulado, pela rota, juiz independente, tela e contradições
 sincronizar.py        exporta/importa o estado de um usuário entre máquinas
 semear_demo.py        conta descartável com dado plausível, pra olhar a TELA
+bateria_estudo.py     COPIA uma mesa real p/ conta descartável e simula 60 dias de estudo pelas rotas (cota zero)
 ```
 
 Scripts da raiz: `setup.sh` (sobe tudo), `testar.sh` (qualidade da resposta),
@@ -157,7 +159,7 @@ Scripts da raiz: `setup.sh` (sobe tudo), `testar.sh` (qualidade da resposta),
   (o CASCADE da 009 limpa o resto).
 - Migração: `python migrar.py` aplica; **commitar não aplica**. Nunca por
   `psql -f` — fora do runner ela não entra no livro-razão (023), e o banco fica
-  com o efeito sem registro. A PRÓXIMA é a **038**; confira com
+  com o efeito sem registro. A PRÓXIMA é a **040**; confira com
   `migrar.py --listar` (há dois pares 018/019 repetidos, não crie um terceiro).
 - `.env` e `acervo/` fora do git; `corpus/` e `dados/progresso.json` no git.
   SQL só em migração numerada.

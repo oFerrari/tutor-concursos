@@ -40,7 +40,7 @@ import unicodedata
 
 from . import assunto, db, llm
 
-VERSAO = "indice-v2"
+VERSAO = "indice-v3"
 
 LOTE = 30                 # trechos por chamada: 60 estourou o limite de tokens/min (medido)
 PAUSA_S = float(os.getenv("INDICE_PAUSA_S", "8"))
@@ -237,8 +237,10 @@ SIS_MARCAS = (
 
 
 def gasto_hoje() -> int:
-    """Chamadas do índice no dia da cota (meia-noite do Pacífico), pela telemetria."""
-    r = db.exec1("""SELECT count(*) AS n FROM telemetria_llm WHERE origem_chamada LIKE 'indice.%%'
+    """Chamadas do índice no dia da cota (meia-noite do Pacífico), pela telemetria.
+    Conta também o mapa de domínio (038): mesmo modelo, mesma cota."""
+    r = db.exec1("""SELECT count(*) AS n FROM telemetria_llm
+                     WHERE (origem_chamada LIKE 'indice.%%' OR origem_chamada LIKE 'dominio.%%')
                      AND criado_em >= (date_trunc('day', now() AT TIME ZONE 'America/Los_Angeles')
                                        AT TIME ZONE 'America/Los_Angeles')""")
     return r["n"] if r else 0

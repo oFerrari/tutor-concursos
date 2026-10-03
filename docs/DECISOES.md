@@ -327,8 +327,8 @@ mandaria "C" pra ser comparado contra uma justificativa em prosa.
 **Não há escada socrática no item binário**, e isso é decisão: qualquer
 dica sobre uma assertiva de 50% É a resposta, e "tente de novo" vira cara
 ou coroa com o gabarito garantido na segunda. Também não existe `parcial` —
-metade de um booleano não é nada, e `parcial` DESCE uma caixa em
-`scheduler_regras`, punindo por um estado que o formato não pode ocupar.
+metade de um booleano não é nada (e, até 02/10/2026, `parcial` DESCIA uma caixa em
+`scheduler_regras`, punindo por um estado que o formato não pode ocupar).
 
 Na geração, `_validar_ce` checa `isinstance(gabarito_ce, bool)` e não
 veracidade: `if not gabarito_ce` descartaria TODO item ERRADO (False é
@@ -3754,3 +3754,121 @@ Na conversa de Raciocínio Lógico:
   sem par sai da tela.
 
 A saudação "Boa noite" respondendo a "bom dia" estava CERTA: eram 23h44 locais.
+
+## Mapa de domínio e métrica das questões (02/10/2026)
+
+**Caixas fixas, não SM-2.** O agendamento é Leitner (1, 3, 7, 15, 30, 90 dias),
+sem fator de facilidade; o selo "Algoritmo SM-2" na tela era falso e virou
+"Revisão espaçada". O dono preferiu manter as caixas: acerto com dica já não
+punia (mantém a caixa), e trocar para SM-2 mudaria a fila de todo mundo sem nota
+de 0–5 no histórico.
+
+**Meio acerto estaciona.** `parcial` descia uma caixa; agora fica nela, como o
+acerto com dica. O tutor é socrático — guia até a resposta —, e punir quem chegou
+perto com a ajuda dele contradiz a didática. Continua indo para o caderno de erros.
+
+**Cobertura em camadas.** "Coberto" = caixa ≥ 3 (15 dias): nas primeiras semanas
+a tela mostrava 0% para quem estudava todo dia. `em_construcao_pct` (respondida,
+abaixo da caixa 3) é a camada amarela ao lado do verde em Panorama, Raio-X e
+Meu edital. O limiar do verde não mudou.
+
+**Ligação ao edital pelo índice, decidida pelo modelo.** Medido na conta real
+(110 assuntos de edital, 119 nomes do índice): o 035 levava só 1 de 108 questões a
+um assunto; palavras em comum erram ("Verbos" -> "Modos de organização
+discursiva", por "modo"); os vetores e5 erram com folga grande, pelo texto inteiro
+e por subitem ("Princípios fundamentais" -> "Direitos e garantias", folga 0,033).
+O modelo do índice (cota própria), uma chamada por material com os nomes do
+índice contra os assuntos do edital da disciplina, acertou os casos acima:
+"Verbos" -> "Classes de palavras", "Supremo Tribunal Federal" -> "Poderes da
+União". 18 chamadas para 160 nomes. Sem cota, as palavras distintivas com folga
+1,5× sobre o segundo, gravadas como `texto` e refeitas depois.
+
+"Estudado" = leu o trecho com o tutor (leitura em sequência ou fonte citada) ou
+respondeu questão do assunto. O ciclo do assunto é o da questão mais fraca dele.
+Questão sem assunto identificado aparece como contagem na disciplina, nunca
+forçada num assunto.
+
+**Defeito à parte, não consertado aqui:** o 035 marca 313 subitens do edital real
+como "sem material" e 1 como "coberto", inclusive onde há apostila do assunto.
+
+## Bateria de estudo: dois meses simulados sobre a conta real (02/10/2026)
+
+`bateria_estudo.py` copia uma mesa real (edital, material, índice, questões) para
+uma conta descartável e simula 60 dias pelas rotas, envelhecendo as datas um dia
+por vez. Cota zero. A conta real não é usada: dois meses inventados no histórico
+dela misturariam fila, caderno e mapa com o que não aconteceu. O que achou:
+
+- **Fuso.** O Postgres roda em UTC e o Python no horário local: das 20h à
+  meia-noite (UTC−4) `CURRENT_DATE` já era amanhã — a questão errada à noite
+  voltava à fila na mesma noite, e o estudo da noite contava no dia seguinte.
+  A conexão agora usa o fuso do processo (`db.fuso_local`: `TZ`, senão
+  /etc/localtime). Na nuvem, processo e banco em UTC continuam iguais.
+- **/meta contava questão privada de outra pessoa** no denominador (sem
+  `questoes.do_aluno`): 2,3% dominado onde eram 4,7%.
+- **Questão de prova não chegava ao edital**: só 3 de 32 pelo trecho. Ligada
+  pelo enunciado (039), pelo modelo do índice, lote de 12 (25 estourou 4000
+  tokens de resposta): 96 de 103 com assunto, conferidas à mão por amostra.
+- Sem defeito nas conferências automáticas depois disso: caixa e próxima revisão
+  de cada questão batem com as regras puras; mapa refeito do banco por outro
+  caminho bate; fila, meta e caderno coerentes entre si. O domínio latente do
+  aluno simulado acompanha o mapa (dominado 0,82 · em dia 0,69).
+
+Duas regras de produto, decididas pelo dono:
+
+- **Superados.** O caderno nunca tirava a questão que já chegou à caixa de 15
+  dias (com 95% dominado ainda listava 20 "erros"). Agora ela sai da lista
+  principal, do que o tutor (`socratic`, `ritmo`) e o desafio tratam como
+  fraqueza, e aparece em "Superados" (`/erros?superados=1`). O histórico fica.
+- **Pouca evidência.** 33 dos 53 assuntos ligados têm UMA questão só. O verde
+  continua, mas o mapa mostra em quantas questões diferentes ele se apoia
+  (`questoes_distintas`) e, abaixo de 3, a gaveta pede mais questões. Exigir 3
+  para ficar verde foi recusado: com o banco atual quase nenhum assunto chegaria
+  lá sem gerar questão, e isso gasta cota.
+
+## Uma conta só para "estudado", "dominado" e "edital fechado" (02/10/2026)
+
+Relatado pelo dono, com a carga de dois meses na conta: o Meu edital contava 466
+subitens onde o mapa contava 110 assuntos; "edital fechado 94%" com 53 assuntos
+nunca tocados; e "1 sem contato recente" com quase todo o material sem ler.
+
+- **Estudado = leu a maior parte do material do assunto** (`LIMIAR_LIDO` = 70% dos
+  trechos de ensino ligados a ele pelo índice) ou, não havendo material, respondeu
+  questões ("só por questões"). Ler um trecho ou responder uma questão é "em
+  andamento". Medido: o aluno simulado leu menos de 10% dos 2.522 trechos e todo
+  assunto com material saía "estudado".
+- **Dominado exige estudado**: questão em dia com a apostila sem ler é acerto de
+  questão, não domínio do assunto (`questoes_em_dia` diz isso à parte).
+- **Atenção** ganha "material não lido": assunto com material abaixo do limiar.
+- **Edital fechado e o Meu edital por disciplina** contam assuntos dominados sobre
+  o total do edital (`dominio._contas`), e a probabilidade de fechamento usa o mesmo
+  número: na conta carregada caiu de 100% para 9,3% (68 assuntos, 9 dias). Sem
+  edital, segue por questões. O Panorama passou a dizer "questões dominadas" onde
+  a conta é por questão.
+- **"O que do edital está no seu material"** saiu da conferência por subitem (035)
+  para o mapa: assunto com material, onde está (apostila, seção, páginas) e quanto
+  foi lido. O resumo que o tutor recebe no chat também. O 035 continua no backend
+  para a leitura na ordem do edital e o "onde está"; o defeito de "sem material"
+  dele segue aberto (ver LIMITACOES).
+
+## Conversa real de 02/10/2026: "ti", "5", "eu pedi de…", recusa e matérias não vistas
+
+Achados na conversa do dono e conferidos pela `bateria_decisoes.py` (124 falas, sem
+modelo) e por 4 chamadas numa cópia da conta:
+
+- **Disciplina de nome longo não era reconhecida.** "ti" e "fundamentos de informática,
+  sistemas operacionais e segurança da informação" não achavam "Tecnologia e Sistemas
+  de Informação e de Comunicação, Segurança Cibernética e Crimes Digitais". Agora:
+  sigla pelas iniciais EM ORDEM (nome de 4+ palavras, sigla única; "pra ti" é pronome),
+  duas palavras próprias do nome, e as duas primeiras palavras ("direito penal").
+- **Pedido vago após explicação SEM fonte** buscava pelas palavras da explicação e
+  trouxe Direito Penal ("integridade", "comunicação") para TI. Só explicação com fonte
+  vira assunto de busca; e o sorteio sem assunto respeita a matéria em foco (sem
+  material dela, não há questão).
+- **"5" respondendo à oferta** é aceite com essa quantidade; **"eu não pedi X, eu pedi
+  de Y"** é pedido de Y.
+- **Recusa** ("não", "também não") não adota a matéria que o tutor ofereceu: vale a
+  última que o aluno nomeou.
+- **"Quais matérias não vi?"** vem da seção do mapa (assuntos começados por disciplina,
+  "Disciplinas sem nenhum assunto começado"), e o tutor não dá razão contra os
+  registros nem inventa "o registro falhou".
+- Questões geradas com a frase que as oferecia: a frase sai da resposta.

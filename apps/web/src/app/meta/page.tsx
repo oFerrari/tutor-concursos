@@ -205,7 +205,15 @@ export default function PaginaMeta() {
                 </p>
               )}
               <p className="mt-1 text-muted">
-                Cobertura {meta.cobertura_pct}% · {meta.questoes_pendentes} questões pendentes ·{" "}
+                {meta.assuntos_total ? (
+                  <>
+                    <span className="text-foreground">{meta.assuntos_estudados}</span> de {meta.assuntos_total} assuntos
+                    estudados ·{" "}
+                  </>
+                ) : null}
+                <span className="text-success">{meta.cobertura_pct}% dominado</span> ·{" "}
+                <span className="text-warning">{meta.em_construcao_pct ?? 0}% em construção</span> ·{" "}
+                {meta.questoes_pendentes} questões pendentes ·{" "}
                 {meta.questoes_respondidas} já respondidas
               </p>
               {meta.ritmo_necessario != null && (
@@ -236,11 +244,11 @@ export default function PaginaMeta() {
             </button>
           </div>
           <TabelaPorDisciplina
-            colunas={["Tópicos", "Cobertura"]}
+            colunas={["Assuntos", "Dominado · em construção"]}
             linhas={edital.cobertura.map((c) => ({
               disciplina: c.disciplina,
               a: c.topicos_no_edital,
-              b: `${c.cobertura_pct}%`,
+              b: `${c.cobertura_pct}% · ${c.em_construcao_pct ?? 0}%`,
             }))}
             aoRemover={editando ? (d) => ajustar({ remover: [d] }) : undefined}
             removendo={ajustando}

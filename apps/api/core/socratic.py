@@ -15,10 +15,10 @@ import re
 import unicodedata
 from datetime import datetime
 
-from . import assunto, cobertura, db, diario, leitura, llm, mesa as mesa_mod, pedido as pedido_mod, retrieval
+from . import assunto, cobertura, db, diario, dominio, leitura, llm, mesa as mesa_mod, pedido as pedido_mod, retrieval
 from .retrieval import referencia
 
-VERSAO = "socratic-v92"
+VERSAO = "socratic-v94"
 
 ESQUEMA_RESPOSTA_TUTOR = {
     "type": "OBJECT",
@@ -1065,6 +1065,10 @@ NUNCA abra com desculpa nem com elogio à crítica — nada de "perdão pela con
 
 RECLAMOU QUE VOCÊ NÃO FEZ O QUE ELE PEDIU ("você continua…", "eu pedi…", "ignorando o que eu peço"): faça AGORA o pedido que ele fez antes, inteiro, na forma que ele pediu. NUNCA responda perguntando o que ele quer — ele já disse. Medido: "Vamos direto ao ponto: o que você precisa que eu faça?" depois de três pedidos de resumão completo.
 
+DISCORDOU DOS REGISTROS ("eu não estudei X ainda", "tem certeza?"): diga o que os registros mostram, com o número, e de onde ele vem ("aparecem 134 questões respondidas de X") — sem dar razão por dar e sem inventar falha ("o registro falhou") que nada no contexto mostra. Se o número não estiver no contexto, diga que não tem esse dado. Medido em 02/10/2026: "Você tem razão e o registro falhou, pois você já tem 134 tentativas" — as duas metades se contradizem.
+
+"O QUE EU AINDA NÃO VI / O QUE FALTA": responda pela seção "Quanto do edital o material dele cobre", que traz por disciplina os assuntos COMEÇADOS (lidos ou com questão respondida) e os nunca tocados — não pela lista de materiais que ele subiu. Matéria sem material pode já ter sido estudada por questões.
+
 Termine com uma pergunta ou sugestão que seja o próximo passo para este aluno, respeitando o tipo do turno.
 
 NUNCA repita o fechamento do turno anterior. Se você já ofereceu seguir para um ponto e ele seguiu com outra dúvida, a oferta anterior morreu — não a reapresente com outras palavras. E NÃO ofereça questões em dois turnos seguidos: oferta recusada uma vez vira ruído que ele aprende a ignorar, e aí o convite não funciona nem quando é a hora certa. Na dúvida, feche ensinando: uma pergunta sobre o que você acabou de explicar vale mais que um cardápio.
@@ -1516,8 +1520,8 @@ def explicar(pergunta: str, usuario_id: int | None = None,
                            if usuario_id else None)
     contexto_mesa = _resumo_mesa(mesa_)
     contexto_biblioteca = _resumo_biblioteca(usuario_id, mesa_, marcadores)
-    contexto_cobertura_edital = (cobertura.resumo_geral_para_prompt(mesa_["id"])
-                                 if mesa_ and mesa_.get("id") else None)
+    contexto_cobertura_edital = (dominio.resumo_para_prompt(mesa_, usuario_id)
+                                 if mesa_ and mesa_.get("id") and usuario_id else None)
     contexto_onde_esta = (cobertura.localizar(mesa_["id"], usuario_id, pergunta)
                           if mesa_ and mesa_.get("id") and usuario_id else None)
     contexto_programa = _programa_em_foco(mesa_, pergunta, historico)
@@ -1568,7 +1572,7 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     if contexto_biblioteca:
         partes.append(f"### Material que o aluno subiu (biblioteca)\n{contexto_biblioteca}")
     if contexto_cobertura_edital:
-        partes.append("### Quanto do edital o material dele cobre (subitens do programa)\n"
+        partes.append("### Quanto do edital o material dele cobre (assuntos do programa)\n"
                       f"{contexto_cobertura_edital}")
     if contexto_onde_esta:
         partes.append("### Onde os pontos que ele citou estão no material dele (use apostila e "

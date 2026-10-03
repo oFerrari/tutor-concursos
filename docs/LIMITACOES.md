@@ -534,3 +534,9 @@ fala anterior, não do texto dela — hoje é `_truncar` de prosa.
 - **Formatos fora do padrão** (número sem ponto, alternativa sem letra) não são
   reconhecidos. Não há extração por modelo como reserva.
 - **Gabarito do tutor** pode errar e fica marcado como tal na tela.
+
+- **Conferência do edital por subitem (035) marca "sem material" demais.** Na conta
+  real, 313 subitens "sem material" e 1 "coberto", inclusive onde há apostila. A
+  tela e o resumo do chat já não usam esse número (usam o mapa de domínio, 038/039),
+  mas a leitura "na ordem do edital" (`leitura.proximo_subitem`) e o "onde está"
+  (`cobertura.localizar`) ainda dependem dele.

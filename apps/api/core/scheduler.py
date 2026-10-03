@@ -30,7 +30,7 @@ from . import db, mesa, questoes
 from .scheduler_regras import (INTERVALOS, conta_como_erro, dias_ate_revisao,
                                orcamento_novas, proxima_caixa)
 
-VERSAO = "scheduler-v29"
+VERSAO = "scheduler-v31"
 
 # TETO_DIARIO: quantas questões por dia. NOVAS_POR_DIA=None significa "todo o
 # orçamento que sobrar depois das revisões" — cota fixa perdeu em todos os
@@ -290,14 +290,25 @@ def registrar(usuario_id: int, questao_id: int, veredito: str, resposta: str,
     return {"caixa": caixa, "prox_revisao": prox}
 
 
+# SUPERADO = errada um dia, hoje na caixa de 15 dias ou mais (o limiar do
+# "dominado"). Medido na bateria de estudo (02/10/2026): com 95% das questões
+# dominadas, o caderno ainda listava 20 "erros" — os da primeira semana, já
+# acertados de primeira várias vezes. Sai da lista principal (e do que o tutor e
+# o desafio tratam como fraqueza), sem apagar o histórico.
+CAIXA_SUPERADO = 3
+
+
 def caderno_erros(usuario_id: int, limite: int = 20,
-                  disciplinas: list[str] | None = None) -> list[dict]:
+                  disciplinas: list[str] | None = None, superados: bool = False) -> list[dict]:
+    """Os erros que ainda pesam; com `superados=True`, só os que já foram vencidos."""
     return db.query(
-        f"""SELECT e.*, q.enunciado
+        f"""SELECT e.*, q.enunciado, p.caixa
            FROM erro_caderno e JOIN questao q ON q.id = e.questao_id
+           LEFT JOIN progresso p ON p.questao_id = e.questao_id AND p.usuario_id = e.usuario_id
            WHERE e.usuario_id = %(u)s AND {mesa.filtro('q.disciplina')}
+             AND (COALESCE(p.caixa, 0) >= %(s)s) = %(sup)s
            ORDER BY e.vezes DESC, e.ultima DESC LIMIT %(l)s""",
-        {"u": usuario_id, "l": limite, "disc": disciplinas},
+        {"u": usuario_id, "l": limite, "disc": disciplinas, "s": CAIXA_SUPERADO, "sup": superados},
     )
 
 
@@ -418,13 +429,21 @@ def meta(usuario_id: int, data_prova: date | None = None, mesa_id: int | None = 
     r = db.exec1(
         f"""SELECT COUNT(DISTINCT q.id) AS total,
                   COUNT(DISTINCT q.id) FILTER (WHERE p.caixa >= 3) AS dominadas,
+                  COUNT(DISTINCT q.id) FILTER (WHERE p.caixa < 3) AS em_construcao,
                   COUNT(DISTINCT q.id) FILTER (WHERE p.questao_id IS NULL
                                                 OR p.prox_revisao <= CURRENT_DATE) AS pendentes_hoje
            FROM questao q
            LEFT JOIN progresso p ON p.questao_id = q.id AND p.usuario_id = %(u)s
-           WHERE {mesa.filtro('q.disciplina')}""",
-        {"u": usuario_id, "disc": disciplinas},
-    ) or {"total": 0, "dominadas": 0, "pendentes_hoje": 0}
+           WHERE {mesa.filtro('q.disciplina')} AND {questoes.do_aluno('q')}""",
+        {"u": usuario_id, "disc": disciplinas, "dono": usuario_id},
+    ) or {"total": 0, "dominadas": 0, "em_construcao": 0, "pendentes_hoje": 0}
+    # `do_aluno` (02/10/2026): sem ele o denominador somava a questão PRIVADA de
+    # outro aluno das mesmas disciplinas — a bateria de estudo mediu 2,3% onde
+    # eram 4,7%, e "pendentes" contava questão que esta pessoa nunca verá.
+    # EM CONSTRUÇÃO (02/10/2026): já respondida, ainda abaixo da caixa 3. Sem esta
+    # camada a cobertura ficava em 0% nas primeiras semanas de estudo — dominar
+    # exige 15 dias de intervalo — e o aluno não via avanço nenhum.
+    construcao_pct = round(100 * r["em_construcao"] / r["total"], 1) if r["total"] else 0.0
     respondidas = db.exec1(
         f"""SELECT count(DISTINCT t.questao_id) AS n
               FROM tentativa t JOIN questao q ON q.id = t.questao_id
@@ -436,6 +455,7 @@ def meta(usuario_id: int, data_prova: date | None = None, mesa_id: int | None = 
         return {
             "dias_restantes": None,
             "cobertura_pct": round(100 * r["dominadas"] / r["total"], 1) if r["total"] else 0.0,
+            "em_construcao_pct": construcao_pct,
             "questoes_pendentes": r["total"] - r["dominadas"],
             "questoes_respondidas": respondidas,
             "ritmo_necessario": None,
@@ -453,6 +473,7 @@ def meta(usuario_id: int, data_prova: date | None = None, mesa_id: int | None = 
     resultado = {
         "dias_restantes": dias,
         "cobertura_pct": round(100 * r["dominadas"] / r["total"], 1) if r["total"] else 0.0,
+        "em_construcao_pct": construcao_pct,
         "questoes_pendentes": pendente,
         "questoes_respondidas": respondidas,
         "ritmo_necessario": -(-pendente // dias) if dias else None,
@@ -462,4 +483,21 @@ def meta(usuario_id: int, data_prova: date | None = None, mesa_id: int | None = 
         resultado["edital"] = ed["titulo"]
         resultado["probabilidade_fechamento"] = edital_mod.probabilidade_fechamento(
             ed["id"], usuario_id, data_prova=data_prova, disciplinas=disciplinas)
+        resultado.update(_por_assunto(usuario_id, mesa_id))
     return resultado
+
+
+def _por_assunto(usuario_id: int, mesa_id: int | None) -> dict:
+    """"Edital fechado" pelos ASSUNTOS do edital (mapa de domínio), não pelas questões:
+    107 questões sobre meio edital davam 94% fechado (02/10/2026). As contas são as
+    de `dominio._contas`, as mesmas do mapa e do Meu edital."""
+    from . import dominio
+    if mesa_id is None:
+        return {}
+    t = dominio.mapa(mesa.contexto(usuario_id, mesa_id), usuario_id)["totais"]
+    if not t or not t["total"]:
+        return {}
+    return {"cobertura_pct": round(100 * t["dominados"] / t["total"], 1),
+            "em_construcao_pct": round(100 * t["em_construcao"] / t["total"], 1),
+            "assuntos_total": t["total"], "assuntos_dominados": t["dominados"],
+            "assuntos_estudados": t["estudados"], "cobertura_base": "assuntos"}

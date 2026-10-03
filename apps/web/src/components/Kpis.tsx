@@ -70,7 +70,7 @@ export function Kpis({
     {
       rotulo: "revisões hoje",
       valor: String(carga.revisoes),
-      nota: carga.atraso > 0 ? `${carga.atraso} em atraso` : "fila SM-2 em dia",
+      nota: carga.atraso > 0 ? `${carga.atraso} em atraso` : "revisões em dia",
       cor: carga.revisoes > 0 ? "var(--accent-text)" : "var(--foreground)",
     },
     {

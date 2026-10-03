@@ -33,7 +33,7 @@ Aqui só se responde "ele quer treinar, e quantas".
 """
 import re
 
-VERSAO = "pedido-v16"
+VERSAO = "pedido-v17"
 
 # Pedido de TREINO. `quest(?:[ãa]o|[õo]es)` e não `quest[õo]es?`: o singular
 # leva "ã" e o plural "õ", e quem tem pressa digita sem acento — a primeira
@@ -359,13 +359,35 @@ RE_ACEITE = re.compile(
     r"[\s,!.]*(?:(?:sim|pode|manda|por\s+favor|bora|quero|claro|mesmo|ai|a[íi])\b[\s,!.]*){0,3}$")
 
 
+RE_CORRECAO_DE_PEDIDO = re.compile(r"(?i)\bn[ãa]o\s+(?:te\s+)?pedi\b[^.?!]*?\b(?:eu\s+)?pedi\b")
+# Número sozinho respondendo à oferta: "quer que eu monte três?" → "5". Conversa
+# real de 02/10/2026: o "5" seguiu como conversa e o tutor voltou à matéria anterior.
+RE_SO_QUANTIDADE = re.compile(
+    r"(?i)^\s*(?:(?:sim|pode|manda|quero)[\s,]+)?(\d{1,2}|uma?|duas|dois|tr[êe]s|quatro|cinco)"
+    r"(?:\s+(?:quest(?:[ãa]o|[õo]es)|por\s+favor|pf|pfv))?[\s.!]*$")
+
+
+def sem_oferta_de_questoes(texto: str) -> str:
+    """O texto sem a FRASE que oferece questões (para quando elas já vieram). PURO."""
+    saida = texto or ""
+    for f in re.split(r"(?<=[.!?])\s+", saida):
+        if RE_OFERTA_DE_QUESTOES.search(f):
+            saida = saida.replace(f, "")          # tira a frase, mantém os parágrafos
+    return re.sub(r"\n{3,}", "\n\n", re.sub(r"[ \t]{2,}", " ", saida)).strip()
+
+
 def aceitou_oferta_de_questoes(fala: str, ultima_do_tutor: str | None) -> dict | None:
     """O pedido de treino que o aceite de uma oferta representa, ou None.
-    A quantidade e o formato são os que o TUTOR ofereceu ("três itens C/E")."""
+    A quantidade e o formato são os que o TUTOR ofereceu ("três itens C/E") — ou
+    a que o aluno respondeu com um número."""
     oferta = RE_OFERTA_DE_QUESTOES.search(ultima_do_tutor or "")
-    if not oferta or not RE_ACEITE.match(fala or ""):
+    numero = RE_SO_QUANTIDADE.match(fala or "")
+    if not oferta or not (RE_ACEITE.match(fala or "") or numero):
         return None
     trecho = (ultima_do_tutor or "")[oferta.start():oferta.end() + 60]
+    if numero:
+        return {"quantidade": quantas(f"{numero.group(1)} questões"),
+                "tipo": "certo_errado" if RE_CERTO_ERRADO.search(trecho) else None, "formal": False}
     return {"quantidade": quantas(trecho),
             "tipo": "certo_errado" if RE_CERTO_ERRADO.search(trecho) else None,
             "formal": False}
@@ -462,6 +484,12 @@ def treino(fala: str, apos_treino: bool = False) -> dict | None:
     # Só vale quando o adiamento GOVERNA a palavra de treino (ela vem depois
     # dele na frase): "depois me dá questões" adia; "me dá 5 questões, depois a
     # gente vê a teoria" pede agora e fala de outra coisa em seguida.
+    # CORREÇÃO DO PEDIDO: "eu não pedi questão de direito, eu pedi de informática"
+    # nega a primeira matéria e PEDE a segunda. A negação colada a "questão" fazia
+    # `_negado` recusar tudo (conversa real de 02/10/2026).
+    if RE_CORRECAO_DE_PEDIDO.search(fala):
+        return {"quantidade": quantas(fala), "tipo": "certo_errado" if RE_CERTO_ERRADO.search(fala) else None,
+                "formal": False}
     if _adiado(fala) or _negado(fala):
         return None
     if RE_ESCOLHA_ASSUNTO.search(fala):

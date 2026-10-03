@@ -378,10 +378,12 @@ export type ErroCaderno = {
   vezes: number;
   ultima: string;
   enunciado: string;
+  caixa?: number | null;
 };
 
-export function getErros(): Promise<ErroCaderno[]> {
-  return chamar<ErroCaderno[]>("/erros");
+/** Sem argumento: os erros que ainda pesam. `superados`: os já vencidos (caixa de 15 dias). */
+export function getErros(superados = false): Promise<ErroCaderno[]> {
+  return chamar<ErroCaderno[]>(superados ? "/erros?superados=1" : "/erros");
 }
 
 // ------------------------------------------------------------------ simulado
@@ -796,6 +798,13 @@ export type Probabilidade =
 export type Meta = {
   dias_restantes: number | null;
   cobertura_pct: number;
+  /** Com edital: assuntos começados e ainda não dominados (a camada amarela). */
+  em_construcao_pct?: number;
+  /** "assuntos" = cobertura pelos assuntos do edital (mapa de domínio); sem edital, por questões. */
+  cobertura_base?: "assuntos";
+  assuntos_total?: number;
+  assuntos_dominados?: number;
+  assuntos_estudados?: number;
   questoes_pendentes: number;
   questoes_respondidas: number;
   ritmo_necessario: number | null;
@@ -816,7 +825,11 @@ export type CoberturaDisciplina = {
   topicos_no_edital: number;
   questoes_disciplina: number;
   cobertura_pct: number;
+  em_construcao_pct?: number;
   topicos_pendentes_estimado: number;
+  base?: "assuntos" | "questoes";
+  assuntos_estudados?: number;
+  assuntos_dominados?: number;
 };
 
 export type EditalAtual = {
@@ -1183,6 +1196,79 @@ export type MapaDoEdital = {
 
 export function getMapaDoEdital(): Promise<MapaDoEdital> {
   return chamar<MapaDoEdital>("/edital/mapa");
+}
+
+// ---- Mapa de domínio (038, `core/dominio.py`): o edital assunto por assunto.
+
+/** ns não estudado · nr estudado sem revisão · sc em dia · td hoje ·
+ *  od atrasado · st sem contato (atrasado mais que o intervalo da caixa). */
+export type EstadoDoAssunto = "ns" | "nr" | "sc" | "td" | "od" | "st";
+
+export type AssuntoDoMapa = {
+  id: number;
+  nome: string;
+  /** Cabeçalho do assunto ("Lógica"), para o pedido ao tutor. */
+  item: string;
+  estado: EstadoDoAssunto;
+  /** nenhum · contato (encostou) · lido (leu a maior parte do material) · so_questoes (sem material). */
+  nivel: "nenhum" | "contato" | "lido" | "so_questoes";
+  estudado: boolean;
+  /** Trechos de ensino do material ligados ao assunto, e quantos foram lidos com o tutor. */
+  material_trechos: number;
+  material_lidos: number;
+  leitura_pct: number | null;
+  materiais: {
+    documento_id: number;
+    material: string;
+    assunto: string;
+    pagina_inicio: number | null;
+    pagina_fim: number | null;
+    trechos: number;
+    lidos: number;
+  }[];
+  /** As questões estão na caixa de 15 dias — mesmo sem o material lido. */
+  questoes_em_dia: boolean;
+  /** Intervalo da caixa atual em dias (1, 3, 7, 15, 30, 90); 0 = fora do ciclo. */
+  estagio: number;
+  dominado: boolean;
+  /** Dias até a revisão (negativo = atrasada); null sem questão respondida. */
+  proxima_em: number | null;
+  ultimo_contato: number | null;
+  questoes: number;
+  /** Questões DIFERENTES do assunto no ciclo — a evidência por trás do "dominado". */
+  questoes_distintas: number;
+  /** c acerto · d acerto com dica ou meio acerto · e erro, em ordem cronológica. */
+  historico: string;
+};
+
+export type DisciplinaDoMapa = {
+  nome: string;
+  assuntos: AssuntoDoMapa[];
+  total: number;
+  estudados: number;
+  em_andamento: number;
+  dominados: number;
+  em_construcao: number;
+  tocados: number;
+  com_material: number;
+  material_nao_lido: number;
+  questoes_sem_assunto: number;
+};
+
+export type MapaDeDominio = {
+  edital?: number;
+  intervalos: number[];
+  disciplinas: DisciplinaDoMapa[];
+  limiar_lido?: number;
+  totais: {
+    total: number; estudados: number; em_andamento: number; dominados: number; em_construcao: number;
+    tocados: number; com_material: number; material_nao_lido: number; hoje: number;
+  } | null;
+  ligando: boolean;
+};
+
+export function getMapaDeDominio(): Promise<MapaDeDominio> {
+  return chamar<MapaDeDominio>("/dominio");
 }
 
 // ------------------------------------------------- edital: curadoria

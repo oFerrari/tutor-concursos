@@ -49,7 +49,7 @@ from pathlib import Path
 
 from . import db, mesa as mesa_mod, questoes
 
-VERSAO = "edital-v9"
+VERSAO = "edital-v11"
 
 MESES = {"janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5,
          "junho": 6, "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10,
@@ -1035,25 +1035,55 @@ def cobertura(edital_id: int, usuario_id: int) -> list[dict]:
             alvo.append(d)
     mapa = mesa_mod.mapa_do_acervo(mesa_id, usuario_id, alvo) if mesa_id else {}
 
+    # POR ASSUNTO DO EDITAL, pela mesma conta do mapa de domínio (02/10/2026). A
+    # cobertura por QUESTÕES dominadas dizia "Língua Portuguesa 84,6%" com 12 dos 26
+    # assuntos nunca estudados — 107 questões cobriam meio edital e a tela marcava
+    # 94% fechado. Disciplina manual (sem tópico no edital) continua por questões.
+    from . import dominio
+    por_assunto = {}
+    if mesa_id:
+        ultimo = db.exec1("SELECT id FROM edital WHERE mesa_id = %(m)s ORDER BY criado_em DESC LIMIT 1",
+                          {"m": mesa_id})
+        if ultimo and ultimo["id"] == edital_id:
+            por_assunto = {d["nome"]: d for d in dominio.mapa({"id": mesa_id, "mapa": mapa}, usuario_id)["disciplinas"]}
+
     resultado = []
     for disciplina in alvo:
         r = db.exec1(
             f"""SELECT count(DISTINCT q.id) AS total,
-                       count(DISTINCT q.id) FILTER (WHERE p.caixa >= 3) AS dominadas
+                       count(DISTINCT q.id) FILTER (WHERE p.caixa >= 3) AS dominadas,
+                       count(DISTINCT q.id) FILTER (WHERE p.caixa < 3) AS em_construcao
                 FROM questao q
                 LEFT JOIN progresso p ON p.questao_id = q.id AND p.usuario_id = %(u)s
                 WHERE {mesa_mod.filtro('q.disciplina')} AND {questoes.do_aluno('q')}""",
             {"disc": [disciplina, *mapa.get(disciplina, [])], "u": usuario_id,
              "dono": usuario_id},
-        ) or {"total": 0, "dominadas": 0}
+        ) or {"total": 0, "dominadas": 0, "em_construcao": 0}
         n_topicos = topicos.get(disciplina, 0)
         cobertura_pct = 100 * r["dominadas"] / r["total"] if r["total"] else 0.0
+        d = por_assunto.get(disciplina)
+        if d and d["total"]:
+            resultado.append({
+                "disciplina": disciplina,
+                "topicos_no_edital": n_topicos,
+                "questoes_disciplina": r["total"],
+                "cobertura_pct": round(100 * d["dominados"] / d["total"], 1),
+                "em_construcao_pct": round(100 * d["em_construcao"] / d["total"], 1),
+                "topicos_pendentes_estimado": d["total"] - d["dominados"],
+                "assuntos_estudados": d["estudados"],
+                "assuntos_dominados": d["dominados"],
+                "base": "assuntos",
+                "manual": False,
+            })
+            continue
         resultado.append({
             "disciplina": disciplina,
             "topicos_no_edital": n_topicos,
             "questoes_disciplina": r["total"],
             "cobertura_pct": round(cobertura_pct, 1),
+            "em_construcao_pct": round(100 * r["em_construcao"] / r["total"], 1) if r["total"] else 0.0,
             "topicos_pendentes_estimado": round(n_topicos * (1 - cobertura_pct / 100)),
+            "base": "questoes",
             "manual": disciplina not in topicos,
         })
     return resultado

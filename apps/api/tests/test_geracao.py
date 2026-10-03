@@ -468,3 +468,16 @@ def test_tema_manda_mais_que_novidade(usuario):
             continue
         primeiro = db.exec1("SELECT norma, artigo FROM chunk WHERE id = %(i)s", {"i": ids[0]})
         assert (primeiro["norma"], primeiro["artigo"]) == (norma, artigo), (tema, primeiro)
+
+
+def test_pedido_vago_com_materia_em_foco_sem_material_nao_sorteia_na_mesa(monkeypatch):
+    """Conversa real (02/10/2026): numa conversa de TI (sem material), "traga 5 questões
+    disso" saiu de Direito Penal — o sorteio sem assunto ignorava a matéria em foco."""
+    import pytest
+    from core import geracao
+    monkeypatch.setattr(geracao, "_por_disciplina",
+                        lambda ds, n, u: [1, 2] if ds and "Disciplina Com Material" in ds else [])
+    with pytest.raises(geracao.SemMaterial):
+        geracao.escolher(["Disciplina Com Material", "Disciplina Sem Material"], None, 2, 1,
+                         materia_em_foco=["Disciplina Sem Material"])
+    assert geracao.escolher(["Disciplina Com Material"], None, 2, 1)[0] == [1, 2]

@@ -17,17 +17,19 @@ def proxima_caixa(caixa: int, veredito: str, dicas_usadas: int) -> int:
     """
     correta sem dica  -> promove
     correta com dica  -> mantém (lembrou com andaime, não é domínio)
-    parcial           -> desce uma (perto, mas não sabe)
+    parcial           -> mantém (perto, mas não sabe)
     incorreta         -> zera
 
-    A distinção parcial/incorreta existe para preservar sinal: quem acertou
-    metade precisa de revisão curta, não de reestudo do zero. Tratar os dois
-    como iguais apaga essa diferença do caderno de erros.
+    Meio acerto ESTACIONA, não desce (decisão do dono em 02/10/2026): o tutor
+    é socrático — guia até a resposta —, e punir quem chegou perto com a
+    ajuda dele contradiz a didática. Repete na mesma caixa até acertar de
+    primeira. O sinal não se perde: parcial continua indo pro caderno de erros
+    (`conta_como_erro`) e fica no histórico como "acerto com dica".
     """
     if veredito == "correta":
         return min(caixa + 1, MAX_CAIXA) if dicas_usadas == 0 else caixa
     if veredito == "parcial":
-        return max(caixa - 1, 0)
+        return caixa
     return 0
 
 

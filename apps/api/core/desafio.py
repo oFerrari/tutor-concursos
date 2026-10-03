@@ -23,9 +23,9 @@ Sem histórico ainda (usuário novo), cai num default documentado abaixo.
 import re
 
 from . import db, mesa, questoes
-from .scheduler import CAMPOS_Q, JOIN_CTX, ineditas_em_rodizio
+from .scheduler import CAIXA_SUPERADO, CAMPOS_Q, JOIN_CTX, ineditas_em_rodizio
 
-VERSAO = "desafio-v7"
+VERSAO = "desafio-v8"
 
 _RE_HORAS = re.compile(r"^(\d+(?:\.\d)?)h\+?$")
 
@@ -166,9 +166,9 @@ def _reincidentes(usuario_id: int, limite: int,
             FROM questao q {JOIN_CTX}
             JOIN erro_caderno e ON e.questao_id = q.id AND e.usuario_id = %(u)s
             JOIN progresso p ON p.questao_id = q.id AND p.usuario_id = %(u)s
-            WHERE {mesa.filtro('q.disciplina')}
+            WHERE {mesa.filtro('q.disciplina')} AND p.caixa < %(s)s
             ORDER BY e.vezes DESC, e.ultima DESC LIMIT %(l)s""",
-        {"u": usuario_id, "l": limite, "disc": disciplinas},
+        {"u": usuario_id, "l": limite, "disc": disciplinas, "s": CAIXA_SUPERADO},
     )
 
 

@@ -31,16 +31,11 @@ def test_correta_com_dica_mantem(caixa, dicas):
     assert proxima_caixa(caixa, "correta", dicas) == caixa
 
 
-@pytest.mark.parametrize("caixa, esperado", [
-    (0, 0),      # já no fundo: não existe caixa negativa
-    (1, 0),
-    (3, 2),
-    (MAX_CAIXA, MAX_CAIXA - 1),
-])
-def test_parcial_desce_uma(caixa, esperado):
-    """Dicas usadas no parcial não têm efeito — só correta distingue por dica."""
+@pytest.mark.parametrize("caixa", [0, 1, 3, MAX_CAIXA])
+def test_parcial_estaciona(caixa):
+    """Meio acerto não desce (02/10/2026): repete na mesma caixa. Dica não muda nada."""
     for dicas in (0, 1, 3):
-        assert proxima_caixa(caixa, "parcial", dicas) == esperado
+        assert proxima_caixa(caixa, "parcial", dicas) == caixa
 
 
 @pytest.mark.parametrize("caixa", [0, 1, 3, MAX_CAIXA])

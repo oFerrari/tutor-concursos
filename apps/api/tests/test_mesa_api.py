@@ -102,17 +102,33 @@ def test_listar_traz_cobertura_no_mesmo_criterio_do_painel(client, usuario, duas
     assert m["ultimo_estudo"] is None   # ninguém estudou nesta conta ainda
 
 
+def _dominar_por_assunto(usuario, eid, disciplina, n_assuntos=None):
+    """Responde e domina as questões públicas da disciplina, cada uma ligada a um
+    assunto do edital (039) — o mapa de domínio só conta assunto com questão ligada.
+    Devolve quantos assuntos DIFERENTES receberam questão."""
+    tops = [t["id"] for t in db.query("SELECT id FROM topico WHERE edital_id = %(e)s AND disciplina = %(d)s "
+                                      "ORDER BY ordem", {"e": eid, "d": disciplina})][:n_assuntos]
+    qs = [q["id"] for q in db.query("SELECT id FROM questao WHERE disciplina = %(d)s AND usuario_id IS NULL "
+                                    "ORDER BY id", {"d": disciplina})]
+    ligados = set()
+    for i, q in enumerate(qs):
+        t = tops[i % len(tops)]
+        ligados.add(t)
+        db.query("INSERT INTO tentativa (usuario_id, questao_id, resposta, veredito, dicas_usadas) "
+                 "VALUES (%(u)s, %(q)s, 'r', 'correta', 0)", {"u": usuario["id"], "q": q})
+        db.query("INSERT INTO progresso (usuario_id, questao_id, caixa, prox_revisao) "
+                 "VALUES (%(u)s, %(q)s, 3, CURRENT_DATE + 15)", {"u": usuario["id"], "q": q})
+        db.query("INSERT INTO questao_no_edital (questao_id, edital_id, topico_id, origem) "
+                 "VALUES (%(q)s, %(e)s, %(t)s, 'modelo')", {"q": q, "e": eid, "t": t})
+    return len(ligados)
+
+
 def test_cartao_mede_progresso_em_topicos_do_edital(client, usuario, duas_disciplinas):
     """
-    O cartão da mesa fala em TÓPICOS (a unidade do edital), e esse número é
-    ESTIMADO — não há vínculo questão→tópico no schema (aproximação 2 de
-    core/edital.py). O que este teste trava é a estimativa não ter virado uma
-    TERCEIRA definição de cobertura: ela é a das questões da disciplina
-    aplicada aos tópicos dela, a mesma que `probabilidade_fechamento()` usa.
-
-    Por isso as pontas: 0 questão dominada -> 0 tópico coberto; TODAS
-    dominadas -> todos os tópicos. Se as duas contas divergirem, o cartão e
-    a tela de meta passam a dar números diferentes pra mesma mesa.
+    O cartão da mesa fala em TÓPICOS (a unidade do edital) pela MESMA conta do mapa
+    de domínio, do Meu edital e da probabilidade de fechamento (02/10/2026): tópico
+    coberto = assunto do edital dominado. Até então era ESTIMADO pela fração de
+    questões dominadas, e 107 questões sobre meio edital davam 94% fechado.
     """
     dentro, _ = duas_disciplinas
     mesa = _criar_mesa(client, usuario, "Por tópico", disciplina=dentro)
@@ -129,27 +145,18 @@ def test_cartao_mede_progresso_em_topicos_do_edital(client, usuario, duas_discip
     assert m["topicos_cobertos"] == 0
     assert m["cobertura_topicos_pct"] == 0.0
 
-    # Dominar = caixa >= 3, o mesmo critério de v_desempenho_disciplina.
-    db.query(
-        "INSERT INTO progresso (usuario_id, questao_id, caixa) "
-        "SELECT %(u)s, id, 3 FROM questao WHERE disciplina = %(d)s\n           AND usuario_id IS NULL",
-        {"u": usuario["id"], "d": dentro},
-    )
-
+    cobertos = _dominar_por_assunto(usuario, eid, dentro)
     m = client.get("/mesas", headers=usuario["headers"]).json()[0]
     assert m["dominadas"] == m["questoes"] > 0
-    assert m["topicos_cobertos"] == 4
-    assert m["cobertura_topicos_pct"] == 100.0
+    assert m["topicos_cobertos"] == cobertos > 0
+    assert m["cobertura_topicos_pct"] == round(100.0 * cobertos / 4, 1)
 
 
 def test_topicos_cobertos_pesam_pelo_tamanho_da_disciplina(client, usuario, duas_disciplinas):
     """
-    O meio da escala, que as pontas 0/100 não pegam: duas disciplinas com
-    PESOS diferentes no edital. Dominar tudo da disciplina que vale 30
-    tópicos e nada da que vale 10 tem que dar 30/40, não 50% (média simples
-    entre disciplinas) nem a fração de QUESTÕES dominadas — que aqui seria
-    outra, porque o número de questões de cada disciplina no acervo não tem
-    relação com quantos tópicos o edital dá a ela.
+    Duas disciplinas com PESOS diferentes no edital: dominar assuntos da que vale 30
+    tópicos e nada da que vale 10 dá cobertos/40 — não a média entre disciplinas nem
+    a fração de QUESTÕES dominadas.
     """
     pesada, leve = duas_disciplinas
     mesa = _criar_mesa(client, usuario, "Pesos diferentes", disciplina=pesada)
@@ -161,19 +168,15 @@ def test_topicos_cobertos_pesam_pelo_tamanho_da_disciplina(client, usuario, duas
             "SELECT %(e)s, %(d)s, g, %(d)s || ' ' || g FROM generate_series(1, %(n)s) g",
             {"e": eid, "d": disciplina, "n": n},
         )
-    db.query(
-        "INSERT INTO progresso (usuario_id, questao_id, caixa) "
-        "SELECT %(u)s, id, 3 FROM questao WHERE disciplina = %(d)s\n           AND usuario_id IS NULL",
-        {"u": usuario["id"], "d": pesada},
-    )
+    cobertos = _dominar_por_assunto(usuario, eid, pesada)
 
     m = client.get("/mesas", headers=usuario["headers"]).json()[0]
     assert m["topicos"] == 40
-    assert m["topicos_cobertos"] == 30
-    assert m["cobertura_topicos_pct"] == 75.0
+    assert m["topicos_cobertos"] == cobertos > 0
+    assert m["cobertura_topicos_pct"] == round(100.0 * cobertos / 40, 1)
     # E o par por questão continua sendo outro número — os dois convivem no
     # payload de propósito (o cartão mostra tópicos, o painel mostra questões).
-    assert m["cobertura_pct"] != 75.0
+    assert m["cobertura_pct"] != m["cobertura_topicos_pct"]
 
 
 def test_crud_da_mesa(client, usuario):

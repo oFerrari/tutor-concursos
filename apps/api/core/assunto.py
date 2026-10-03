@@ -109,7 +109,7 @@ import unicodedata
 from . import pedido
 from .retrieval import RE_CITACAO
 
-VERSAO = "assunto-v21"
+VERSAO = "assunto-v23"
 
 # Teto da consulta. Embedding é MÉDIA do que entra: parede de texto dilui o
 # assunto exatamente como o art. 37 (13.059 caracteres) já se dilui no próprio
@@ -334,7 +334,50 @@ def disciplina_citada(texto: str, disciplinas: list[str] | None) -> str | None:
     for sigla, ds in siglas.items():
         if len(ds) == 1 and sigla in tokens and (len(sigla) >= 3 or sigla not in SIGLAS_QUE_SAO_PALAVRA):
             return ds[0]
+    # SIGLA DE NOME LONGO, pelas iniciais EM ORDEM: "ti" é "Tecnologia e Sistemas de
+    # Informação e de Comunicação, Segurança Cibernética…" — ninguém diz as oito
+    # iniciais. Conversa real de 02/10/2026: "eu não estudei ti ainda" não achou a
+    # disciplina, e as questões saíram de Direito Penal. Só nome de 4+ palavras, a
+    # primeira inicial tem de bater, e a sigla tem de servir a UMA disciplina só.
+    longas = {}
+    for d in disciplinas:
+        partes = [x for x in re.split(r"[\s\-–,]+", _sem_acento(d.lower()))
+                  if x and x not in {"e", "de", "da", "do", "das", "dos"}]
+        if len(partes) >= 4:
+            longas[d] = "".join(x[0] for x in partes)
+    # "pra ti"/"para ti" é pronome, não sigla.
+    pronome = {m.group(1) for m in re.finditer(r"\b(?:pra|para)\s+(\w{2,3})\b", _sem_acento(texto.lower()))}
+    for t in tokens:
+        if not (2 <= len(t) <= 3) or t in SIGLAS_QUE_SAO_PALAVRA or t in pronome:
+            continue
+        servem = [d for d, ini in longas.items() if ini[0] == t[0] and _subsequencia(t, ini)]
+        if len(servem) == 1:
+            return servem[0]
+    # AS DUAS PRIMEIRAS PALAVRAS DO NOME: "direito penal" é "Direito Penal E
+    # Legislação Penal Extravagante" quando só ela começa assim.
+    comecos = [d for d in disciplinas
+               if len(palavras_de_conteudo(d)) >= 3
+               and all(equivale(_sem_acento(x)) for x in palavras_de_conteudo(d)[:2])]
+    if len(comecos) == 1:
+        return comecos[0]
+    # PALAVRAS PRÓPRIAS DO NOME: duas ou mais palavras da fala que só o nome de UMA
+    # disciplina tem. "fundamentos de informática, sistemas operacionais e a segurança
+    # da informação" tem "sistemas", "segurança" e "informação" — as três do nome
+    # longo de TI, de nenhum outro (mesma conversa).
+    nomes = {d: {_sem_acento(x) for x in palavras_de_conteudo(d) if len(x) >= 5} for d in disciplinas}
+    pontos = {}
+    for d, ws in nomes.items():
+        proprias = {w for w in ws if not any(w[:7] == o[:7] for d2, os_ in nomes.items() if d2 != d for o in os_)}
+        pontos[d] = sum(1 for w in proprias if equivale(w))
+    melhores = sorted(pontos.items(), key=lambda x: -x[1])
+    if melhores and melhores[0][1] >= 2 and (len(melhores) == 1 or melhores[1][1] < melhores[0][1]):
+        return melhores[0][0]
     return None
+
+
+def _subsequencia(curta: str, longa: str) -> bool:
+    it = iter(longa)
+    return all(c in it for c in curta)
 
 
 def _disciplina_aproximada(texto: str | None, disciplinas: list[str] | None) -> str | None:
@@ -469,7 +512,19 @@ def disciplina_em_foco(fala: str | None, historico: list[dict] | None,
     propria = _disciplina_aproximada(fala, disciplinas)
     if propria or traz_assunto_proprio(fala, disciplinas):
         return propria
+    # RECUSA DA OFERTA: "Prefere voltar para Raciocínio Lógico?" → "não". A matéria
+    # oferecida na pergunta do tutor não vira a da conversa — conversa real de
+    # 02/10/2026: o "não" levou à leitura de Raciocínio Lógico assim mesmo.
+    # Vale a última que o ALUNO nomeou; as ofertas do tutor ficam de fora (uma
+    # segunda recusa, "também não", recusaria a mesma oferta de novo).
+    if RE_RECUSA.match(fala or "") and historico:
+        historico = [h for h in historico if h.get("autor") == "aluno"]
     return disciplina_da_conversa(historico, disciplinas, fala)
+
+
+RE_RECUSA = re.compile(
+    r"(?i)^\s*(?:n[ãa]o|tamb[ée]m\s+n[ãa]o|nem|prefiro\s+n[ãa]o|n[ãa]o\s+quero|agora\s+n[ãa]o|"
+    r"melhor\s+n[ãa]o)\b[\s,.!]*(?:obrigad[oa]|valeu|quero|agora|por\s+enquanto)?[\s.!]*$")
 
 
 RE_TROCA_DISCIPLINA = re.compile(r"(?i)^\s*(?:e\s+)?(?:no|na|em)\b")

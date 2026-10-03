@@ -177,7 +177,7 @@ export default function PaginaPanorama() {
                       <div className="barra-fill" style={{ width: `${pct}%`, background: corDoPct(pct) }} />
                     </div>
                     <p className="mt-1.5 text-[11.5px] text-subtle">
-                      {d.dominadas} de {d.questoes} dominadas · {d.cobertura_pct.toFixed(0)}% coberto
+                      {d.dominadas} de {d.questoes} questões dominadas
                     </p>
                   </div>
                 );
@@ -203,12 +203,21 @@ export default function PaginaPanorama() {
                     {meta.cobertura_pct.toFixed(0)}%
                   </span>
                   <span className="mono-num text-[12px] text-subtle">
-                    {meta.questoes_respondidas} / {meta.questoes_respondidas + meta.questoes_pendentes}
+                    {meta.assuntos_total
+                      ? `${meta.assuntos_dominados} / ${meta.assuntos_total} assuntos`
+                      : `${meta.questoes_respondidas} / ${meta.questoes_respondidas + meta.questoes_pendentes}`}
                   </span>
                 </div>
-                <div className="barra-grossa">
-                  <div className="barra-fill bg-accent" style={{ width: `${meta.cobertura_pct}%` }} />
+                {/* EM CAMADAS: dominado (verde) e em construção (amarelo). Só o
+                    dominado ficava 0% nas primeiras semanas — exige 15 dias. */}
+                <div className="barra-grossa flex">
+                  <div className="barra-fill rounded-none bg-success" style={{ width: `${meta.cobertura_pct}%` }} />
+                  <div className="barra-fill rounded-none bg-warning" style={{ width: `${meta.em_construcao_pct ?? 0}%` }} />
                 </div>
+                <p className="mt-1.5 text-[12px] text-muted">
+                  <span className="text-success">{meta.cobertura_pct.toFixed(0)}% dominado</span> ·{" "}
+                  <span className="text-warning">{(meta.em_construcao_pct ?? 0).toFixed(0)}% em construção</span>
+                </p>
                 <p className="mt-2 text-[12px] text-subtle">
                   {meta.ritmo_necessario != null
                     ? `Ritmo necessário: ${meta.ritmo_necessario.toFixed(1)} questões/dia`

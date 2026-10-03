@@ -42,7 +42,7 @@ import re
 
 from . import assunto, db, llm, mesa, retrieval, socratic
 
-VERSAO = "geracao-v13"
+VERSAO = "geracao-v14"
 
 MIN_TEXTO = 140          # abaixo disso é stub, revogado ou remissão
 MAX_POR_VEZ = 5          # teto por chamada: cota de LLM é o recurso escasso
@@ -913,7 +913,12 @@ def escolher(disciplinas: list[str] | None, tema: str | None, quantidade: int,
                     vistos.add(lista[rodada])
                     ids.append(lista[rodada])
     elif not ids:
-        ids = _por_disciplina(disciplinas, quantidade, usuario_id)
+        # Com matéria em foco, o sorteio é DELA — e sem trecho dela não há questão.
+        # Sem isto o pedido vago numa conversa de TI (sem material) sorteava na mesa
+        # inteira: Processo Penal, 8.112, aula de Administrativo (02/10/2026).
+        ids = _por_disciplina(materia_em_foco or disciplinas, quantidade, usuario_id)
+        if not ids and materia_em_foco:
+            raise SemMaterial("não há trecho da matéria em foco no acervo do aluno")
     # TROCA DE ASSUNTO DECLARADA. O fallback já existia e estava certo — cair
     # pro recorte é melhor que devolver vazio a quem pediu questão —, mas era
     # SILENCIOSO, e isso o transformava em mentira: relatado com transcrição, o

@@ -419,3 +419,18 @@ def test_mesma_pergunta_no_mesmo_trecho_nao_vira_outra_linha(client, usuario):
     n = db.exec1("SELECT count(*) n FROM questao WHERE fonte_chunks = %(f)s::bigint[]",
                  {"f": [c["id"]]})["n"]
     assert n == 2, "só a primeira e a diferente existem"
+
+
+def test_meta_nao_conta_questao_privada_de_outra_pessoa(usuario, outro_usuario):
+    """Medido na bateria de estudo (02/10/2026): o /meta dizia 2,3% dominado onde
+    eram 4,7% — o denominador somava as questões da apostila de outro aluno."""
+    disciplina = "Disciplina Sintética Da Meta"
+    for dono in (usuario["id"], outro_usuario["id"]):
+        doc = db.exec1("INSERT INTO documento (titulo, tipo, disciplina, usuario_id) "
+                       "VALUES ('apostila', 'aula', %(d)s, %(u)s) RETURNING id", {"d": disciplina, "u": dono})["id"]
+        db.query("INSERT INTO questao (documento_id, disciplina, tema, enunciado, gabarito, usuario_id) "
+                 "VALUES (%(d)s, %(disc)s, 't', %(e)s, 'g.', %(u)s)",
+                 {"d": doc, "disc": disciplina, "e": f"enunciado de {dono}?", "u": dono})
+    from core import scheduler
+    assert scheduler.meta(usuario["id"], disciplinas=[disciplina])["questoes_pendentes"] == 1
+    assert "em_construcao_pct" in scheduler.meta(usuario["id"], disciplinas=[disciplina])

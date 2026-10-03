@@ -291,3 +291,14 @@ def test_frase_cortada_dentro_da_janela_vai_inteira_pro_trecho_de_cima():
     saida = emendar([{"id": 1, "texto": a}, {"id": 2, "texto": b}], None, None)
     assert saida[0]["texto"].endswith("plataforma continental e da zona econômica exclusiva.")
     assert saida[1]["texto"] == "É assegurada a participação."
+
+
+def test_recusa_da_oferta_nao_adota_a_materia_oferecida():
+    """Conversa real (02/10/2026): "Prefere voltar para Raciocínio Lógico?" → "não"."""
+    from core import assunto
+    ds = ["Raciocínio Lógico-Matemático", "Paraná", "Direito Constitucional"]
+    hist = [{"autor": "aluno", "texto": "que tal estudarmos os aspectos geográficos do Paraná"},
+            {"autor": "tutor", "texto": "O material não traz isso. Prefere voltar para Raciocínio Lógico-Matemático?"}]
+    for fala in ("não", "também não", "agora não"):
+        assert assunto.disciplina_em_foco(fala, hist, ds) == "Paraná"
+    assert assunto.disciplina_em_foco("sim", hist, ds) == "Raciocínio Lógico-Matemático"

@@ -21,6 +21,7 @@ const RASTRO: Record<string, string> = {
   "/desafio": "sessão de estudo",
   "/fila": "fila do dia",
   "/erros": "caderno de erros",
+  "/mapa": "mapa de domínio",
   "/simulado": "montar simulado",
   "/stats": "desempenho",
   "/meta": "meu edital",

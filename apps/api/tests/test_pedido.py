@@ -631,3 +631,26 @@ def test_questao_anterior_e_com_resolucao_sao_resolucao_nao_questoes_novas():
         assert pedido.resolucao(fala), fala
         assert pedido.treino(fala) is None, fala
     assert pedido.treino("me manda 2 questões de juros")
+
+
+def test_numero_sozinho_aceita_a_oferta_com_essa_quantidade():
+    """Conversa real (02/10/2026): "Quer que eu monte três questões disso?" → "5"."""
+    oferta = "A matéria cobra os fundamentos de informática. Quer que eu monte três questões disso?"
+    assert pedido.aceitou_oferta_de_questoes("5", oferta)["quantidade"] == 5
+    assert pedido.aceitou_oferta_de_questoes("duas", oferta)["quantidade"] == 2
+    assert pedido.aceitou_oferta_de_questoes("5", "Vamos para o art. 5?") is None
+    assert pedido.aceitou_oferta_de_questoes("o art. 5 fala disso", oferta) is None
+
+
+def test_corrigir_o_pedido_e_pedir():
+    """"Eu não pedi questão de direito, eu pedi de informática" nega uma e pede a outra."""
+    assert pedido.treino("eu não pedi questão de direito eu pedi de fundamentos de informática") is not None
+    assert pedido.treino("não quero questões agora") is None
+
+
+def test_tira_a_oferta_quando_as_questoes_ja_vieram():
+    t = "Vamos treinar os pilares. Quer que eu monte cinco questões sobre isso?"
+    assert pedido.sem_oferta_de_questoes(t) == "Vamos treinar os pilares."
+    assert pedido.sem_oferta_de_questoes("Quer que eu monte três questões?") == ""
+    assert pedido.sem_oferta_de_questoes("Sem oferta aqui.") == "Sem oferta aqui."
+    assert pedido.sem_oferta_de_questoes("Parágrafo um.\n\nDois. Quer que eu monte duas questões?") == "Parágrafo um.\n\nDois."

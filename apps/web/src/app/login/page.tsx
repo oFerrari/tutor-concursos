@@ -70,7 +70,7 @@ export default function PaginaLogin() {
         </div>
 
         <div className="relative z-[1] flex flex-wrap gap-[18px] font-mono text-[11px] uppercase tracking-[1.5px] text-[#45454d]">
-          <span>Algoritmo SM-2</span>
+          <span>Revisão espaçada</span>
           <span>Método socrático</span>
           <span>Edital vetorizado</span>
         </div>

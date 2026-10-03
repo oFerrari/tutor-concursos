@@ -167,6 +167,7 @@ código 1 se houver falha.
 
 ```bash
 python bateria_decisoes.py                  # PASSO 1, cota zero: falas reais pela lógica de decisão -> .logs/decisoes.md
+python bateria_estudo.py --mesa <id>        # cota zero: cópia da mesa + 60 dias simulados pelas rotas -> .logs/estudo.md
 python roteiro_modelo.py                    # PASSO 2, ~17 chamadas: falas fixas, sem juiz, LEIA .logs/roteiro.md
 ./testar.sh --descobrir                      # caro (centenas de chamadas): falas reais + 5 conversas simuladas + contradições
 ./testar.sh --descobrir --so contradicoes    # só prompt e decisões (poucas chamadas)

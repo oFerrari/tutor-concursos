@@ -11,6 +11,7 @@ import {
   FileText,
   FolderOpen,
   LayoutDashboard,
+  Map as MapIcon,
   MessageSquare,
   MoreVertical,
   PanelLeftClose,
@@ -39,6 +40,7 @@ const ITENS = [
   { href: "/simulado", label: "Montar simulado", Icone: ClipboardList },
   { href: "/stats", label: "Desempenho", Icone: BarChart3 },
   { href: "/meta", label: "Meu edital", Icone: FileText },
+  { href: "/mapa", label: "Mapa de domínio", Icone: MapIcon },
   { href: "/materiais", label: "Meus materiais", Icone: FolderOpen },
 ];
 

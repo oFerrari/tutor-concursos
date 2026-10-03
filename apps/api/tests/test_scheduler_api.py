@@ -42,11 +42,11 @@ def test_correta_com_dica_mantem_a_caixa(client, usuario, questao_id):
     assert resultado["caixa"] == 1                                   # dica: mantém, não promove
 
 
-def test_parcial_desce_uma_caixa(client, usuario, questao_id):
+def test_parcial_estaciona_na_caixa(client, usuario, questao_id):
     _registrar(client, usuario, questao_id, "correta")                # 0 -> 1
     _registrar(client, usuario, questao_id, "correta")                # 1 -> 2
-    resultado = _registrar(client, usuario, questao_id, "parcial")    # 2 -> 1
-    assert resultado["caixa"] == 1
+    resultado = _registrar(client, usuario, questao_id, "parcial")    # 2 -> 2
+    assert resultado["caixa"] == 2
 
 
 def test_incorreta_zera_mesmo_de_caixa_alta(client, usuario, questao_id):
@@ -125,3 +125,15 @@ def test_ineditas_alternam_disciplinas_e_serie_certo_errado_sai_inteira(usuario)
                                            disciplinas=[antiga, nova])]
 
     assert ids == [velhas[0], *serie, velhas[1], avulsa]
+
+
+def test_erro_vencido_sai_do_caderno_para_os_superados(client, usuario, questao_id):
+    """Bateria de estudo (02/10/2026): com 95% dominado, o caderno ainda listava os
+    erros da primeira semana. Chegou à caixa de 15 dias = superado, não apagado."""
+    _registrar(client, usuario, questao_id, "incorreta")
+    assert [e["questao_id"] for e in client.get("/erros", headers=usuario["headers"]).json()] == [questao_id]
+    for _ in range(3):
+        _registrar(client, usuario, questao_id, "correta")          # 0 -> 3
+    assert client.get("/erros", headers=usuario["headers"]).json() == []
+    sup = client.get("/erros?superados=1", headers=usuario["headers"]).json()
+    assert [(e["questao_id"], e["vezes"]) for e in sup] == [(questao_id, 1)]

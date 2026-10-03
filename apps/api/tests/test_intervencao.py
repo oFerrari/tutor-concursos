@@ -87,9 +87,12 @@ def test_rota_devolve_sugestao_e_intervencao_juntas(client, usuario, acervo):
 def test_intervencao_respeita_a_mesa(client, usuario, acervo):
     """Errar em Penal não deve parar a sessão de quem sentou na mesa que só
     cobre Constitucional — mesmo recorte do resto de `ritmo`."""
-    linhas = db.query("""SELECT DISTINCT disciplina FROM questao
+    # A errada precisa de 3 questões públicas (a regra é de 3 erros seguidos): o
+    # acervo real pode ter uma disciplina com menos, e a primeira em ordem alfabética
+    # não serve só por ser a primeira.
+    linhas = db.query("""SELECT disciplina FROM questao
                           WHERE usuario_id IS NULL AND disciplina IS NOT NULL
-                          ORDER BY 1""")
+                          GROUP BY disciplina ORDER BY (count(*) >= 3) DESC, disciplina""")
     if len(linhas) < 2:
         return
     errada, outra = linhas[0]["disciplina"], linhas[1]["disciplina"]

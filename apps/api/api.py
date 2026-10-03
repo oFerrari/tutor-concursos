@@ -45,11 +45,11 @@ from pydantic import BaseModel
 
 from core import (assunto, auth, cobertura, conversa, desafio, edital, geracao, material, melhoria, mesa, pedido,
                   questoes, rascunho, ritmo, scheduler, simulado, socratic, telemetria)
-from core import db, prova, questoes as questoes_mod   # `questoes` é nome de variável na rota do chat
+from core import db, dominio, prova, questoes as questoes_mod   # `questoes` é nome de variável na rota do chat
 from core.config import CORS_ORIGINS
 from core.llm import ErroLLM
 
-VERSAO = "api-v21"
+VERSAO = "api-v23"
 
 app = FastAPI(title="Tutor de concursos — API", version=VERSAO)
 
@@ -709,8 +709,10 @@ def rota_stats(uid: int = Depends(usuario_atual), m: dict = Depends(mesa_atual))
 
 
 @app.get("/erros")
-def rota_erros(uid: int = Depends(usuario_atual), m: dict = Depends(mesa_atual)):
-    return scheduler.caderno_erros(uid, disciplinas=m["recorte"])
+def rota_erros(superados: bool = False, uid: int = Depends(usuario_atual), m: dict = Depends(mesa_atual)):
+    """Os erros que ainda pesam; `?superados=1`, os já vencidos (caixa de 15 dias)."""
+    return scheduler.caderno_erros(uid, limite=50 if superados else 20, disciplinas=m["recorte"],
+                                   superados=superados)
 
 
 @app.get("/conceitos")
@@ -900,7 +902,15 @@ def _turno_do_chat(body: PerguntaBody, uid: int, m: dict, ao_gerar=None) -> dict
             # trecho traz os termos da explicação, e não sai cartão.
             # Rede de segurança: explicação sem termo nenhum do acervo ("Você lembra a
             # diferença?") fica com o assunto da conversa, como antes.
-            if vago and ultima_do_tutor and geracao.termos_raros(ultima_do_tutor, uid):
+            # SÓ EXPLICAÇÃO COM FONTE vira assunto de busca. A dada de cabeça (sem
+            # trecho nenhum) tem palavras que o acervo tem por acaso: conversa real de
+            # 02/10/2026, explicação de segurança da informação (TI sem material) →
+            # "integridade", "comunicação" → duas questões de Direito Penal.
+            ultima_com_fonte = bool(db.exec1(
+                """SELECT 1 AS x FROM mensagem WHERE conversa_id = %(c)s AND autor = 'tutor'
+                    AND id = (SELECT max(id) FROM mensagem WHERE conversa_id = %(c)s AND autor = 'tutor')
+                    AND jsonb_array_length(fontes) > 0""", {"c": conv["id"]}))
+            if vago and ultima_do_tutor and ultima_com_fonte and geracao.termos_raros(ultima_do_tutor, uid):
                 tema = ultima_do_tutor
                 treino_ctx["tema"] = tema
             # QUESTÕES DE PROVA PRIMEIRO (037): o que ele subiu de simulado e ainda
@@ -1019,6 +1029,13 @@ def _turno_do_chat(body: PerguntaBody, uid: int, m: dict, ao_gerar=None) -> dict
                                   "o trecho não rendeu mais sem repetir o ponto.)"}
             conversa.reescrever(msg_tutor["id"], r["resposta"])
         if questoes:
+            # AS QUESTÕES JÁ ESTÃO NA TELA: a frase que as OFERECE ("Quer que eu monte
+            # cinco questões…?") contradiz o cartão logo abaixo (conversa real de
+            # 02/10/2026). Sai a frase; o resto da resposta fica.
+            sem_oferta = pedido.sem_oferta_de_questoes(r["resposta"])
+            if sem_oferta != r["resposta"]:
+                r = {**r, "resposta": sem_oferta or "As questões estão logo abaixo."}
+                conversa.reescrever(msg_tutor["id"], r["resposta"])
             temas = ", ".join(q["tema"] for q in questoes)
             conversa.registrar_evento(
                 conv["id"],
@@ -1287,6 +1304,20 @@ def rota_mapa_do_edital(fundo: BackgroundTasks, uid: int = Depends(usuario_atual
     return {"itens": cobertura.mapa_do_edital(m["id"], uid),
             "resumo": cobertura.resumo_por_disciplina(m["id"]),
             "verificando": faltam}
+
+
+@app.get("/dominio")
+def rota_mapa_de_dominio(fundo: BackgroundTasks, uid: int = Depends(usuario_atual),
+                         m: dict = Depends(mesa_atual)):
+    """O edital da mesa assunto por assunto: estudado, ciclo de revisão, atenção (038).
+
+    Assunto do índice ainda sem ligação ao edital (material novo, edital novo) é
+    ligado em segundo plano — uma chamada ao modelo do índice por material — e a
+    resposta diz `ligando` para a tela pedir de novo depois."""
+    ligando = dominio.pendente(m, uid)
+    if ligando:
+        fundo.add_task(dominio.ligar, m, uid)
+    return {**dominio.mapa(m, uid), "ligando": ligando}
 
 
 @app.post("/edital/mapa/verificar", status_code=202)

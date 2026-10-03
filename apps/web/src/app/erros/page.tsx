@@ -12,12 +12,18 @@ export default function PaginaErros() {
   // Do cache primeiro: o caderno visto nesta sessão aparece na hora.
   const [erros, setErros] = useCache<ErroCaderno[]>("erros");
   const [erro, setErro] = useState<string | null>(null);
+  // SUPERADOS: errados um dia, hoje na caixa de 15 dias. Saem da lista principal
+  // sem sumir — é a prova de que o caderno serviu.
+  const [superados, setSuperados] = useState<ErroCaderno[]>([]);
 
   useEffect(() => {
     if (!getToken()) {
       router.push("/login");
       return;
     }
+    getErros(true)
+      .then(setSuperados)
+      .catch(() => {});
     getErros()
       .then((e) => {
         setErros(e);
@@ -45,7 +51,9 @@ export default function PaginaErros() {
       {erro && <p className="callout-danger">{erro}</p>}
       {!erro && !erros && <Carregando linhas={4} />}
       {erros && erros.length === 0 && (
-        <p className="text-muted">Nenhuma reincidência ainda — bom sinal.</p>
+        <p className="text-muted">
+          {superados.length > 0 ? "Nenhum erro pendente — todos os que você teve já foram vencidos." : "Nenhuma reincidência ainda — bom sinal."}
+        </p>
       )}
 
       {erros && erros.length > 0 && (
@@ -65,6 +73,28 @@ export default function PaginaErros() {
             </li>
           ))}
         </ul>
+      )}
+
+      {superados.length > 0 && (
+        <div className="mt-10">
+          <h2 className="text-sm font-medium text-muted">Superados ({superados.length})</h2>
+          <p className="mb-3 mt-1 text-[12.5px] text-subtle">
+            Você errou e depois acertou até a revisão de 15 dias. Continuam na fila de revisão, fora da lista de erros.
+          </p>
+          <ul className="space-y-2">
+            {superados.map((e) => (
+              <li key={e.questao_id}>
+                <Link href={`/questao/${e.questao_id}`} className="card-link cursor-pointer opacity-80">
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className="selo-ok">{e.disciplina}</span>
+                    <span className="whitespace-nowrap text-xs text-muted">errou {e.vezes}×</span>
+                  </div>
+                  <p className="text-sm leading-relaxed text-body">{e.enunciado}</p>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   );

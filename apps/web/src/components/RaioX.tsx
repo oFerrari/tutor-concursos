@@ -117,14 +117,20 @@ export function RaioX({ meta, mesa, edital, desempenho, carga, erros, onFechar }
                 </span>
                 <span className="mono-num text-[12.5px] text-foreground">{meta.cobertura_pct.toFixed(0)}%</span>
               </div>
-              <div className="barra-grossa">
+              <div className="barra-grossa flex">
                 <div
-                  className="barra-fill bg-accent"
+                  className="barra-fill rounded-none bg-success"
                   style={{ width: `${Math.max(0, Math.min(100, meta.cobertura_pct))}%` }}
+                />
+                <div
+                  className="barra-fill rounded-none bg-warning"
+                  style={{ width: `${Math.max(0, Math.min(100, meta.em_construcao_pct ?? 0))}%` }}
                 />
               </div>
               <p className="mt-1.5 text-[12px] text-subtle">
-                {meta.questoes_respondidas} de {meta.questoes_respondidas + meta.questoes_pendentes} questões
+                {meta.assuntos_total
+                  ? `${meta.assuntos_dominados} de ${meta.assuntos_total} assuntos dominados`
+                  : `${meta.questoes_respondidas} de ${meta.questoes_respondidas + meta.questoes_pendentes} questões`}
                 {meta.ritmo_necessario != null && ` · ritmo: ${meta.ritmo_necessario.toFixed(1)}/dia`}
               </p>
             </div>
@@ -134,15 +140,46 @@ export function RaioX({ meta, mesa, edital, desempenho, carga, erros, onFechar }
 
       {/* ------------------------------------------------------ ofensiva */}
       {/* A "liga" (Ouro, 7º de 42) saiu: era constante do protótipo, sem ranking
-          nenhum por trás, e mostrava 42 alunos numa base com um usuário só. */}
-      <div className="painel">
-        <p className="rotulo mb-1.5">ofensiva</p>
-        <p className="text-xl font-semibold">🔥 {carga?.ofensiva_dias ?? 0}</p>
-        <p className="mt-0.5 text-[11.5px] text-subtle">
-          {carga?.ofensiva_dias ? "dias seguidos" : "estude hoje pra começar"}
+          nenhum por trás, e mostrava 42 alunos numa base com um usuário só.
+          COMPACTA (02/10/2026): o número e o texto na mesma linha, ao lado do fogo —
+          um card alto para um número só empurrava a carga de memória para baixo. */}
+      <div className="painel flex items-center justify-between gap-3 !py-2.5">
+        <p className="rotulo">ofensiva</p>
+        <p className="flex items-baseline gap-1.5">
+          <span className="text-[17px] font-semibold">🔥 {carga?.ofensiva_dias ?? 0}</span>
+          <span className="text-[11.5px] text-subtle">
+            {carga?.ofensiva_dias ? (carga.ofensiva_dias === 1 ? "dia seguido" : "dias seguidos") : "estude hoje pra começar"}
+          </span>
         </p>
       </div>
 
+      {/* ------------------------------------------- carga de memória */}
+      {/* ACIMA dos cards de maestria (02/10/2026): é o que pede ação hoje, e embaixo
+          de doze disciplinas só aparecia rolando. */}
+      {carga && (
+        <div className="painel p-4">
+          <p className="rotulo mb-2.5">
+            carga de memória{semAlvo && <span className="opacity-60"> · acervo inteiro</span>}
+          </p>
+          <div className="flex flex-col gap-2">
+            <div className="dado-linha">
+              <span className="text-[#b6b6bd]">Revisões de hoje</span>
+              <span className={`mono-num ${carga.revisoes > 0 ? "text-accent-text" : "text-body"}`}>
+                {carga.revisoes}
+              </span>
+            </div>
+            <div className="dado-linha">
+              <span className="text-[#b6b6bd]">Erros pendentes</span>
+              <span className={`mono-num ${(erros?.length ?? 0) > 0 ? "text-accent-text" : "text-body"}`}>
+                {erros?.length ?? 0}
+              </span>
+            </div>
+          </div>
+          <Link href="/fila" className="btn-ghost mt-3.5 w-full text-[12.5px]">
+            Abrir a fila
+          </Link>
+        </div>
+      )}
       {/* --------------------------------------------- cards de maestria */}
       {ordenadas.length > 0 && (
         <div>
@@ -150,7 +187,7 @@ export function RaioX({ meta, mesa, edital, desempenho, carga, erros, onFechar }
             cards de maestria{semAlvo && <span className="opacity-60"> · acervo inteiro</span>}
           </p>
           <div className="flex flex-col gap-2">
-            {ordenadas.slice(0, 5).map((d) => {
+            {ordenadas.map((d) => {
               const pct = d.pct_acerto ?? 0;
               return (
                 <Link
@@ -172,7 +209,7 @@ export function RaioX({ meta, mesa, edital, desempenho, carga, erros, onFechar }
                     />
                   </div>
                   <p className="mt-1.5 text-[11.5px] text-subtle">
-                    {d.dominadas} de {d.questoes} dominadas · {d.cobertura_pct.toFixed(0)}% coberto
+                    {d.dominadas} de {d.questoes} questões dominadas
                   </p>
                 </Link>
               );
@@ -181,31 +218,6 @@ export function RaioX({ meta, mesa, edital, desempenho, carga, erros, onFechar }
         </div>
       )}
 
-      {/* ------------------------------------------- carga de memória */}
-      {carga && (
-        <div className="painel p-4">
-          <p className="rotulo mb-2.5">
-            carga de memória{semAlvo && <span className="opacity-60"> · acervo inteiro</span>}
-          </p>
-          <div className="flex flex-col gap-2">
-            <div className="dado-linha">
-              <span className="text-[#b6b6bd]">Revisões SM-2 hoje</span>
-              <span className={`mono-num ${carga.revisoes > 0 ? "text-accent-text" : "text-body"}`}>
-                {carga.revisoes}
-              </span>
-            </div>
-            <div className="dado-linha">
-              <span className="text-[#b6b6bd]">Erros pendentes</span>
-              <span className={`mono-num ${(erros?.length ?? 0) > 0 ? "text-accent-text" : "text-body"}`}>
-                {erros?.length ?? 0}
-              </span>
-            </div>
-          </div>
-          <Link href="/fila" className="btn-ghost mt-3.5 w-full text-[12.5px]">
-            Abrir a fila
-          </Link>
-        </div>
-      )}
     </aside>
   );
 }

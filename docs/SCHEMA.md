@@ -44,7 +44,9 @@ db/034_telemetria_pensamento_e_cache.sql  telemetria grava tokens de raciocínio
 db/035_cobertura_do_edital.sql            edital ligado ao material por subitem: `edital_subitem` (estado) e `edital_subitem_trecho`
 db/036_assuntos_do_material.sql           assuntos de cada material (`material_assunto`) e de cada trecho (`chunk_assunto`); `documento.assuntos_status`
 db/037_questoes_de_prova.sql              material `simulado`; questão `multipla_escolha` + `questao_alternativa`; `questao.origem`/`numero_na_prova`/`gabarito_fonte`; `documento.gabarito_de`
+db/038_assunto_no_edital.sql              assunto do índice do material -> assunto do edital (`assunto_no_edital`), para o mapa de domínio
+db/039_questao_no_edital.sql              questão sem caminho por trecho (prova, lei) -> assunto do edital, pelo enunciado
 ```
 
-Próximo número livre: **038**. Confirme no diretório e com
+Próximo número livre: **040**. Confirme no diretório e com
 `python migrar.py --listar` antes de criar.
