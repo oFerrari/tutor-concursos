@@ -167,6 +167,12 @@ código 1 se houver falha.
 
 ```bash
 python bateria_decisoes.py                  # PASSO 1, cota zero: falas reais pela lógica de decisão -> .logs/decisoes.md
+./tutor avaliar_offline.py --rapido         # da RAIZ: regras + 20 falas gravadas; nenhum LLM
+./tutor avaliar_offline.py --rapido --limite 200 # amplia o histórico sem embeddings
+./tutor avaliar_offline.py --limite 5        # + replay de busca/leitura com código e corpus atuais
+./tutor avaliar_offline.py --so-regras --caso adiado # só uma regressão, sem banco
+python bateria_longa.py                     # 56 falas seguidas, só decisões: cota zero, ~1 min -> .logs/bateria-longa.md
+python bateria_longa.py --modelo            # + o chat real (~70 chamadas) + avaliar_offline nas respostas
 python bateria_estudo.py --mesa <id>        # cota zero: cópia da mesa + 60 dias simulados pelas rotas -> .logs/estudo.md
 python roteiro_modelo.py                    # PASSO 2, ~17 chamadas: falas fixas, sem juiz, LEIA .logs/roteiro.md
 ./testar.sh --descobrir                      # caro (centenas de chamadas): falas reais + 5 conversas simuladas + contradições
@@ -174,6 +180,18 @@ python roteiro_modelo.py                    # PASSO 2, ~17 chamadas: falas fixas
 ./testar.sh --descobrir --so reais           # só as falas reais
 ./testar.sh --descobrir --episodios 10 --turnos 8
 ```
+
+Avaliação offline: relatório em `.logs/avaliacao-offline/ultimo.md`, dados em
+`ultimo.json` e snapshots por execução. Saída **0**: verificações atuais passaram;
+**1**: regressão/decisão suspeita; **2**: execução incompleta. Respostas antigas
+são triagem, não prova de que o prompt atual ainda falha. Limite padrão de 20
+falas/90 s; `--usuario ID` resolve múltiplas contas e `--conversa ID` restringe
+o histórico. Nenhum provedor LLM é permitido, nem fallback; banco somente leitura.
+Para incluir uma regressão permanente, acrescente fala e expectativa independente
+em `apps/api/cenarios/regressoes_offline.json`. Não ajuste a expectativa só para
+acompanhar a implementação. Compare mudanças com casos reservados antes de ampliar
+o uso. A avaliação offline não substitui uma amostra pequena no modelo real após
+alterações de prompt.
 
 Conta descartável (`cenarios/descoberta.json`), apagada no fim junto com toda
 questão pública que a rodada gerar. Relatório em `.logs/descoberta.md` (a ausência

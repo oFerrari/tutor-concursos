@@ -28,7 +28,7 @@ import re
 
 from . import assunto, db, retrieval
 
-VERSAO = "leitura-v12"
+VERSAO = "leitura-v14"
 
 # Quanto texto do material entra por turno. Um trecho tem ~1100 caracteres
 # (`chunking.chunk_paginado`); três a quatro dão uma seção de apostila — o
@@ -161,8 +161,12 @@ RE_PONTUAL = re.compile(
 # CONTINUAR, perguntando se há mais: "é só isso que tem no material?", "tem
 # mais?", "de tudo", "e o resto?" — no meio de uma leitura, é pedir o próximo trecho.
 RE_MAIS = re.compile(
-    r"(?i)\b(?:[eé]\s+s[oó]\s+isso|tem\s+mais|s[oó]\s+isso\??$|de\s+tudo|tudo\s*$|e\s+o\s+resto|cad[eê]\s+o\s+resto"
-    r"|o\s+resto|mais\s+coisa)\b")
+    r"(?i)(?<!era\s)(?<!foi\s)\b(?:[eé]\s+s[oó]\s+isso|tem\s+mais|s[oó]\s+isso\?$|de\s+tudo|tudo\s*$|e\s+o\s+resto"
+    r"|cad[eê]\s+o\s+resto|o\s+resto|mais\s+coisa)\b")
+# DESPEDIDA não é pedido de mais: "obrigado, era só isso" continuava a leitura
+# (bateria longa, 03/10/2026).
+RE_DESPEDIDA = re.compile(r"(?i)\b(?:obrigad[oa]|valeu|vlw|at[ée]\s+(?:amanh[ãa]|mais|logo)|tchau|era\s+s[oó]\s+isso|"
+                          r"foi\s+s[oó]\s+isso|por\s+hoje\s+[ée]\s+s[oó])\b")
 
 # AVANÇAR, dito como pedido: vale mesmo que o turno anterior tenha sido uma
 # dúvida no meio da leitura — "continua" retoma de onde a leitura parou.
@@ -245,7 +249,7 @@ def intencao(fala: str | None, ultima_foi_leitura: bool, ha_leitura: bool) -> st
     `ha_leitura`: existe leitura em andamento nesta conversa, ainda que o turno
     anterior tenha sido uma dúvida respondida pela busca."""
     fala = fala or ""
-    if RE_PLANEJAMENTO.search(fala):
+    if RE_PLANEJAMENTO.search(fala) or RE_DESPEDIDA.search(fala):
         return None
     if RE_PELO_EDITAL.search(fala):
         return "edital"
@@ -524,6 +528,16 @@ def escolher_material(fala: str | None, consulta: str | None, historico: list[di
             if da_disciplina(doc, citada, mapa):
                 return doc
         return primeiro_material_da_disciplina(citada, mapa, usuario_id)
+    # A FALA NOMEIA UM ASSUNTO: o material que o ensina vem antes do recente. "me
+    # explica do zero tabela-verdade" abria a apostila de Administrativo, citada no
+    # turno anterior (bateria longa, 03/10/2026). SÓ PELO ÍNDICE (036), que casa com
+    # nome de seção do material: a busca aqui puxaria apostila por qualquer palavra
+    # de uma fala sobre COMO estudar ("na ordem, o conceito inteiro…").
+    if fala and assunto.traz_assunto_proprio(fala, disciplinas):
+        from . import indice
+        alvo = indice.assunto_citado(usuario_id, assunto.sem_o_adiado(fala))
+        if alvo:
+            return alvo["documento_id"]
     if material_recente and (not foco or da_disciplina(material_recente, foco, mapa)):
         return material_recente
     for t in reversed((historico or [])[-8:]):

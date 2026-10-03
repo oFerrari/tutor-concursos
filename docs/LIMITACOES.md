@@ -540,3 +540,11 @@ fala anterior, não do texto dela — hoje é `_truncar` de prosa.
   tela e o resumo do chat já não usam esse número (usam o mapa de domínio, 038/039),
   mas a leitura "na ordem do edital" (`leitura.proximo_subitem`) e o "onde está"
   (`cobertura.localizar`) ainda dependem dele.
+
+- **"Me explica X" sem índice do material.** A leitura acha o material que ensina X
+  pelo índice de assuntos (036). Sem cota, a RESERVA indexa: PDF por títulos em caixa
+  alta e páginas; desde 03/10/2026 também .txt/.html sem página, por títulos numerados
+  ("3. Tabela-verdade") ou em caixa alta. Material sem nenhum título reconhecível
+  continua sem índice, e aí "me explica X" abre o material citado por último. Busca
+  pela fala como reserva foi testada e recusada: "na ordem, o conceito inteiro… se me
+  sentir preparado" tem termos tão "raros" quanto "tabela-verdade".

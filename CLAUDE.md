@@ -104,6 +104,7 @@ bateria_conversa.py   cenários com o modelo real numa conta DESCARTÁVEL (mater
 descobrir.py          DESCOBERTA: falas reais + aluno simulado, pela rota, juiz independente, tela e contradições
 sincronizar.py        exporta/importa o estado de um usuário entre máquinas
 semear_demo.py        conta descartável com dado plausível, pra olhar a TELA
+bateria_longa.py      56 falas seguidas (roteiro_longo.json): decisões sem cota; --modelo usa o chat real
 bateria_estudo.py     COPIA uma mesa real p/ conta descartável e simula 60 dias de estudo pelas rotas (cota zero)
 ```
 

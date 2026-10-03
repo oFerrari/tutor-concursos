@@ -3872,3 +3872,30 @@ modelo) e por 4 chamadas numa cópia da conta:
   "Disciplinas sem nenhum assunto começado"), e o tutor não dá razão contra os
   registros nem inventa "o registro falhou".
 - Questões geradas com a frase que as oferecia: a frase sai da resposta.
+
+## Bateria longa: 56 falas seguidas em três etapas (03/10/2026)
+
+`bateria_longa.py` + `cenarios/roteiro_longo.json`, conta descartável com o material
+sintético de `descoberta.json`. Etapa 1 sem modelo: cada fala pela decisão do chat
+(`bateria_decisoes.turno`, agora alinhada à rota), com a resposta do tutor ESCRITA no
+roteiro e o estado avançando como na rota (marcador de leitura, fonte citada, evento
+de questões). Etapa 2 (`--modelo`): o `/perguntar` real; etapa 3: `avaliar_offline`
+nas respostas gravadas. Achados e consertos, todos universais:
+
+- matéria em foco esquecida depois de 4 trocas (janela de 8 mensagens): na ESCOLHA
+  DAS QUESTÕES vale também a matéria do material lido/citado (no resto do chat, não:
+  mudava o foco de turnos de conversa — 3 achados da bateria de decisões);
+- "e de conjuntos?" após questões é pedido, com o assunto da fala; "e no processo
+  penal?" continua sendo troca de matéria;
+- aceite de oferta usa o assunto da OFERTA do tutor, não a fala anterior do aluno;
+- "manda", "questão", "parei", "difícil" não são assunto; "obrigado, era só isso"
+  não continua a leitura;
+- a matéria da conversa vem antes da dos trechos citados na escolha das questões
+  (um art. 100 da CF puxado por "juros" levava a Constitucional);
+- oferta recusada não ressuscita mais atrás na conversa;
+- "continua" com a conversa já em outra matéria não retoma a leitura antiga (só a
+  leitura do turno anterior manda) — achado só na etapa 2, com o modelo: a conversa
+  inteira derivava de Administrativo para Constitucional;
+- "me explica X" vai ao material de X pelo índice antes do material recente; nome
+  composto ("Tabela-Verdade") conta inteiro na chave do índice; a reserva indexa
+  material sem página por títulos numerados.

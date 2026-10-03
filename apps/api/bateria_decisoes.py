@@ -32,7 +32,7 @@ from pathlib import Path
 
 from core import assunto, conversa, db, geracao, leitura, mesa, pedido, prova, retrieval, socratic
 
-VERSAO = "bateria-decisoes-v1"
+VERSAO = "bateria-decisoes-v2"
 SAIDA = Path(__file__).resolve().parents[2] / ".logs" / "decisoes.md"
 
 
@@ -85,8 +85,8 @@ def turno(uid, mesa_id, ctx, msgs, k):
         consulta = fala if assunto.cita_dispositivo(fala) else assunto.em_foco(hist, fala, disciplinas)
     foco = assunto.disciplina_em_foco(fala, hist, disciplinas)
     foco_da_conversa = foco
-    if (ultima and not assunto.disciplina_citada(fala, disciplinas)
-            and leitura.intencao(fala, bool(ultima.get("foi_a_ultima")), True) in ("continua", "aprofunda")):
+    if (ultima and ultima.get("foi_a_ultima") and not assunto.disciplina_citada(fala, disciplinas)
+            and leitura.intencao(fala, True, True) in ("continua", "aprofunda")):
         foco = None
     tem_material = bool(foco and leitura.primeiro_material_da_disciplina(foco, mapa, uid))
     plano = (None if foco and not tem_material else
@@ -107,17 +107,56 @@ def turno(uid, mesa_id, ctx, msgs, k):
          or pedido.aceitou_oferta_de_questoes(fala, ultima_do_tutor))
     cartoes = None
     if p and not p["formal"]:
+        # O MESMO caminho da rota (api.py, bloco do treino): disciplina pedida, pedido
+        # vago, explicação COM fonte como assunto, matéria em foco e da conversa.
         tema = assunto.em_foco(hist, pergunta=fala, disciplinas=disciplinas)
+        pedida = assunto.disciplina_citada(fala, disciplinas)
+        vago = not (pedida or assunto.pedido_de_treino_nomeia_assunto(fala, disciplinas))
+        nomeado = (pedido.assunto_eliptico(fala)
+                   or (pedido.assunto_da_oferta(ultima_do_tutor)
+                       if not pedido.treino(fala, apos_treino=pedido.veio_de_treino(hist)) else None))
+        if nomeado:
+            tema, vago = nomeado, False
+        ultima_msg = next((m for m in reversed(msgs[:k]) if m["autor"] == "tutor"), None)
+        com_fonte = bool(ultima_msg and ultima_msg.get("fontes"))
+        if vago and ultima_do_tutor and com_fonte and geracao.termos_raros(ultima_do_tutor, uid):
+            tema = ultima_do_tutor
+        dc = assunto.disciplina_da_conversa(hist, disciplinas, fala)
         try:
-            da_prova = prova.da_conversa(uid, fala, p["quantidade"])
-            ids, _ = geracao.escolher(m_recorte(ctx), tema, p["quantidade"], uid, assunto_nomeado=bool(tema),
-                                      materia_em_foco=([foco_da_conversa, *mapa.get(foco_da_conversa, [])]
-                                                       if foco_da_conversa else None))
-            cartoes = {"prova": da_prova, "trechos": ids}
+            da_prova = prova.da_conversa(uid, fala if not vago else (tema or fala), p["quantidade"],
+                                         disciplinas=[pedida] if pedida else None)
+            if len(da_prova) >= p["quantidade"]:
+                ids = []
+            else:
+                ids, _ = geracao.escolher(
+                    [pedida, *mapa.get(pedida, [])] if pedida else m_recorte(ctx), tema,
+                    p["quantidade"] - len(da_prova), uid,
+                    trechos=conversa_citados(msgs, k) if vago else None,
+                    materias_da_conversa=([dc, *mapa.get(dc, [])] if dc
+                                          else geracao.disciplinas_dos_trechos(conversa_citados(msgs, k))),
+                    assunto_nomeado=bool(tema),
+                    # na escolha das questões vale também a matéria do material da conversa (como a rota)
+                    materia_em_foco=([fc, *mapa.get(fc, [])] if (fc := assunto.disciplina_em_foco(
+                        fala, hist, disciplinas, do_material=socratic._disciplina_do_material(
+                            _material_recente(msgs, k), disciplinas, mapa))) else None),
+                    materia_da_conversa=([dc, *mapa.get(dc, [])] if dc else None))
+            cartoes = {"prova": da_prova, "trechos": ids, "quantidade": p["quantidade"]}
         except geracao.SemMaterial:
-            cartoes = {"prova": [], "trechos": []}
-    return {"fala": fala, "foco": foco_da_conversa, "plano": plano, "chunks": chunks, "ultima": ultima,
+            cartoes = {"prova": da_prova if "da_prova" in locals() else [], "trechos": [],
+                       "quantidade": p["quantidade"]}
+    foco_cartoes = (assunto.disciplina_em_foco(fala, hist, disciplinas, do_material=socratic._disciplina_do_material(
+        _material_recente(msgs, k), disciplinas, mapa)) if cartoes is not None else None)
+    return {"fala": fala, "foco": foco_da_conversa, "foco_cartoes": foco_cartoes, "plano": plano, "chunks": chunks, "ultima": ultima,
             "cartoes": cartoes, "resolucao": pedido.resolucao(fala), "tem_material": tem_material}
+
+
+def conversa_citados(msgs: list[dict], k: int, respostas: int = 3) -> list[int]:
+    """`conversa.trechos_citados_recentes`, sobre a lista em memória."""
+    for r in [m for m in msgs[:k] if m["autor"] == "tutor"][::-1][:respostas]:
+        citados = [f["id"] for f in (r.get("fontes") or []) if f.get("citada") and f.get("id")]
+        if citados:
+            return citados
+    return []
 
 
 def m_recorte(ctx):

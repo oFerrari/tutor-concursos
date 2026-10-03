@@ -1,0 +1,354 @@
+{
+ "sobre": "Uma conversa de 55 falas seguidas sobre a conta sintética de descoberta.json. 'tutor' é a resposta ESCRITA para a etapa offline (o que o modelo diria, em uma linha, para a conversa seguir). Expectativas: foco = disciplina em foco ('*' = tanto faz); leitura = abre | continua | nao | '*'; cartoes = nao (não é pedido) | nenhum (pedido sem trecho da matéria) | nome da disciplina (pedido, cartões dela); resolucao = true quando pede resolução. Cada caso difícil nasceu de conversa real ou bateria — ver docs/DECISOES.md. Pergunta com assunto próprio NÃO herda a matéria da conversa (de propósito: 'o que é peculato?' no meio de RLM), por isso foco '*' nelas. leitura_de = matéria do material lido (a conversa já em outra matéria não retoma a leitura antiga: bateria longa com o modelo, 03/10/2026).",
+ "turnos": [
+  {
+   "aluno": "oi",
+   "tutor": "Oi! Por onde quer começar hoje?",
+   "cartoes": "nao",
+   "leitura": "nao"
+  },
+  {
+   "aluno": "o que eu já estudei?",
+   "tutor": "Ainda não há estudo registrado nesta mesa. Quer começar por Raciocínio Lógico-Matemático?",
+   "cartoes": "nao",
+   "leitura": "nao"
+  },
+  {
+   "aluno": "rlm",
+   "tutor": "Vamos ler o material de Raciocínio Lógico-Matemático pelo começo: proposições.",
+   "foco": "Raciocínio Lógico-Matemático",
+   "leitura": "abre",
+   "cartoes": "nao"
+  },
+  {
+   "aluno": "continua",
+   "tutor": "Seguindo: os conectivos lógicos ligam proposições simples.",
+   "foco": "*",
+   "leitura": "continua",
+   "cartoes": "nao",
+   "leitura_de": "Raciocínio Lógico-Matemático"
+  },
+  {
+   "aluno": "o que é uma proposição?",
+   "tutor": "Proposição é a oração declarativa que admite um só valor lógico. Seguimos no material?",
+   "foco": "*",
+   "leitura": "nao",
+   "cartoes": "nao"
+  },
+  {
+   "aluno": "continua",
+   "tutor": "A tabela-verdade lista todos os valores possíveis das proposições.",
+   "foco": "*",
+   "leitura": "continua",
+   "cartoes": "nao",
+   "leitura_de": "Raciocínio Lógico-Matemático"
+  },
+  {
+   "aluno": "me dá 3 questões disso",
+   "tutor": "As questões de tabela-verdade estão logo abaixo.",
+   "foco": "Raciocínio Lógico-Matemático",
+   "cartoes": "Raciocínio Lógico-Matemático"
+  },
+  {
+   "aluno": "agora só uma",
+   "tutor": "Mais uma abaixo.",
+   "foco": "Raciocínio Lógico-Matemático",
+   "cartoes": "Raciocínio Lógico-Matemático"
+  },
+  {
+   "aluno": "chega de questões",
+   "tutor": "Certo. Seguimos na leitura de conjuntos? Quer que eu monte três questões de conectivos antes?",
+   "cartoes": "nao"
+  },
+  {
+   "aluno": "5",
+   "tutor": "As cinco questões de conectivos estão abaixo.",
+   "foco": "Raciocínio Lógico-Matemático",
+   "cartoes": "Raciocínio Lógico-Matemático"
+  },
+  {
+   "aluno": "beleza. agora quero estudar informática",
+   "tutor": "O seu material ainda não traz Noções de Informática; o edital cobra internet, intranet e segurança da informação. Quer que eu explique o conceito de intranet?",
+   "foco": "Noções de Informática",
+   "leitura": "nao",
+   "cartoes": "nao"
+  },
+  {
+   "aluno": "sim",
+   "tutor": "Intranet é a rede interna de uma organização, com as tecnologias da internet e acesso restrito. Ficou claro?",
+   "foco": "Noções de Informática",
+   "cartoes": "nao"
+  },
+  {
+   "aluno": "me manda uma questão disso",
+   "tutor": "Sem material de Informática não tenho de onde montar questão com fonte. Quer seguir pelo conceito?",
+   "foco": "Noções de Informática",
+   "cartoes": "nenhum"
+  },
+  {
+   "aluno": "eu não pedi explicação de direito, eu pedi questões de segurança da informação",
+   "tutor": "Sem material de Informática não sai questão com fonte; posso explicar backup e firewall.",
+   "foco": "Noções de Informática",
+   "cartoes": "nenhum"
+  },
+  {
+   "aluno": "ni",
+   "tutor": "Seguimos em Noções de Informática. Prefere voltar para Raciocínio Lógico-Matemático, que tem material?",
+   "foco": "Noções de Informática",
+   "cartoes": "nao"
+  },
+  {
+   "aluno": "não",
+   "tutor": "Certo, ficamos em Noções de Informática pelo conceito: firewall filtra o tráfego da rede.",
+   "foco": "Noções de Informática",
+   "cartoes": "nao"
+  },
+  {
+   "aluno": "também não",
+   "tutor": "Tudo bem. Para onde quer ir?",
+   "foco": "Noções de Informática",
+   "cartoes": "nao"
+  },
+  {
+   "aluno": "vamos para direito constitucional",
+   "tutor": "Vamos ler Direito Constitucional pelo começo: princípios fundamentais.",
+   "foco": "Direito Constitucional",
+   "cartoes": "nao"
+  },
+  {
+   "aluno": "me explica a organização do estado",
+   "tutor": "A organização político-administrativa compreende União, Estados, Distrito Federal e Municípios, todos autônomos.",
+   "foco": "*",
+   "leitura": "abre",
+   "cartoes": "nao"
+  },
+  {
+   "aluno": "qual a diferença entre união e estados?",
+   "tutor": "A União é o ente central, com competências de interesse nacional; os Estados são autônomos no âmbito regional.",
+   "foco": "*",
+   "leitura": "nao",
+   "cartoes": "nao"
+  },
+  {
+   "aluno": "continua",
+   "tutor": "Seguindo no material: os bens da União estão no art. 20.",
+   "foco": "*",
+   "leitura": "continua",
+   "cartoes": "nao",
+   "leitura_de": "Direito Constitucional"
+  },
+  {
+   "aluno": "quero 2 questões de organização do estado",
+   "tutor": "As duas questões estão logo abaixo.",
+   "foco": "*",
+   "cartoes": "Direito Constitucional"
+  },
+  {
+   "aluno": "resolve a questão anterior",
+   "tutor": "Resolução: a alternativa certa decorre do art. 18.",
+   "cartoes": "nao",
+   "resolucao": true
+  },
+  {
+   "aluno": "e no administrativo?",
+   "tutor": "Em Direito Administrativo, o material começa pelo regime jurídico dos servidores.",
+   "foco": "Direito Administrativo",
+   "cartoes": "nao"
+  },
+  {
+   "aluno": "o que é estágio probatório?",
+   "tutor": "É o período em que o servidor nomeado é avaliado para adquirir estabilidade.",
+   "foco": "*",
+   "leitura": "nao",
+   "cartoes": "nao"
+  },
+  {
+   "aluno": "me explica posse e exercício",
+   "tutor": "Posse é a aceitação formal do cargo; exercício é o efetivo desempenho das atribuições.",
+   "foco": "*",
+   "leitura": "abre",
+   "cartoes": "nao"
+  },
+  {
+   "aluno": "tenho 20 minutos e quero questões de direito administrativo",
+   "tutor": "As questões estão abaixo.",
+   "foco": "Direito Administrativo",
+   "cartoes": "Direito Administrativo",
+   "quantidade": 2
+  },
+  {
+   "aluno": "quero uma questão, mas só depois da explicação",
+   "tutor": "Combinado: primeiro a explicação de estabilidade.",
+   "cartoes": "nao"
+  },
+  {
+   "aluno": "explique o que é uma questão prejudicial no processo penal",
+   "tutor": "Questão prejudicial é a que precisa ser decidida antes do mérito. Não está no seu edital.",
+   "cartoes": "nao"
+  },
+  {
+   "aluno": "boa noite!",
+   "tutor": "Boa noite! Seguimos em Direito Administrativo?",
+   "cartoes": "nao",
+   "leitura": "nao"
+  },
+  {
+   "aluno": "quero questões de raciocínio lógico, mas antes quais são os assuntos?",
+   "tutor": "Os assuntos são proposições, equivalências, conjuntos, contagem e porcentagem. Qual quer treinar?",
+   "cartoes": "nao"
+  },
+  {
+   "aluno": "quais matérias eu ainda não vi nada?",
+   "tutor": "Pelos registros, você já começou Raciocínio Lógico, Constitucional e Administrativo.",
+   "cartoes": "nao",
+   "leitura": "nao"
+  },
+  {
+   "aluno": "tem certeza? eu não estudei informática ainda",
+   "tutor": "Em Informática há só conversa pelo conceito, sem questão respondida.",
+   "cartoes": "nao"
+  },
+  {
+   "aluno": "voltar pro rlm",
+   "tutor": "De volta a Raciocínio Lógico-Matemático, de onde paramos.",
+   "foco": "Raciocínio Lógico-Matemático",
+   "cartoes": "nao"
+  },
+  {
+   "aluno": "continua de onde parei",
+   "tutor": "Seguindo: equivalências lógicas.",
+   "foco": "*",
+   "leitura": "*",
+   "cartoes": "nao",
+   "leitura_de": "Raciocínio Lógico-Matemático"
+  },
+  {
+   "aluno": "quero questões de juros simples",
+   "tutor": "As questões de juros simples estão abaixo.",
+   "foco": "*",
+   "cartoes": "Raciocínio Lógico-Matemático"
+  },
+  {
+   "aluno": "e de conjuntos?",
+   "tutor": "As de conjuntos estão abaixo.",
+   "foco": "*",
+   "cartoes": "Raciocínio Lógico-Matemático"
+  },
+  {
+   "aluno": "não quero questões agora",
+   "tutor": "Tudo bem. Quer seguir na leitura?",
+   "cartoes": "nao"
+  },
+  {
+   "aluno": "me explica do zero tabela-verdade",
+   "tutor": "Vamos do começo: a tabela-verdade lista as combinações de valores lógicos.",
+   "foco": "*",
+   "leitura": "abre",
+   "cartoes": "nao"
+  },
+  {
+   "aluno": "é só isso que tem no material?",
+   "tutor": "Não, o material segue com equivalências e negações.",
+   "foco": "*",
+   "leitura": "continua",
+   "cartoes": "nao"
+  },
+  {
+   "aluno": "obrigado, era só isso",
+   "tutor": "Bons estudos! Até a próxima.",
+   "cartoes": "nao",
+   "leitura": "nao"
+  },
+  {
+   "aluno": "dc",
+   "tutor": "Seguimos em Direito Constitucional.",
+   "foco": "Direito Constitucional",
+   "cartoes": "nao"
+  },
+  {
+   "aluno": "o que cai na prova de constitucional?",
+   "tutor": "O edital cobra princípios fundamentais, direitos e garantias e organização do Estado.",
+   "foco": "Direito Constitucional",
+   "cartoes": "nao"
+  },
+  {
+   "aluno": "me dá questões de informática",
+   "tutor": "Sem material de Informática não sai questão com fonte.",
+   "foco": "Noções de Informática",
+   "cartoes": "nenhum"
+  },
+  {
+   "aluno": "e de direito administrativo?",
+   "tutor": "As questões de Direito Administrativo estão abaixo.",
+   "foco": "Direito Administrativo",
+   "cartoes": "Direito Administrativo"
+  },
+  {
+   "aluno": "qual aula e página sustentam isso?",
+   "tutor": "Saiu da Aula 00 de Direito Administrativo.",
+   "cartoes": "nao"
+  },
+  {
+   "aluno": "continua",
+   "tutor": "Seguindo no material de Administrativo: provimento e posse.",
+   "leitura_de": "Direito Administrativo",
+   "cartoes": "nao"
+  },
+  {
+   "aluno": "me explica estabilidade",
+   "tutor": "Estabilidade é a garantia do servidor após três anos de efetivo exercício e avaliação.",
+   "foco": "*",
+   "leitura": "abre",
+   "cartoes": "nao"
+  },
+  {
+   "aluno": "continua",
+   "tutor": "Seguindo: as hipóteses de perda do cargo do servidor estável. Quer que eu monte duas questões de estabilidade?",
+   "foco": "*",
+   "leitura": "continua",
+   "cartoes": "nao",
+   "leitura_de": "Direito Administrativo"
+  },
+  {
+   "aluno": "sim",
+   "tutor": "As duas questões estão abaixo.",
+   "foco": "Direito Administrativo",
+   "cartoes": "Direito Administrativo"
+  },
+  {
+   "aluno": "certo, vamos seguir?",
+   "tutor": "Seguimos: exoneração e demissão. Quer seguir para a vacância?",
+   "foco": "*",
+   "cartoes": "nao"
+  },
+  {
+   "aluno": "não",
+   "tutor": "Tudo bem. Quer revisar posse e exercício?",
+   "foco": "*",
+   "cartoes": "nao"
+  },
+  {
+   "aluno": "me testa nisso",
+   "tutor": "As questões de posse e exercício estão abaixo.",
+   "foco": "Direito Administrativo",
+   "cartoes": "Direito Administrativo"
+  },
+  {
+   "aluno": "pra ti, qual é o mais difícil?",
+   "tutor": "Costuma ser a diferença entre exoneração e demissão.",
+   "foco": "*",
+   "cartoes": "nao"
+  },
+  {
+   "aluno": "eu errei por quê?",
+   "tutor": "Você confundiu posse com exercício: a posse é a aceitação formal.",
+   "cartoes": "nao"
+  },
+  {
+   "aluno": "valeu, até amanhã",
+   "tutor": "Até amanhã! Bons estudos.",
+   "cartoes": "nao",
+   "leitura": "nao"
+  }
+ ]
+}

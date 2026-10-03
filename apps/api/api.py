@@ -888,6 +888,14 @@ def _turno_do_chat(body: PerguntaBody, uid: int, m: dict, ao_gerar=None) -> dict
         # que nomeia assunto ou disciplina segue pela busca.
         vago = not (disciplina_pedida or assunto.pedido_de_treino_nomeia_assunto(
             body.pergunta, m["disciplinas"]))
+        # O ASSUNTO DO ACEITE é o da oferta ("três questões de conectivos" → "5"), e o
+        # da forma elíptica é o da fala ("e de conjuntos?"): o histórico colado dava
+        # "chega de questões" e "juros simples continua de onde parei" (bateria longa).
+        nomeado = (pedido.assunto_eliptico(body.pergunta)
+                   or (pedido.assunto_da_oferta(ultima_do_tutor)
+                       if not pedido.treino(body.pergunta, apos_treino=pedido.veio_de_treino(historico)) else None))
+        if nomeado:
+            tema, vago = nomeado, False
         citados = conversa.trechos_citados_recentes(conv["id"])
         treino_ctx = {"tema": tema, "vago": vago, "disciplinas": disciplinas_geracao}
         try:
@@ -923,16 +931,24 @@ def _turno_do_chat(body: PerguntaBody, uid: int, m: dict, ao_gerar=None) -> dict
             p = {**p, "da_prova": len(da_prova)}
             if len(da_prova) >= p["quantidade"]:
                 raise _ProvaBasta()
+            # A MATÉRIA DA CONVERSA vem antes da dos trechos citados: um trecho de
+            # Constitucional que a busca puxou por "juros" (art. 100) levava "e de
+            # conjuntos?" para Constitucional numa conversa de Raciocínio Lógico
+            # (bateria longa, 03/10/2026).
+            dc_treino = assunto.disciplina_da_conversa(historico, m["disciplinas"], body.pergunta)
             escolha = geracao.escolher(disciplinas_geracao, tema, p["quantidade"] - len(da_prova), uid,
                                        trechos=citados if vago else None,
-                                       materias_da_conversa=geracao.disciplinas_dos_trechos(citados),
+                                       materias_da_conversa=([dc_treino, *m["mapa"].get(dc_treino, [])] if dc_treino
+                                                             else geracao.disciplinas_dos_trechos(citados)),
                                        assunto_nomeado=bool(tema),
                                        # A MATÉRIA EM FOCO da conversa (nomeada agora ou
                                        # antes) restringe os trechos a ela; sem material
                                        # dela, não sai cartão de outra.
                                        materia_em_foco=([foco, *m["mapa"].get(foco, [])] if (
                                            foco := assunto.disciplina_em_foco(
-                                               body.pergunta, historico, m["disciplinas"])) else None),
+                                               body.pergunta, historico, m["disciplinas"],
+                                               do_material=socratic._disciplina_do_material(
+                                                   material_recente, m["disciplinas"], m["mapa"]))) else None),
                                        materia_da_conversa=([dc, *m["mapa"].get(dc, [])] if (
                                            dc := assunto.disciplina_da_conversa(
                                                historico, m["disciplinas"], body.pergunta)) else None))

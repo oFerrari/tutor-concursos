@@ -18,7 +18,7 @@ from datetime import datetime
 from . import assunto, cobertura, db, diario, dominio, leitura, llm, mesa as mesa_mod, pedido as pedido_mod, retrieval
 from .retrieval import referencia
 
-VERSAO = "socratic-v94"
+VERSAO = "socratic-v96"
 
 ESQUEMA_RESPOSTA_TUTOR = {
     "type": "OBJECT",
@@ -861,6 +861,15 @@ def fora_da_formula(limpar, texto: str) -> str:
     return "".join(p if i % 2 else limpar(p) for i, p in enumerate(partes))
 
 
+def _disciplina_do_material(documento_id: int | None, disciplinas: list[str] | None,
+                            mapa: dict | None) -> str | None:
+    """A disciplina (no nome do edital) do material que a conversa lê ou cita."""
+    if not documento_id:
+        return None
+    d = db.exec1("SELECT disciplina FROM documento WHERE id = %(d)s", {"d": documento_id})
+    return assunto.disciplina_do_edital(d and d["disciplina"], disciplinas, mapa)
+
+
 def limpar_questoes(resposta: str) -> tuple[str, int]:
     """Tira da resposta as questões que o TUTOR escreveu. Devolve (texto, quantas).
 
@@ -1469,9 +1478,13 @@ def explicar(pergunta: str, usuario_id: int | None = None,
     # "de Raciocínio Lógico e Estatística"; o "certo.." seguinte achou
     # Estatística em foco, não havia material dela, e a leitura virou "não temos
     # material de Estatística".
-    if (leitura_atual and not assunto.disciplina_citada(pergunta, disciplinas)
-            and leitura.intencao(pergunta, bool(leitura_atual.get("foi_a_ultima")), True)
-            in ("continua", "aprofunda")):
+    # SÓ QUANDO A LEITURA FOI O TURNO ANTERIOR. Leitura mais antiga, com a conversa
+    # já em outra matéria, não manda: "continua" retomava Constitucional (art. 5º)
+    # numa conversa de Administrativo, e a conversa inteira derivava para lá — até
+    # o cartão de "me testa nisso" (bateria longa com o modelo, 03/10/2026).
+    if (leitura_atual and leitura_atual.get("foi_a_ultima")
+            and not assunto.disciplina_citada(pergunta, disciplinas)
+            and leitura.intencao(pergunta, True, True) in ("continua", "aprofunda")):
         foco = None
     tem_material_do_foco = bool(foco and usuario_id and
                                 leitura.primeiro_material_da_disciplina(foco, mapa_mesa, usuario_id))

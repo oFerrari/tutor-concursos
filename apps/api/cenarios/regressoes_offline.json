@@ -1,0 +1,14 @@
+[
+  {"id":"negacao","fala":"Não quero questões agora.","quantidade":null},
+  {"id":"planejamento","fala":"Tenho 20 minutos por dia. Só quero planejar a semana, sem iniciar aula ou questões agora.","quantidade":null},
+  {"id":"mapa_antes","fala":"Quero questões de ciências forenses, mas antes quais são os assuntos?","quantidade":null},
+  {"id":"adiado","fala":"Quero uma questão, mas só depois da explicação.","quantidade":null},
+  {"id":"termo_juridico","fala":"Explique o que é uma questão prejudicial no processo penal.","quantidade":null},
+  {"id":"saudacao","fala":"Boa noite!","quantidade":null},
+  {"id":"encerramento","fala":"Obrigado, era só isso.","quantidade":null},
+  {"id":"treino_explicito","fala":"Me dê uma questão de Ciências Forenses sobre papiloscopia.","quantidade":1},
+  {"id":"quantidade","fala":"Quero três questões de Direito Penal.","quantidade":3},
+  {"id":"minutos_nao_quantidade","fala":"Tenho 20 minutos e quero questões de Direito Penal.","quantidade":2},
+  {"id":"resolucao","fala":"Resolva esta questão para mim: o que é peculato?","quantidade":null},
+  {"id":"troca_curta","fala":"E no processo penal?","quantidade":null,"disciplinas":["Direito Administrativo","Direito Processual Penal"],"historico":[{"autor":"aluno","texto":"Me explique competência no direito administrativo"},{"autor":"tutor","texto":"Competência administrativa é uma atribuição do agente. Quer um exemplo?"}],"foco":"Direito Processual Penal"}
+]

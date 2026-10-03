@@ -109,7 +109,7 @@ import unicodedata
 from . import pedido
 from .retrieval import RE_CITACAO
 
-VERSAO = "assunto-v23"
+VERSAO = "assunto-v24"
 
 # Teto da consulta. Embedding é MÉDIA do que entra: parede de texto dilui o
 # assunto exatamente como o art. 37 (13.059 caracteres) já se dilui no próprio
@@ -418,6 +418,8 @@ detalhado edital topico item ponto comeco inicio pausa pausas pergunta perguntas
 resumos conceito consegue conseguir consegues nada falando fala trazendo mais alem
 cobre cobrem querer impossivel varias varios paginas pagina ensinar ensina ensinando
 mapa mental trilha aprendizagem plano cronograma roteiro estudo estudos
+manda mande mandar passa passe questao questoes exercicio exercicios continua continuar parei paramos
+parou onde dificil dificeis facil faceis
 """.split())
 
 
@@ -447,11 +449,19 @@ def disciplina_da_conversa(historico: list[dict] | None,
     olhando só as falas do aluno, a matéria de antes (Legislação) continuava
     valendo, e a leitura seguinte abriu uma apostila de Constitucional. Fala do
     tutor que cita duas ou mais disciplinas não decide nada."""
+    recusou = False
     for t in reversed((historico or [])[-12:]):
         texto = t.get("texto") or ""
         if t.get("autor") == "aluno":
             if (d := _disciplina_aproximada(texto, disciplinas)):
                 return d
+            # A RECUSA vale para a oferta logo antes dela: "Prefere voltar para
+            # Raciocínio Lógico?" → "não" não ressuscita depois (conversa real de
+            # 02/10/2026, "eu parei aí?" voltou a Raciocínio Lógico).
+            recusou = recusou or bool(RE_RECUSA.match(texto))
+        elif t.get("autor") == "tutor" and recusou:
+            recusou = False
+            continue
         elif t.get("autor") == "tutor":
             # Do tutor, só o NOME INTEIRO: a regra frouxa de `disciplina_citada`
             # (prefixo de 7 letras) lia "esfera administrativa", numa aula de
@@ -497,7 +507,7 @@ def sem_o_adiado(fala: str | None) -> str | None:
 
 
 def disciplina_em_foco(fala: str | None, historico: list[dict] | None,
-                       disciplinas: list[str] | None) -> str | None:
+                       disciplinas: list[str] | None, do_material: str | None = None) -> str | None:
     """A disciplina de que a conversa trata AGORA, se alguém a nomeou.
 
     A fala atual primeiro. Sem nome nela, as falas recentes do ALUNO — mas só
@@ -519,7 +529,21 @@ def disciplina_em_foco(fala: str | None, historico: list[dict] | None,
     # segunda recusa, "também não", recusaria a mesma oferta de novo).
     if RE_RECUSA.match(fala or "") and historico:
         historico = [h for h in historico if h.get("autor") == "aluno"]
-    return disciplina_da_conversa(historico, disciplinas, fala)
+    # SEM NOME NA JANELA, a matéria do MATERIAL que a conversa está lendo ou citando
+    # (`do_material`, já no nome do edital). O histórico tem 8 mensagens: o "rlm" de
+    # dez turnos atrás saía da janela, e "me testa nisso" virava sorteio na mesa —
+    # cartões de Processo Penal numa conversa de Administrativo (bateria longa,
+    # 03/10/2026). Fala com assunto próprio não chega aqui (retornou acima).
+    return disciplina_da_conversa(historico, disciplinas, fala) or do_material
+
+
+def disciplina_do_edital(nome: str | None, disciplinas: list[str] | None, mapa: dict | None) -> str | None:
+    """O nome de disciplina de um MATERIAL no nome do edital (o mapa da mesa). PURO."""
+    if not nome or not disciplinas:
+        return None
+    if nome in disciplinas:
+        return nome
+    return next((d for d, nomes in (mapa or {}).items() if nome in nomes), None)
 
 
 RE_RECUSA = re.compile(

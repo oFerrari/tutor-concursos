@@ -40,7 +40,7 @@ import unicodedata
 
 from . import assunto, db, llm
 
-VERSAO = "indice-v3"
+VERSAO = "indice-v5"
 
 LOTE = 30                 # trechos por chamada: 60 estourou o limite de tokens/min (medido)
 PAUSA_S = float(os.getenv("INDICE_PAUSA_S", "8"))
@@ -143,8 +143,16 @@ GENERICAS = {"nocoes", "iniciais", "introducao", "conceito", "conceitos", "senti
 
 def chave(nome: str) -> list[str]:
     """As palavras que dizem DE QUE o assunto trata, sem as genéricas de título. PURO."""
-    return [p for p in (_sem_acento(x) for x in assunto.palavras_de_conteudo(nome or ""))
-            if p not in GENERICAS and len(p) >= 4]
+    palavras = [p for p in (_sem_acento(x) for x in assunto.palavras_de_conteudo(nome or ""))
+                if p not in GENERICAS and len(p) >= 4]
+    # NOME COMPOSTO conta inteiro: em "Tabela-Verdade", "verdade" é palavra vazia de
+    # conversa ("na verdade") e sumia — sobrava "tabela", curta demais para casar, e
+    # "me explica do zero tabela-verdade" não achava a seção (bateria longa, 03/10/2026).
+    for composto in re.findall(r"\w{3,}-\w{3,}", nome or ""):
+        for p in (_sem_acento(x.lower()) for x in composto.split("-")):
+            if len(p) >= 4 and p not in GENERICAS and p not in palavras:
+                palavras.append(p)
+    return palavras
 
 
 def menciona(texto_normalizado: str, palavras: list[str]) -> bool:
@@ -161,8 +169,40 @@ def _papel_do_nome(nome: str) -> str:
     return "questoes" if RE_QUESTOES.search(nome) else "outro" if RE_OUTRO.search(nome) else "ensino"
 
 
+# TÍTULO NUMERADO de material SEM PÁGINA (.txt, .html): "3. Tabela-verdade". Curto,
+# começa em maiúscula depois do número, sem ponto final. A reserva só aceitava título
+# em caixa alta com página, e material assim ficava sem índice nenhum — "me explica
+# tabela-verdade" não achava a seção (bateria longa, 03/10/2026).
+RE_TITULO_NUMERADO = re.compile(r"^\s*\d{1,2}(?:\.\d{1,2})*\s*[.)\-–]?\s+([A-ZÁÉÍÓÚÂÊÔÃÕÇ][^.!?;:\n]{2,68})$")
+
+
+def titulos_sem_pagina(chunks: list[dict]) -> list[tuple[int, str]]:
+    """(ordem do trecho, título) dos títulos numerados ou em caixa alta. PURO."""
+    achados, vistos = [], set()
+    for c in sorted(chunks, key=lambda c: c.get("ordem", 0)):
+        for l in juntar_versalete(c.get("texto") or "").split("\n"):
+            l = l.strip()
+            m = RE_TITULO_NUMERADO.match(l)
+            nome = m.group(1).strip() if m and len(l.split()) <= 9 else None
+            if not nome:
+                letras = [ch for ch in l if ch.isalpha()]
+                if 6 <= len(l) <= 70 and len(letras) >= 5 and len(l.split()) >= 2 and not l.endswith((".", ",", ";", ":")) \
+                        and sum(ch.isupper() for ch in letras) / len(letras) > 0.85 and not re.search(r"\d", l):
+                    nome = l.title()
+            if nome and nome.lower() not in vistos:      # a sobreposição repete o título no trecho seguinte
+                vistos.add(nome.lower())
+                achados.append((c.get("ordem", 0), nome))
+    return achados
+
+
 def estrutura_reserva(chunks: list[dict]) -> list[dict]:
     """A lista de assuntos SEM modelo: o sumário, ou os títulos do corpo. PURO."""
+    if chunks and not any(c.get("pagina") for c in chunks):
+        itens = [{"nome": t, "pagina_inicio": None, "pagina_fim": None, "origem": "titulo", "_ordem": o}
+                 for o, t in titulos_sem_pagina(chunks)]
+        for a in itens:
+            a["papel"] = _papel_do_nome(a["nome"])
+        return [a for a in itens if a["papel"] != "ensino" or chave(a["nome"])]
     ultima = max((c.get("pagina") or 0 for c in chunks), default=0) or None
     ents = sumario(chunks)
     if ents:
@@ -186,14 +226,34 @@ def secao_da_pagina(lista: list[dict], pagina: int | None) -> dict | None:
     return dentro[-1] if dentro else None
 
 
+def secao_da_ordem(lista: list[dict], ordem: int | None) -> dict | None:
+    """Sem página: o assunto de ENSINO do último título antes do trecho. PURO."""
+    if ordem is None:
+        return None
+    antes = [a for a in lista if a.get("_ordem") is not None and a["_ordem"] <= ordem]
+    return antes[-1] if antes and antes[-1].get("papel") == "ensino" else None
+
+
 def marcar_reserva(lista: list[dict], chunks: list[dict]) -> dict[int, list[tuple[str, str, str]]]:
     """{chunk_id: [(assunto, papel, origem)]} SEM modelo: a seção pela página, e
     todo assunto de ensino cuja expressão aparece no texto. PURO."""
     ensino = [a for a in lista if a.get("papel") == "ensino"]
     marcas: dict[int, list[tuple[str, str, str]]] = {}
+    sem_pagina = any("_ordem" in a for a in lista)
     for c in chunks:
         texto = _sem_acento(re.sub(r"\s+", " ", juntar_versalete(c.get("texto") or "")))
-        secao = secao_da_pagina(lista, c.get("pagina"))
+        secao = secao_da_ordem(lista, c.get("ordem")) if sem_pagina else secao_da_pagina(lista, c.get("pagina"))
+        if sem_pagina:
+            # sem página, a seção de questões é a do último título antes do trecho
+            atual = [a for a in lista if a.get("_ordem", 10 ** 9) <= (c.get("ordem") or 0)]
+            em_q = bool(atual and atual[-1].get("papel") == "questoes")
+            ms = [] if em_q or not secao else [(secao["nome"], "ensino", "secao")]
+            for a in ensino:
+                if all(a["nome"] != m[0] for m in ms) and menciona(texto, chave(a["nome"])):
+                    ms.append((a["nome"], "questao" if em_q else "ensino", "expressao"))
+            if ms:
+                marcas[c["id"]] = ms
+            continue
         em_questoes = any(a.get("papel") == "questoes" and a.get("pagina_inicio") is not None
                           and a["pagina_inicio"] <= (c.get("pagina") or -1) <= (a.get("pagina_fim") or a["pagina_inicio"])
                           for a in lista)

@@ -33,7 +33,7 @@ Aqui só se responde "ele quer treinar, e quantas".
 """
 import re
 
-VERSAO = "pedido-v17"
+VERSAO = "pedido-v19"
 
 # Pedido de TREINO. `quest(?:[ãa]o|[õo]es)` e não `quest[õo]es?`: o singular
 # leva "ã" e o plural "õ", e quem tem pressa digita sem acento — a primeira
@@ -118,6 +118,11 @@ def _valor(bruto: str) -> int:
     return NUMERO.get(b, 0) or (int(b) if b.isdigit() else 0)
 
 
+RE_NUMERO_COM_UNIDADE = re.compile(
+    r"(?i)\b\d+\s*(?:minutos?|min\b|horas?|h\b|dias?|semanas?|meses|m[êe]s|anos?|%|por\s*cento|"
+    r"p[áa]ginas?|reais|pontos?)")
+
+
 def quantas(fala: str) -> int:
     """Quantas questões a fala pede. `PADRAO` quando ela não diz.
 
@@ -137,7 +142,10 @@ def quantas(fala: str) -> int:
     #
     # Só soma o que vier ANCORADO em substantivo ("1 questão", "uma pergunta"):
     # somar número solto pegaria "art. 37" e "3 anos de pena".
-    texto = fala or ""
+    # Número com UNIDADE não é quantidade: "tenho 20 minutos e quero questões" pede o
+    # padrão, não cinco (avaliação offline de 03/10/2026).
+    texto = RE_NUMERO_COM_UNIDADE.sub(" ", fala or "")
+    fala = texto
     primeira = RE_QUANTIDADE.search(texto)
     if primeira:
         total = _valor(primeira.group(1))
@@ -190,14 +198,23 @@ RE_CONTINUA = re.compile(
 MAX_PALAVRAS_ELIPTICA = 6
 
 
+# "E DE CONJUNTOS?" logo depois de um pedido: o mesmo pedido, outro assunto
+# (bateria longa, 03/10/2026: não gerava nada).
+# Só "de"/"sobre": "e no processo penal?" é TROCA de matéria, não pedido (teste
+# `test_assunto_troca_de_disciplina`).
+RE_ELIPTICA_ASSUNTO = re.compile(r"(?i)^\s*(?:e|agora|ent[ãa]o|tamb[ée]m)\s+(?:de|sobre|do|da|dos|das)\s+\w")
+
+
 def _eliptica(fala: str) -> bool:
     fala = (fala or "").strip()
-    return bool(RE_CONTINUA.match(fala)) and len(fala.split()) <= MAX_PALAVRAS_ELIPTICA
+    return bool(RE_CONTINUA.match(fala) or RE_ELIPTICA_ASSUNTO.match(fala)) \
+        and len(fala.split()) <= MAX_PALAVRAS_ELIPTICA
 
 
 # O adiamento, e o que ele governa. Curta e fechada como as outras listas deste
 # módulo: quem carrega a decisão é a POSIÇÃO (o marcador antes da palavra de
 # treino), não o vocabulário.
+PALAVRA_TREINO_RE = r"quest(?:[ãa]o|[õo]es)|exerc[íi]cios?|it(?:em|ens)|treino|treinar|simulados?"
 RE_ADIADO = re.compile(
     r"(?i)\b(?:depois|mais\s+tarde|mais\s+pra\s+frente|em\s+seguida|no\s+fim|ao\s+final|"
     r"talvez|quem\s+sabe|se\s+der|futuramente)\b[^.!?]{0,40}?"
@@ -212,9 +229,27 @@ RE_ESCOLHA_ASSUNTO = re.compile(
     r"(?:assuntos?|temas?|t[óo]picos?|conte[úu]dos?)\b")
 
 
+# ADIADO DEPOIS DA PALAVRA: "quero uma questão, mas só depois da explicação". O
+# adiamento vem atrás, e é CONDIÇÃO ("só depois de", "depois que", "após a"). Sem
+# preposição é sequência, e o pedido vale agora: "me dá 5 questões, depois a gente
+# vê a teoria" (avaliação offline de 03/10/2026).
+RE_ADIADO_DEPOIS = re.compile(
+    rf"(?i)\b(?:{PALAVRA_TREINO_RE})\b[^.!?]{{0,60}}?\b(?:s[óo]\s+)?"
+    r"(?:depois\s+(?:d[aoe]s?|que)|ap[óo]s\s+(?:a|o|as|os|voc[êe]))\b")
+
+
 def _adiado(fala: str) -> bool:
     """A fala fala de treino PRA DEPOIS, não pra agora?"""
-    return bool(RE_ADIADO.search(fala or ""))
+    return bool(RE_ADIADO.search(fala or "") or RE_ADIADO_DEPOIS.search(fala or ""))
+
+
+# TERMO JURÍDICO COM "QUESTÃO": "questão prejudicial", "questão de ordem" são
+# instituto, não pedido de treino. "Explique o que é uma questão prejudicial no
+# processo penal" gerava cartão (avaliação offline de 03/10/2026). Lista fechada
+# e sem "de direito"/"de fato": "questões de direito penal" é pedido.
+RE_TERMO_JURIDICO = re.compile(
+    r"(?i)\bquest(?:[ãa]o|[õo]es)\s+(?:prejudicia(?:l|is)|de\s+ordem|incidenta(?:l|is)|"
+    r"preliminar(?:es)?|de\s+alta\s+indaga[çc][ãa]o)\b")
 
 
 # PEDIDO NEGADO NÃO É PEDIDO. Relatado na bateria de 22/09/2026: "Tenho 20
@@ -367,6 +402,35 @@ RE_SO_QUANTIDADE = re.compile(
     r"(?:\s+(?:quest(?:[ãa]o|[õo]es)|por\s+favor|pf|pfv))?[\s.!]*$")
 
 
+def assunto_da_oferta(ultima_do_tutor: str | None) -> str | None:
+    """O assunto que a OFERTA do tutor nomeia ("Quer que eu monte três questões de
+    conectivos?" → "conectivos"). É o assunto do aceite: "5" ou "sim" não dizem nada,
+    e a fala anterior do aluno podia ser "chega de questões" (bateria longa, 03/10/2026)."""
+    m = RE_OFERTA_DE_QUESTOES.search(ultima_do_tutor or "")
+    if not m:
+        return None
+    frase = next((f for f in re.split(r"(?<=[.!?])\s+", ultima_do_tutor) if RE_OFERTA_DE_QUESTOES.search(f)), "")
+    resto = sem_o_pedido(re.sub(r"(?i)^.*?\b(?:quest(?:[ãa]o|[õo]es)|exerc[íi]cios?|itens)\b", "", frase))
+    return _so_o_assunto(resto)
+
+
+RE_BORDA_DO_ASSUNTO = re.compile(r"(?i)^(?:\s*\b(?:e|agora|ent[ãa]o|tamb[ée]m|de|sobre|do|da|dos|das|em|no|na|nos|nas)\b)+|"
+                                 r"(?:\b(?:antes|agora|depois|tamb[ée]m|a[íi]|por\s+favor)\b\s*)+$")
+
+
+def _so_o_assunto(texto: str | None) -> str | None:
+    t = (texto or "").strip(" ?.!,")
+    t = RE_BORDA_DO_ASSUNTO.sub("", t).strip(" ?.!,")
+    return t or None
+
+
+def assunto_eliptico(fala: str | None) -> str | None:
+    """"e de conjuntos?" → "conjuntos": o assunto da forma elíptica, sem a borda."""
+    if not RE_ELIPTICA_ASSUNTO.match(fala or ""):
+        return None
+    return _so_o_assunto(fala)
+
+
 def sem_oferta_de_questoes(texto: str) -> str:
     """O texto sem a FRASE que oferece questões (para quando elas já vieram). PURO."""
     saida = texto or ""
@@ -470,7 +534,7 @@ def treino(fala: str, apos_treino: bool = False) -> dict | None:
     # "questão", que era o que a regex procurava.
     if not fala:
         return None
-    fala = RE_ITEM_DO_PROGRAMA.sub(" ", fala)
+    fala = RE_TERMO_JURIDICO.sub(" ", RE_ITEM_DO_PROGRAMA.sub(" ", fala))
     if not (RE_TREINO.search(fala) or RE_FORMAL.search(fala)):
         # Só a forma elíptica, e só logo depois de um turno de treino.
         if not (apos_treino and _eliptica(fala)):

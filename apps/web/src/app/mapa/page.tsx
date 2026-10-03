@@ -388,7 +388,7 @@ export default function PaginaMapa() {
               [
                 [od, od === 1 ? "revisão atrasada" : "revisões atrasadas", "var(--danger)", "overdue"],
                 [stl, "sem contato recente", "#f5b83d", "stale"],
-                [nr, "sem questão respondida", "var(--body)", "no_review"],
+                [nr, nr === 1 ? "estudado sem revisão" : "estudados sem revisão", "var(--body)", "no_review"],
                 [nl, "com material não lido", "#f5b83d", "unread"],
               ] as [number, string, string, Filtro][]
             )
@@ -486,7 +486,7 @@ export default function PaginaMapa() {
                   [c("today"), " hoje", "#f5b83d"],
                   [c("overdue"), c("overdue") > 1 ? " atrasados" : " atrasado", "var(--danger)"],
                   [c("stale"), " sem contato", "#f5b83d"],
-                  [c("no_review"), " sem questão", "var(--muted)"],
+                  [c("no_review"), " sem revisão", "var(--muted)"],
                   [c("not_started"), c("not_started") > 1 ? " não estudados" : " não estudado", "var(--subtle)"],
                 ] as [number, string, string][]).filter(([n]) => n > 0)
               : ([
